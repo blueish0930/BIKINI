@@ -1,0 +1,2 @@
+# Keep text documentation stable across Windows and Unix checkouts.
+*.md text eol=lf
