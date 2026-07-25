@@ -1,0 +1,30 @@
+# Debug symbols and linker output are not part of the portable user build.
+*.pdb
+*.lib
+*.exp
+
+# Build-time helper executables installed beside Blender but not needed by users.
+/datatoc.exe
+/makesdna.exe
+/makesrna.exe
+/msgfmt.exe
+/shader_tool.exe
+/zstd_compress.exe
+
+# Local packaging and temporary files.
+*.log
+*.tmp
+*.bak
+*.manifest.json
+*.sha256
+/BIKINI-Blender-*.zip
+
+# Python byte-code generated when this portable build is run locally.
+__pycache__/
+*.py[cod]
+
+# Common editor/OS metadata.
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
