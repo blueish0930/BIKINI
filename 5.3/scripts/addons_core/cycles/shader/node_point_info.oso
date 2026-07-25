@@ -1,0 +1,24 @@
+OpenShadingLanguage 1.00
+# Compiled by oslc 1.15.3.0
+# options: -q -O2 -IE:/Blender_Source/intern/cycles/kernel/osl/shaders -IE:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders -o E:/build_windows_Full_x64_vc17_Release/intern/cycles/kernel/osl/shaders/node_point_info.oso
+shader node_point_info
+oparam	point	Position	0 0 0		%read{2147483647,-1} %write{0,0}
+oparam	float	Radius	0		%read{2147483647,-1} %write{1,1}
+oparam	float	Random	0		%read{2147483647,-1} %write{2,2}
+temp	int	$tmp1	%read{2147483647,-1} %write{0,0}
+const	string	$const1	"geom:point_position"		%read{0,0} %write{2147483647,-1}
+temp	int	$tmp2	%read{2147483647,-1} %write{1,1}
+const	string	$const2	"geom:point_radius"		%read{1,1} %write{2147483647,-1}
+temp	int	$tmp3	%read{2147483647,-1} %write{2,2}
+const	string	$const3	"geom:point_random"		%read{2,2} %write{2147483647,-1}
+code ___main___
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_point_info.osl:11
+#   getattribute("geom:point_position", Position);
+	getattribute	$tmp1 $const1 Position 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_point_info.osl"} %line{11} %argrw{"wrw"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_point_info.osl:12
+#   getattribute("geom:point_radius", Radius);
+	getattribute	$tmp2 $const2 Radius 	%line{12} %argrw{"wrw"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_point_info.osl:13
+#   getattribute("geom:point_random", Random);
+	getattribute	$tmp3 $const3 Random 	%line{13} %argrw{"wrw"}
+	end

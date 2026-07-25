@@ -1,0 +1,71 @@
+OpenShadingLanguage 1.00
+# Compiled by oslc 1.15.3.0
+# options: -q -O2 -IE:/Blender_Source/intern/cycles/kernel/osl/shaders -IE:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders -o E:/build_windows_Full_x64_vc17_Release/intern/cycles/kernel/osl/shaders/node_uv_map.oso
+shader node_uv_map
+param	int	from_dupli	0		%read{0,15} %write{2147483647,-1}
+param	string	attribute	""		%read{2,5} %write{2147483647,-1} %derivs
+param	string	bump_offset	"center"		%read{6,13} %write{2147483647,-1}
+param	float	bump_filter_width	0.100000001		%read{11,18} %write{2147483647,-1} %derivs
+oparam	point	UV	0 0 0		%read{10,19} %write{1,19} %derivs
+temp	int	$tmp1	%read{2147483647,-1} %write{1,1}
+const	string	$const1	"geom:dupli_uv"		%read{1,1} %write{2147483647,-1}
+const	string	$const2	""		%read{2,2} %write{2147483647,-1}
+temp	int	$tmp2	%read{3,3} %write{2,2}
+temp	int	$tmp3	%read{2147483647,-1} %write{4,4}
+const	string	$const3	"geom:uv"		%read{4,4} %write{2147483647,-1}
+temp	int	$tmp4	%read{2147483647,-1} %write{5,5}
+const	string	$const4	"dx"		%read{6,6} %write{2147483647,-1}
+temp	int	$tmp5	%read{7,7} %write{6,6}
+temp	int	$tmp6	%read{9,9} %write{8,8}
+const	int	$const5	0		%read{8,15} %write{2147483647,-1}
+temp	vector	$tmp7	%read{11,11} %write{10,10} %derivs
+temp	vector	$tmp8	%read{12,12} %write{11,11} %derivs
+const	string	$const6	"dy"		%read{13,13} %write{2147483647,-1}
+temp	int	$tmp9	%read{14,14} %write{13,13}
+temp	int	$tmp10	%read{16,16} %write{15,15}
+temp	vector	$tmp11	%read{18,18} %write{17,17} %derivs
+temp	vector	$tmp12	%read{19,19} %write{18,18} %derivs
+code ___main___
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_uv_map.osl:13
+#   if (from_dupli) {
+	if		from_dupli 2 6 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_uv_map.osl"} %line{13} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_uv_map.osl:14
+#     getattribute("geom:dupli_uv", UV);
+	getattribute	$tmp1 $const1 UV 	%line{14} %argrw{"wrw"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_uv_map.osl:17
+#     if (attribute == "")
+	eq		$tmp2 attribute $const2 	%line{17} %argrw{"wrr"}
+	if		$tmp2 5 6 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_uv_map.osl:18
+#       getattribute("geom:uv", UV);
+	getattribute	$tmp3 $const3 UV 	%line{18} %argrw{"wrw"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_uv_map.osl:20
+#       getattribute(attribute, UV);
+	getattribute	$tmp4 attribute UV 	%line{20} %argrw{"wrw"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_uv_map.osl:23
+#   if (bump_offset == "dx") {
+	eq		$tmp5 bump_offset $const4 	%line{23} %argrw{"wrr"}
+	if		$tmp5 13 20 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_uv_map.osl:24
+#     if (!from_dupli) {
+	eq		$tmp6 from_dupli $const5 	%line{24} %argrw{"wrr"}
+	if		$tmp6 13 13 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_uv_map.osl:25
+#       UV += Dx(UV) * bump_filter_width;
+	Dx		$tmp7 UV 	%line{25} %argrw{"wr"} %argderivs{1}
+	mul		$tmp8 $tmp7 bump_filter_width 	%argrw{"wrr"}
+	add		UV UV $tmp8 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_uv_map.osl:28
+#   else if (bump_offset == "dy") {
+	eq		$tmp9 bump_offset $const6 	%line{28} %argrw{"wrr"}
+	if		$tmp9 20 20 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_uv_map.osl:29
+#     if (!from_dupli) {
+	eq		$tmp10 from_dupli $const5 	%line{29} %argrw{"wrr"}
+	if		$tmp10 20 20 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_uv_map.osl:30
+#       UV += Dy(UV) * bump_filter_width;
+	Dy		$tmp11 UV 	%line{30} %argrw{"wr"} %argderivs{1}
+	mul		$tmp12 $tmp11 bump_filter_width 	%argrw{"wrr"}
+	add		UV UV $tmp12 	%argrw{"wrr"}
+	end

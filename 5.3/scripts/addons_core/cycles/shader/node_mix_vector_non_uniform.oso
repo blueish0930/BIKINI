@@ -1,0 +1,45 @@
+OpenShadingLanguage 1.00
+# Compiled by oslc 1.15.3.0
+# options: -q -O2 -IE:/Blender_Source/intern/cycles/kernel/osl/shaders -IE:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders -o E:/build_windows_Full_x64_vc17_Release/intern/cycles/kernel/osl/shaders/node_mix_vector_non_uniform.oso
+shader node_mix_vector_non_uniform
+param	int	use_clamp	0		%read{0,0} %write{2147483647,-1}
+param	vector	Factor	0.5 0.5 0.5		%read{4,6} %write{2147483647,-1}
+param	vector	A	0 0 0		%read{9,9} %write{2147483647,-1}
+param	vector	B	0 0 0		%read{10,10} %write{2147483647,-1}
+oparam	vector	Result	0 0 0		%read{2147483647,-1} %write{11,11}
+local	vector	t	%read{8,10} %write{5,6}
+const	float	$const1	0		%read{1,1} %write{2147483647,-1}
+temp	vector	$tmp1	%read{5,5} %write{1,1}
+const	float	$const2	1		%read{2,2} %write{2147483647,-1}
+temp	vector	$tmp2	%read{4,4} %write{2,2}
+const	string	$const3	"clamp"		%read{3,3} %write{2147483647,-1}
+temp	vector	$tmp3	%read{5,5} %write{4,4}
+const	string	$const4	"endvalue_preserving_mix"		%read{7,7} %write{2147483647,-1}
+const	point	$const5	1 1 1		%read{8,8} %write{2147483647,-1}
+temp	vector	$tmp5	%read{9,9} %write{8,8}
+temp	vector	$tmp6	%read{11,11} %write{9,9}
+temp	point	$tmp7	%read{11,11} %write{10,10}
+code ___main___
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix_vector_non_uniform.osl:13
+#   vector t = (use_clamp) ? clamp(Factor, 0.0, 1.0) : Factor;
+	if		use_clamp 6 7 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix_vector_non_uniform.osl"} %line{13} %argrw{"r"}
+	assign		$tmp1 $const1 	%argrw{"wr"}
+	assign		$tmp2 $const2 	%argrw{"wr"}
+	functioncall	$const3 6 	%argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:138
+# vector clamp (vector x, vector minval, vector maxval) { return max(min(x,maxval),minval); }
+	min		$tmp3 Factor $tmp2 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{138} %argrw{"wrr"}
+	max		t $tmp3 $tmp1 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix_vector_non_uniform.osl:13
+#   vector t = (use_clamp) ? clamp(Factor, 0.0, 1.0) : Factor;
+	assign		t Factor 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix_vector_non_uniform.osl"} %line{13} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix_vector_non_uniform.osl:14
+#   Result = endvalue_preserving_mix(A, B, t);
+	functioncall	$const4 12 	%line{14} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_math.h:70
+#   return (vector3(1.0, 1.0, 1.0) - t) * a + t * b;
+	sub		$tmp5 $const5 t 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_math.h"} %line{70} %argrw{"wrr"}
+	mul		$tmp6 $tmp5 A 	%argrw{"wrr"}
+	mul		$tmp7 t B 	%argrw{"wrr"}
+	add		Result $tmp6 $tmp7 	%argrw{"wrr"}
+	end

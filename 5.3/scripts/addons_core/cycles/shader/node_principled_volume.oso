@@ -1,0 +1,249 @@
+OpenShadingLanguage 1.00
+# Compiled by oslc 1.15.3.0
+# options: -q -O2 -IE:/Blender_Source/intern/cycles/kernel/osl/shaders -IE:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders -o E:/build_windows_Full_x64_vc17_Release/intern/cycles/kernel/osl/shaders/node_principled_volume.oso
+shader node_principled_volume
+param	color	Color	0.5 0.5 0.5		%read{10,10} %write{2147483647,-1}
+param	float	Density	1		%read{1,1} %write{2147483647,-1}
+param	float	Anisotropy	0		%read{49,49} %write{2147483647,-1}
+param	color	AbsorptionColor	0 0 0		%read{15,15} %write{2147483647,-1}
+param	float	EmissionStrength	0		%read{51,51} %write{2147483647,-1}
+param	color	EmissionColor	1 1 1		%read{56,56} %write{2147483647,-1}
+param	float	BlackbodyIntensity	0		%read{52,52} %write{2147483647,-1}
+param	color	BlackbodyTint	1 1 1		%read{79,79} %write{2147483647,-1}
+param	float	Temperature	1500		%read{61,61} %write{2147483647,-1}
+param	string	DensityAttribute	"geom:density"		%read{4,4} %write{2147483647,-1}
+param	string	ColorAttribute	"geom:color"		%read{11,11} %write{2147483647,-1}
+param	string	TemperatureAttribute	"geom:temperature"		%read{62,62} %write{2147483647,-1}
+oparam	closure color	Volume			%read{58,84} %write{50,84}
+local	float	primitive_density	%read{6,6} %write{0,4}
+local	float	density	%read{2,50} %write{1,7}
+local	color	___512_scatter_color	%read{13,43} %write{10,13}
+local	color	___512_primitive_color	%read{13,13} %write{11,11}
+local	color	___512_absorption_color	%read{20,20} %write{16,16}
+local	color	___512_absorption_coeff	%read{24,24} %write{23,23}
+local	color	___512_extinction	%read{26,49} %write{24,24}
+local	color	___512_albedo	%read{49,49} %write{47,47}
+local	float	emission_strength	%read{53,56} %write{51,51}
+local	float	blackbody_intensity	%read{59,71} %write{52,52}
+local	float	___515_T	%read{65,75} %write{61,66}
+local	float	___515_temperature	%read{64,64} %write{62,62}
+local	float	___515_T4	%read{71,71} %write{69,69}
+local	float	___515_sigma	%read{72,72} %write{70,70}
+local	float	___515_intensity	%read{73,79} %write{72,72}
+local	color	___517_bb	%read{76,83} %write{75,81}
+local	float	___517_l	%read{77,80} %write{76,76}
+const	float	$const1	1		%read{0,71} %write{2147483647,-1}
+const	float	$const2	0		%read{1,77} %write{2147483647,-1}
+temp	int	$tmp1	%read{3,3} %write{2,2}
+temp	int	$tmp2	%read{5,5} %write{4,4}
+temp	float	$tmp3	%read{7,7} %write{6,6}
+temp	int	$tmp4	%read{9,9} %write{8,8}
+temp	int	$tmp5	%read{12,12} %write{11,11}
+temp	color	$tmp6	%read{16,16} %write{15,15}
+temp	color	$tmp7	%read{15,15} %write{14,14}
+temp	color	$tmp8	%read{23,23} %write{19,19}
+temp	color	$tmp9	%read{19,19} %write{17,17}
+temp	color	$tmp10	%read{19,19} %write{18,18}
+temp	color	$tmp11	%read{23,23} %write{22,22}
+temp	color	$tmp12	%read{22,22} %write{20,20}
+temp	color	$tmp13	%read{22,22} %write{21,21}
+const	string	$const3	"safe_divide"		%read{25,25} %write{2147483647,-1}
+temp	float	$tmp14	%read{47,47} %write{31,32}
+const	int	$const4	0		%read{26,30} %write{2147483647,-1}
+temp	float	$tmp15	%read{27,27} %write{26,26}
+temp	int	$tmp16	%read{28,28} %write{27,27}
+temp	float	$tmp17	%read{31,31} %write{29,29}
+temp	float	$tmp18	%read{31,31} %write{30,30}
+temp	float	$tmp19	%read{47,47} %write{38,39}
+const	int	$const5	1		%read{33,37} %write{2147483647,-1}
+temp	float	$tmp20	%read{34,34} %write{33,33}
+temp	int	$tmp21	%read{35,35} %write{34,34}
+temp	float	$tmp22	%read{38,38} %write{36,36}
+temp	float	$tmp23	%read{38,38} %write{37,37}
+temp	float	$tmp24	%read{47,47} %write{45,46}
+const	int	$const6	2		%read{40,44} %write{2147483647,-1}
+temp	float	$tmp25	%read{41,41} %write{40,40}
+temp	int	$tmp26	%read{42,42} %write{41,41}
+temp	float	$tmp27	%read{45,45} %write{43,43}
+temp	float	$tmp28	%read{45,45} %write{44,44}
+temp	closure color	$tmp29	%read{50,50} %write{49,49}
+const	string	$const7	"anisotropic_vdf"		%read{49,49} %write{2147483647,-1}
+temp	int	$tmp30	%read{54,54} %write{53,53}
+temp	closure color	$tmp31	%read{57,57} %write{55,55}
+const	string	$const8	"emission"		%read{55,82} %write{2147483647,-1}
+temp	color	$tmp32	%read{57,57} %write{56,56}
+temp	closure color	$tmp33	%read{58,58} %write{57,57}
+temp	int	$tmp34	%read{60,60} %write{59,59}
+temp	int	$tmp35	%read{63,63} %write{62,62}
+temp	float	$tmp36	%read{65,65} %write{64,64}
+temp	float	$tmp37	%read{69,69} %write{67,67}
+temp	float	$tmp38	%read{69,69} %write{68,68}
+const	float	$const9	1.80493573e-14		%read{70,70} %write{2147483647,-1}
+temp	float	$tmp39	%read{72,72} %write{71,71}
+temp	int	$tmp40	%read{74,74} %write{73,73}
+temp	int	$tmp41	%read{78,78} %write{77,77}
+temp	color	$tmp42	%read{80,80} %write{79,79}
+temp	color	$tmp43	%read{81,81} %write{80,80}
+temp	closure color	$tmp44	%read{83,83} %write{82,82}
+temp	closure color	$tmp45	%read{84,84} %write{83,83}
+code ___main___
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl:23
+#   float primitive_density = 1.0;
+	assign		primitive_density $const1 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl"} %line{23} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl:24
+#   float density = max(Density, 0.0);
+	max		density Density $const2 	%line{24} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl:26
+#   if (density > 0.0) {
+	gt		$tmp1 density $const2 	%line{26} %argrw{"wrr"}
+	if		$tmp1 8 8 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl:27
+#     if (getattribute(DensityAttribute, primitive_density)) {
+	getattribute	$tmp2 DensityAttribute primitive_density 	%line{27} %argrw{"wrw"}
+	if		$tmp2 8 8 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl:28
+#       density = max(density * primitive_density, 0.0);
+	mul		$tmp3 density primitive_density 	%line{28} %argrw{"wrr"}
+	max		density $tmp3 $const2 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl:32
+#   if (density > 0.0) {
+	gt		$tmp4 density $const2 	%line{32} %argrw{"wrr"}
+	if		$tmp4 51 51 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl:34
+#     color scatter_color = Color;
+	assign		___512_scatter_color Color 	%line{34} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl:36
+#     if (getattribute(ColorAttribute, primitive_color)) {
+	getattribute	$tmp5 ColorAttribute ___512_primitive_color 	%line{36} %argrw{"wrw"}
+	if		$tmp5 14 14 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl:37
+#       scatter_color *= primitive_color;
+	mul		___512_scatter_color ___512_scatter_color ___512_primitive_color 	%line{37} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl:41
+#     color absorption_color = sqrt(max(AbsorptionColor, 0.0));
+	assign		$tmp7 $const2 	%line{41} %argrw{"wr"}
+	max		$tmp6 AbsorptionColor $tmp7 	%argrw{"wrr"}
+	sqrt		___512_absorption_color $tmp6 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl:42
+#     color absorption_coeff = max(1.0 - scatter_color, 0.0) * max(1.0 - absorption_color, 0.0);
+	sub		$tmp9 $const1 ___512_scatter_color 	%line{42} %argrw{"wrr"}
+	assign		$tmp10 $const2 	%argrw{"wr"}
+	max		$tmp8 $tmp9 $tmp10 	%argrw{"wrr"}
+	sub		$tmp12 $const1 ___512_absorption_color 	%argrw{"wrr"}
+	assign		$tmp13 $const2 	%argrw{"wr"}
+	max		$tmp11 $tmp12 $tmp13 	%argrw{"wrr"}
+	mul		___512_absorption_coeff $tmp8 $tmp11 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl:43
+#     color extinction = scatter_color + absorption_coeff;
+	add		___512_extinction ___512_scatter_color ___512_absorption_coeff 	%line{43} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl:44
+#     color albedo = safe_divide(scatter_color, extinction);
+	functioncall	$const3 49 	%line{44} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_math.h:17
+#   return vector((b[0] != 0.0) ? a[0] / b[0] : 0.0,
+	compref		$tmp15 ___512_extinction $const4 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_math.h"} %line{17} %argrw{"wrr"}
+	neq		$tmp16 $tmp15 $const2 	%argrw{"wrr"}
+	if		$tmp16 32 33 	%argrw{"r"}
+	compref		$tmp17 ___512_scatter_color $const4 	%argrw{"wrr"}
+	compref		$tmp18 ___512_extinction $const4 	%argrw{"wrr"}
+	div		$tmp14 $tmp17 $tmp18 	%argrw{"wrr"}
+	assign		$tmp14 $const2 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_math.h:18
+#                 (b[1] != 0.0) ? a[1] / b[1] : 0.0,
+	compref		$tmp20 ___512_extinction $const5 	%line{18} %argrw{"wrr"}
+	neq		$tmp21 $tmp20 $const2 	%argrw{"wrr"}
+	if		$tmp21 39 40 	%argrw{"r"}
+	compref		$tmp22 ___512_scatter_color $const5 	%argrw{"wrr"}
+	compref		$tmp23 ___512_extinction $const5 	%argrw{"wrr"}
+	div		$tmp19 $tmp22 $tmp23 	%argrw{"wrr"}
+	assign		$tmp19 $const2 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_math.h:19
+#                 (b[2] != 0.0) ? a[2] / b[2] : 0.0);
+	compref		$tmp25 ___512_extinction $const6 	%line{19} %argrw{"wrr"}
+	neq		$tmp26 $tmp25 $const2 	%argrw{"wrr"}
+	if		$tmp26 46 47 	%argrw{"r"}
+	compref		$tmp27 ___512_scatter_color $const6 	%argrw{"wrr"}
+	compref		$tmp28 ___512_extinction $const6 	%argrw{"wrr"}
+	div		$tmp24 $tmp27 $tmp28 	%argrw{"wrr"}
+	assign		$tmp24 $const2 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_math.h:17
+#   return vector((b[0] != 0.0) ? a[0] / b[0] : 0.0,
+	vector		___512_albedo $tmp14 $tmp19 $tmp24 	%line{17} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_math.h:19
+#                 (b[2] != 0.0) ? a[2] / b[2] : 0.0);
+	return	%line{19}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl:45
+#     Volume = density * anisotropic_vdf(albedo, extinction, Anisotropy);
+	closure		$tmp29 $const7 ___512_albedo ___512_extinction Anisotropy 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl"} %line{45} %argrw{"wrrrr"}
+	mul		Volume $tmp29 density 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl:49
+#   float emission_strength = max(EmissionStrength, 0.0);
+	max		emission_strength EmissionStrength $const2 	%line{49} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl:50
+#   float blackbody_intensity = BlackbodyIntensity;
+	assign		blackbody_intensity BlackbodyIntensity 	%line{50} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl:52
+#   if (emission_strength > 0.0) {
+	gt		$tmp30 emission_strength $const2 	%line{52} %argrw{"wrr"}
+	if		$tmp30 59 59 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl:53
+#     Volume += emission_strength * EmissionColor * emission();
+	closure		$tmp31 $const8 	%line{53} %argrw{"wr"}
+	mul		$tmp32 emission_strength EmissionColor 	%argrw{"wrr"}
+	mul		$tmp33 $tmp31 $tmp32 	%argrw{"wrr"}
+	add		Volume Volume $tmp33 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl:56
+#   if (blackbody_intensity > 0.0) {
+	gt		$tmp34 blackbody_intensity $const2 	%line{56} %argrw{"wrr"}
+	if		$tmp34 85 85 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl:57
+#     float T = Temperature;
+	assign		___515_T Temperature 	%line{57} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl:61
+#     if (getattribute(TemperatureAttribute, temperature)) {
+	getattribute	$tmp35 TemperatureAttribute ___515_temperature 	%line{61} %argrw{"wrw"}
+	if		$tmp35 66 66 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl:62
+#       T *= max(temperature, 0.0);
+	max		$tmp36 ___515_temperature $const2 	%line{62} %argrw{"wrr"}
+	mul		___515_T ___515_T $tmp36 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl:65
+#     T = max(T, 0.0);
+	max		___515_T ___515_T $const2 	%line{65} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl:68
+#     float T4 = (T * T) * (T * T);
+	mul		$tmp37 ___515_T ___515_T 	%line{68} %argrw{"wrr"}
+	mul		$tmp38 ___515_T ___515_T 	%argrw{"wrr"}
+	mul		___515_T4 $tmp37 $tmp38 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl:69
+#     float sigma = 5.670373e-8 * 1e-6 / M_PI;
+	assign		___515_sigma $const9 	%line{69} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl:70
+#     float intensity = sigma * mix(1.0, T4, blackbody_intensity);
+	mix		$tmp39 $const1 ___515_T4 blackbody_intensity 	%line{70} %argrw{"wrrr"}
+	mul		___515_intensity ___515_sigma $tmp39 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl:72
+#     if (intensity > 0.0) {
+	gt		$tmp40 ___515_intensity $const2 	%line{72} %argrw{"wrr"}
+	if		$tmp40 85 85 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl:73
+#       color bb = blackbody(T);
+	blackbody	___517_bb ___515_T 	%line{73} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl:74
+#       float l = luminance(bb);
+	luminance	___517_l ___517_bb 	%line{74} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl:76
+#       if (l != 0.0) {
+	neq		$tmp41 ___517_l $const2 	%line{76} %argrw{"wrr"}
+	if		$tmp41 85 85 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl:77
+#         bb *= BlackbodyTint * intensity / l;
+	mul		$tmp42 BlackbodyTint ___515_intensity 	%line{77} %argrw{"wrr"}
+	div		$tmp43 $tmp42 ___517_l 	%argrw{"wrr"}
+	mul		___517_bb ___517_bb $tmp43 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_volume.osl:78
+#         Volume += bb * emission();
+	closure		$tmp44 $const8 	%line{78} %argrw{"wr"}
+	mul		$tmp45 $tmp44 ___517_bb 	%argrw{"wrr"}
+	add		Volume Volume $tmp45 	%argrw{"wrr"}
+	end

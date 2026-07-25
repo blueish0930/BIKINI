@@ -1,0 +1,11 @@
+OpenShadingLanguage 1.00
+# Compiled by oslc 1.15.3.0
+# options: -q -O2 -IE:/Blender_Source/intern/cycles/kernel/osl/shaders -IE:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders -o E:/build_windows_Full_x64_vc17_Release/intern/cycles/kernel/osl/shaders/node_output_surface.oso
+surface node_output_surface
+param	closure color	Surface			%read{0,0} %write{2147483647,-1}
+global	closure color	Ci	%read{2147483647,-1} %write{0,0}
+code ___main___
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_output_surface.osl:9
+#   Ci = Surface;
+	assign		Ci Surface 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_output_surface.osl"} %line{9} %argrw{"wr"}
+	end

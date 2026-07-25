@@ -1,0 +1,273 @@
+OpenShadingLanguage 1.00
+# Compiled by oslc 1.15.3.0
+# options: -q -O2 -IE:/Blender_Source/intern/cycles/kernel/osl/shaders -IE:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders -o E:/build_windows_Full_x64_vc17_Release/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.oso
+shader node_metallic_bsdf
+param	color	BaseColor	0.616999984 0.577000022 0.540000021		%read{75,75} %write{2147483647,-1}
+param	color	EdgeTint	0.694999993 0.726000011 0.769999981		%read{78,78} %write{2147483647,-1}
+param	vector	IOR	2.75699997 2.51300001 2.23099995		%read{82,82} %write{2147483647,-1}
+param	vector	Extinction	3.8670001 3.40400004 3.00900006		%read{84,84} %write{2147483647,-1}
+param	string	distribution	"multi_ggx"		%read{80,85} %write{2147483647,-1}
+param	string	fresnel_type	"f82"		%read{72,72} %write{2147483647,-1}
+param	float	Roughness	0.5		%read{2,2} %write{2147483647,-1}
+param	float	Anisotropy	0		%read{8,11} %write{2147483647,-1}
+param	float	Rotation	0		%read{18,20} %write{2147483647,-1}
+param	float	ThinFilmThickness	0		%read{80,85} %write{2147483647,-1}
+param	float	ThinFilmIOR	1.33000004		%read{80,85} %write{2147483647,-1}
+param	normal	Normal	0 0 0		%read{22,85} %write{0,0} %initexpr
+param	normal	Tangent	0 0 0		%read{7,7} %write{2147483647,-1}
+oparam	closure color	BSDF			%read{2147483647,-1} %write{80,85}
+global	normal	N	%read{0,0} %write{2147483647,-1}
+local	vector	___257_axis	%read{26,28} %write{23,23}
+local	float	___257_cosang	%read{25,66} %write{24,24}
+local	float	___257_sinang	%read{36,61} %write{24,24}
+local	float	___257_cosang1	%read{35,60} %write{25,25}
+local	float	___257_x	%read{29,61} %write{26,26}
+local	float	___257_y	%read{34,59} %write{27,27}
+local	float	___257_z	%read{36,64} %write{28,28}
+local	matrix	___257_M	%read{70,70} %write{68,68}
+local	float	r2	%read{4,6} %write{3,4}
+local	float	alpha_x	%read{16,85} %write{5,16}
+local	float	alpha_y	%read{17,85} %write{6,17}
+local	vector	T	%read{69,85} %write{7,71}
+local	float	___376_aspect	%read{16,17} %write{15,15}
+local	color	___377_F0	%read{80,80} %write{76,76}
+local	color	___377_F82	%read{80,80} %write{79,79}
+const	float	$const1	0		%read{3,83} %write{2147483647,-1}
+const	float	$const2	1		%read{2,68} %write{2147483647,-1}
+const	string	$const3	"clamp"		%read{1,77} %write{2147483647,-1}
+temp	float	$tmp1	%read{3,3} %write{2,2}
+temp	int	$tmp2	%read{9,9} %write{8,8}
+temp	float	$tmp3	%read{13,13} %write{12,12}
+temp	float	$tmp4	%read{12,12} %write{11,11}
+const	float	$const4	0.899999976		%read{13,13} %write{2147483647,-1}
+temp	float	$tmp5	%read{14,14} %write{13,13}
+temp	float	$tmp6	%read{15,15} %write{14,14}
+temp	int	$tmp7	%read{19,19} %write{18,18}
+const	float	$const5	6.28318548		%read{20,20} %write{2147483647,-1}
+temp	float	$tmp8	%read{24,24} %write{20,20}
+const	point	$const6	0 0 0		%read{22,71} %write{2147483647,-1}
+const	string	$const7	"rotate"		%read{21,21} %write{2147483647,-1}
+temp	vector	$tmp10	%read{23,23} %write{22,22}
+const	int	$const8	0		%read{26,26} %write{2147483647,-1}
+const	int	$const9	1		%read{27,27} %write{2147483647,-1}
+const	int	$const10	2		%read{28,28} %write{2147483647,-1}
+temp	float	$tmp11	%read{33,33} %write{29,29}
+temp	float	$tmp12	%read{31,31} %write{30,30}
+temp	float	$tmp13	%read{32,32} %write{31,31}
+temp	float	$tmp14	%read{33,33} %write{32,32}
+temp	float	$tmp15	%read{68,68} %write{33,33}
+temp	float	$tmp16	%read{35,35} %write{34,34}
+temp	float	$tmp17	%read{37,37} %write{35,35}
+temp	float	$tmp18	%read{37,37} %write{36,36}
+temp	float	$tmp19	%read{68,68} %write{37,37}
+temp	float	$tmp20	%read{39,39} %write{38,38}
+temp	float	$tmp21	%read{41,41} %write{39,39}
+temp	float	$tmp22	%read{41,41} %write{40,40}
+temp	float	$tmp23	%read{68,68} %write{41,41}
+temp	float	$tmp24	%read{43,43} %write{42,42}
+temp	float	$tmp25	%read{45,45} %write{43,43}
+temp	float	$tmp26	%read{45,45} %write{44,44}
+temp	float	$tmp27	%read{68,68} %write{45,45}
+temp	float	$tmp28	%read{50,50} %write{46,46}
+temp	float	$tmp29	%read{48,48} %write{47,47}
+temp	float	$tmp30	%read{49,49} %write{48,48}
+temp	float	$tmp31	%read{50,50} %write{49,49}
+temp	float	$tmp32	%read{68,68} %write{50,50}
+temp	float	$tmp33	%read{52,52} %write{51,51}
+temp	float	$tmp34	%read{54,54} %write{52,52}
+temp	float	$tmp35	%read{54,54} %write{53,53}
+temp	float	$tmp36	%read{68,68} %write{54,54}
+temp	float	$tmp37	%read{56,56} %write{55,55}
+temp	float	$tmp38	%read{58,58} %write{56,56}
+temp	float	$tmp39	%read{58,58} %write{57,57}
+temp	float	$tmp40	%read{68,68} %write{58,58}
+temp	float	$tmp41	%read{60,60} %write{59,59}
+temp	float	$tmp42	%read{62,62} %write{60,60}
+temp	float	$tmp43	%read{62,62} %write{61,61}
+temp	float	$tmp44	%read{68,68} %write{62,62}
+temp	float	$tmp45	%read{67,67} %write{63,63}
+temp	float	$tmp46	%read{65,65} %write{64,64}
+temp	float	$tmp47	%read{66,66} %write{65,65}
+temp	float	$tmp48	%read{67,67} %write{66,66}
+temp	float	$tmp49	%read{68,68} %write{67,67}
+temp	vector	$tmp50	%read{71,71} %write{70,70}
+temp	vector	$tmp51	%read{70,70} %write{69,69}
+const	string	$const11	"f82"		%read{72,72} %write{2147483647,-1}
+temp	int	$tmp52	%read{73,73} %write{72,72}
+const	color	$const12	0 0 0		%read{76,79} %write{2147483647,-1}
+const	color	$const13	1 1 1		%read{75,78} %write{2147483647,-1}
+temp	color	$tmp55	%read{76,76} %write{75,75}
+temp	color	$tmp58	%read{79,79} %write{78,78}
+const	string	$const14	"thinfilm_thickness"		%read{80,85} %write{2147483647,-1}
+const	string	$const15	"thinfilm_ior"		%read{80,85} %write{2147483647,-1}
+const	string	$const16	"microfacet_f82_tint"		%read{80,80} %write{2147483647,-1}
+temp	vector	$tmp59	%read{85,85} %write{82,82}
+temp	vector	$tmp60	%read{82,82} %write{81,81}
+temp	vector	$tmp61	%read{85,85} %write{84,84}
+temp	vector	$tmp62	%read{84,84} %write{83,83}
+const	string	$const17	"conductor_bsdf"		%read{85,85} %write{2147483647,-1}
+code Normal
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl:19
+#                           normal Normal = N,
+	assign		Normal N 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl"} %line{19} %argrw{"wr"}
+code ___main___
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl:23
+#   float r2 = clamp(Roughness, 0.0, 1.0);
+	functioncall	$const3 4 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl"} %line{23} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
+# float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
+	min		$tmp1 Roughness $const2 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
+	max		r2 $tmp1 $const1 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl:24
+#   r2 *= r2;
+	mul		r2 r2 r2 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl"} %line{24} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl:25
+#   float alpha_x = r2, alpha_y = r2;
+	assign		alpha_x r2 	%line{25} %argrw{"wr"}
+	assign		alpha_y r2 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl:28
+#   vector T = Tangent;
+	assign		T Tangent 	%line{28} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl:29
+#   if (Anisotropy > 0.0) {
+	gt		$tmp2 Anisotropy $const1 	%line{29} %argrw{"wrr"}
+	if		$tmp2 72 72 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl:30
+#     float aspect = sqrt(1.0 - clamp(Anisotropy, 0.0, 1.0) * 0.9);
+	functioncall	$const3 13 	%line{30} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
+# float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
+	min		$tmp4 Anisotropy $const2 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
+	max		$tmp3 $tmp4 $const1 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl:30
+#     float aspect = sqrt(1.0 - clamp(Anisotropy, 0.0, 1.0) * 0.9);
+	mul		$tmp5 $tmp3 $const4 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl"} %line{30} %argrw{"wrr"}
+	sub		$tmp6 $const2 $tmp5 	%argrw{"wrr"}
+	sqrt		___376_aspect $tmp6 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl:31
+#     alpha_x /= aspect;
+	div		alpha_x alpha_x ___376_aspect 	%line{31} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl:32
+#     alpha_y *= aspect;
+	mul		alpha_y alpha_y ___376_aspect 	%line{32} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl:33
+#     if (Rotation != 0.0)
+	neq		$tmp7 Rotation $const1 	%line{33} %argrw{"wrr"}
+	if		$tmp7 72 72 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl:34
+#       T = rotate(T, Rotation * M_2PI, point(0.0, 0.0, 0.0), Normal);
+	mul		$tmp8 Rotation $const5 	%line{34} %argrw{"wrr"}
+	functioncall	$const7 72 	%argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:270
+#     vector axis = normalize (b - a);
+	sub		$tmp10 Normal $const6 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{270} %argrw{"wrr"}
+	normalize	___257_axis $tmp10 	%argrw{"wr"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:272
+#     sincos (angle, sinang, cosang);
+	sincos		$tmp8 ___257_sinang ___257_cosang 	%line{272} %argrw{"rww"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:273
+#     float cosang1 = 1.0 - cosang;
+	sub		___257_cosang1 $const2 ___257_cosang 	%line{273} %argrw{"wrr"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:274
+#     float x = axis[0], y = axis[1], z = axis[2];
+	compref		___257_x ___257_axis $const8 	%line{274} %argrw{"wrr"}
+	compref		___257_y ___257_axis $const9 	%argrw{"wrr"}
+	compref		___257_z ___257_axis $const10 	%argrw{"wrr"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:275
+#     matrix M = matrix (x * x + (1.0 - x * x) * cosang,
+	mul		$tmp11 ___257_x ___257_x 	%line{275} %argrw{"wrr"}
+	mul		$tmp12 ___257_x ___257_x 	%argrw{"wrr"}
+	sub		$tmp13 $const2 $tmp12 	%argrw{"wrr"}
+	mul		$tmp14 $tmp13 ___257_cosang 	%argrw{"wrr"}
+	add		$tmp15 $tmp11 $tmp14 	%argrw{"wrr"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:276
+#                        x * y * cosang1 + z * sinang,
+	mul		$tmp16 ___257_x ___257_y 	%line{276} %argrw{"wrr"}
+	mul		$tmp17 $tmp16 ___257_cosang1 	%argrw{"wrr"}
+	mul		$tmp18 ___257_z ___257_sinang 	%argrw{"wrr"}
+	add		$tmp19 $tmp17 $tmp18 	%argrw{"wrr"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:277
+#                        x * z * cosang1 - y * sinang,
+	mul		$tmp20 ___257_x ___257_z 	%line{277} %argrw{"wrr"}
+	mul		$tmp21 $tmp20 ___257_cosang1 	%argrw{"wrr"}
+	mul		$tmp22 ___257_y ___257_sinang 	%argrw{"wrr"}
+	sub		$tmp23 $tmp21 $tmp22 	%argrw{"wrr"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:279
+#                        x * y * cosang1 - z * sinang,
+	mul		$tmp24 ___257_x ___257_y 	%line{279} %argrw{"wrr"}
+	mul		$tmp25 $tmp24 ___257_cosang1 	%argrw{"wrr"}
+	mul		$tmp26 ___257_z ___257_sinang 	%argrw{"wrr"}
+	sub		$tmp27 $tmp25 $tmp26 	%argrw{"wrr"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:280
+#                        y * y + (1.0 - y * y) * cosang,
+	mul		$tmp28 ___257_y ___257_y 	%line{280} %argrw{"wrr"}
+	mul		$tmp29 ___257_y ___257_y 	%argrw{"wrr"}
+	sub		$tmp30 $const2 $tmp29 	%argrw{"wrr"}
+	mul		$tmp31 $tmp30 ___257_cosang 	%argrw{"wrr"}
+	add		$tmp32 $tmp28 $tmp31 	%argrw{"wrr"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:281
+#                        y * z * cosang1 + x * sinang,
+	mul		$tmp33 ___257_y ___257_z 	%line{281} %argrw{"wrr"}
+	mul		$tmp34 $tmp33 ___257_cosang1 	%argrw{"wrr"}
+	mul		$tmp35 ___257_x ___257_sinang 	%argrw{"wrr"}
+	add		$tmp36 $tmp34 $tmp35 	%argrw{"wrr"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:283
+#                        x * z * cosang1 + y * sinang,
+	mul		$tmp37 ___257_x ___257_z 	%line{283} %argrw{"wrr"}
+	mul		$tmp38 $tmp37 ___257_cosang1 	%argrw{"wrr"}
+	mul		$tmp39 ___257_y ___257_sinang 	%argrw{"wrr"}
+	add		$tmp40 $tmp38 $tmp39 	%argrw{"wrr"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:284
+#                        y * z * cosang1 - x * sinang,
+	mul		$tmp41 ___257_y ___257_z 	%line{284} %argrw{"wrr"}
+	mul		$tmp42 $tmp41 ___257_cosang1 	%argrw{"wrr"}
+	mul		$tmp43 ___257_x ___257_sinang 	%argrw{"wrr"}
+	sub		$tmp44 $tmp42 $tmp43 	%argrw{"wrr"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:285
+#                        z * z + (1.0 - z * z) * cosang,
+	mul		$tmp45 ___257_z ___257_z 	%line{285} %argrw{"wrr"}
+	mul		$tmp46 ___257_z ___257_z 	%argrw{"wrr"}
+	sub		$tmp47 $const2 $tmp46 	%argrw{"wrr"}
+	mul		$tmp48 $tmp47 ___257_cosang 	%argrw{"wrr"}
+	add		$tmp49 $tmp45 $tmp48 	%argrw{"wrr"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:275
+#     matrix M = matrix (x * x + (1.0 - x * x) * cosang,
+	matrix		___257_M $tmp15 $tmp19 $tmp23 $const1 $tmp27 $tmp32 $tmp36 $const1 $tmp40 $tmp44 $tmp49 $const1 $const1 $const1 $const1 $const2 	%line{275} %argrw{"wrrrrrrrrrrrrrrrr"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:288
+#     return transform (M, p-a) + a;
+	sub		$tmp51 T $const6 	%line{288} %argrw{"wrr"}
+	transformv	$tmp50 ___257_M $tmp51 	%argrw{"wrr"}
+	add		T $tmp50 $const6 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl:37
+#   if (fresnel_type == "f82") {
+	eq		$tmp52 fresnel_type $const11 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl"} %line{37} %argrw{"wrr"}
+	if		$tmp52 81 86 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl:38
+#     color F0 = clamp(BaseColor, color(0.0), color(1.0));
+	functioncall	$const3 77 	%line{38} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:140
+# color  clamp (color x, color minval, color maxval) { return max(min(x,maxval),minval); }
+	min		$tmp55 BaseColor $const13 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{140} %argrw{"wrr"}
+	max		___377_F0 $tmp55 $const12 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl:39
+#     color F82 = clamp(EdgeTint, color(0.0), color(1.0));
+	functioncall	$const3 80 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl"} %line{39} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:140
+# color  clamp (color x, color minval, color maxval) { return max(min(x,maxval),minval); }
+	min		$tmp58 EdgeTint $const13 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{140} %argrw{"wrr"}
+	max		___377_F82 $tmp58 $const12 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl:40
+#     BSDF = microfacet_f82_tint(distribution,
+	closure		BSDF $const16 distribution Normal T alpha_x alpha_y ___377_F0 ___377_F82 $const14 ThinFilmThickness $const15 ThinFilmIOR 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl"} %line{40} %argrw{"wrrrrrrrrrrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl:57
+#                           max(IOR, 0.0),
+	assign		$tmp60 $const1 	%line{57} %argrw{"wr"}
+	max		$tmp59 IOR $tmp60 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl:58
+#                           max(Extinction, 0.0),
+	assign		$tmp62 $const1 	%line{58} %argrw{"wr"}
+	max		$tmp61 Extinction $tmp62 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl:53
+#     BSDF = conductor_bsdf(Normal,
+	closure		BSDF $const17 Normal T alpha_x alpha_y $tmp59 $tmp61 distribution $const14 ThinFilmThickness $const15 ThinFilmIOR 	%line{53} %argrw{"wrrrrrrrrrrrr"}
+	end

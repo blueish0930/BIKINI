@@ -1,0 +1,14 @@
+BIKINI custom Blender portable build
+
+Blender: 5.3.0 Alpha custom Windows x64 build
+Package date: 2026-07-25
+Repository: https://github.com/blueish0930/BIKINI
+
+Usage:
+1. Download the repository ZIP from Code -> Download ZIP.
+2. Extract the entire ZIP.
+3. Open the extracted BIKINI-main folder.
+4. Run blender.exe.
+
+Keep blender.exe together with the 5.3, blender.crt, blender.shared, and license folders.
+This is an unofficial custom build and is not digitally signed by the Blender Foundation.

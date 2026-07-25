@@ -1,0 +1,47 @@
+OpenShadingLanguage 1.00
+# Compiled by oslc 1.15.3.0
+# options: -q -O2 -IE:/Blender_Source/intern/cycles/kernel/osl/shaders -IE:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders -o E:/build_windows_Full_x64_vc17_Release/intern/cycles/kernel/osl/shaders/node_hair_info.oso
+shader node_hair_info
+oparam	float	IsStrand	0		%read{2147483647,-1} %write{1,1}
+oparam	float	Intercept	0		%read{2147483647,-1} %write{2,2}
+oparam	float	Length	0		%read{2147483647,-1} %write{3,3}
+oparam	float	Thickness	0		%read{2147483647,-1} %write{4,4}
+oparam	normal	TangentNormal	0 0 0		%read{2147483647,-1} %write{0,5} %initexpr
+oparam	float	Random	0		%read{2147483647,-1} %write{6,6}
+global	normal	N	%read{0,0} %write{2147483647,-1}
+temp	int	$tmp1	%read{2147483647,-1} %write{1,1}
+const	string	$const1	"geom:is_curve"		%read{1,1} %write{2147483647,-1}
+temp	int	$tmp2	%read{2147483647,-1} %write{2,2}
+const	string	$const2	"geom:curve_intercept"		%read{2,2} %write{2147483647,-1}
+temp	int	$tmp3	%read{2147483647,-1} %write{3,3}
+const	string	$const3	"geom:curve_length"		%read{3,3} %write{2147483647,-1}
+temp	int	$tmp4	%read{2147483647,-1} %write{4,4}
+const	string	$const4	"geom:curve_thickness"		%read{4,4} %write{2147483647,-1}
+temp	int	$tmp5	%read{2147483647,-1} %write{5,5}
+const	string	$const5	"geom:curve_tangent_normal"		%read{5,5} %write{2147483647,-1}
+temp	int	$tmp6	%read{2147483647,-1} %write{6,6}
+const	string	$const6	"geom:curve_random"		%read{6,6} %write{2147483647,-1}
+code TangentNormal
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_hair_info.osl:11
+#                       output normal TangentNormal = N,
+	assign		TangentNormal N 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_hair_info.osl"} %line{11} %argrw{"wr"}
+code ___main___
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_hair_info.osl:14
+#   getattribute("geom:is_curve", IsStrand);
+	getattribute	$tmp1 $const1 IsStrand 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_hair_info.osl"} %line{14} %argrw{"wrw"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_hair_info.osl:15
+#   getattribute("geom:curve_intercept", Intercept);
+	getattribute	$tmp2 $const2 Intercept 	%line{15} %argrw{"wrw"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_hair_info.osl:16
+#   getattribute("geom:curve_length", Length);
+	getattribute	$tmp3 $const3 Length 	%line{16} %argrw{"wrw"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_hair_info.osl:17
+#   getattribute("geom:curve_thickness", Thickness);
+	getattribute	$tmp4 $const4 Thickness 	%line{17} %argrw{"wrw"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_hair_info.osl:18
+#   getattribute("geom:curve_tangent_normal", TangentNormal);
+	getattribute	$tmp5 $const5 TangentNormal 	%line{18} %argrw{"wrw"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_hair_info.osl:19
+#   getattribute("geom:curve_random", Random);
+	getattribute	$tmp6 $const6 Random 	%line{19} %argrw{"wrw"}
+	end

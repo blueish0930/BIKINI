@@ -1,0 +1,322 @@
+OpenShadingLanguage 1.00
+# Compiled by oslc 1.15.3.0
+# options: -q -O2 -IE:/Blender_Source/intern/cycles/kernel/osl/shaders -IE:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders -o E:/build_windows_Full_x64_vc17_Release/intern/cycles/kernel/osl/shaders/node_texture_coordinate.oso
+shader node_texture_coordinate
+param	int	is_background	0		%read{0,0} %write{2147483647,-1}
+param	int	is_volume	0		%read{16,16} %write{2147483647,-1}
+param	int	from_dupli	0		%read{13,81} %write{2147483647,-1}
+param	int	use_transform	0		%read{3,39} %write{2147483647,-1}
+param	string	bump_offset	"center"		%read{54,79} %write{2147483647,-1}
+param	float	bump_filter_width	0.100000001		%read{59,101} %write{2147483647,-1} %derivs
+param	matrix	object_itfm	0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0		%read{4,40} %write{2147483647,-1} %derivs
+oparam	point	Generated	0 0 0		%read{21,85} %write{1,85} %derivs
+oparam	point	UV	0 0 0		%read{61,88} %write{2,88} %derivs
+oparam	point	Object	0 0 0		%read{64,91} %write{4,91} %derivs
+oparam	point	Camera	0 0 0		%read{67,94} %write{9,94} %derivs
+oparam	point	Window	0 0 0		%read{70,97} %write{10,104} %derivs
+oparam	normal	Normal	0 0 0		%read{75,102} %write{11,103} %derivs
+oparam	point	Reflection	0 0 0		%read{2147483647,-1} %write{12,53}
+global	point	P	%read{1,44} %write{2147483647,-1} %derivs
+global	vector	I	%read{12,52} %write{2147483647,-1}
+global	normal	N	%read{11,51} %write{2147483647,-1} %derivs
+global	float	u	%read{36,38} %write{2147483647,-1} %derivs
+global	float	v	%read{37,37} %write{2147483647,-1} %derivs
+local	point	___370_Pcam	%read{7,7} %write{6,6} %derivs
+local	matrix	___375_tfm	%read{21,21} %write{19,19} %derivs
+local	float	___376_is_light	%read{33,33} %write{28,28}
+const	point	$const1	0 0 0		%read{2,6} %write{2147483647,-1}
+const	string	$const2	"camera"		%read{6,44} %write{2147483647,-1}
+const	string	$const3	"world"		%read{6,46} %write{2147483647,-1}
+temp	point	$tmp2	%read{9,9} %write{7,7} %derivs
+const	string	$const4	"transform"		%read{8,43} %write{2147483647,-1}
+const	string	$const5	"common"		%read{9,44} %write{2147483647,-1}
+temp	int	$tmp3	%read{2147483647,-1} %write{10,10}
+const	string	$const6	"NDC"		%read{10,45} %write{2147483647,-1}
+temp	int	$tmp4	%read{2147483647,-1} %write{14,14}
+const	string	$const7	"geom:dupli_generated"		%read{14,14} %write{2147483647,-1}
+temp	int	$tmp5	%read{2147483647,-1} %write{15,15}
+const	string	$const8	"geom:dupli_uv"		%read{15,15} %write{2147483647,-1}
+const	string	$const9	"object"		%read{18,46} %write{2147483647,-1}
+temp	int	$tmp6	%read{20,20} %write{19,19}
+const	string	$const10	"geom:generated_transform"		%read{19,19} %write{2147483647,-1}
+temp	int	$tmp7	%read{2147483647,-1} %write{22,22}
+const	string	$const11	"geom:uv"		%read{22,29} %write{2147483647,-1}
+temp	int	$tmp8	%read{24,24} %write{23,23}
+const	string	$const12	"geom:generated"		%read{23,23} %write{2147483647,-1}
+temp	int	$tmp9	%read{25,25} %write{24,24}
+const	int	$const13	0		%read{24,81} %write{2147483647,-1}
+temp	int	$tmp10	%read{2147483647,-1} %write{28,28}
+const	string	$const14	"object:is_light"		%read{28,28} %write{2147483647,-1}
+temp	int	$tmp11	%read{30,30} %write{29,29}
+temp	int	$tmp12	%read{31,31} %write{30,30}
+temp	int	$tmp13	%read{32,35} %write{31,34}
+temp	int	$tmp14	%read{34,34} %write{33,33}
+const	float	$const15	0		%read{33,104} %write{2147483647,-1}
+const	float	$const16	1		%read{36,36} %write{2147483647,-1}
+temp	float	$tmp15	%read{37,37} %write{36,36} %derivs
+temp	float	$tmp16	%read{38,38} %write{37,37} %derivs
+temp	int	$tmp17	%read{2147483647,-1} %write{45,45}
+temp	normal	$tmp18	%read{47,47} %write{46,46} %derivs
+temp	vector	$tmp19	%read{53,53} %write{52,52}
+const	string	$const17	"reflect"		%read{48,48} %write{2147483647,-1}
+const	int	$const18	2		%read{104,104} %write{2147483647,-1}
+temp	float	$tmp20	%read{50,50} %write{49,49}
+temp	float	$tmp21	%read{51,51} %write{50,50}
+const	float	$const19	2		%read{50,50} %write{2147483647,-1}
+temp	vector	$tmp22	%read{52,52} %write{51,51}
+const	string	$const20	"dx"		%read{54,54} %write{2147483647,-1}
+temp	int	$tmp23	%read{55,55} %write{54,54}
+temp	int	$tmp24	%read{57,57} %write{56,56}
+temp	vector	$tmp25	%read{59,59} %write{58,58} %derivs
+temp	vector	$tmp26	%read{60,60} %write{59,59} %derivs
+temp	vector	$tmp27	%read{62,62} %write{61,61} %derivs
+temp	vector	$tmp28	%read{63,63} %write{62,62} %derivs
+temp	vector	$tmp29	%read{65,65} %write{64,64} %derivs
+temp	vector	$tmp30	%read{66,66} %write{65,65} %derivs
+temp	vector	$tmp31	%read{68,68} %write{67,67} %derivs
+temp	vector	$tmp32	%read{69,69} %write{68,68} %derivs
+temp	vector	$tmp33	%read{71,71} %write{70,70} %derivs
+temp	vector	$tmp34	%read{72,72} %write{71,71} %derivs
+temp	int	$tmp35	%read{74,74} %write{73,73}
+const	string	$const21	"geom:bump_map_normal"		%read{73,98} %write{2147483647,-1}
+temp	vector	$tmp36	%read{76,76} %write{75,75} %derivs
+temp	vector	$tmp37	%read{77,77} %write{76,76} %derivs
+temp	normal	$tmp38	%read{78,78} %write{77,77} %derivs
+const	string	$const22	"dy"		%read{79,79} %write{2147483647,-1}
+temp	int	$tmp39	%read{80,80} %write{79,79}
+temp	int	$tmp40	%read{82,82} %write{81,81}
+temp	vector	$tmp41	%read{84,84} %write{83,83} %derivs
+temp	vector	$tmp42	%read{85,85} %write{84,84} %derivs
+temp	vector	$tmp43	%read{87,87} %write{86,86} %derivs
+temp	vector	$tmp44	%read{88,88} %write{87,87} %derivs
+temp	vector	$tmp45	%read{90,90} %write{89,89} %derivs
+temp	vector	$tmp46	%read{91,91} %write{90,90} %derivs
+temp	vector	$tmp47	%read{93,93} %write{92,92} %derivs
+temp	vector	$tmp48	%read{94,94} %write{93,93} %derivs
+temp	vector	$tmp49	%read{96,96} %write{95,95} %derivs
+temp	vector	$tmp50	%read{97,97} %write{96,96} %derivs
+temp	int	$tmp51	%read{99,99} %write{98,98}
+temp	vector	$tmp52	%read{101,101} %write{100,100} %derivs
+temp	vector	$tmp53	%read{102,102} %write{101,101} %derivs
+temp	normal	$tmp54	%read{103,103} %write{102,102} %derivs
+code ___main___
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:24
+#   if (is_background) {
+	if		is_background 13 54 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl"} %line{24} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:25
+#     Generated = P;
+	assign		Generated P 	%line{25} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:26
+#     UV = point(0.0, 0.0, 0.0);
+	assign		UV $const1 	%line{26} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:27
+#     if (use_transform) {
+	if		use_transform 5 6 	%line{27} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:28
+#       Object = transform(object_itfm, P);
+	transform	Object object_itfm P 	%line{28} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:31
+#       Object = P;
+	assign		Object P 	%line{31} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:33
+#     point Pcam = transform("camera", "world", point(0, 0, 0));
+	transform	___370_Pcam $const2 $const3 $const1 	%line{33} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:34
+#     Camera = transform("camera", P + Pcam);
+	add		$tmp2 P ___370_Pcam 	%line{34} %argrw{"wrr"}
+	functioncall	$const4 10 	%argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:263
+# point  transform (string to, point p)  { return transform("common",to,p); }
+	transform	Camera $const5 $const2 $tmp2 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{263} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:35
+#     getattribute("NDC", Window);
+	getattribute	$tmp3 $const6 Window 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl"} %line{35} %argrw{"wrw"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:36
+#     Normal = N;
+	assign		Normal N 	%line{36} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:37
+#     Reflection = I;
+	assign		Reflection I 	%line{37} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:40
+#     if (from_dupli) {
+	if		from_dupli 16 39 	%line{40} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:41
+#       getattribute("geom:dupli_generated", Generated);
+	getattribute	$tmp4 $const7 Generated 	%line{41} %argrw{"wrw"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:42
+#       getattribute("geom:dupli_uv", UV);
+	getattribute	$tmp5 $const8 UV 	%line{42} %argrw{"wrw"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:44
+#     else if (is_volume) {
+	if		is_volume 23 39 	%line{44} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:45
+#       Generated = transform("object", P);
+	functioncall	$const4 19 	%line{45} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:263
+# point  transform (string to, point p)  { return transform("common",to,p); }
+	transform	Generated $const5 $const9 P 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{263} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:48
+#       if (getattribute("geom:generated_transform", tfm))
+	getattribute	$tmp6 $const10 ___375_tfm 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl"} %line{48} %argrw{"wrw"}
+	if		$tmp6 22 22 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:49
+#         Generated = transform(tfm, Generated);
+	transform	Generated ___375_tfm Generated 	%line{49} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:51
+#       getattribute("geom:uv", UV);
+	getattribute	$tmp7 $const11 UV 	%line{51} %argrw{"wrw"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:54
+#       if (!getattribute("geom:generated", Generated)) {
+	getattribute	$tmp8 $const12 Generated 	%line{54} %argrw{"wrw"}
+	eq		$tmp9 $tmp8 $const13 	%argrw{"wrr"}
+	if		$tmp9 28 28 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:55
+#         Generated = transform("object", P);
+	functioncall	$const4 28 	%line{55} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:263
+# point  transform (string to, point p)  { return transform("common",to,p); }
+	transform	Generated $const5 $const9 P 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{263} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:58
+#       getattribute("object:is_light", is_light);
+	getattribute	$tmp10 $const14 ___376_is_light 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl"} %line{58} %argrw{"wrw"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:59
+#       if (!getattribute("geom:uv", UV) && is_light) {
+	getattribute	$tmp11 $const11 UV 	%line{59} %argrw{"wrw"}
+	eq		$tmp12 $tmp11 $const13 	%argrw{"wrr"}
+	neq		$tmp13 $tmp12 $const13 	%argrw{"wrr"}
+	if		$tmp13 35 35 	%argrw{"r"}
+	neq		$tmp14 ___376_is_light $const15 	%argrw{"wrr"}
+	assign		$tmp13 $tmp14 	%argrw{"wr"}
+	if		$tmp13 39 39 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:60
+#         UV = point(1.0 - u - v, u, 0.0);
+	sub		$tmp15 $const16 u 	%line{60} %argrw{"wrr"}
+	sub		$tmp16 $tmp15 v 	%argrw{"wrr"}
+	point		UV $tmp16 u $const15 	%argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:64
+#     if (use_transform) {
+	if		use_transform 41 43 	%line{64} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:65
+#       Object = transform(object_itfm, P);
+	transform	Object object_itfm P 	%line{65} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:68
+#       Object = transform("object", P);
+	functioncall	$const4 43 	%line{68} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:263
+# point  transform (string to, point p)  { return transform("common",to,p); }
+	transform	Object $const5 $const9 P 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{263} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:70
+#     Camera = transform("camera", P);
+	functioncall	$const4 45 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl"} %line{70} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:263
+# point  transform (string to, point p)  { return transform("common",to,p); }
+	transform	Camera $const5 $const2 P 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{263} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:71
+#     getattribute("NDC", Window);
+	getattribute	$tmp17 $const6 Window 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl"} %line{71} %argrw{"wrw"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:72
+#     Normal = normalize(transform("world", "object", N));
+	transformn	$tmp18 $const3 $const9 N 	%line{72} %argrw{"wrrr"}
+	normalize	Normal $tmp18 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:73
+#     Reflection = -reflect(I, N);
+	functioncall	$const17 53 	%line{73} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:212
+# vector reflect (vector I, vector N) { return I - 2*dot(N,I)*N; }
+	dot		$tmp20 N I 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{212} %argrw{"wrr"}
+	mul		$tmp21 $const19 $tmp20 	%argrw{"wrr"}
+	mul		$tmp22 $tmp21 N 	%argrw{"wrr"}
+	sub		$tmp19 I $tmp22 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:73
+#     Reflection = -reflect(I, N);
+	neg		Reflection $tmp19 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl"} %line{73} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:76
+#   if (bump_offset == "dx") {
+	eq		$tmp23 bump_offset $const20 	%line{76} %argrw{"wrr"}
+	if		$tmp23 79 104 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:77
+#     if (!from_dupli) {
+	eq		$tmp24 from_dupli $const13 	%line{77} %argrw{"wrr"}
+	if		$tmp24 64 64 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:78
+#       Generated += Dx(Generated) * bump_filter_width;
+	Dx		$tmp25 Generated 	%line{78} %argrw{"wr"} %argderivs{1}
+	mul		$tmp26 $tmp25 bump_filter_width 	%argrw{"wrr"}
+	add		Generated Generated $tmp26 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:79
+#       UV += Dx(UV) * bump_filter_width;
+	Dx		$tmp27 UV 	%line{79} %argrw{"wr"} %argderivs{1}
+	mul		$tmp28 $tmp27 bump_filter_width 	%argrw{"wrr"}
+	add		UV UV $tmp28 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:81
+#     Object += Dx(Object) * bump_filter_width;
+	Dx		$tmp29 Object 	%line{81} %argrw{"wr"} %argderivs{1}
+	mul		$tmp30 $tmp29 bump_filter_width 	%argrw{"wrr"}
+	add		Object Object $tmp30 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:82
+#     Camera += Dx(Camera) * bump_filter_width;
+	Dx		$tmp31 Camera 	%line{82} %argrw{"wr"} %argderivs{1}
+	mul		$tmp32 $tmp31 bump_filter_width 	%argrw{"wrr"}
+	add		Camera Camera $tmp32 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:83
+#     Window += Dx(Window) * bump_filter_width;
+	Dx		$tmp33 Window 	%line{83} %argrw{"wr"} %argderivs{1}
+	mul		$tmp34 $tmp33 bump_filter_width 	%argrw{"wrr"}
+	add		Window Window $tmp34 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:84
+#     if (getattribute("geom:bump_map_normal", Normal)) {
+	getattribute	$tmp35 $const21 Normal 	%line{84} %argrw{"wrw"}
+	if		$tmp35 79 79 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:85
+#       Normal = normalize(Normal + Dx(Normal) * bump_filter_width);
+	Dx		$tmp36 Normal 	%line{85} %argrw{"wr"} %argderivs{1}
+	mul		$tmp37 $tmp36 bump_filter_width 	%argrw{"wrr"}
+	add		$tmp38 Normal $tmp37 	%argrw{"wrr"}
+	normalize	Normal $tmp38 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:88
+#   else if (bump_offset == "dy") {
+	eq		$tmp39 bump_offset $const22 	%line{88} %argrw{"wrr"}
+	if		$tmp39 104 104 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:89
+#     if (!from_dupli) {
+	eq		$tmp40 from_dupli $const13 	%line{89} %argrw{"wrr"}
+	if		$tmp40 89 89 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:90
+#       Generated += Dy(Generated) * bump_filter_width;
+	Dy		$tmp41 Generated 	%line{90} %argrw{"wr"} %argderivs{1}
+	mul		$tmp42 $tmp41 bump_filter_width 	%argrw{"wrr"}
+	add		Generated Generated $tmp42 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:91
+#       UV += Dy(UV) * bump_filter_width;
+	Dy		$tmp43 UV 	%line{91} %argrw{"wr"} %argderivs{1}
+	mul		$tmp44 $tmp43 bump_filter_width 	%argrw{"wrr"}
+	add		UV UV $tmp44 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:93
+#     Object += Dy(Object) * bump_filter_width;
+	Dy		$tmp45 Object 	%line{93} %argrw{"wr"} %argderivs{1}
+	mul		$tmp46 $tmp45 bump_filter_width 	%argrw{"wrr"}
+	add		Object Object $tmp46 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:94
+#     Camera += Dy(Camera) * bump_filter_width;
+	Dy		$tmp47 Camera 	%line{94} %argrw{"wr"} %argderivs{1}
+	mul		$tmp48 $tmp47 bump_filter_width 	%argrw{"wrr"}
+	add		Camera Camera $tmp48 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:95
+#     Window += Dy(Window) * bump_filter_width;
+	Dy		$tmp49 Window 	%line{95} %argrw{"wr"} %argderivs{1}
+	mul		$tmp50 $tmp49 bump_filter_width 	%argrw{"wrr"}
+	add		Window Window $tmp50 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:96
+#     if (getattribute("geom:bump_map_normal", Normal)) {
+	getattribute	$tmp51 $const21 Normal 	%line{96} %argrw{"wrw"}
+	if		$tmp51 104 104 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:97
+#       Normal = normalize(Normal + Dy(Normal) * bump_filter_width);
+	Dy		$tmp52 Normal 	%line{97} %argrw{"wr"} %argderivs{1}
+	mul		$tmp53 $tmp52 bump_filter_width 	%argrw{"wrr"}
+	add		$tmp54 Normal $tmp53 	%argrw{"wrr"}
+	normalize	Normal $tmp54 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_texture_coordinate.osl:101
+#   Window[2] = 0.0;
+	compassign	Window $const18 $const15 	%line{101} %argrw{"wrr"}
+	end

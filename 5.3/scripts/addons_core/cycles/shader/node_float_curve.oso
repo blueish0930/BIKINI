@@ -1,0 +1,179 @@
+OpenShadingLanguage 1.00
+# Compiled by oslc 1.15.3.0
+# options: -q -O2 -IE:/Blender_Source/intern/cycles/kernel/osl/shaders -IE:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders -o E:/build_windows_Full_x64_vc17_Release/intern/cycles/kernel/osl/shaders/node_float_curve.oso
+shader node_float_curve
+param	float[]	ramp	0		%read{5,60} %write{2147483647,-1}
+param	float	min_x	0		%read{0,1} %write{2147483647,-1}
+param	float	max_x	1		%read{1,1} %write{2147483647,-1}
+param	int	extrapolate	1		%read{14,14} %write{2147483647,-1}
+param	float	ValueIn	0		%read{0,64} %write{2147483647,-1}
+param	float	Factor	0		%read{64,64} %write{2147483647,-1}
+oparam	float	ValueOut	0		%read{64,64} %write{33,64}
+local	float	___352_f	%read{6,49} %write{4,40}
+local	int	___352_table_size	%read{23,47} %write{5,5}
+local	float	___353_t0	%read{21,33} %write{19,24}
+local	float	___353_dy	%read{29,29} %write{21,27}
+local	int	___352_i	%read{42,59} %write{41,47}
+local	float	___352_t	%read{53,61} %write{49,49}
+local	float	___352_result	%read{58,63} %write{50,62}
+local	float	c	%read{4,36} %write{2,2}
+temp	float	$tmp1	%read{2,2} %write{0,0}
+temp	float	$tmp2	%read{2,2} %write{1,1}
+const	int	$const1	1		%read{20,59} %write{2147483647,-1}
+const	string	$const2	"rgb_ramp_lookup"		%read{3,3} %write{2147483647,-1}
+const	float	$const3	0		%read{6,53} %write{2147483647,-1}
+temp	int	$tmp3	%read{7,7} %write{6,6}
+temp	int	$tmp4	%read{8,12} %write{7,11}
+const	int	$const4	0		%read{7,54} %write{2147483647,-1}
+const	float	$const5	1		%read{9,57} %write{2147483647,-1}
+temp	int	$tmp5	%read{10,10} %write{9,9}
+temp	int	$tmp6	%read{11,11} %write{10,10}
+temp	int	$tmp7	%read{13,16} %write{12,15}
+temp	int	$tmp8	%read{15,15} %write{14,14}
+temp	int	$tmp9	%read{18,18} %write{17,17}
+temp	float	$tmp10	%read{21,21} %write{20,20}
+temp	int	$tmp11	%read{24,24} %write{23,23}
+const	int	$const6	2		%read{25,25} %write{2147483647,-1}
+temp	int	$tmp12	%read{26,26} %write{25,25}
+temp	float	$tmp13	%read{27,27} %write{26,26}
+temp	float	$tmp14	%read{32,32} %write{29,29}
+temp	int	$tmp15	%read{31,31} %write{30,30}
+temp	float	$tmp16	%read{33,33} %write{32,32}
+temp	float	$tmp17	%read{32,32} %write{31,31}
+temp	float	$tmp18	%read{40,40} %write{37,37}
+const	string	$const7	"clamp"		%read{35,35} %write{2147483647,-1}
+temp	float	$tmp19	%read{37,37} %write{36,36}
+temp	int	$tmp20	%read{39,39} %write{38,38}
+temp	float	$tmp21	%read{40,40} %write{39,39}
+temp	int	$tmp22	%read{43,43} %write{42,42}
+temp	int	$tmp23	%read{46,46} %write{45,45}
+temp	float	$tmp24	%read{49,49} %write{48,48}
+temp	int	$tmp25	%read{52,56} %write{51,55}
+temp	int	$tmp26	%read{54,54} %write{53,53}
+temp	int	$tmp27	%read{55,55} %write{54,54}
+temp	float	$tmp28	%read{58,58} %write{57,57}
+temp	float	$tmp29	%read{62,62} %write{58,58}
+temp	int	$tmp30	%read{60,60} %write{59,59}
+temp	float	$tmp31	%read{61,61} %write{60,60}
+temp	float	$tmp32	%read{62,62} %write{61,61}
+code ___main___
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_float_curve.osl:17
+#   float c = (ValueIn - min_x) / (max_x - min_x);
+	sub		$tmp1 ValueIn min_x 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_float_curve.osl"} %line{17} %argrw{"wrr"}
+	sub		$tmp2 max_x min_x 	%argrw{"wrr"}
+	div		c $tmp1 $tmp2 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_float_curve.osl:19
+#   ValueOut = rgb_ramp_lookup(ramp, c, 1, extrapolate);
+	functioncall	$const2 64 	%line{19} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_ramp_util.h:50
+#   float f = at;
+	assign		___352_f c 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_ramp_util.h"} %line{50} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_ramp_util.h:51
+#   int table_size = arraylength(ramp);
+	arraylength	___352_table_size ramp 	%line{51} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_ramp_util.h:53
+#   if ((f < 0.0 || f > 1.0) && extrapolate) {
+	lt		$tmp3 ___352_f $const3 	%line{53} %argrw{"wrr"}
+	neq		$tmp4 $tmp3 $const4 	%argrw{"wrr"}
+	if		$tmp4 9 12 	%argrw{"r"}
+	gt		$tmp5 ___352_f $const5 	%argrw{"wrr"}
+	neq		$tmp6 $tmp5 $const4 	%argrw{"wrr"}
+	assign		$tmp4 $tmp6 	%argrw{"wr"}
+	neq		$tmp7 $tmp4 $const4 	%argrw{"wrr"}
+	if		$tmp7 16 16 	%argrw{"r"}
+	neq		$tmp8 extrapolate $const4 	%argrw{"wrr"}
+	assign		$tmp7 $tmp8 	%argrw{"wr"}
+	if		$tmp7 35 35 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_ramp_util.h:55
+#     if (f < 0.0) {
+	lt		$tmp9 ___352_f $const3 	%line{55} %argrw{"wrr"}
+	if		$tmp9 23 29 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_ramp_util.h:56
+#       t0 = ramp[0];
+	aref		___353_t0 ramp $const4 	%line{56} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_ramp_util.h:57
+#       dy = t0 - ramp[1];
+	aref		$tmp10 ramp $const1 	%line{57} %argrw{"wrr"}
+	sub		___353_dy ___353_t0 $tmp10 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_ramp_util.h:58
+#       f = -f;
+	neg		___352_f ___352_f 	%line{58} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_ramp_util.h:61
+#       t0 = ramp[table_size - 1];
+	sub		$tmp11 ___352_table_size $const1 	%line{61} %argrw{"wrr"}
+	aref		___353_t0 ramp $tmp11 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_ramp_util.h:62
+#       dy = t0 - ramp[table_size - 2];
+	sub		$tmp12 ___352_table_size $const6 	%line{62} %argrw{"wrr"}
+	aref		$tmp13 ramp $tmp12 	%argrw{"wrr"}
+	sub		___353_dy ___353_t0 $tmp13 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_ramp_util.h:63
+#       f = f - 1.0;
+	sub		___352_f ___352_f $const5 	%line{63} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_ramp_util.h:65
+#     return t0 + dy * f * (table_size - 1);
+	mul		$tmp14 ___353_dy ___352_f 	%line{65} %argrw{"wrr"}
+	sub		$tmp15 ___352_table_size $const1 	%argrw{"wrr"}
+	assign		$tmp17 $tmp15 	%argrw{"wr"}
+	mul		$tmp16 $tmp14 $tmp17 	%argrw{"wrr"}
+	add		ValueOut ___353_t0 $tmp16 	%argrw{"wrr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_ramp_util.h:68
+#   f = clamp(at, 0.0, 1.0) * (table_size - 1);
+	functioncall	$const7 38 	%line{68} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
+# float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
+	min		$tmp19 c $const5 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
+	max		$tmp18 $tmp19 $const3 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_ramp_util.h:68
+#   f = clamp(at, 0.0, 1.0) * (table_size - 1);
+	sub		$tmp20 ___352_table_size $const1 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_ramp_util.h"} %line{68} %argrw{"wrr"}
+	assign		$tmp21 $tmp20 	%argrw{"wr"}
+	mul		___352_f $tmp18 $tmp21 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_ramp_util.h:71
+#   int i = (int)f;
+	assign		___352_i ___352_f 	%line{71} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_ramp_util.h:72
+#   if (i < 0) {
+	lt		$tmp22 ___352_i $const4 	%line{72} %argrw{"wrr"}
+	if		$tmp22 45 45 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_ramp_util.h:73
+#     i = 0;
+	assign		___352_i $const4 	%line{73} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_ramp_util.h:75
+#   if (i >= table_size) {
+	ge		$tmp23 ___352_i ___352_table_size 	%line{75} %argrw{"wrr"}
+	if		$tmp23 48 48 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_ramp_util.h:76
+#     i = table_size - 1;
+	sub		___352_i ___352_table_size $const1 	%line{76} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_ramp_util.h:78
+#   float t = f - (float)i;
+	assign		$tmp24 ___352_i 	%line{78} %argrw{"wr"}
+	sub		___352_t ___352_f $tmp24 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_ramp_util.h:80
+#   float result = ramp[i];
+	aref		___352_result ramp ___352_i 	%line{80} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_ramp_util.h:82
+#   if (interpolate && t > 0.0) {
+	neq		$tmp25 $const1 $const4 	%line{82} %argrw{"wrr"}
+	if		$tmp25 56 56 	%argrw{"r"}
+	gt		$tmp26 ___352_t $const3 	%argrw{"wrr"}
+	neq		$tmp27 $tmp26 $const4 	%argrw{"wrr"}
+	assign		$tmp25 $tmp27 	%argrw{"wr"}
+	if		$tmp25 63 63 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_ramp_util.h:83
+#     result = (1.0 - t) * result + t * ramp[i + 1];
+	sub		$tmp28 $const5 ___352_t 	%line{83} %argrw{"wrr"}
+	mul		$tmp29 $tmp28 ___352_result 	%argrw{"wrr"}
+	add		$tmp30 ___352_i $const1 	%argrw{"wrr"}
+	aref		$tmp31 ramp $tmp30 	%argrw{"wrr"}
+	mul		$tmp32 ___352_t $tmp31 	%argrw{"wrr"}
+	add		___352_result $tmp29 $tmp32 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_ramp_util.h:86
+#   return result;
+	assign		ValueOut ___352_result 	%line{86} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_float_curve.osl:21
+#   ValueOut = mix(ValueIn, ValueOut, Factor);
+	mix		ValueOut ValueIn ValueOut Factor 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_float_curve.osl"} %line{21} %argrw{"wrrr"}
+	end

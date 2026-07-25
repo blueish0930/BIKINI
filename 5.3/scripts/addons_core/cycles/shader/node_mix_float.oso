@@ -1,0 +1,40 @@
+OpenShadingLanguage 1.00
+# Compiled by oslc 1.15.3.0
+# options: -q -O2 -IE:/Blender_Source/intern/cycles/kernel/osl/shaders -IE:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders -o E:/build_windows_Full_x64_vc17_Release/intern/cycles/kernel/osl/shaders/node_mix_float.oso
+shader node_mix_float
+param	int	use_clamp	0		%read{0,0} %write{2147483647,-1}
+param	float	Factor	0.5		%read{2,4} %write{2147483647,-1}
+param	float	A	0		%read{7,7} %write{2147483647,-1}
+param	float	B	0		%read{8,8} %write{2147483647,-1}
+oparam	float	Result	0		%read{2147483647,-1} %write{9,9}
+local	float	t	%read{6,8} %write{3,4}
+const	float	$const1	0		%read{3,3} %write{2147483647,-1}
+const	float	$const2	1		%read{2,6} %write{2147483647,-1}
+const	string	$const3	"clamp"		%read{1,1} %write{2147483647,-1}
+temp	float	$tmp1	%read{3,3} %write{2,2}
+const	string	$const4	"endvalue_preserving_mix"		%read{5,5} %write{2147483647,-1}
+temp	float	$tmp2	%read{7,7} %write{6,6}
+temp	float	$tmp3	%read{9,9} %write{7,7}
+temp	float	$tmp4	%read{9,9} %write{8,8}
+code ___main___
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix_float.osl:10
+#   float t = (use_clamp) ? clamp(Factor, 0.0, 1.0) : Factor;
+	if		use_clamp 4 5 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix_float.osl"} %line{10} %argrw{"r"}
+	functioncall	$const3 4 	%argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
+# float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
+	min		$tmp1 Factor $const2 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
+	max		t $tmp1 $const1 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix_float.osl:10
+#   float t = (use_clamp) ? clamp(Factor, 0.0, 1.0) : Factor;
+	assign		t Factor 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix_float.osl"} %line{10} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix_float.osl:11
+#   Result = endvalue_preserving_mix(A, B, t);
+	functioncall	$const4 10 	%line{11} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_math.h:50
+#   return (1.0 - t) * a + t * b;
+	sub		$tmp2 $const2 t 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_math.h"} %line{50} %argrw{"wrr"}
+	mul		$tmp3 $tmp2 A 	%argrw{"wrr"}
+	mul		$tmp4 t B 	%argrw{"wrr"}
+	add		Result $tmp3 $tmp4 	%argrw{"wrr"}
+	end

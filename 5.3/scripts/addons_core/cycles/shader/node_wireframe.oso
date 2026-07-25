@@ -1,0 +1,228 @@
+OpenShadingLanguage 1.00
+# Compiled by oslc 1.15.3.0
+# options: -q -O2 -IE:/Blender_Source/intern/cycles/kernel/osl/shaders -IE:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders -o E:/build_windows_Full_x64_vc17_Release/intern/cycles/kernel/osl/shaders/node_wireframe.oso
+shader node_wireframe
+param	string	bump_offset	"center"		%read{0,5} %write{2147483647,-1}
+param	float	bump_filter_width	0.100000001		%read{3,8} %write{2147483647,-1} %derivs
+param	int	use_pixel_size	0		%read{43,43} %write{2147483647,-1}
+param	float	Size	0.00999999978		%read{58,58} %write{2147483647,-1}
+oparam	float	Fac	0		%read{2147483647,-1} %write{13,83}
+global	point	P	%read{2,82} %write{4,9} %derivs
+global	vector	I	%read{46,53} %write{2147483647,-1}
+local	int	___345_np	%read{33,82} %write{15,32}
+local	point[64]	___345_p	%read{63,82} %write{20,36}
+local	float	___345_pixelWidth	%read{59,82} %write{16,60}
+local	float	___348_pixelWidthX	%read{56,56} %write{49,49}
+local	float	___348_pixelWidthY	%read{56,56} %write{55,55}
+local	int	___349_i	%read{63,82} %write{62,82}
+local	int	___350_i2	%read{63,82} %write{63,82}
+local	vector	___350_dir	%read{63,82} %write{63,82}
+local	vector	___350_edge	%read{63,82} %write{63,82}
+local	vector	___350_crs	%read{63,82} %write{63,82}
+const	string	$const1	"dx"		%read{0,0} %write{2147483647,-1}
+temp	int	$tmp1	%read{1,1} %write{0,0}
+temp	vector	$tmp2	%read{3,3} %write{2,2} %derivs
+temp	vector	$tmp3	%read{4,4} %write{3,3} %derivs
+const	string	$const2	"dy"		%read{5,5} %write{2147483647,-1}
+temp	int	$tmp4	%read{6,6} %write{5,5}
+temp	vector	$tmp5	%read{8,8} %write{7,7} %derivs
+temp	vector	$tmp6	%read{9,9} %write{8,8} %derivs
+const	string	$const3	"triangles"		%read{17,28} %write{2147483647,-1}
+const	string	$const4	"wireframe"		%read{10,10} %write{2147483647,-1}
+temp	int	$tmp7	%read{12,12} %write{11,11}
+const	string	$const5	"path:diffuse"		%read{11,11} %write{2147483647,-1}
+const	float	$const6	0		%read{13,41} %write{2147483647,-1}
+const	int	$const7	0		%read{15,83} %write{2147483647,-1}
+const	int	$const8	1		%read{16,82} %write{2147483647,-1}
+temp	int	$tmp8	%read{18,18} %write{17,17}
+const	int	$const9	3		%read{19,33} %write{2147483647,-1}
+temp	int	$tmp9	%read{21,21} %write{20,20}
+const	string	$const10	"geom:trianglevertices"		%read{20,20} %write{2147483647,-1}
+temp	int	$tmp10	%read{22,22} %write{21,21}
+const	string	$const11	"polygons"		%read{25,25} %write{2147483647,-1}
+temp	int	$tmp11	%read{26,26} %write{25,25}
+temp	int	$tmp12	%read{27,31} %write{26,30}
+const	string	$const12	"patches"		%read{28,28} %write{2147483647,-1}
+temp	int	$tmp13	%read{29,29} %write{28,28}
+temp	int	$tmp14	%read{30,30} %write{29,29}
+temp	int	$tmp15	%read{2147483647,-1} %write{32,32}
+const	string	$const13	"geom:numpolyvertices"		%read{32,32} %write{2147483647,-1}
+temp	int	$tmp16	%read{34,34} %write{33,33}
+temp	int	$tmp17	%read{35,40} %write{34,39}
+temp	int	$tmp18	%read{37,37} %write{36,36}
+const	string	$const14	"geom:polyvertices"		%read{36,36} %write{2147483647,-1}
+temp	int	$tmp19	%read{38,38} %write{37,37}
+temp	int	$tmp20	%read{39,39} %write{38,38}
+temp	vector	$tmp21	%read{48,48} %write{44,44}
+temp	float	$tmp22	%read{47,47} %write{46,46}
+temp	vector	$tmp23	%read{46,46} %write{45,45}
+temp	vector	$tmp24	%read{48,48} %write{47,47}
+temp	vector	$tmp25	%read{49,49} %write{48,48}
+temp	vector	$tmp26	%read{54,54} %write{50,50}
+temp	float	$tmp27	%read{53,53} %write{52,52}
+temp	vector	$tmp28	%read{52,52} %write{51,51}
+temp	vector	$tmp29	%read{54,54} %write{53,53}
+temp	vector	$tmp30	%read{55,55} %write{54,54}
+temp	float	$tmp31	%read{57,57} %write{56,56}
+const	float	$const16	2		%read{57,57} %write{2147483647,-1}
+const	float	$const17	0.5		%read{58,58} %write{2147483647,-1}
+temp	float	$tmp32	%read{59,59} %write{58,58}
+temp	int	$tmp33	%read{63,82} %write{63,82}
+temp	int	$tmp34	%read{61,82} %write{62,82}
+temp	point	$tmp35	%read{63,82} %write{63,82}
+temp	point	$tmp36	%read{63,82} %write{63,82}
+temp	point	$tmp37	%read{63,82} %write{63,82}
+temp	float	$tmp38	%read{63,82} %write{63,82}
+temp	float	$tmp39	%read{63,82} %write{63,82}
+temp	float	$tmp40	%read{63,82} %write{63,82}
+temp	int	$tmp41	%read{63,82} %write{63,82}
+temp	int	$tmp42	%read{2147483647,-1} %write{63,82}
+code ___main___
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wireframe.osl:14
+#   if (bump_offset == "dx") {
+	eq		$tmp1 bump_offset $const1 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wireframe.osl"} %line{14} %argrw{"wrr"}
+	if		$tmp1 5 10 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wireframe.osl:15
+#     P += Dx(P) * bump_filter_width;
+	Dx		$tmp2 P 	%line{15} %argrw{"wr"} %argderivs{1}
+	mul		$tmp3 $tmp2 bump_filter_width 	%argrw{"wrr"}
+	add		P P $tmp3 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wireframe.osl:17
+#   else if (bump_offset == "dy") {
+	eq		$tmp4 bump_offset $const2 	%line{17} %argrw{"wrr"}
+	if		$tmp4 10 10 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wireframe.osl:18
+#     P += Dy(P) * bump_filter_width;
+	Dy		$tmp5 P 	%line{18} %argrw{"wr"} %argderivs{1}
+	mul		$tmp6 $tmp5 bump_filter_width 	%argrw{"wrr"}
+	add		P P $tmp6 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wireframe.osl:21
+#   Fac = wireframe("triangles", Size, use_pixel_size);
+	functioncall	$const4 85 	%line{21} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\oslutil.h:16
+#    if (raytype("path:diffuse")) return 0.0;
+	raytype		$tmp7 $const5 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\oslutil.h"} %line{16} %argrw{"wr"}
+	if		$tmp7 15 15 	%argrw{"r"}
+	assign		Fac $const6 	%argrw{"wr"}
+	return
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\oslutil.h:18
+#    int np = 0;
+	assign		___345_np $const7 	%line{18} %argrw{"wr"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\oslutil.h:20
+#    float pixelWidth = 1;
+	assign		___345_pixelWidth $const8 	%line{20} %argrw{"wr"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\oslutil.h:22
+#    if (edge_type == "triangles")
+	eq		$tmp8 $const3 $const3 	%line{22} %argrw{"wrr"}
+	if		$tmp8 25 43 	%argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\oslutil.h:24
+#       np = 3;
+	assign		___345_np $const9 	%line{24} %argrw{"wr"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\oslutil.h:25
+#       if (!getattribute("geom:trianglevertices", p))
+	getattribute	$tmp9 $const10 ___345_p 	%line{25} %argrw{"wrw"}
+	eq		$tmp10 $tmp9 $const7 	%argrw{"wrr"}
+	if		$tmp10 25 25 	%argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\oslutil.h:26
+#          return 0.0;
+	assign		Fac $const6 	%line{26} %argrw{"wr"}
+	return
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\oslutil.h:28
+#    else if (edge_type == "polygons" || edge_type == "patches")
+	eq		$tmp11 $const3 $const11 	%line{28} %argrw{"wrr"}
+	neq		$tmp12 $tmp11 $const7 	%argrw{"wrr"}
+	if		$tmp12 28 31 	%argrw{"r"}
+	eq		$tmp13 $const3 $const12 	%argrw{"wrr"}
+	neq		$tmp14 $tmp13 $const7 	%argrw{"wrr"}
+	assign		$tmp12 $tmp14 	%argrw{"wr"}
+	if		$tmp12 43 43 	%argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\oslutil.h:30
+#       getattribute("geom:numpolyvertices", np);
+	getattribute	$tmp15 $const13 ___345_np 	%line{30} %argrw{"wrw"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\oslutil.h:31
+#       if (np < 3 || !getattribute("geom:polyvertices", p))
+	lt		$tmp16 ___345_np $const9 	%line{31} %argrw{"wrr"}
+	neq		$tmp17 $tmp16 $const7 	%argrw{"wrr"}
+	if		$tmp17 36 40 	%argrw{"r"}
+	getattribute	$tmp18 $const14 ___345_p 	%argrw{"wrw"}
+	eq		$tmp19 $tmp18 $const7 	%argrw{"wrr"}
+	neq		$tmp20 $tmp19 $const7 	%argrw{"wrr"}
+	assign		$tmp17 $tmp20 	%argrw{"wr"}
+	if		$tmp17 43 43 	%argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\oslutil.h:32
+#          return 0.0;
+	assign		Fac $const6 	%line{32} %argrw{"wr"}
+	return
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\oslutil.h:35
+#    if (raster)
+	if		use_pixel_size 58 58 	%line{35} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\oslutil.h:39
+#       float pixelWidthX = length(Dx(P) - dot(Dx(P), I) * I);
+	Dx		$tmp21 P 	%line{39} %argrw{"wr"} %argderivs{1}
+	Dx		$tmp23 P 	%argrw{"wr"} %argderivs{1}
+	dot		$tmp22 $tmp23 I 	%argrw{"wrr"}
+	mul		$tmp24 $tmp22 I 	%argrw{"wrr"}
+	sub		$tmp25 $tmp21 $tmp24 	%argrw{"wrr"}
+	length		___348_pixelWidthX $tmp25 	%argrw{"wr"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\oslutil.h:40
+#       float pixelWidthY = length(Dy(P) - dot(Dy(P), I) * I);
+	Dy		$tmp26 P 	%line{40} %argrw{"wr"} %argderivs{1}
+	Dy		$tmp28 P 	%argrw{"wr"} %argderivs{1}
+	dot		$tmp27 $tmp28 I 	%argrw{"wrr"}
+	mul		$tmp29 $tmp27 I 	%argrw{"wrr"}
+	sub		$tmp30 $tmp26 $tmp29 	%argrw{"wrr"}
+	length		___348_pixelWidthY $tmp30 	%argrw{"wr"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\oslutil.h:42
+#       pixelWidth = (pixelWidthX + pixelWidthY) / 2;
+	add		$tmp31 ___348_pixelWidthX ___348_pixelWidthY 	%line{42} %argrw{"wrr"}
+	div		___345_pixelWidth $tmp31 $const16 	%argrw{"wrr"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\oslutil.h:47
+#    pixelWidth *= 0.5 * line_width;
+	mul		$tmp32 $const17 Size 	%line{47} %argrw{"wrr"}
+	mul		___345_pixelWidth ___345_pixelWidth $tmp32 	%argrw{"wrr"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\oslutil.h:48
+#    pixelWidth *= pixelWidth;
+	mul		___345_pixelWidth ___345_pixelWidth ___345_pixelWidth 	%line{48} %argrw{"wrr"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\oslutil.h:49
+#    for (int i = 0; i < np; i++)
+	for		$tmp34 63 65 81 83 	%line{49} %argrw{"r"}
+	assign		___349_i $const7 	%argrw{"wr"}
+	lt		$tmp33 ___349_i ___345_np 	%argrw{"wrr"}
+	neq		$tmp34 $tmp33 $const7 	%argrw{"wrr"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\oslutil.h:51
+#       int i2 = i ? i - 1 : np - 1;
+	if		___349_i 67 68 	%line{51} %argrw{"r"}
+	sub		___350_i2 ___349_i $const8 	%argrw{"wrr"}
+	sub		___350_i2 ___345_np $const8 	%argrw{"wrr"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\oslutil.h:52
+#       vector dir = P - p[i];
+	aref		$tmp35 ___345_p ___349_i 	%line{52} %argrw{"wrr"}
+	sub		___350_dir P $tmp35 	%argrw{"wrr"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\oslutil.h:53
+#       vector edge = p[i] - p[i2];
+	aref		$tmp36 ___345_p ___349_i 	%line{53} %argrw{"wrr"}
+	aref		$tmp37 ___345_p ___350_i2 	%argrw{"wrr"}
+	sub		___350_edge $tmp36 $tmp37 	%argrw{"wrr"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\oslutil.h:54
+#       vector crs = cross(edge, dir);
+	cross		___350_crs ___350_edge ___350_dir 	%line{54} %argrw{"wrr"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\oslutil.h:58
+#       if (dot(crs, crs) < (dot(edge, edge) * pixelWidth))
+	dot		$tmp38 ___350_crs ___350_crs 	%line{58} %argrw{"wrr"}
+	dot		$tmp39 ___350_edge ___350_edge 	%argrw{"wrr"}
+	mul		$tmp40 $tmp39 ___345_pixelWidth 	%argrw{"wrr"}
+	lt		$tmp41 $tmp38 $tmp40 	%argrw{"wrr"}
+	if		$tmp41 81 81 	%argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\oslutil.h:59
+#          return 1;
+	assign		Fac $const8 	%line{59} %argrw{"wr"}
+	return
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\oslutil.h:49
+#    for (int i = 0; i < np; i++)
+	assign		$tmp42 ___349_i 	%line{49} %argrw{"wr"}
+	add		___349_i ___349_i $const8 	%argrw{"wrr"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\oslutil.h:61
+#    return 0;
+	assign		Fac $const7 	%line{61} %argrw{"wr"}
+	return
+	end

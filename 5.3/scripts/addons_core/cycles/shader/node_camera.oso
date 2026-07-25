@@ -1,0 +1,25 @@
+OpenShadingLanguage 1.00
+# Compiled by oslc 1.15.3.0
+# options: -q -O2 -IE:/Blender_Source/intern/cycles/kernel/osl/shaders -IE:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders -o E:/build_windows_Full_x64_vc17_Release/intern/cycles/kernel/osl/shaders/node_camera.oso
+shader node_camera
+oparam	vector	ViewVector	0 0 0		%read{1,3} %write{0,3}
+oparam	float	ViewZDepth	0		%read{2147483647,-1} %write{1,1}
+oparam	float	ViewDistance	0		%read{2147483647,-1} %write{2,2}
+global	point	P	%read{0,0} %write{2147483647,-1}
+const	string	$const1	"world"		%read{0,0} %write{2147483647,-1}
+const	string	$const2	"camera"		%read{0,0} %write{2147483647,-1}
+const	int	$const3	2		%read{1,1} %write{2147483647,-1}
+code ___main___
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_camera.osl:11
+#   ViewVector = (vector)transform("world", "camera", P);
+	transform	ViewVector $const1 $const2 P 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_camera.osl"} %line{11} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_camera.osl:13
+#   ViewZDepth = ViewVector[2];
+	compref		ViewZDepth ViewVector $const3 	%line{13} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_camera.osl:14
+#   ViewDistance = length(ViewVector);
+	length		ViewDistance ViewVector 	%line{14} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_camera.osl:16
+#   ViewVector = normalize(ViewVector);
+	normalize	ViewVector ViewVector 	%line{16} %argrw{"wr"}
+	end

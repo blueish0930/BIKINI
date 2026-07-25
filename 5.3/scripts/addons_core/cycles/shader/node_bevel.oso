@@ -1,0 +1,33 @@
+OpenShadingLanguage 1.00
+# Compiled by oslc 1.15.3.0
+# options: -q -O2 -IE:/Blender_Source/intern/cycles/kernel/osl/shaders -IE:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders -o E:/build_windows_Full_x64_vc17_Release/intern/cycles/kernel/osl/shaders/node_bevel.oso
+shader node_bevel
+param	int	samples	4		%read{2,2} %write{2147483647,-1} %derivs
+param	float	Radius	0.0500000007		%read{3,3} %write{2147483647,-1} %derivs
+param	normal	NormalIn	0 0 0		%read{5,5} %write{0,0} %initexpr
+oparam	normal	NormalOut	0 0 0		%read{2147483647,-1} %write{1,6} %initexpr
+global	normal	N	%read{0,4} %write{2147483647,-1}
+local	vector	bevel_N	%read{4,4} %write{3,3}
+const	string	$const1	"@bevel"		%read{3,3} %write{2147483647,-1}
+temp	float	$tmp1	%read{3,3} %write{2,2} %derivs
+temp	vector	$tmp2	%read{5,5} %write{4,4}
+temp	normal	$tmp3	%read{6,6} %write{5,5}
+code NormalIn
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_bevel.osl:9
+#                   normal NormalIn = N,
+	assign		NormalIn N 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_bevel.osl"} %line{9} %argrw{"wr"}
+code NormalOut
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_bevel.osl:10
+#                   output normal NormalOut = N)
+	assign		NormalOut N 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_bevel.osl"} %line{10} %argrw{"wr"}
+code ___main___
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_bevel.osl:13
+#   vector bevel_N = (normal)(color)texture("@bevel", samples, Radius);
+	assign		$tmp1 samples 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_bevel.osl"} %line{13} %argrw{"wr"}
+	texture		bevel_N $const1 $tmp1 Radius 	%argrw{"wrrr"} %argderivs{2,3}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_bevel.osl:16
+#   NormalOut = normalize(NormalIn + (bevel_N - N));
+	sub		$tmp2 bevel_N N 	%line{16} %argrw{"wrr"}
+	add		$tmp3 NormalIn $tmp2 	%argrw{"wrr"}
+	normalize	NormalOut $tmp3 	%argrw{"wr"}
+	end
