@@ -1172,8 +1172,8 @@ class NODE_OT_interface_item_new(NodeInterfaceOperator, Operator):
             ('INPUT', "Input", ""),
             ('OUTPUT', "Output", ""),
             ('PANEL', "Panel", ""),
-            ('SEPARATOR', "Separator", ""),
-            ('MESSAGE', "Message", ""),
+            ('SEPARATOR', "Separator", "Visual divider for the group interface"),
+            ('MESSAGE', "Message", "Informational text for the group interface"),
         ),
         default='INPUT',
     )

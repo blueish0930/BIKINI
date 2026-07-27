@@ -296,6 +296,7 @@ class NODE_MT_gn_geometry_operations_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "GeometryNodeMergeByDistance")
         self.node_operator(layout, "GeometryNodeMergePoints")
         self.node_operator(layout, "GeometryNodeSortElements")
+        self.node_operator(layout, "GeometryNodeTimeShift")
         self.node_operator(layout, "GeometryNodeTransform", search_weight=1.0)
         layout.separator()
         self.node_operator(layout, "GeometryNodeGetGeometryComponent")
@@ -314,6 +315,7 @@ class NODE_MT_gn_geometry_sample_base(node_add_menu.NodeMenu):
         layout = self.layout
         self.node_operator(layout, "GeometryNodeProximity")
         self.node_operator(layout, "GeometryNodeIndexOfNearest")
+        self.node_operator(layout, "GeometryNodeKNearest")
         self.node_operator(layout, "GeometryNodeRaycast")
         self.node_operator(layout, "GeometryNodeSampleIndex")
         self.node_operator(layout, "GeometryNodeSampleNearest")
@@ -326,6 +328,7 @@ class NODE_MT_gn_input_base(node_add_menu.NodeMenu):
 
     def draw(self, context):
         layout = self.layout
+        self.node_operator(layout, "NodeEnableInput")
         self.draw_menu(layout, path="Input/Constant")
         if context.space_data.node_tree_sub_type != 'TOOL':
             self.draw_menu(layout, path="Input/Gizmo")
@@ -408,6 +411,7 @@ class NODE_MT_gn_input_scene_base(node_add_menu.NodeMenu):
             )
         self.node_operator(layout, "GeometryNodeObjectInfo")
         self.node_operator_with_outputs(context, layout, "GeometryNodeInputSceneTime", ["Frame", "Seconds"])
+        self.node_operator(layout, "GeometryNodeInputViewportCamera")
         self.node_operator(layout, "GeometryNodeSelfObject")
         if context.space_data.node_tree_sub_type == 'TOOL':
             self.node_operator_with_outputs(
@@ -553,6 +557,7 @@ class NODE_MT_gn_mesh_operations_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "GeometryNodeEdgePathsToSelection")
         self.node_operator(layout, "GeometryNodeExtrudeMesh")
         self.node_operator(layout, "GeometryNodeFlipFaces")
+        self.node_operator(layout, "GeometryNodeLoopSubdivision")
         self.node_operator(layout, "GeometryNodeMeshBevel")
         self.node_operator(layout, "GeometryNodeMeshBoolean")
         self.node_operator(layout, "GeometryNodeMeshToCurve")
@@ -628,6 +633,7 @@ class NODE_MT_gn_output_base(node_add_menu.NodeMenu):
         layout = self.layout
         self.node_operator(layout, "NodeEnableOutput")
         self.node_operator(layout, "NodeGroupOutput")
+        self.node_operator(layout, "GeometryNodeDebug")
         self.node_operator(layout, "GeometryNodeViewer")
         self.node_operator_with_searchable_enum(context, layout, "GeometryNodeWarning", "warning_type")
 

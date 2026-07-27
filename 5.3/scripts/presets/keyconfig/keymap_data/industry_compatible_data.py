@@ -1143,6 +1143,8 @@ def km_node_editor(params):
     items.extend(_template_node_select(type='LEFTMOUSE', value='PRESS', select_passthrough=True))
 
     items.extend([
+        # Press/hold U then LMB-drag anywhere (modal blocks box-select).
+        ("node.align_selection", {"type": 'U', "value": 'PRESS'}, None),
         ("node.select_box", {"type": 'LEFTMOUSE', "value": 'CLICK_DRAG'},
          {"properties": [("tweak", True)]}),
         ("node.select_lasso", {"type": 'LEFTMOUSE', "value": 'CLICK_DRAG', "ctrl": True, "alt": True},
@@ -3671,6 +3673,8 @@ def km_transform_modal_map(_params):
         ("INSERTOFS_TOGGLE_DIR", {"type": 'T', "value": 'PRESS'}, None),
         ("NODE_ATTACH_ON", {"type": 'LEFT_ALT', "value": 'RELEASE', "any": True}, None),
         ("NODE_ATTACH_OFF", {"type": 'LEFT_ALT', "value": 'PRESS', "any": True}, None),
+        # Hold U while moving nodes: snap/align to nearby nodes (node editor only; poll).
+        # Node align: hold U + LMB drag in Node Editor (node_align=True). No modal hold-U.
         ("AUTOCONSTRAIN", {"type": 'MIDDLEMOUSE', "value": 'ANY'}, None),
         ("AUTOCONSTRAINPLANE", {"type": 'MIDDLEMOUSE', "value": 'ANY', "shift": True}, None),
         ("PRECISION", {"type": 'LEFT_SHIFT', "value": 'ANY', "any": True}, None),

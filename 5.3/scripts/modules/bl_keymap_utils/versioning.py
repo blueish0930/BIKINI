@@ -360,4 +360,70 @@ def keyconfig_update(keyconfig_data, keyconfig_version):
                     if index_to_fix != -1:
                         item_prop["properties"][index_to_fix] = ("brush_toggle", value_to_copy)
 
+    if keyconfig_version < (5, 3, 0):
+        # Node align: hold U + LMB drag (not plain U, not modal hold-U).
+        # A remains Select All. Remove early experimental modal / U-PRESS bindings.
+        if km_items_data := get_transform_modal_map():
+            remove_idx = [
+                idx for idx, (item_modal, _item_event, _item_prop) in enumerate(km_items_data["items"])
+                if item_modal in {"NODE_ALIGN_ON", "NODE_ALIGN_OFF"}
+            ]
+            if remove_idx:
+                if not has_copy:
+                    keyconfig_data = copy.deepcopy(keyconfig_data)
+                    has_copy = True
+                    km_items_data = get_transform_modal_map()
+                    remove_idx = [
+                        idx for idx, (item_modal, _item_event, _item_prop) in enumerate(
+                            km_items_data["items"])
+                        if item_modal in {"NODE_ALIGN_ON", "NODE_ALIGN_OFF"}
+                    ]
+                for idx in reversed(remove_idx):
+                    del km_items_data["items"][idx]
+
+        for km_index, (km_name, _km_params, km_items_data) in enumerate(keyconfig_data):
+            if km_name != "Node Editor":
+                continue
+            if not has_copy:
+                keyconfig_data = copy.deepcopy(keyconfig_data)
+                has_copy = True
+                km_items_data = keyconfig_data[km_index][2]
+
+            # Drop plain U PRESS translate (moved without LMB — undesired).
+            km_items_data["items"] = [
+                item for item in km_items_data["items"]
+                if not (
+                    item[0] == "transform.translate"
+                    and item[1].get("type") == 'U'
+                    and item[1].get("value") == 'PRESS'
+                    and not item[1].get("key_modifier")
+                )
+            ]
+
+            # Drop old U+LMB / key_modifier U translate bindings.
+            km_items_data["items"] = [
+                item for item in km_items_data["items"]
+                if not (
+                    (
+                        item[0] in {"node.translate_attach", "transform.translate"}
+                        and item[1].get("key_modifier") == 'U'
+                    )
+                    or (
+                        item[0] == "transform.translate"
+                        and item[1].get("type") == 'U'
+                        and item[1].get("value") == 'PRESS'
+                    )
+                )
+            ]
+
+            has_align_modal = any(
+                item[0] == "node.align_selection" for item in km_items_data["items"]
+            )
+            if not has_align_modal:
+                km_items_data["items"].insert(
+                    0,
+                    ("node.align_selection", {"type": 'U', "value": 'PRESS'}, None),
+                )
+            break
+
     return keyconfig_data

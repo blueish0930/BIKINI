@@ -2307,6 +2307,8 @@ def km_node_editor(params):
         ))
 
     items.extend([
+        # Houdini-style: press/hold U (modal blocks box-select), then LMB-drag anywhere.
+        ("node.align_selection", {"type": 'U', "value": 'PRESS'}, None),
         ("node.select_box", {"type": params.select_mouse, "value": 'CLICK_DRAG'},
          {"properties": [("tweak", True)]}),
         ("node.select_lasso", {"type": 'LEFTMOUSE', "value": 'CLICK_DRAG', "ctrl": True, "alt": True},
@@ -3784,6 +3786,7 @@ def km_spreadsheet_generic(params):
             channels_key={"type": 'T', "value": 'PRESS'},
         ),
         ("spreadsheet.resize_column", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
+        ("spreadsheet.sort_column", {"type": 'LEFTMOUSE', "value": 'CLICK'}, None),
         ("spreadsheet.fit_column", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'}, None),
         ("spreadsheet.reorder_columns", {"type": 'LEFTMOUSE', "value": 'CLICK_DRAG'}, None),
     ])
@@ -6243,6 +6246,9 @@ def km_transform_modal_map(params):
         ("NODE_ATTACH_ON", {"type": 'LEFT_ALT', "value": 'RELEASE', "any": True}, None),
         ("NODE_ATTACH_OFF", {"type": 'LEFT_ALT', "value": 'PRESS', "any": True}, None),
         ("NODE_FRAME", {"type": 'F', "value": 'PRESS'}, None),
+        # Hold U while moving nodes: snap/align to nearby nodes (node editor only; poll).
+        # Node align is started via hold-U + LMB drag (Node Editor keymap, node_align=True).
+        # No modal hold-U: holding U alone while moving the mouse must do nothing.
         ("AUTOCONSTRAIN", {"type": 'MIDDLEMOUSE', "value": 'ANY', **alt_without_navigation}, None),
         ("AUTOCONSTRAINPLANE", {"type": 'MIDDLEMOUSE', "value": 'ANY', "shift": True, **alt_without_navigation}, None),
         ("PRECISION", {"type": 'LEFT_SHIFT', "value": 'ANY', "any": True}, None),

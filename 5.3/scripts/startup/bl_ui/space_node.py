@@ -1046,12 +1046,26 @@ class NODE_MT_node_tree_interface_new_item(Menu):
 
     def draw(self, context):
         layout = self.layout
-        layout.operator_enum("node.interface_item_new", "item_type")
+
+        props = layout.operator("node.interface_item_new", text="Input")
+        props.item_type = 'INPUT'
+        props = layout.operator("node.interface_item_new", text="Output")
+        props.item_type = 'OUTPUT'
+        props = layout.operator("node.interface_item_new", text="Panel")
+        props.item_type = 'PANEL'
 
         active_item = context.space_data.edit_tree.interface.active
 
         if active_item and active_item.item_type == 'PANEL':
             layout.operator("node.interface_item_new_panel_toggle", text="Panel Toggle")
+
+        # UI-only helpers are intentionally separated from sockets and panels.
+        layout.separator(type='LINE')
+
+        props = layout.operator("node.interface_item_new", text="Separator", icon='REMOVE')
+        props.item_type = 'SEPARATOR'
+        props = layout.operator("node.interface_item_new", text="Message", icon='INFO')
+        props.item_type = 'MESSAGE'
 
 
 class NODE_PT_node_tree_properties(Panel):

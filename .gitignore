@@ -19,6 +19,17 @@
 *.sha256
 /BIKINI-Blender-*.zip
 
+# Local backup / previous binaries (not the shipping build).
+/blender.exe.old*
+/blender.exe.prev*
+/blender.exe.bak*
+
+# Dev / verification builds and helper scripts (not the portable product).
+/blender_enable_io_verify.exe
+/blender_timeshift_interactive.exe
+/verify_*.py
+/verify_*.cmd
+
 # Python byte-code generated when this portable build is run locally.
 __pycache__/
 *.py[cod]
