@@ -411,7 +411,8 @@ class NODE_MT_gn_input_scene_base(node_add_menu.NodeMenu):
             )
         self.node_operator(layout, "GeometryNodeObjectInfo")
         self.node_operator_with_outputs(context, layout, "GeometryNodeInputSceneTime", ["Frame", "Seconds"])
-        self.node_operator(layout, "GeometryNodeInputViewportCamera")
+        # Disabled: Viewport Camera node kept in source but not enabled in the Add menu.
+        # self.node_operator(layout, "GeometryNodeInputViewportCamera")
         self.node_operator(layout, "GeometryNodeSelfObject")
         if context.space_data.node_tree_sub_type == 'TOOL':
             self.node_operator_with_outputs(
@@ -558,6 +559,7 @@ class NODE_MT_gn_mesh_operations_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "GeometryNodeExtrudeMesh")
         self.node_operator(layout, "GeometryNodeFlipFaces")
         self.node_operator(layout, "GeometryNodeLoopSubdivision")
+        self.node_operator(layout, "GeometryNodeMeshLaplacian")
         self.node_operator(layout, "GeometryNodeMeshBevel")
         self.node_operator(layout, "GeometryNodeMeshBoolean")
         self.node_operator(layout, "GeometryNodeMeshToCurve")
@@ -669,6 +671,7 @@ class NODE_MT_gn_simulation_base(node_add_menu.NodeMenu):
         self.simulation_zone(layout, label="Simulation")
         layout.separator()
         self.node_operator(layout, "GeometryNodeXPBDSolver")
+        self.node_operator(layout, "GeometryNodeLinearSolver")
 
         self.draw_assets_for_catalog(layout, self.bl_label)
 
@@ -832,6 +835,7 @@ class NODE_MT_gn_utilities_matrix_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "FunctionNodeProjectPoint")
         self.node_operator(layout, "FunctionNodeSeparateMatrix")
         self.node_operator(layout, "FunctionNodeSeparateTransform")
+        self.node_operator(layout, "GeometryNodeSparseMatrixMath")
         self.node_operator(layout, "FunctionNodeTransformDirection")
         self.node_operator(layout, "FunctionNodeTransformPoint")
         self.node_operator(layout, "FunctionNodeTransposeMatrix")
