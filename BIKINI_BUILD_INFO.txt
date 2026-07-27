@@ -13,3 +13,5 @@ Usage:
 Keep blender.exe together with the 5.3, blender.crt, blender.shared, and license folders.
 This is an unofficial custom build and is not digitally signed by the Blender Foundation.
 Crash fix (2026-07-27): Harden Evaluate Closure internal-link / pass-through paths used by Shift+Alt and Ctrl+Shift viewer connect.
+
+Fix 2026-07-27 15:21: Menu multi 1-2 item hide recovery + LMB-slide flip in multi checklist dropdown.
