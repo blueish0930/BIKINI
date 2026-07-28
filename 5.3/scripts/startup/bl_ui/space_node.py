@@ -212,9 +212,9 @@ class NODE_HT_header(Header):
                     layout.popover(panel="NODE_PT_geometry_node_tool_options", text="Options")
                 display_pin = False
         elif snode.tree_type == 'ImageNodeTree':
-            # Independent Image node groups: store selection in selected_node_group so
-            # switching tree types away and back restores the last Image group, and so
-            # picking a different Image group is not sticky-overridden on redraw.
+            # Image Process: independent node groups stored in selected_node_group so
+            # switching tree types away and back restores the last group, and picking
+            # a different group is not sticky-overridden on redraw.
             NODE_MT_editor_menus.draw_collapsible(context, layout)
 
             layout.separator_spacer()
@@ -238,8 +238,8 @@ class NODE_HT_header(Header):
             op = layout.operator("node.tree_path_parent", text="", icon='FILE_PARENT')
             op.parent_tree_index = len(snode.path) - 2
 
-        # Backdrop
-        if is_compositor and snode.node_tree_sub_type == 'SCENE':
+        # Backdrop (Compositor scene + Image node editor Viewer)
+        if (is_compositor and snode.node_tree_sub_type == 'SCENE') or snode.tree_type == 'ImageNodeTree':
             row = layout.row(align=True)
             row.prop(snode, "show_backdrop", toggle=True)
             row.active = snode.node_tree is not None
@@ -247,13 +247,14 @@ class NODE_HT_header(Header):
             sub.active = snode.show_backdrop
             sub.prop(snode, "backdrop_channels", icon_only=True, text="")
 
-            # Gizmo toggle and popover.
-            row = layout.row(align=True)
-            row.prop(snode, "show_gizmo", icon='GIZMO', text="")
-            row.active = snode.node_tree is not None
-            sub = row.row(align=True)
-            sub.active = snode.show_gizmo and row.active
-            sub.popover(panel="NODE_PT_gizmo_display", text="")
+            # Gizmo toggle and popover (compositor only).
+            if is_compositor:
+                row = layout.row(align=True)
+                row.prop(snode, "show_gizmo", icon='GIZMO', text="")
+                row.active = snode.node_tree is not None
+                sub = row.row(align=True)
+                sub.active = snode.show_gizmo and row.active
+                sub.popover(panel="NODE_PT_gizmo_display", text="")
 
         # Snap
         row = layout.row(align=True)
@@ -935,7 +936,7 @@ class NODE_PT_backdrop(Panel):
     @classmethod
     def poll(cls, context):
         snode = context.space_data
-        return snode.tree_type == 'CompositorNodeTree'
+        return snode.tree_type in {'CompositorNodeTree', 'ImageNodeTree'}
 
     def draw_header(self, context):
         snode = context.space_data

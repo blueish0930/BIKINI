@@ -18,7 +18,11 @@ class NODE_MT_image_node_input_base(node_add_menu.NodeMenu):
         layout = self.layout
         self.node_operator(layout, "CompositorNodeImage")
         self.node_operator(layout, "ImageNodeBlankImage")
+        self.node_operator(layout, "CompositorNodeBlankImage")
+        self.node_operator(layout, "CompositorNodeBokehImage")
         self.node_operator(layout, "CompositorNodeRGB")
+        self.node_operator(layout, "CompositorNodeImageInfo")
+        self.node_operator(layout, "CompositorNodeImageCoordinates")
         self.node_operator(layout, "NodeGroupInput")
         self.draw_assets_for_catalog(layout, self.bl_label)
 
@@ -29,6 +33,7 @@ class NODE_MT_image_node_output_base(node_add_menu.NodeMenu):
     def draw(self, _context):
         layout = self.layout
         self.node_operator(layout, "ImageNodeViewer")
+        # Image Output writes a named Image datablock into bpy.data.images.
         self.node_operator(layout, "ImageNodeFileOutput")
         self.node_operator(layout, "NodeGroupOutput")
         self.draw_assets_for_catalog(layout, self.bl_label)
@@ -114,10 +119,15 @@ class NODE_MT_image_node_filter_blur_base(node_add_menu.NodeMenu):
     bl_label = "Blur"
     menu_path = "Filter/Blur"
 
-    def draw(self, _context):
+    def draw(self, context):
         layout = self.layout
         self.node_operator(layout, "CompositorNodeBilateralblur")
-        self.node_operator(layout, "CompositorNodeBlur")
+        # Expand Blur Type menu options in search (Flat/Tent/Gaussian/…).
+        self.node_operator_with_searchable_enum_socket(
+            context, layout, "CompositorNodeBlur", "Type", [
+                "Flat", "Tent", "Quadratic", "Cubic", "Gaussian", "Fast Gaussian", "Catrom", "Mitch",
+            ],
+        )
         self.node_operator(layout, "CompositorNodeBokehBlur")
         self.node_operator(layout, "CompositorNodeDefocus")
         self.node_operator(layout, "CompositorNodeDBlur")
