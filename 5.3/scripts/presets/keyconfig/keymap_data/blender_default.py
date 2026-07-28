@@ -2396,6 +2396,9 @@ def km_node_editor(params):
          {"properties": [("exit", False)]}),
         ("node.group_edit", {"type": 'TAB', "value": 'PRESS', "ctrl": True},
          {"properties": [("exit", True)]}),
+        # Select Elements: Enter opens viewport edit selection when only that node is selected.
+        ("node.select_elements_edit", {"type": 'RET', "value": 'PRESS'}, None),
+        ("node.select_elements_edit", {"type": 'NUMPAD_ENTER', "value": 'PRESS'}, None),
         ("node.read_viewlayers", {"type": 'R', "value": 'PRESS', "ctrl": True}, None),
         ("node.render_changed", {"type": 'Z', "value": 'PRESS'}, None),
         ("node.clipboard_copy", {"type": 'C', "value": 'PRESS', "ctrl": True}, None),
