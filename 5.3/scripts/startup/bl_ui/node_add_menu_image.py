@@ -190,6 +190,13 @@ class NODE_MT_image_node_utilities_base(node_add_menu.NodeMenu):
         self.draw_menu(layout, path="Utilities/Matrix")
         self.draw_menu(layout, path="Utilities/Rotation")
         layout.separator()
+        self.draw_menu(layout, path="Utilities/Bundle")
+        self.draw_menu(layout, path="Utilities/Closure")
+        layout.separator()
+        # Zones (color-only state items in Image Process).
+        self.simulation_zone(layout, label="Simulation")
+        self.repeat_zone(layout, label="Repeat")
+        layout.separator()
         self.node_operator(layout, "NodeImplicitConversion")
         self.node_operator(layout, "CompositorNodeLevels")
         self.node_operator(layout, "CompositorNodeNormalize")
@@ -203,6 +210,29 @@ class NODE_MT_image_node_utilities_base(node_add_menu.NodeMenu):
         layout.separator()
         self.node_operator(layout, "CompositorNodeRelativeToPixel")
         self.draw_assets_for_catalog(layout, self.bl_label)
+
+
+class NODE_MT_image_node_bundle_base(node_add_menu.NodeMenu):
+    bl_label = "Bundle"
+    menu_path = "Utilities/Bundle"
+
+    def draw(self, _context):
+        layout = self.layout
+        self.node_operator(layout, "NodeCombineBundle")
+        self.node_operator(layout, "NodeJoinBundle")
+        self.node_operator(layout, "NodeSeparateBundle")
+        self.draw_assets_for_catalog(layout, self.menu_path)
+
+
+class NODE_MT_image_node_closure_base(node_add_menu.NodeMenu):
+    bl_label = "Closure"
+    menu_path = "Utilities/Closure"
+
+    def draw(self, _context):
+        layout = self.layout
+        self.closure_zone(layout, label="Closure")
+        self.node_operator(layout, "NodeEvaluateClosure")
+        self.draw_assets_for_catalog(layout, self.menu_path)
 
 
 class NODE_MT_image_node_math_base(node_add_menu.NodeMenu):
@@ -373,6 +403,8 @@ add_menus = {
     "NODE_MT_category_image_vector": NODE_MT_image_node_vector_base,
     "NODE_MT_category_image_matrix": NODE_MT_image_utilities_matrix_base,
     "NODE_MT_category_image_rotation": NODE_MT_image_node_rotation_base,
+    "NODE_MT_category_image_bundle": NODE_MT_image_node_bundle_base,
+    "NODE_MT_category_image_closure": NODE_MT_image_node_closure_base,
     "NODE_MT_category_image_layout": NODE_MT_image_node_layout_base,
     "NODE_MT_image_node_add_all": NODE_MT_image_node_all_base,
 }
@@ -398,6 +430,8 @@ swap_menus = {
     "NODE_MT_image_node_vector_swap": NODE_MT_image_node_vector_base,
     "NODE_MT_image_node_matrix_swap": NODE_MT_image_utilities_matrix_base,
     "NODE_MT_image_node_rotation_swap": NODE_MT_image_node_rotation_base,
+    "NODE_MT_image_node_bundle_swap": NODE_MT_image_node_bundle_base,
+    "NODE_MT_image_node_closure_swap": NODE_MT_image_node_closure_base,
     "NODE_MT_image_node_layout_swap": NODE_MT_image_node_layout_base,
     "NODE_MT_image_node_swap_all": NODE_MT_image_node_all_base,
 }
