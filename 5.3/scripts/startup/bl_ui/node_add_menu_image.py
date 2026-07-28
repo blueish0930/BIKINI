@@ -17,9 +17,7 @@ class NODE_MT_image_node_input_base(node_add_menu.NodeMenu):
     def draw(self, _context):
         layout = self.layout
         self.node_operator(layout, "CompositorNodeImage")
-        self.node_operator(layout, "ImageNodeBlankImage")
         self.node_operator(layout, "ImageNodeRasterizeGeometry")
-        self.node_operator(layout, "CompositorNodeBlankImage")
         self.node_operator(layout, "CompositorNodeBokehImage")
         self.node_operator(layout, "CompositorNodeRGB")
         self.node_operator(layout, "CompositorNodeImageInfo")

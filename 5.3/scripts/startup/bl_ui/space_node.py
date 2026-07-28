@@ -247,6 +247,11 @@ class NODE_HT_header(Header):
             sub.active = snode.show_backdrop
             sub.prop(snode, "backdrop_channels", icon_only=True, text="")
 
+            # Image Process: texture resolution next to backdrop.
+            if snode.tree_type == 'ImageNodeTree':
+                row = layout.row(align=True)
+                row.prop(snode, "image_resolution", text="Resolution")
+
             # Gizmo toggle and popover (compositor only).
             if is_compositor:
                 row = layout.row(align=True)
