@@ -211,6 +211,15 @@ class NODE_HT_header(Header):
                     layout.popover(panel="NODE_PT_geometry_node_tool_mode", text="Modes")
                     layout.popover(panel="NODE_PT_geometry_node_tool_options", text="Options")
                 display_pin = False
+        elif snode.tree_type == 'ImageNodeTree':
+            # Independent Image node groups: store selection in selected_node_group so
+            # switching tree types away and back restores the last Image group, and so
+            # picking a different Image group is not sticky-overridden on redraw.
+            NODE_MT_editor_menus.draw_collapsible(context, layout)
+
+            layout.separator_spacer()
+
+            layout.template_ID(snode, "selected_node_group", new="node.new_node_tree")
         else:
             # Custom node tree is edited as independent ID block
             NODE_MT_editor_menus.draw_collapsible(context, layout)
