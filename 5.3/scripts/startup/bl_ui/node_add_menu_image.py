@@ -35,6 +35,8 @@ class NODE_MT_image_node_output_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "ImageNodeViewer")
         # Image Output writes a named Image datablock into bpy.data.images.
         self.node_operator(layout, "ImageNodeFileOutput")
+        # Bake Image writes files to a directory (single or named bundle slots).
+        self.node_operator(layout, "ImageNodeBakeImage")
         self.node_operator(layout, "NodeGroupOutput")
         self.draw_assets_for_catalog(layout, self.bl_label)
 
