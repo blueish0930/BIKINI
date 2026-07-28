@@ -18,6 +18,7 @@ class NODE_MT_image_node_input_base(node_add_menu.NodeMenu):
         layout = self.layout
         self.node_operator(layout, "CompositorNodeImage")
         self.node_operator(layout, "ImageNodeBlankImage")
+        self.node_operator(layout, "ImageNodeRasterizeGeometry")
         self.node_operator(layout, "CompositorNodeBlankImage")
         self.node_operator(layout, "CompositorNodeBokehImage")
         self.node_operator(layout, "CompositorNodeRGB")
@@ -114,6 +115,9 @@ class NODE_MT_image_node_filter_base(node_add_menu.NodeMenu):
                 "Bloom", "Ghosts", "Streaks", "Fog Glow", "Simple Star", "Sun Beams", "Kernel",
             ],
         )
+        layout.separator()
+        self.node_operator(layout, "ImageNodeHeightToNormal")
+        self.node_operator(layout, "ImageNodeNormalToHeight")
         self.draw_assets_for_catalog(layout, self.bl_label)
 
 
