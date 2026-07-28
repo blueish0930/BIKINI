@@ -323,6 +323,10 @@ class NODE_MT_add(node_add_menu.AddNodeMenu):
             layout.menu_contents("NODE_MT_shader_node_add_all")
         elif snode.tree_type == 'TextureNodeTree':
             layout.menu_contents("NODE_MT_texture_node_add_all")
+        # --- IMAGE_NODES_MVP begin ---
+        elif snode.tree_type == 'ImageNodeTree':
+            layout.menu_contents("NODE_MT_image_node_add_all")
+        # --- IMAGE_NODES_MVP end ---
         elif nodeitems_utils.has_node_categories(context):
             # Actual node sub-menus are defined by draw functions from node categories.
             nodeitems_utils.draw_node_categories_menu(self, context)
@@ -353,6 +357,10 @@ class NODE_MT_swap(node_add_menu.SwapNodeMenu):
             layout.menu_contents("NODE_MT_shader_node_swap_all")
         elif snode.tree_type == 'TextureNodeTree':
             layout.menu_contents("NODE_MT_texture_node_swap_all")
+        # --- IMAGE_NODES_MVP begin ---
+        elif snode.tree_type == 'ImageNodeTree':
+            layout.menu_contents("NODE_MT_image_node_swap_all")
+        # --- IMAGE_NODES_MVP end ---
 
 
 class NODE_MT_view(Menu):

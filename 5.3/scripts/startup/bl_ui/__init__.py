@@ -18,6 +18,7 @@ _modules = [
     "node_add_menu_geometry",
     "node_add_menu_shader",
     "node_add_menu_texture",
+    "node_add_menu_image",  # IMAGE_NODES_MVP
     "properties_animviz",
     "properties_constraint",
     "properties_data_armature",
