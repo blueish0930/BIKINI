@@ -155,6 +155,11 @@ class NODE_MT_image_node_texture_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "ShaderNodeTexVoronoi")
         self.node_operator(layout, "ShaderNodeTexWave")
         self.node_operator(layout, "ShaderNodeTexWhiteNoise")
+        layout.separator()
+        self.node_operator(layout, "ImageNodeSDFShape")
+        self.node_operator(layout, "ImageNodeFractalPrimitive")
+        self.node_operator(layout, "ShaderNodeSDFShape")
+        self.node_operator(layout, "ShaderNodeFractalPrimitive")
         self.draw_assets_for_catalog(layout, self.bl_label)
 
 

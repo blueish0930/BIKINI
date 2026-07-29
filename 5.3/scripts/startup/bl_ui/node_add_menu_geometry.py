@@ -756,6 +756,7 @@ class NODE_MT_gn_utilities_base(node_add_menu.NodeMenu):
         self.for_each_element_zone(layout, label="For Each Element")
         self.node_operator(layout, "NodeImplicitConversion")
         self.node_operator(layout, "FunctionNodeRandomValue")
+        self.node_operator(layout, "GeometryNodePython")
         self.repeat_zone(layout, label="Repeat")
         layout.separator()
         self.node_operator(layout, "GeometryNodeIndexSwitch")
