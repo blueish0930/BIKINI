@@ -17,3 +17,6 @@ Update 2026-07-29:
 - Image Process Fluid Simulation zone (Input/Output black-box Stable Fluids 2D).
 - Geometric Multigrid pressure solve with previous-frame pressure warm-start.
 - Color multi / Velocity / Temperature / Divergence / Collision Mask / Collider Velocity panels.
+
+Fix 2026-07-29: Height to Normal resolution-aware Scale (default 1.0 now visible at 1k).
+
