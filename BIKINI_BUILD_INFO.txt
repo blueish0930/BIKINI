@@ -7,16 +7,14 @@ Repository: https://github.com/blueish0930/BIKINI
 Usage:
 1. Download the repository ZIP from Code -> Download ZIP.
 2. Extract the entire ZIP.
-3. Open the extracted BIKINI-main (or BIKINI-develop) folder.
+3. Open the extracted BIKINI folder.
 4. Run blender.exe.
 
 Keep blender.exe together with the 5.3, blender.crt, blender.shared, and license folders.
 This is an unofficial custom build and is not digitally signed by the Blender Foundation.
 
-Update 2026-07-29:
-- Image Process Fluid Simulation zone (Input/Output black-box Stable Fluids 2D).
-- Geometric Multigrid pressure solve with previous-frame pressure warm-start.
-- Color multi / Velocity / Temperature / Divergence / Collision Mask / Collider Velocity panels.
-
-Fix 2026-07-29: Height to Normal resolution-aware Scale (default 1.0 now visible at 1k).
-
+2026-07-29:
+- Select/Edit Elements: robust object+modifier lookup (never require blender.org).
+- Select Elements Enter: force cook Geometry-input cache, realize instances, CoW tree match.
+- Edit Elements: same Enter path fixes; node registration/search description.
+- Point Stamp / Import Points / Bundle / radius attribute fixes (previous session).
