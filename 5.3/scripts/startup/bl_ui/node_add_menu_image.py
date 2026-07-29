@@ -229,9 +229,13 @@ class NODE_MT_image_node_bundle_base(node_add_menu.NodeMenu):
 
     def draw(self, _context):
         layout = self.layout
+        # Match Geometry Nodes Bundle menu (Combine / Join / Separate + Get / Store by path).
         self.node_operator(layout, "NodeCombineBundle")
         self.node_operator(layout, "NodeJoinBundle")
         self.node_operator(layout, "NodeSeparateBundle")
+        layout.separator()
+        self.node_operator(layout, "NodeGetBundleItem")
+        self.node_operator(layout, "NodeStoreBundleItem")
         self.draw_assets_for_catalog(layout, self.menu_path)
 
 

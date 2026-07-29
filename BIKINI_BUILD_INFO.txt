@@ -13,17 +13,7 @@ Usage:
 Keep blender.exe together with the 5.3, blender.crt, blender.shared, and license folders.
 This is an unofficial custom build and is not digitally signed by the Blender Foundation.
 
-2026-07-29:
-- Select/Edit Elements: robust object+modifier lookup (never require blender.org).
-- Select Elements Enter: force cook Geometry-input cache, realize instances, CoW tree match.
-- Edit Elements: same Enter path fixes; node registration/search description.
-- Point Stamp / Import Points / Bundle / radius attribute fixes (previous session).
-
-Fix 2026-07-29: Geometry Nodes Select/Edit Elements visibility and Enter binding
-- Add Edit Elements to Geometry > Operations add menu (Shift+A search).
-- Bind Enter / Numpad Enter to node.edit_elements_edit in default keymap.
-
-Update 2026-07-29 (Edit Elements free mesh edit):
-- Edit Elements: free Mesh Edit Mode (no topology limit); Esc/Enter/Tab saves full mesh to node.
-- Select Elements: cook-cache / side-effect fixes so Enter can get upstream geometry.
-- Edit Elements appears in Geometry > Operations add menu; Enter keymap for both nodes.
+2026-07-29 (Image Process Bake / Point Stamp / Bundle):
+- Bake Image: multi-format (PNG/JPEG/EXR/TIFF/BMP/Targa/WebP/HDR), color space, Path/Name string sockets, top Bake button, Bundle item names.
+- Point Stamp: tiled parallel rasterization (faster for dense point clouds).
+- Get Bundle Item / Store Bundle Item registered in Image Process Utilities > Bundle (compositor lookup for stamp maps).
