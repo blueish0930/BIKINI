@@ -294,6 +294,7 @@ class NODE_MT_gn_geometry_operations_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "GeometryNodeDuplicateElements")
         self.node_operator(layout, "GeometryNodeGeometryClip")
         self.node_operator(layout, "GeometryNodeSelectElements")
+        self.node_operator(layout, "GeometryNodeEditElements")
         self.node_operator(layout, "GeometryNodeMergeByDistance")
         self.node_operator(layout, "GeometryNodeMergePoints")
         self.node_operator(layout, "GeometryNodeSortElements")

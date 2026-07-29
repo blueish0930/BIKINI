@@ -18,3 +18,7 @@ This is an unofficial custom build and is not digitally signed by the Blender Fo
 - Select Elements Enter: force cook Geometry-input cache, realize instances, CoW tree match.
 - Edit Elements: same Enter path fixes; node registration/search description.
 - Point Stamp / Import Points / Bundle / radius attribute fixes (previous session).
+
+Fix 2026-07-29: Geometry Nodes Select/Edit Elements visibility and Enter binding
+- Add Edit Elements to Geometry > Operations add menu (Shift+A search).
+- Bind Enter / Numpad Enter to node.edit_elements_edit in default keymap.
