@@ -330,16 +330,19 @@ class NODE_MT_add(node_add_menu.AddNodeMenu):
         layout.operator_context = 'INVOKE_REGION_WIN'
 
         snode = context.space_data
-        if snode.tree_type == 'GeometryNodeTree':
+        # Prefer the tree currently being edited (path depth), so Import Points nested
+        # GeometryNodeTree still shows GN menus while the editor type stays Image Process.
+        tree_type = snode.edit_tree.bl_idname if snode.edit_tree else snode.tree_type
+        if tree_type == 'GeometryNodeTree':
             layout.menu_contents("NODE_MT_geometry_node_add_all")
-        elif snode.tree_type == 'CompositorNodeTree':
+        elif tree_type == 'CompositorNodeTree':
             layout.menu_contents("NODE_MT_compositor_node_add_all")
-        elif snode.tree_type == 'ShaderNodeTree':
+        elif tree_type == 'ShaderNodeTree':
             layout.menu_contents("NODE_MT_shader_node_add_all")
-        elif snode.tree_type == 'TextureNodeTree':
+        elif tree_type == 'TextureNodeTree':
             layout.menu_contents("NODE_MT_texture_node_add_all")
         # --- IMAGE_NODES_MVP begin ---
-        elif snode.tree_type == 'ImageNodeTree':
+        elif tree_type == 'ImageNodeTree':
             layout.menu_contents("NODE_MT_image_node_add_all")
         # --- IMAGE_NODES_MVP end ---
         elif nodeitems_utils.has_node_categories(context):
@@ -364,16 +367,17 @@ class NODE_MT_swap(node_add_menu.SwapNodeMenu):
         layout.operator_context = 'INVOKE_REGION_WIN'
 
         snode = context.space_data
-        if snode.tree_type == 'GeometryNodeTree':
+        tree_type = snode.edit_tree.bl_idname if snode.edit_tree else snode.tree_type
+        if tree_type == 'GeometryNodeTree':
             layout.menu_contents("NODE_MT_geometry_node_swap_all")
-        elif snode.tree_type == 'CompositorNodeTree':
+        elif tree_type == 'CompositorNodeTree':
             layout.menu_contents("NODE_MT_compositor_node_swap_all")
-        elif snode.tree_type == 'ShaderNodeTree':
+        elif tree_type == 'ShaderNodeTree':
             layout.menu_contents("NODE_MT_shader_node_swap_all")
-        elif snode.tree_type == 'TextureNodeTree':
+        elif tree_type == 'TextureNodeTree':
             layout.menu_contents("NODE_MT_texture_node_swap_all")
         # --- IMAGE_NODES_MVP begin ---
-        elif snode.tree_type == 'ImageNodeTree':
+        elif tree_type == 'ImageNodeTree':
             layout.menu_contents("NODE_MT_image_node_swap_all")
         # --- IMAGE_NODES_MVP end ---
 
@@ -1045,6 +1049,10 @@ class NODE_PT_overlay(Panel):
             row = subcol.row(align=True)
             row.prop(overlay, "show_render_size", text="Render Region")
             row.prop(overlay, "passepartout_alpha", text="Passepartout")
+
+        if snode.tree_type == 'ImageNodeTree':
+            col.separator()
+            col.prop(overlay, "show_timing", text="Timings")
 
 
 class NODE_MT_node_tree_interface_context_menu(Menu):

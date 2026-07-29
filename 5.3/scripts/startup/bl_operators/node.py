@@ -820,6 +820,9 @@ class ZoneOperator:
         "NodeClosureInput": (
             n_("Wrap nodes inside a closure that can be executed at a different part of the node-tree")
         ),
+        "ImageNodeFluidSimInput": (
+            n_("Black-box 2D fluid simulation (Stable Fluids + Multigrid pressure) across frames")
+        ),
     }
 
     @classmethod

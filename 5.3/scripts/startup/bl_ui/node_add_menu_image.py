@@ -18,6 +18,7 @@ class NODE_MT_image_node_input_base(node_add_menu.NodeMenu):
         layout = self.layout
         self.node_operator(layout, "CompositorNodeImage")
         self.node_operator(layout, "ImageNodeRasterizeGeometry")
+        self.node_operator(layout, "ImageNodeImportPoints")
         self.node_operator(layout, "CompositorNodeBokehImage")
         self.node_operator(layout, "CompositorNodeRGB")
         self.node_operator(layout, "CompositorNodeImageInfo")
@@ -116,6 +117,7 @@ class NODE_MT_image_node_filter_base(node_add_menu.NodeMenu):
         layout.separator()
         self.node_operator(layout, "ImageNodeHeightToNormal")
         self.node_operator(layout, "ImageNodeNormalToHeight")
+        self.node_operator(layout, "ImageNodePointStamp")
         self.draw_assets_for_catalog(layout, self.bl_label)
 
 
@@ -198,6 +200,13 @@ class NODE_MT_image_node_utilities_base(node_add_menu.NodeMenu):
         # Zones (color-only state items in Image Process).
         self.simulation_zone(layout, label="Simulation")
         self.repeat_zone(layout, label="Repeat")
+        # Black-box 2D Stable Fluids + Multigrid pressure.
+        props = layout.operator(self.zone_operator_id, text="Fluid Simulation")
+        props.input_node_type = "ImageNodeFluidSimInput"
+        props.output_node_type = "ImageNodeFluidSimOutput"
+        props.add_default_geometry_link = False
+        if hasattr(props, "use_transform"):
+            props.use_transform = self.use_transform
         layout.separator()
         self.node_operator(layout, "NodeImplicitConversion")
         self.node_operator(layout, "CompositorNodeLevels")
