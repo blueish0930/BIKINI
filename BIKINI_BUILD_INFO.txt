@@ -1,7 +1,7 @@
-BIKINI custom Blender portable build
+﻿BIKINI custom Blender portable build
 
 Blender: 5.3.0 Alpha custom Windows x64 build
-Package date: 2026-07-30
+Package date: 2026-07-30 (blender.exe reupload)
 Repository: https://github.com/blueish0930/BIKINI
 
 Usage:
@@ -16,7 +16,7 @@ This is an unofficial custom build and is not digitally signed by the Blender Fo
 2026-07-30:
 - Updated blender.exe (portable binary refresh).
 - Image Process texture menu: SDF Shape / Fractal Primitive use ImageNode path only (not Shader variants).
-- docs/changelog.html: bilingual EN/中文 release notes (auto language + manual switch).
+- docs/changelog.html: bilingual EN/涓枃 release notes (auto language + manual switch).
 
 2026-07-29 (Image Process Bake / Point Stamp / Bundle):
 - Bake Image: multi-format (PNG/JPEG/EXR/TIFF/BMP/Targa/WebP/HDR), color space, Path/Name string sockets, top Bake button, Bundle item names.
