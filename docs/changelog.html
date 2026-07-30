@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BIKINI: Geometry Nodes &amp; UX — Release Notes</title>
+  <style>
+    /* Approximates Blender Developer Documentation (Material for MkDocs) */
+    :root {
+      --md-default-fg: rgba(0, 0, 0, 0.87);
+      --md-default-fg-light: rgba(0, 0, 0, 0.54);
+      --md-default-bg: #fff;
+      --md-code-bg: #f5f5f5;
+      --md-accent: #265787;
+      --md-typeset-a: #3f51b5;
+      --md-border: #e0e0e0;
+      --md-admonition-note: #448aff;
+      --md-admonition-warning: #ff9100;
+      --md-admonition-tip: #00bfa5;
+      --font: "Roboto", "Helvetica Neue", "Segoe UI", "PingFang SC",
+        "Microsoft YaHei", Arial, sans-serif;
+      --font-mono: "Roboto Mono", "Cascadia Code", Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: var(--font);
+      font-size: 0.95rem;
+      line-height: 1.65;
+      color: var(--md-default-fg);
+      background: #fafafa;
+    }
+
+    .md-header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: #265787;
+      color: #fff;
+      box-shadow: 0 0 0.2rem rgba(0, 0, 0, 0.1), 0 0.2rem 0.4rem rgba(0, 0, 0, 0.2);
+    }
+
+    .md-header__inner {
+      max-width: 61rem;
+      margin: 0 auto;
+      padding: 0.7rem 1.2rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .md-header__title {
+      font-weight: 700;
+      font-size: 1.05rem;
+      letter-spacing: 0.01em;
+    }
+
+    .md-header__title span {
+      font-weight: 400;
+      opacity: 0.85;
+      margin-left: 0.4rem;
+    }
+
+    .md-header a {
+      color: rgba(255, 255, 255, 0.85);
+      text-decoration: none;
+      font-size: 0.85rem;
+    }
+
+    .md-header a:hover { color: #fff; }
+
+    .layout {
+      max-width: 61rem;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 14rem minmax(0, 1fr);
+      gap: 0;
+      min-height: calc(100vh - 3rem);
+    }
+
+    .md-sidebar {
+      padding: 1.5rem 1rem 2rem 1.2rem;
+      border-right: 1px solid var(--md-border);
+      background: #fff;
+      font-size: 0.82rem;
+      position: sticky;
+      top: 3rem;
+      align-self: start;
+      max-height: calc(100vh - 3rem);
+      overflow: auto;
+    }
+
+    .md-sidebar h4 {
+      margin: 0 0 0.6rem;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--md-default-fg-light);
+    }
+
+    .md-sidebar ul {
+      list-style: none;
+      margin: 0 0 1.2rem;
+      padding: 0;
+    }
+
+    .md-sidebar li { margin: 0.2rem 0; }
+
+    .md-sidebar a {
+      color: var(--md-default-fg);
+      text-decoration: none;
+      display: block;
+      padding: 0.15rem 0;
+    }
+
+    .md-sidebar a:hover { color: var(--md-typeset-a); }
+
+    .md-content {
+      background: var(--md-default-bg);
+      padding: 1.6rem 2rem 4rem;
+      border-left: 1px solid transparent;
+    }
+
+    h1 {
+      margin: 0 0 0.4rem;
+      font-size: 1.85rem;
+      font-weight: 400;
+      letter-spacing: -0.01em;
+      line-height: 1.3;
+      border-bottom: 1px solid var(--md-border);
+      padding-bottom: 0.55rem;
+    }
+
+    h2 {
+      margin: 2rem 0 0.75rem;
+      font-size: 1.35rem;
+      font-weight: 400;
+      border-bottom: 1px solid var(--md-border);
+      padding-bottom: 0.35rem;
+      scroll-margin-top: 3.5rem;
+    }
+
+    h3 {
+      margin: 1.4rem 0 0.5rem;
+      font-size: 1.05rem;
+      font-weight: 700;
+      scroll-margin-top: 3.5rem;
+    }
+
+    p { margin: 0.55rem 0 0.75rem; }
+
+    a { color: var(--md-typeset-a); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    ul, ol {
+      margin: 0.4rem 0 0.9rem;
+      padding-left: 1.4rem;
+    }
+
+    li { margin: 0.28rem 0; }
+    li ul { margin: 0.2rem 0 0.4rem; }
+
+    strong { font-weight: 700; }
+
+    code {
+      font-family: var(--font-mono);
+      font-size: 0.86em;
+      background: var(--md-code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 0.2rem;
+      word-break: break-word;
+    }
+
+    hr {
+      border: 0;
+      border-top: 1px solid var(--md-border);
+      margin: 1.5rem 0;
+    }
+
+    .lead {
+      color: var(--md-default-fg-light);
+      font-size: 0.98rem;
+      margin-bottom: 1.2rem;
+    }
+
+    .meta-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+      margin: 0.8rem 0 1.2rem;
+    }
+
+    .meta-table th,
+    .meta-table td {
+      text-align: left;
+      padding: 0.4rem 0.6rem;
+      border: 1px solid var(--md-border);
+      vertical-align: top;
+    }
+
+    .meta-table th {
+      width: 9.5rem;
+      background: #f7f7f7;
+      font-weight: 600;
+      color: var(--md-default-fg-light);
+    }
+
+    .admonition {
+      margin: 1rem 0 1.25rem;
+      padding: 0.7rem 0.9rem 0.8rem 0.9rem;
+      border-left: 0.25rem solid var(--md-admonition-note);
+      background: rgba(68, 138, 255, 0.08);
+      border-radius: 0.15rem;
+      font-size: 0.92rem;
+    }
+
+    .admonition.warning {
+      border-left-color: var(--md-admonition-warning);
+      background: rgba(255, 145, 0, 0.08);
+    }
+
+    .admonition.tip {
+      border-left-color: var(--md-admonition-tip);
+      background: rgba(0, 191, 165, 0.08);
+    }
+
+    .admonition .title {
+      font-weight: 700;
+      margin-bottom: 0.25rem;
+      font-size: 0.88rem;
+    }
+
+    .status {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      padding: 0.12rem 0.45rem;
+      border-radius: 0.2rem;
+      vertical-align: middle;
+      margin-left: 0.35rem;
+    }
+
+    .status.on {
+      color: #0a7a3e;
+      background: rgba(10, 122, 62, 0.1);
+    }
+
+    .status.off {
+      color: #666;
+      background: rgba(0, 0, 0, 0.06);
+    }
+
+    .status.note {
+      color: #a65c00;
+      background: rgba(255, 145, 0, 0.12);
+    }
+
+    .toc-inline {
+      background: #f7f9fc;
+      border: 1px solid var(--md-border);
+      border-radius: 0.25rem;
+      padding: 0.75rem 1rem;
+      margin: 1rem 0 1.5rem;
+      font-size: 0.9rem;
+    }
+
+    .toc-inline .title {
+      font-weight: 700;
+      margin-bottom: 0.35rem;
+      color: var(--md-default-fg-light);
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    footer.md-footer {
+      margin-top: 2.5rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--md-border);
+      color: var(--md-default-fg-light);
+      font-size: 0.82rem;
+    }
+
+    .meeting {
+      background: #fcfcfc;
+      border: 1px solid var(--md-border);
+      border-radius: 0.25rem;
+      padding: 0.2rem 1.1rem 0.9rem;
+      margin: 0.8rem 0 1.2rem;
+    }
+
+    .meeting h3 {
+      border: 0;
+      margin-top: 1rem;
+    }
+
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+      .md-sidebar {
+        position: static;
+        max-height: none;
+        border-right: 0;
+        border-bottom: 1px solid var(--md-border);
+      }
+      .md-content { padding: 1.2rem 1rem 3rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <header class="md-header">
+    <div class="md-header__inner">
+      <div class="md-header__title">
+        BIKINI<span>Release Notes</span>
+      </div>
+      <a href="../readme.html">readme.html</a>
+      <a href="../BIKINI_BUILD_INFO.txt">Build Info</a>
+      <a href="https://developer.blender.org/docs/release_notes/5.3/geometry_nodes/" target="_blank" rel="noopener">Upstream 5.3 GN notes</a>
+      <a href="https://github.com/blueish0930/BIKINI" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav class="md-sidebar" aria-label="Table of contents">
+      <h4>On this page</h4>
+      <ul>
+        <li><a href="#overview">Overview</a></li>
+        <li><a href="#string-attributes">String Attributes</a></li>
+        <li><a href="#geometry-nodes">Geometry Nodes</a></li>
+        <li><a href="#math-solver">Math &amp; Solver</a></li>
+        <li><a href="#zones">Zones</a></li>
+        <li><a href="#node-group-ui">Node Group UI</a></li>
+        <li><a href="#editor-ux">Editor UX</a></li>
+        <li><a href="#image-process">Image Process</a></li>
+        <li><a href="#disabled">Disabled / WIP</a></li>
+        <li><a href="#known-issues">Known Issues</a></li>
+        <li><a href="#weekly-style">Weekly-style Summary</a></li>
+      </ul>
+      <h4>Also</h4>
+      <ul>
+        <li><a href="#package">Package contents</a></li>
+      </ul>
+    </nav>
+
+    <main class="md-content">
+      <h1 id="top">BIKINI: Geometry Nodes &amp; UX</h1>
+      <p class="lead">
+        Custom features on top of Blender <strong>5.3 Alpha</strong>, documented in the same style as the
+        <a href="https://developer.blender.org/docs/release_notes/5.3/geometry_nodes/" target="_blank" rel="noopener">official Geometry Nodes release notes</a>.
+        Source list: <code>Achieve List</code>; verified against this portable build
+        (<code>blender.exe</code> + <code>5.3/scripts/startup/bl_ui/node_add_menu_*.py</code>).
+      </p>
+
+      <div class="admonition tip">
+        <div class="title">Note</div>
+        This HTML file is documentation only. Placing it next to <code>blender.exe</code> does
+        <strong>not</strong> affect startup or runtime.
+      </div>
+
+      <!-- Overview -->
+      <h2 id="overview">Overview</h2>
+      <table class="meta-table">
+        <tr><th>Build</th><td>Blender 5.3.0 Alpha · Windows x64 · portable</td></tr>
+        <tr><th>Package date</th><td>2026-07-29</td></tr>
+        <tr><th>Repository</th><td><a href="https://github.com/blueish0930/BIKINI" target="_blank" rel="noopener">blueish0930/BIKINI</a></td></tr>
+        <tr><th>Focus</th><td>Geometry Nodes, node editor UX, Image Process (COPs-style)</td></tr>
+        <tr><th>Base</th><td>Tracks mainline Blender; features below are BIKINI additions / changes</td></tr>
+      </table>
+
+      <div class="toc-inline">
+        <div class="title">Highlights</div>
+        <ul>
+          <li>String attributes end-to-end (store / capture / viewer / viewport overlay)</li>
+          <li>New nodes: Portal, Geometry Clip, Loop Subdivision, K-Nearest, Linear Solver, …</li>
+          <li>Sparse matrix pipeline (Mesh Laplacian → Sparse Matrix Math → Linear Solver)</li>
+          <li>Repeat Zone <strong>Break</strong>, Simulation Zone <strong>Cache Limit</strong>, Time Shift</li>
+          <li>Node group UI: Separator, Message, Join-to-Next, Ctrl+LMB rename</li>
+          <li>Image Process: Point Stamp, Normal ↔ Height, Bake Image</li>
+        </ul>
+      </div>
+
+      <!-- String -->
+      <h2 id="string-attributes">String Attributes</h2>
+      <p>
+        Geometry attributes support a <strong>String</strong> data type across the attribute pipeline.
+        This enables text-like data on points, faces, and other domains, with UI and spreadsheet support.
+      </p>
+      <ul>
+        <li><strong>Named Attribute / Store Named Attribute / Capture Attribute</strong> — string domain support</li>
+        <li><strong>Viewer</strong> — string values in the viewer and improved viewport attribute text overlays</li>
+        <li><strong>Join Geometry / Realize Instances</strong> — string attributes propagate correctly</li>
+        <li><strong>Spreadsheet</strong> — columns can be sorted (click column header)</li>
+      </ul>
+
+      <!-- Geometry Nodes -->
+      <h2 id="geometry-nodes">Geometry Nodes</h2>
+
+      <h3 id="named-portal">Named Portal</h3>
+      <p>
+        The <strong>Named Portal</strong> node (<code>GeometryNodeNamedPortal</code>) passes values by name
+        across a node tree, similar to a lightweight global link without long noodle runs.
+      </p>
+
+      <h3 id="geometry-clip">Geometry Clip</h3>
+      <p>
+        The <strong>Geometry Clip</strong> node clips geometry against a plane or volume-style cut.
+        Mesh classification and edge topology build have been optimized for large meshes.
+      </p>
+
+      <h3 id="loop-subdivision">Loop Subdivision</h3>
+      <p>
+        The <strong>Loop Subdivision</strong> node applies Loop subdivision to meshes.
+      </p>
+
+      <h3 id="k-nearest">Nearest Neighbours</h3>
+      <p>
+        The <strong>K-Nearest</strong> node (<code>GeometryNodeKNearest</code>) finds nearest neighbours
+        for points / samples, useful for smoothing, clustering, and field sampling patterns.
+      </p>
+
+      <h3 id="set-default-closure">Set Default Closure</h3>
+      <p>
+        The <strong>Set Default Closure</strong> node assigns a default closure to a closure socket
+        when no external closure is connected.
+      </p>
+
+      <h3 id="debug">Debug</h3>
+      <p>
+        The <strong>Debug</strong> node inspects intermediate geometry / values while authoring node trees.
+      </p>
+
+      <h3 id="time-shift">Time Shift</h3>
+      <p>
+        The <strong>Time Shift</strong> node offsets evaluation time for downstream nodes.
+      </p>
+      <div class="admonition warning">
+        <div class="title">Simulation cache</div>
+        When used with a Simulation Zone, scrub to frame 1 (or otherwise reset the simulation cache)
+        after structural changes. This is native Blender simulation cache behaviour.
+      </div>
+
+      <h3 id="object-info-seed">Object Info — Seed</h3>
+      <p>
+        <strong>Object Info</strong> exposes a <strong>Seed</strong> control for deterministic
+        randomness / instance variation tied to object info sampling.
+      </p>
+
+      <h3 id="menu-switch-multi">Menu Switch — multi-select</h3>
+      <p>
+        <strong>Menu Switch</strong> supports multi-selection of menu items for richer branching UIs.
+      </p>
+
+      <!-- Math -->
+      <h2 id="math-solver">Math &amp; Solver</h2>
+      <p>
+        A sparse linear-algebra path for geometry-driven problems (smoothing, diffusion, pin-and-solve, eigensystems).
+      </p>
+      <ul>
+        <li>
+          <strong>Mesh Laplacian</strong> — builds a mesh Laplacian as a sparse matrix bundle
+          (uniform / cotangent-style modes; <code>I+tL</code> / mass-matrix variants where applicable)
+        </li>
+        <li>
+          <strong>Sparse Matrix Math</strong> — add / multiply / combine sparse matrix bundles (COO-style),
+          with sync helpers for bundle layouts
+        </li>
+        <li>
+          <strong>Linear Solver</strong> — solve <code>Ax = b</code>, optional pin constraints,
+          matrix factorization, and partial eigen decomposition (sparse path; Eigen / Spectra)
+        </li>
+      </ul>
+
+      <!-- Zones -->
+      <h2 id="zones">Zones</h2>
+      <ul>
+        <li>
+          <strong>Repeat Zone — Break</strong> — boolean early-exit on the zone output so the loop
+          can stop before reaching the iteration count
+        </li>
+        <li>
+          <strong>Simulation Zone — Cache Limit</strong> — cap how many frames of simulation cache
+          are retained, reducing unbounded memory growth
+        </li>
+      </ul>
+
+      <!-- Node Group UI -->
+      <h2 id="node-group-ui">Node Group Interface</h2>
+      <ul>
+        <li>
+          <strong>Separator</strong> and <strong>Message</strong> items — organize group inputs/outputs
+          with visual dividers and help text (same spirit as panel layout polish in mainline)
+        </li>
+        <li>
+          <strong>Join to Next Parameter</strong> — place the next socket on the same row to save vertical space
+        </li>
+        <li>
+          <strong>Ctrl + LMB rename</strong> — rename group interface sockets from the node header area,
+          with hover highlight feedback
+        </li>
+        <li>
+          <strong>Enable Input / Output</strong> — when disabled, the interface is hidden, external links
+          are ignored, and outputs fall back to static defaults / Default Input
+        </li>
+      </ul>
+
+      <!-- Editor UX -->
+      <h2 id="editor-ux">Node Editor UX</h2>
+      <ul>
+        <li>
+          <strong>Shake to detach</strong> — shaking a node detaches it from links; supports inserting
+          multiple nodes along a chain in one gesture flow
+        </li>
+        <li>
+          <strong>Hold U + drag</strong> — hold <code>U</code> while dragging with LMB to align nodes
+          horizontally or vertically
+        </li>
+        <li>
+          <strong>Viewport attribute overlay</strong> — clearer attribute / viewer text overlays in the 3D View
+        </li>
+        <li>
+          <strong>Spreadsheet column sort</strong> — click headers to sort attribute columns
+        </li>
+      </ul>
+
+      <!-- Image Process -->
+      <h2 id="image-process">Image Process</h2>
+      <p>
+        An Image Process node tree (COPs-oriented workflow) for point/image operations outside the classic
+        compositor-only path. Registered under Image Process add menus.
+      </p>
+      <ul>
+        <li><strong>Import Points</strong> / <strong>Rasterize Geometry</strong> — bring geometry samples into image space</li>
+        <li>
+          <strong>Point Stamp</strong> — stamp points into an image; tiled parallel rasterization for dense clouds
+        </li>
+        <li>
+          <strong>Normal to Height</strong> / <strong>Height to Normal</strong> — convert between normal maps and height maps
+        </li>
+        <li>
+          <strong>Bake Image</strong> (2026-07-29) — multi-format bake (PNG, JPEG, EXR, TIFF, BMP, Targa, WebP, HDR),
+          color space, Path / Name string sockets, top-level Bake button; Bundle item naming for stamp maps
+        </li>
+        <li>
+          <strong>Get / Store Bundle Item</strong> — Image Process Utilities › Bundle (compositor lookup for stamp maps)
+        </li>
+      </ul>
+
+      <!-- Disabled -->
+      <h2 id="disabled">Disabled / Not shipped</h2>
+      <ul>
+        <li>
+          <strong>Viewport Camera</strong> node
+          <span class="status off">Disabled</span>
+          — present in development notes / Achieve List as <code>//viewport camera</code>;
+          <strong>not enabled</strong> in this portable build (not registered in add menus; not linked in <code>blender.exe</code>).
+        </li>
+      </ul>
+
+      <!-- Known issues -->
+      <h2 id="known-issues">Known Issues</h2>
+      <ul>
+        <li>
+          <strong>Time Shift + Simulation Zone:</strong> after graph changes, return to the first frame
+          (or clear simulation cache) so cached frames do not show stale results. This is upstream cache behaviour.
+        </li>
+        <li>
+          This is an <strong>unofficial</strong> custom build and is not digitally signed by the Blender Foundation.
+        </li>
+      </ul>
+
+      <!-- Weekly-style summary (like Nodes & Physics module meeting) -->
+      <h2 id="weekly-style">Weekly-style Summary</h2>
+      <p>
+        Condensed in the style of
+        <a href="https://devtalk.blender.org/c/meetings/28" target="_blank" rel="noopener">Nodes &amp; Physics module meetings</a>
+        (“Since the last meeting” bullet list).
+      </p>
+
+      <div class="meeting">
+        <h3>Present</h3>
+        <ul>
+          <li>BIKINI portable package · <code>bin/Release</code></li>
+        </ul>
+
+        <h3>Since the Last Package</h3>
+        <ul>
+          <li>String attributes + viewer / viewport overlay text</li>
+          <li>Named Portal</li>
+          <li>Node group interface: Separator, Message, Join to Next, Ctrl+LMB rename</li>
+          <li>Geometry Clip (incl. mesh build optimizations)</li>
+          <li>Set Default Closure</li>
+          <li>Loop Subdivision</li>
+          <li>K-Nearest (Nearest Neighbours)</li>
+          <li>Simulation Zone Cache Limit</li>
+          <li>Geometry Debug node</li>
+          <li>Shake-detach / multi-insert; hold U align while dragging</li>
+          <li>Enable Input/Output interface hide behaviour</li>
+          <li>Spreadsheet attribute column sort</li>
+          <li>Menu Switch multi-select</li>
+          <li>Time Shift (simulation cache note applies)</li>
+          <li>Sparse Matrix Math, Linear Solver, Mesh Laplacian</li>
+          <li>Object Info Seed</li>
+          <li>Image Process: Point Stamp, Normal ↔ Height, Bake Image, Bundle items</li>
+          <li>Repeat Zone Break</li>
+        </ul>
+
+        <h3>Parking Lot / Disabled</h3>
+        <ul>
+          <li>Viewport Camera node — kept out of this build (<code>//</code> in Achieve List)</li>
+        </ul>
+
+        <h3>Notes</h3>
+        <ul>
+          <li>Upstream reference: Blender 5.3 Geometry Nodes notes on developer.blender.org</li>
+          <li>Keep <code>blender.exe</code> next to <code>5.3</code>, <code>blender.crt</code>, <code>blender.shared</code>, <code>license</code></li>
+        </ul>
+      </div>
+
+      <!-- Package -->
+      <h2 id="package">Package Contents</h2>
+      <ul>
+        <li><code>blender.exe</code> — application</li>
+        <li><code>5.3/</code> — scripts, Python, datafiles, locales</li>
+        <li><code>blender.crt/</code>, <code>blender.shared/</code>, <code>license/</code> — runtime &amp; licenses</li>
+        <li><code>BIKINI_BUILD_INFO.txt</code> — short package blurb</li>
+        <li><code>changelog.html</code> — this page (safe to ship; unused at runtime)</li>
+        <li><code>readme.html</code> — standard Blender readme</li>
+      </ul>
+
+      <footer class="md-footer">
+        Format modelled on
+        <a href="https://developer.blender.org/docs/release_notes/5.3/geometry_nodes/" target="_blank" rel="noopener">developer.blender.org · 5.3 Geometry Nodes</a>
+        and
+        <a href="https://devtalk.blender.org/c/meetings/28" target="_blank" rel="noopener">module meeting notes</a>.
+        · Generated 2026-07-30 · Does not load with Blender.
+      </footer>
+    </main>
+  </div>
+
+</body>
+</html>
