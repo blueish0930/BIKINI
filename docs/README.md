@@ -1,31 +1,21 @@
-# BIKINI Docs
+# BIKINI Docs (GitHub Pages source)
 
-| File | Description |
-|------|-------------|
-| [changelog.html](changelog.html) | Release notes in Blender Developer Docs style: **left nav = each period → modules** (Geometry Nodes, Math & Solver, Image Process/COP, Shaders, EEVEE, UI, Zones). **EN / 中文**. |
+This folder is the **GitHub Pages** root for the repository.
 
-## How to read
+| File | URL (after Pages is on) |
+|------|-------------------------|
+| [index.html](index.html) | https://blueish0930.github.io/BIKINI/ |
+| [changelog.html](changelog.html) | https://blueish0930.github.io/BIKINI/changelog.html |
 
-1. Open `changelog.html` in a browser.
-2. **Left sidebar**
-   - **BIKINI 5.3** — cumulative feature notes by module
-   - **Package history** — dated deltas (`2026-07-30`, `2026-07-29`, earlier baseline)
-3. Language is auto-detected (`zh*` → 中文), can be switched in the header, and is remembered in `localStorage`.
+## Layout
 
-Documentation only — does not affect `blender.exe`.
+- **index.html** — project landing page  
+- **changelog.html** — bilingual release notes (period → module → features), styled after [Blender Developer Docs release notes](https://developer.blender.org/docs/release_notes/5.3/)
 
-## Structure (mirrors upstream)
+Language on the changelog page auto-detects `zh*` browsers, can be switched in the header, and is stored in `localStorage`.
 
-Same idea as [developer.blender.org release notes](https://developer.blender.org/docs/release_notes/5.3/):
+Documentation only — does not affect `blender.exe` at runtime.
 
-```
-Release (period)
-  └── Module (Geometry Nodes / Shaders / EEVEE / UI / …)
-        └── Feature + short technical intro
-```
+## Local preview
 
-Notable deep dives in the page:
-
-- **Mesh Laplacian** — sparse Laplacian as COO (`weight` / `row` / `col` bundle)
-- **Linear Solver** — Eigen + Spectra (solve / factor / eigen / mat-vec)
-- **Image Process (COP)** — dedicated `ImageNodeTree` for image graphs
+Open `index.html` or `changelog.html` in any browser (no server required).

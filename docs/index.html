@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="BIKINI — custom Blender 5.3 build focused on Geometry Nodes, sparse solvers, Image Process (COP), and node UX.">
+  <title>BIKINI · Custom Blender Build</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --panel: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --accent2: #3fb950;
+      --warn: #d29922;
+      --font: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      --mono: "Cascadia Code", Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font);
+      color: var(--text);
+      background:
+        radial-gradient(1200px 600px at 10% -10%, rgba(88, 166, 255, 0.18), transparent 55%),
+        radial-gradient(900px 500px at 100% 0%, rgba(63, 185, 80, 0.12), transparent 50%),
+        var(--bg);
+      line-height: 1.6;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .wrap {
+      max-width: 52rem;
+      margin: 0 auto;
+      padding: 3rem 1.25rem 4rem;
+    }
+    .badge {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--accent);
+      border: 1px solid rgba(88, 166, 255, 0.35);
+      background: rgba(88, 166, 255, 0.1);
+      padding: 0.2rem 0.55rem;
+      border-radius: 999px;
+      margin-bottom: 1rem;
+    }
+    h1 {
+      margin: 0 0 0.5rem;
+      font-size: clamp(2rem, 5vw, 2.75rem);
+      font-weight: 750;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+    }
+    .tagline {
+      color: var(--muted);
+      font-size: 1.1rem;
+      margin: 0 0 1.75rem;
+      max-width: 40rem;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-bottom: 2.5rem;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.65rem 1.1rem;
+      border-radius: 0.45rem;
+      font-weight: 650;
+      font-size: 0.95rem;
+      border: 1px solid transparent;
+      text-decoration: none !important;
+      transition: background 0.12s, border-color 0.12s;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #0d1117;
+    }
+    .btn-primary:hover { background: #79b8ff; }
+    .btn-secondary {
+      background: var(--panel);
+      color: var(--text);
+      border-color: var(--border);
+    }
+    .btn-secondary:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+      gap: 0.9rem;
+      margin-bottom: 2rem;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 0.55rem;
+      padding: 1rem 1.1rem;
+    }
+    .card h3 {
+      margin: 0 0 0.4rem;
+      font-size: 0.98rem;
+    }
+    .card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+    .section {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 0.55rem;
+      padding: 1.15rem 1.25rem;
+      margin-bottom: 1rem;
+    }
+    .section h2 {
+      margin: 0 0 0.65rem;
+      font-size: 1.05rem;
+      font-weight: 700;
+    }
+    .section ul {
+      margin: 0;
+      padding-left: 1.2rem;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+    .section li { margin: 0.3rem 0; }
+    .section strong { color: var(--text); }
+    .warn {
+      border-left: 3px solid var(--warn);
+      padding-left: 0.85rem;
+      color: var(--muted);
+      font-size: 0.88rem;
+      margin-top: 0.75rem;
+    }
+    footer {
+      margin-top: 2.5rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+    code {
+      font-family: var(--mono);
+      font-size: 0.86em;
+      background: rgba(110, 118, 129, 0.2);
+      padding: 0.1em 0.35em;
+      border-radius: 0.25rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="badge">Unofficial · Blender 5.3 Alpha · Windows x64</div>
+    <h1>BIKINI</h1>
+    <p class="tagline">
+      自用 / 实验向的 Blender 自定义构建：在主线之上推进
+      <strong style="color:var(--text)">Geometry Nodes</strong>、
+      <strong style="color:var(--text)">稀疏线性代数</strong>、
+      <strong style="color:var(--text)">Image Process（COP）</strong>
+      与节点编辑器体验，并随 daily / main 同步。
+    </p>
+
+    <div class="actions">
+      <a class="btn btn-primary" href="changelog.html">Release Notes 更新日志</a>
+      <a class="btn btn-secondary" href="https://github.com/blueish0930/BIKINI">GitHub 仓库</a>
+      <a class="btn btn-secondary" href="https://github.com/blueish0930/BIKINI/archive/refs/heads/main.zip">下载 ZIP</a>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h3>Geometry Nodes</h3>
+        <p>Portal、Clip、Loop 细分、K-Nearest、SDF Grid 等生产向节点扩展。</p>
+      </div>
+      <div class="card">
+        <h3>Math &amp; Solver</h3>
+        <p>Mesh Laplacian（COO）→ Linear Solver；Eigen + Spectra 稀疏求解与特征分解。</p>
+      </div>
+      <div class="card">
+        <h3>Image Process · COP</h3>
+        <p>专用图像节点树：Stamp、Bake、法线↔高度、Fluid Zone 等。</p>
+      </div>
+      <div class="card">
+        <h3>UX &amp; Shaders</h3>
+        <p>节点组接口、抖动拆线、U 对齐；IQ 风格 SDF / Fractal 着色器。</p>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>开发目标</h2>
+      <ul>
+        <li><strong>跟主线，不 fork 成死支</strong> — 基于 Blender 5.3 Alpha / main，持续合入上游。</li>
+        <li><strong>几何节点为中枢</strong> — 把「能算的」搬进节点图：稀疏矩阵、拉普拉斯、线性系统、特征。</li>
+        <li><strong>图像节点独立成编辑器</strong> — Image Process 作为 COP 向工作流，服务贴图 / 点云栅格 / 烘焙。</li>
+        <li><strong>体验优先</strong> — 少拉线、好对齐、接口可说明、属性可读（含 String）。</li>
+        <li><strong>便携分发</strong> — Windows x64 解压即用；文档与二进制同仓，便于自测与分享。</li>
+      </ul>
+      <div class="warn">
+        非官方构建，未经 Blender Foundation 签名。请勿当作官方发行版分发。
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>文档</h2>
+      <ul>
+        <li><a href="changelog.html"><strong>Release Notes</strong></a> — 按「每期 → 模块」组织（仿官方 release notes），中英切换</li>
+        <li><a href="https://github.com/blueish0930/BIKINI/blob/main/README.md">仓库 README</a> — 下载与使用说明</li>
+        <li><a href="https://developer.blender.org/docs/release_notes/5.3/" target="_blank" rel="noopener">上游 Blender 5.3 Notes</a></li>
+      </ul>
+    </div>
+
+    <footer>
+      Pages · <code>blueish0930.github.io/BIKINI</code>
+      · Source: <a href="https://github.com/blueish0930/BIKINI">github.com/blueish0930/BIKINI</a>
+      · Docs live under <code>/docs</code>
+    </footer>
+  </div>
+</body>
+</html>
