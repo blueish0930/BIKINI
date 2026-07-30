@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>BIKINI: Geometry Nodes &amp; UX — Release Notes</title>
+  <title>BIKINI Release Notes</title>
   <style>
-    /* Approximates Blender Developer Documentation (Material for MkDocs) */
+    /* Blender Developer Documentation style (Material for MkDocs-like) */
     :root {
       --md-default-fg: rgba(0, 0, 0, 0.87);
       --md-default-fg-light: rgba(0, 0, 0, 0.54);
@@ -17,6 +17,7 @@
       --md-admonition-note: #448aff;
       --md-admonition-warning: #ff9100;
       --md-admonition-tip: #00bfa5;
+      --md-sidebar-w: 16.5rem;
       --font: "Roboto", "Helvetica Neue", "Segoe UI", "PingFang SC",
         "Microsoft YaHei", Arial, sans-serif;
       --font-mono: "Roboto Mono", "Cascadia Code", Consolas, monospace;
@@ -33,7 +34,6 @@
       background: #fafafa;
     }
 
-    /* Language visibility: default hide both until script runs, then show active */
     html:not([data-lang]) .lang-en,
     html:not([data-lang]) .lang-zh { visibility: hidden; }
     html[data-lang="en"] .lang-zh { display: none !important; }
@@ -42,14 +42,14 @@
     .md-header {
       position: sticky;
       top: 0;
-      z-index: 10;
+      z-index: 20;
       background: #265787;
       color: #fff;
       box-shadow: 0 0 0.2rem rgba(0, 0, 0, 0.1), 0 0.2rem 0.4rem rgba(0, 0, 0, 0.2);
     }
 
     .md-header__inner {
-      max-width: 61rem;
+      max-width: 72rem;
       margin: 0 auto;
       padding: 0.7rem 1.2rem;
       display: flex;
@@ -64,7 +64,7 @@
       letter-spacing: 0.01em;
     }
 
-    .md-header__title span {
+    .md-header__title span.sub {
       font-weight: 400;
       opacity: 0.85;
       margin-left: 0.4rem;
@@ -119,19 +119,19 @@
     }
 
     .layout {
-      max-width: 61rem;
+      max-width: 72rem;
       margin: 0 auto;
       display: grid;
-      grid-template-columns: 14rem minmax(0, 1fr);
+      grid-template-columns: var(--md-sidebar-w) minmax(0, 1fr);
       gap: 0;
       min-height: calc(100vh - 3rem);
     }
 
     .md-sidebar {
-      padding: 1.5rem 1rem 2rem 1.2rem;
+      padding: 1.25rem 0.85rem 2.5rem 1rem;
       border-right: 1px solid var(--md-border);
       background: #fff;
-      font-size: 0.82rem;
+      font-size: 0.8rem;
       position: sticky;
       top: 3rem;
       align-self: start;
@@ -140,34 +140,106 @@
     }
 
     .md-sidebar h4 {
-      margin: 0 0 0.6rem;
-      font-size: 0.72rem;
+      margin: 1rem 0 0.45rem;
+      padding: 0 0.35rem;
+      font-size: 0.68rem;
       text-transform: uppercase;
       letter-spacing: 0.08em;
       color: var(--md-default-fg-light);
     }
 
-    .md-sidebar ul {
+    .md-sidebar h4:first-child { margin-top: 0.2rem; }
+
+    .md-sidebar > ul {
       list-style: none;
-      margin: 0 0 1.2rem;
+      margin: 0 0 0.35rem;
       padding: 0;
     }
 
-    .md-sidebar li { margin: 0.2rem 0; }
+    .md-sidebar li { margin: 0; }
 
     .md-sidebar a {
       color: var(--md-default-fg);
       text-decoration: none;
       display: block;
-      padding: 0.15rem 0;
+      padding: 0.22rem 0.4rem;
+      border-radius: 0.2rem;
+      line-height: 1.35;
     }
 
-    .md-sidebar a:hover { color: var(--md-typeset-a); }
+    .md-sidebar a:hover {
+      color: var(--md-typeset-a);
+      background: rgba(63, 81, 181, 0.06);
+    }
+
+    /* Nested release → modules (Blender docs style) */
+    .nav-release > summary,
+    .nav-module > summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 0.28rem 0.4rem;
+      border-radius: 0.2rem;
+      font-weight: 600;
+      color: var(--md-default-fg);
+      user-select: none;
+    }
+
+    .nav-release > summary::-webkit-details-marker,
+    .nav-module > summary::-webkit-details-marker { display: none; }
+
+    .nav-release > summary::before,
+    .nav-module > summary::before {
+      content: "▸";
+      display: inline-block;
+      width: 0.9em;
+      color: var(--md-default-fg-light);
+      font-size: 0.75em;
+      transition: transform 0.12s ease;
+    }
+
+    .nav-release[open] > summary::before,
+    .nav-module[open] > summary::before {
+      transform: rotate(90deg);
+    }
+
+    .nav-release > summary:hover,
+    .nav-module > summary:hover {
+      background: rgba(63, 81, 181, 0.06);
+      color: var(--md-typeset-a);
+    }
+
+    .nav-release > ul,
+    .nav-module > ul {
+      list-style: none;
+      margin: 0.1rem 0 0.35rem;
+      padding: 0 0 0 0.65rem;
+      border-left: 1px solid var(--md-border);
+      margin-left: 0.45rem;
+    }
+
+    .nav-module > ul a {
+      font-weight: 400;
+      font-size: 0.78rem;
+      padding: 0.16rem 0.35rem;
+    }
+
+    .nav-release > summary .tag {
+      display: inline-block;
+      margin-left: 0.35rem;
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #265787;
+      background: rgba(38, 87, 135, 0.1);
+      padding: 0.05rem 0.35rem;
+      border-radius: 0.15rem;
+      vertical-align: middle;
+    }
 
     .md-content {
       background: var(--md-default-bg);
-      padding: 1.6rem 2rem 4rem;
-      border-left: 1px solid transparent;
+      padding: 1.6rem 2.1rem 4rem;
     }
 
     h1 {
@@ -181,19 +253,27 @@
     }
 
     h2 {
-      margin: 2rem 0 0.75rem;
-      font-size: 1.35rem;
+      margin: 2.2rem 0 0.75rem;
+      font-size: 1.4rem;
       font-weight: 400;
       border-bottom: 1px solid var(--md-border);
       padding-bottom: 0.35rem;
-      scroll-margin-top: 3.5rem;
+      scroll-margin-top: 3.6rem;
     }
 
     h3 {
-      margin: 1.4rem 0 0.5rem;
-      font-size: 1.05rem;
+      margin: 1.5rem 0 0.5rem;
+      font-size: 1.08rem;
       font-weight: 700;
-      scroll-margin-top: 3.5rem;
+      scroll-margin-top: 3.6rem;
+    }
+
+    h4 {
+      margin: 1.1rem 0 0.4rem;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--md-default-fg);
+      scroll-margin-top: 3.6rem;
     }
 
     p { margin: 0.55rem 0 0.75rem; }
@@ -218,6 +298,24 @@
       padding: 0.1em 0.35em;
       border-radius: 0.2rem;
       word-break: break-word;
+    }
+
+    pre {
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      background: #f6f8fa;
+      border: 1px solid var(--md-border);
+      border-radius: 0.25rem;
+      padding: 0.75rem 1rem;
+      overflow-x: auto;
+      line-height: 1.45;
+      margin: 0.6rem 0 1rem;
+    }
+
+    pre code {
+      background: none;
+      padding: 0;
+      font-size: inherit;
     }
 
     .lead {
@@ -248,9 +346,31 @@
       color: var(--md-default-fg-light);
     }
 
+    .spec-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      margin: 0.6rem 0 1.1rem;
+    }
+
+    .spec-table th,
+    .spec-table td {
+      text-align: left;
+      padding: 0.38rem 0.55rem;
+      border: 1px solid var(--md-border);
+      vertical-align: top;
+    }
+
+    .spec-table th {
+      background: #f7f9fc;
+      font-weight: 600;
+    }
+
+    .spec-table tr:nth-child(even) td { background: #fcfcfc; }
+
     .admonition {
       margin: 1rem 0 1.25rem;
-      padding: 0.7rem 0.9rem 0.8rem 0.9rem;
+      padding: 0.7rem 0.9rem 0.8rem;
       border-left: 0.25rem solid var(--md-admonition-note);
       background: rgba(68, 138, 255, 0.08);
       border-radius: 0.15rem;
@@ -290,6 +410,11 @@
       background: rgba(0, 0, 0, 0.06);
     }
 
+    .status.new {
+      color: #0d5c3d;
+      background: rgba(0, 191, 165, 0.15);
+    }
+
     .toc-inline {
       background: #f7f9fc;
       border: 1px solid var(--md-border);
@@ -308,6 +433,34 @@
       letter-spacing: 0.05em;
     }
 
+    .module-card {
+      border: 1px solid var(--md-border);
+      border-radius: 0.3rem;
+      padding: 0.85rem 1.05rem;
+      margin: 0.7rem 0;
+      background: #fcfcfc;
+    }
+
+    .module-card h3 {
+      margin: 0 0 0.35rem;
+      border: 0;
+      font-size: 1rem;
+    }
+
+    .module-card p { margin: 0.25rem 0 0.4rem; font-size: 0.9rem; }
+
+    .pipeline {
+      font-family: var(--font-mono);
+      font-size: 0.84rem;
+      background: #f0f4f8;
+      border: 1px dashed #b0bec5;
+      border-radius: 0.25rem;
+      padding: 0.65rem 0.9rem;
+      margin: 0.7rem 0 1rem;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
     footer.md-footer {
       margin-top: 2.5rem;
       padding-top: 1rem;
@@ -316,26 +469,25 @@
       font-size: 0.82rem;
     }
 
-    .meeting {
-      background: #fcfcfc;
-      border: 1px solid var(--md-border);
-      border-radius: 0.25rem;
-      padding: 0.2rem 1.1rem 0.9rem;
-      margin: 0.8rem 0 1.2rem;
-    }
-
-    .meeting h3 {
-      border: 0;
-      margin-top: 1rem;
-    }
-
     .lang-hint {
       font-size: 0.78rem;
       color: var(--md-default-fg-light);
       margin: 0 0 1rem;
     }
 
-    @media (max-width: 900px) {
+    .period-banner {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem 1rem;
+      align-items: baseline;
+      margin: 0.4rem 0 1rem;
+      font-size: 0.9rem;
+      color: var(--md-default-fg-light);
+    }
+
+    .period-banner strong { color: var(--md-default-fg); }
+
+    @media (max-width: 960px) {
       .layout { grid-template-columns: 1fr; }
       .md-sidebar {
         position: static;
@@ -348,7 +500,6 @@
     }
   </style>
   <script>
-    /* Apply language ASAP to avoid flash of wrong language */
     (function () {
       var KEY = "bikini-changelog-lang";
       var saved = null;
@@ -368,14 +519,19 @@
   <header class="md-header">
     <div class="md-header__inner">
       <div class="md-header__title">
-        BIKINI<span class="lang-en">Release Notes</span><span class="lang-zh">更新日志</span>
+        BIKINI
+        <span class="sub lang-en">Release Notes</span>
+        <span class="sub lang-zh">更新日志</span>
       </div>
       <a href="../readme.html">readme.html</a>
       <a href="../BIKINI_BUILD_INFO.txt">
         <span class="lang-en">Build Info</span><span class="lang-zh">构建信息</span>
       </a>
+      <a href="https://developer.blender.org/docs/release_notes/5.3/" target="_blank" rel="noopener">
+        <span class="lang-en">Upstream 5.3</span><span class="lang-zh">上游 5.3</span>
+      </a>
       <a href="https://developer.blender.org/docs/release_notes/5.3/geometry_nodes/" target="_blank" rel="noopener">
-        <span class="lang-en">Upstream 5.3 GN notes</span><span class="lang-zh">上游 5.3 几何节点说明</span>
+        <span class="lang-en">GN notes</span><span class="lang-zh">几何节点</span>
       </a>
       <a href="https://github.com/blueish0930/BIKINI" target="_blank" rel="noopener">GitHub</a>
 
@@ -387,62 +543,205 @@
   </header>
 
   <div class="layout">
+    <!-- ========== Sidebar: release periods → modules (Blender docs style) ========== -->
     <nav class="md-sidebar" aria-label="Table of contents">
       <h4 class="lang-en">On this page</h4>
       <h4 class="lang-zh">本页目录</h4>
       <ul>
         <li><a href="#overview"><span class="lang-en">Overview</span><span class="lang-zh">概览</span></a></li>
-        <li><a href="#string-attributes"><span class="lang-en">String Attributes</span><span class="lang-zh">String 属性</span></a></li>
-        <li><a href="#geometry-nodes"><span class="lang-en">Geometry Nodes</span><span class="lang-zh">几何节点</span></a></li>
-        <li><a href="#math-solver"><span class="lang-en">Math &amp; Solver</span><span class="lang-zh">数学与求解器</span></a></li>
-        <li><a href="#zones"><span class="lang-en">Zones</span><span class="lang-zh">区域（Zones）</span></a></li>
-        <li><a href="#node-group-ui"><span class="lang-en">Node Group UI</span><span class="lang-zh">节点组接口</span></a></li>
-        <li><a href="#editor-ux"><span class="lang-en">Editor UX</span><span class="lang-zh">编辑器交互</span></a></li>
-        <li><a href="#image-process"><span class="lang-en">Image Process</span><span class="lang-zh">图像处理</span></a></li>
-        <li><a href="#disabled"><span class="lang-en">Disabled / WIP</span><span class="lang-zh">未启用 / 进行中</span></a></li>
-        <li><a href="#known-issues"><span class="lang-en">Known Issues</span><span class="lang-zh">已知问题</span></a></li>
-        <li><a href="#weekly-style"><span class="lang-en">Weekly-style Summary</span><span class="lang-zh">周会式摘要</span></a></li>
       </ul>
+
+      <h4 class="lang-en">Releases</h4>
+      <h4 class="lang-zh">各期更新</h4>
+      <ul>
+        <!-- BIKINI 5.3 cumulative -->
+        <li>
+          <details class="nav-release" open>
+            <summary>
+              BIKINI 5.3
+              <span class="tag">Alpha</span>
+            </summary>
+            <ul>
+              <li><a href="#r53-index"><span class="lang-en">Index</span><span class="lang-zh">索引</span></a></li>
+              <li>
+                <details class="nav-module" open>
+                  <summary>Geometry Nodes</summary>
+                  <ul>
+                    <li><a href="#gn-portal">Named Portal</a></li>
+                    <li><a href="#gn-clip">Geometry Clip</a></li>
+                    <li><a href="#gn-loop">Loop Subdivision</a></li>
+                    <li><a href="#gn-knearest">K-Nearest</a></li>
+                    <li><a href="#gn-misc"><span class="lang-en">Other nodes</span><span class="lang-zh">其它节点</span></a></li>
+                  </ul>
+                </details>
+              </li>
+              <li>
+                <details class="nav-module" open>
+                  <summary>
+                    <span class="lang-en">Math &amp; Solver</span>
+                    <span class="lang-zh">数学与求解器</span>
+                  </summary>
+                  <ul>
+                    <li><a href="#math-pipeline"><span class="lang-en">Pipeline</span><span class="lang-zh">链路</span></a></li>
+                    <li><a href="#math-laplacian">Mesh Laplacian</a></li>
+                    <li><a href="#math-sparse">Sparse Matrix Math</a></li>
+                    <li><a href="#math-solver">Linear Solver</a></li>
+                  </ul>
+                </details>
+              </li>
+              <li>
+                <details class="nav-module" open>
+                  <summary>
+                    Image Process <span class="tag">COP</span>
+                  </summary>
+                  <ul>
+                    <li><a href="#cop-editor"><span class="lang-en">Editor</span><span class="lang-zh">编辑器</span></a></li>
+                    <li><a href="#cop-nodes"><span class="lang-en">Key nodes</span><span class="lang-zh">核心节点</span></a></li>
+                    <li><a href="#cop-fluid">Fluid Zone</a></li>
+                  </ul>
+                </details>
+              </li>
+              <li>
+                <details class="nav-module">
+                  <summary>
+                    <span class="lang-en">Shaders</span>
+                    <span class="lang-zh">着色器</span>
+                  </summary>
+                  <ul>
+                    <li><a href="#shader-sdf">SDF Shape</a></li>
+                    <li><a href="#shader-fractal">Fractal Primitive</a></li>
+                  </ul>
+                </details>
+              </li>
+              <li>
+                <details class="nav-module">
+                  <summary>EEVEE / Viewport</summary>
+                  <ul>
+                    <li><a href="#eevee-gpu"><span class="lang-en">GPU materials</span><span class="lang-zh">GPU 材质</span></a></li>
+                    <li><a href="#eevee-overlay"><span class="lang-en">Overlays</span><span class="lang-zh">叠加显示</span></a></li>
+                  </ul>
+                </details>
+              </li>
+              <li>
+                <details class="nav-module">
+                  <summary>
+                    <span class="lang-en">User Interface</span>
+                    <span class="lang-zh">用户界面</span>
+                  </summary>
+                  <ul>
+                    <li><a href="#ui-group"><span class="lang-en">Node Group</span><span class="lang-zh">节点组接口</span></a></li>
+                    <li><a href="#ui-editor"><span class="lang-en">Editor UX</span><span class="lang-zh">编辑器交互</span></a></li>
+                    <li><a href="#ui-string">String Attributes</a></li>
+                  </ul>
+                </details>
+              </li>
+              <li>
+                <details class="nav-module">
+                  <summary>Zones</summary>
+                  <ul>
+                    <li><a href="#zones-repeat">Repeat Break</a></li>
+                    <li><a href="#zones-sim">Sim Cache Limit</a></li>
+                  </ul>
+                </details>
+              </li>
+            </ul>
+          </details>
+        </li>
+
+        <!-- Dated package deltas -->
+        <li>
+          <details class="nav-release" open>
+            <summary>
+              <span class="lang-en">Package history</span>
+              <span class="lang-zh">分期内更新</span>
+            </summary>
+            <ul>
+              <li>
+                <details class="nav-module" open>
+                  <summary>2026-07-30</summary>
+                  <ul>
+                    <li><a href="#pkg-0730">
+                      <span class="lang-en">Image / Shader menus</span>
+                      <span class="lang-zh">图像 / 着色器菜单</span>
+                    </a></li>
+                  </ul>
+                </details>
+              </li>
+              <li>
+                <details class="nav-module" open>
+                  <summary>2026-07-29</summary>
+                  <ul>
+                    <li><a href="#pkg-0729">Bake / Stamp / Bundle</a></li>
+                  </ul>
+                </details>
+              </li>
+              <li>
+                <details class="nav-module">
+                  <summary>
+                    <span class="lang-en">Earlier baseline</span>
+                    <span class="lang-zh">更早基线</span>
+                  </summary>
+                  <ul>
+                    <li><a href="#pkg-earlier">
+                      <span class="lang-en">Feature dump</span>
+                      <span class="lang-zh">功能清单</span>
+                    </a></li>
+                  </ul>
+                </details>
+              </li>
+            </ul>
+          </details>
+        </li>
+      </ul>
+
       <h4 class="lang-en">Also</h4>
       <h4 class="lang-zh">其它</h4>
       <ul>
+        <li><a href="#disabled"><span class="lang-en">Disabled / WIP</span><span class="lang-zh">未启用</span></a></li>
+        <li><a href="#known-issues"><span class="lang-en">Known Issues</span><span class="lang-zh">已知问题</span></a></li>
         <li><a href="#package"><span class="lang-en">Package contents</span><span class="lang-zh">包内容</span></a></li>
       </ul>
     </nav>
 
     <main class="md-content">
-      <h1 id="top">BIKINI: Geometry Nodes &amp; UX</h1>
+      <h1 id="top">
+        <span class="lang-en">BIKINI Release Notes</span>
+        <span class="lang-zh">BIKINI 更新日志</span>
+      </h1>
 
-      <p class="lang-hint lang-en">Language follows your browser (or last choice). Use the switch in the header anytime.</p>
-      <p class="lang-hint lang-zh">语言随浏览器自动选择（或记住你上次的选择）。可随时点右上角切换。</p>
+      <p class="lang-hint lang-en">Layout modelled on
+        <a href="https://developer.blender.org/docs/release_notes/5.3/" target="_blank" rel="noopener">developer.blender.org release notes</a>
+        (version → modules). Language follows browser / last choice; switch in the header.
+      </p>
+      <p class="lang-hint lang-zh">版式仿照
+        <a href="https://developer.blender.org/docs/release_notes/5.3/" target="_blank" rel="noopener">developer.blender.org 发布说明</a>
+        （版本 → 模块）。语言随浏览器或上次选择；可随时切换。
+      </p>
 
       <p class="lead lang-en">
-        Custom features on top of Blender <strong>5.3 Alpha</strong>, documented in the same style as the
-        <a href="https://developer.blender.org/docs/release_notes/5.3/geometry_nodes/" target="_blank" rel="noopener">official Geometry Nodes release notes</a>.
-        Source list: <code>Achieve List</code>; verified against this portable build
-        (<code>blender.exe</code> + <code>5.3/scripts/startup/bl_ui/node_add_menu_*.py</code>).
+        Custom features on top of Blender <strong>5.3 Alpha</strong>. Left nav lists each
+        <strong>release period</strong>; under each period, modules such as Geometry Nodes,
+        Math &amp; Solver, Image Process (COP), Shaders, EEVEE, and UI — each with short
+        technical introductions.
       </p>
       <p class="lead lang-zh">
-        基于 Blender <strong>5.3 Alpha</strong> 的自定义功能说明，版式参考
-        <a href="https://developer.blender.org/docs/release_notes/5.3/geometry_nodes/" target="_blank" rel="noopener">官方 Geometry Nodes 更新说明</a>。
-        来源：<code>Achieve List</code>；并已对照本便携构建
-        （<code>blender.exe</code> + <code>5.3/scripts/startup/bl_ui/node_add_menu_*.py</code>）核实。
+        基于 Blender <strong>5.3 Alpha</strong> 的自定义功能说明。左侧按<strong>每期更新</strong>组织；
+        每期下再分 Geometry Nodes、数学与求解器、Image Process（COP）、着色器、EEVEE、UI 等模块，
+        并附简短技术介绍。
       </p>
 
       <div class="admonition tip">
-        <div class="title lang-en">Note</div>
-        <div class="title lang-zh">说明</div>
+        <div class="title lang-en">Documentation only</div>
+        <div class="title lang-zh">仅文档</div>
         <span class="lang-en">
-          This HTML file is documentation only. Placing it next to <code>blender.exe</code> does
-          <strong>not</strong> affect startup or runtime.
+          This HTML does <strong>not</strong> affect <code>blender.exe</code> startup or runtime.
         </span>
         <span class="lang-zh">
-          本 HTML 仅为文档。与 <code>blender.exe</code> 同目录放置
-          <strong>不会</strong> 影响启动或运行。
+          本 HTML <strong>不会</strong> 影响 <code>blender.exe</code> 启动或运行。
         </span>
       </div>
 
-      <!-- Overview -->
+      <!-- ===================== Overview ===================== -->
       <h2 id="overview">
         <span class="lang-en">Overview</span><span class="lang-zh">概览</span>
       </h2>
@@ -453,7 +752,7 @@
         </tr>
         <tr>
           <th class="lang-en">Package date</th><th class="lang-zh">打包日期</th>
-          <td>2026-07-29</td>
+          <td>2026-07-30</td>
         </tr>
         <tr>
           <th class="lang-en">Repository</th><th class="lang-zh">仓库</th>
@@ -461,13 +760,13 @@
         </tr>
         <tr>
           <th class="lang-en">Focus</th><th class="lang-zh">重点</th>
-          <td class="lang-en">Geometry Nodes, node editor UX, Image Process (COPs-style)</td>
-          <td class="lang-zh">几何节点、节点编辑器体验、Image Process（COPs 向）</td>
+          <td class="lang-en">Geometry Nodes, sparse linear algebra, Image Process (COP), shader SDF, node UX</td>
+          <td class="lang-zh">几何节点、稀疏线性代数、Image Process（COP）、着色器 SDF、节点交互</td>
         </tr>
         <tr>
-          <th class="lang-en">Base</th><th class="lang-zh">基线</th>
-          <td class="lang-en">Tracks mainline Blender; features below are BIKINI additions / changes</td>
-          <td class="lang-zh">跟随 Blender 主线；下列功能为 BIKINI 新增 / 改动</td>
+          <th class="lang-en">Upstream</th><th class="lang-zh">上游</th>
+          <td class="lang-en">Tracks mainline Blender 5.3; items below are BIKINI additions unless noted</td>
+          <td class="lang-zh">跟随主线 Blender 5.3；下列为 BIKINI 新增（除非另注）</td>
         </tr>
       </table>
 
@@ -475,354 +774,876 @@
         <div class="title lang-en">Highlights</div>
         <div class="title lang-zh">亮点</div>
         <ul class="lang-en">
-          <li>String attributes end-to-end (store / capture / viewer / viewport overlay)</li>
-          <li>New nodes: Portal, Geometry Clip, Loop Subdivision, K-Nearest, Linear Solver, …</li>
-          <li>Sparse matrix pipeline (Mesh Laplacian → Sparse Matrix Math → Linear Solver)</li>
-          <li>Repeat Zone <strong>Break</strong>, Simulation Zone <strong>Cache Limit</strong>, Time Shift</li>
-          <li>Node group UI: Separator, Message, Join-to-Next, Ctrl+LMB rename</li>
-          <li>Image Process: Point Stamp, Normal ↔ Height, Bake Image</li>
+          <li><strong>Sparse math pipeline</strong> — Mesh Laplacian (COO) → Sparse Matrix Math → Linear Solver (Eigen + Spectra)</li>
+          <li><strong>Image Process (COP)</strong> — dedicated node editor for image graphs, Point Stamp, Bake Image, Fluid Zone</li>
+          <li><strong>SDF / Fractal</strong> — Inigo Quilez-style shapes in Shader + Image Process</li>
+          <li><strong>Geometry Nodes</strong> — Portal, Clip, Loop Subdivision, K-Nearest, Time Shift, …</li>
+          <li><strong>UI</strong> — group Separator/Message, shake-detach, U-align, string attributes</li>
         </ul>
         <ul class="lang-zh">
-          <li>String 属性全链路（存储 / 捕获 / Viewer / 视口叠加）</li>
-          <li>新节点：Portal、Geometry Clip、Loop 细分、K-Nearest、Linear Solver 等</li>
-          <li>稀疏矩阵链路（Mesh Laplacian → Sparse Matrix Math → Linear Solver）</li>
-          <li>Repeat Zone <strong>Break</strong>、Simulation Zone <strong>Cache Limit</strong>、Time Shift</li>
-          <li>节点组 UI：Separator、Message、参数并排、Ctrl+LMB 改名</li>
-          <li>Image Process：Point Stamp、法线↔高度、Bake Image</li>
+          <li><strong>稀疏数学链路</strong> — Mesh Laplacian（COO）→ Sparse Matrix Math → Linear Solver（Eigen + Spectra）</li>
+          <li><strong>Image Process（COP）</strong> — 专用图像节点编辑器、Point Stamp、Bake Image、Fluid Zone</li>
+          <li><strong>SDF / Fractal</strong> — 借鉴 Inigo Quilez 的形状，着色器与 Image Process 共用数学核</li>
+          <li><strong>几何节点</strong> — Portal、Clip、Loop 细分、K-Nearest、Time Shift 等</li>
+          <li><strong>UI</strong> — 节点组 Separator/Message、抖动拆线、U 对齐、String 属性</li>
         </ul>
       </div>
 
-      <!-- String -->
-      <h2 id="string-attributes">
-        <span class="lang-en">String Attributes</span><span class="lang-zh">String 属性</span>
-      </h2>
+      <!-- ===================== BIKINI 5.3 Index ===================== -->
+      <h2 id="r53-index">BIKINI 5.3</h2>
+      <p class="period-banner">
+        <span class="lang-en">Cumulative notes for this portable build (Blender 5.3 Alpha base).</span>
+        <span class="lang-zh">本便携构建的累计说明（基线 Blender 5.3 Alpha）。</span>
+      </p>
       <p class="lang-en">
-        Geometry attributes support a <strong>String</strong> data type across the attribute pipeline.
-        This enables text-like data on points, faces, and other domains, with UI and spreadsheet support.
+        Organised like the official
+        <a href="https://developer.blender.org/docs/release_notes/5.3/" target="_blank" rel="noopener">Blender 5.3 release notes</a>:
+        pick a module below for feature details.
       </p>
       <p class="lang-zh">
-        几何属性在整条属性链路中支持 <strong>String</strong> 类型，可在点、面等域上存储文本类数据，
-        并具备 UI 与电子表格支持。
+        组织方式参考官方
+        <a href="https://developer.blender.org/docs/release_notes/5.3/" target="_blank" rel="noopener">Blender 5.3 发布说明</a>：
+        按模块查看功能详情。
       </p>
-      <ul class="lang-en">
-        <li><strong>Named Attribute / Store Named Attribute / Capture Attribute</strong> — string domain support</li>
-        <li><strong>Viewer</strong> — string values in the viewer and improved viewport attribute text overlays</li>
-        <li><strong>Join Geometry / Realize Instances</strong> — string attributes propagate correctly</li>
-        <li><strong>Spreadsheet</strong> — columns can be sorted (click column header)</li>
-      </ul>
-      <ul class="lang-zh">
-        <li><strong>Named Attribute / Store Named Attribute / Capture Attribute</strong> — 支持 string 域</li>
-        <li><strong>Viewer</strong> — Viewer 中显示字符串，并优化视口属性文字叠加</li>
-        <li><strong>Join Geometry / Realize Instances</strong> — string 属性正确传递</li>
-        <li><strong>Spreadsheet</strong> — 点击列头可排序</li>
-      </ul>
 
-      <!-- Geometry Nodes -->
-      <h2 id="geometry-nodes">
-        <span class="lang-en">Geometry Nodes</span><span class="lang-zh">几何节点</span>
-      </h2>
+      <div class="module-card">
+        <h3><a href="#geometry-nodes">Geometry Nodes</a></h3>
+        <p class="lang-en">New operators: Named Portal, Geometry Clip, Loop Subdivision, K-Nearest, Debug, Time Shift, …</p>
+        <p class="lang-zh">新节点：Named Portal、Geometry Clip、Loop 细分、K-Nearest、Debug、Time Shift 等。</p>
+      </div>
+      <div class="module-card">
+        <h3><a href="#math-solver-section"><span class="lang-en">Math &amp; Solver</span><span class="lang-zh">数学与求解器</span></a></h3>
+        <p class="lang-en">Mesh Laplacian (COO sparse bundle), Sparse Matrix Math, Linear Solver via Eigen + Spectra.</p>
+        <p class="lang-zh">Mesh Laplacian（COO 稀疏 Bundle）、Sparse Matrix Math、基于 Eigen + Spectra 的 Linear Solver。</p>
+      </div>
+      <div class="module-card">
+        <h3><a href="#image-process">Image Process (COP)</a></h3>
+        <p class="lang-en">Dedicated <code>ImageNodeTree</code> for image processing — not the classic compositor-only path.</p>
+        <p class="lang-zh">专用 <code>ImageNodeTree</code> 图像处理节点图，区别于经典合成器路径。</p>
+      </div>
+      <div class="module-card">
+        <h3><a href="#shaders"><span class="lang-en">Shaders</span><span class="lang-zh">着色器</span></a></h3>
+        <p class="lang-en">SDF Shape &amp; Fractal Primitive (IQ formulas), GPU paths for EEVEE.</p>
+        <p class="lang-zh">SDF Shape 与 Fractal Primitive（IQ 公式），含 EEVEE GPU 路径。</p>
+      </div>
+      <div class="module-card">
+        <h3><a href="#eevee">EEVEE &amp; Viewport</a></h3>
+        <p class="lang-en">GPU material GLSL for SDF/Fractal; clearer attribute / Viewer overlays.</p>
+        <p class="lang-zh">SDF/Fractal 的 GPU 材质 GLSL；更清晰的属性 / Viewer 叠加。</p>
+      </div>
+      <div class="module-card">
+        <h3><a href="#user-interface"><span class="lang-en">User Interface</span><span class="lang-zh">用户界面</span></a></h3>
+        <p class="lang-en">Node group interface items, editor gestures, string attributes, spreadsheet sort.</p>
+        <p class="lang-zh">节点组接口项、编辑器手势、String 属性、Spreadsheet 排序。</p>
+      </div>
+      <div class="module-card">
+        <h3><a href="#zones">Zones</a></h3>
+        <p class="lang-en">Repeat Zone Break; Simulation Zone Cache Limit.</p>
+        <p class="lang-zh">Repeat Zone Break；Simulation Zone Cache Limit。</p>
+      </div>
 
-      <h3 id="named-portal">Named Portal</h3>
+      <!-- ===================== Geometry Nodes ===================== -->
+      <h2 id="geometry-nodes">Geometry Nodes</h2>
       <p class="lang-en">
-        The <strong>Named Portal</strong> node (<code>GeometryNodeNamedPortal</code>) passes values by name
-        across a node tree, similar to a lightweight global link without long noodle runs.
+        Custom geometry nodes registered in the Geometry Nodes add menu
+        (<code>node_add_menu_geometry.py</code>). Style reference:
+        <a href="https://developer.blender.org/docs/release_notes/5.3/geometry_nodes/" target="_blank" rel="noopener">5.3 Geometry Nodes notes</a>.
       </p>
       <p class="lang-zh">
-        <strong>Named Portal</strong> 节点（<code>GeometryNodeNamedPortal</code>）按名称在节点树中传值，
-        类似轻量全局连接，避免长距离拉线。
+        自定义几何节点注册于 Geometry Nodes 添加菜单（<code>node_add_menu_geometry.py</code>）。
+        风格参考：
+        <a href="https://developer.blender.org/docs/release_notes/5.3/geometry_nodes/" target="_blank" rel="noopener">5.3 Geometry Nodes 说明</a>。
       </p>
 
-      <h3 id="geometry-clip">Geometry Clip</h3>
+      <h3 id="gn-portal">Named Portal / Store Named Portal</h3>
       <p class="lang-en">
-        The <strong>Geometry Clip</strong> node clips geometry against a plane or volume-style cut.
-        Mesh classification and edge topology build have been optimized for large meshes.
+        <strong>Named Portal</strong> (<code>GeometryNodeNamedPortal</code>) and
+        <strong>Store Named Portal</strong> pass values by name across a node tree —
+        lightweight named links without long noodle runs.
       </p>
       <p class="lang-zh">
-        <strong>Geometry Clip</strong> 按平面或体式裁切几何。网格分类与边拓扑构建已针对大网格优化。
+        <strong>Named Portal</strong>（<code>GeometryNodeNamedPortal</code>）与
+        <strong>Store Named Portal</strong> 按名称在节点树中传值，
+        轻量命名连接，避免长距离拉线。
       </p>
 
-      <h3 id="loop-subdivision">Loop Subdivision</h3>
+      <h3 id="gn-clip">Geometry Clip</h3>
       <p class="lang-en">
-        The <strong>Loop Subdivision</strong> node applies Loop subdivision to meshes.
+        <strong>Geometry Clip</strong> (<code>GeometryNodeGeometryClip</code>) clips geometry against
+        a plane / cut. Mesh classification and edge topology build are optimised for large meshes.
       </p>
       <p class="lang-zh">
-        <strong>Loop Subdivision</strong> 对网格应用 Loop 细分。
+        <strong>Geometry Clip</strong>（<code>GeometryNodeGeometryClip</code>）按平面或裁切几何。
+        网格分类与边拓扑构建已针对大网格优化。
       </p>
 
-      <h3 id="k-nearest">
-        <span class="lang-en">Nearest Neighbours</span><span class="lang-zh">最近邻（Nearest Neighbours）</span>
-      </h3>
+      <h3 id="gn-loop">Loop Subdivision</h3>
       <p class="lang-en">
-        The <strong>K-Nearest</strong> node (<code>GeometryNodeKNearest</code>) finds nearest neighbours
-        for points / samples, useful for smoothing, clustering, and field sampling patterns.
+        <strong>Loop Subdivision</strong> (<code>GeometryNodeLoopSubdivision</code>) applies the
+        classic Loop subdivision scheme to triangle meshes.
+      </p>
+      <p class="lang-zh">
+        <strong>Loop Subdivision</strong>（<code>GeometryNodeLoopSubdivision</code>）对三角网格应用
+        经典 Loop 细分。
+      </p>
+
+      <h3 id="gn-knearest">K-Nearest (Nearest Neighbours)</h3>
+      <p class="lang-en">
+        <strong>K-Nearest</strong> (<code>GeometryNodeKNearest</code>) finds nearest neighbours for
+        points / samples — useful for smoothing, clustering, and field sampling patterns.
       </p>
       <p class="lang-zh">
         <strong>K-Nearest</strong>（<code>GeometryNodeKNearest</code>）为点 / 采样查找最近邻，
         适用于平滑、聚类与场采样等。
       </p>
 
-      <h3 id="set-default-closure">Set Default Closure</h3>
-      <p class="lang-en">
-        The <strong>Set Default Closure</strong> node assigns a default closure to a closure socket
-        when no external closure is connected.
-      </p>
-      <p class="lang-zh">
-        <strong>Set Default Closure</strong> 在闭包 socket 未连接外部闭包时指定默认闭包。
-      </p>
+      <h3 id="gn-misc">
+        <span class="lang-en">Other geometry nodes</span>
+        <span class="lang-zh">其它几何节点</span>
+      </h3>
+      <ul class="lang-en">
+        <li><strong>Set Default Closure</strong> — default closure when no external closure is connected</li>
+        <li><strong>Debug</strong> — inspect intermediate geometry / values while authoring</li>
+        <li><strong>Time Shift</strong> — offset evaluation time for downstream nodes (see cache note with Simulation Zone)</li>
+        <li><strong>Object Info → Seed</strong> — deterministic randomness / instance variation</li>
+        <li><strong>Menu Switch</strong> — multi-select menu items for richer branching UIs</li>
+        <li><strong>SDF Grid family</strong> — Boolean, Fillet, Laplacian, Mean, Mean Curvature, Median, Offset, Mesh/Points to SDF Grid, Grid Laplacian</li>
+      </ul>
+      <ul class="lang-zh">
+        <li><strong>Set Default Closure</strong> — 未连接外部闭包时指定默认闭包</li>
+        <li><strong>Debug</strong> — 编写节点树时检查中间几何 / 数值</li>
+        <li><strong>Time Shift</strong> — 为下游偏移求值时间（与 Simulation Zone 联用时注意缓存）</li>
+        <li><strong>Object Info → Seed</strong> — 确定性随机 / 实例变化</li>
+        <li><strong>Menu Switch</strong> — 支持多选菜单项</li>
+        <li><strong>SDF Grid 系列</strong> — Boolean、Fillet、Laplacian、Mean、Mean Curvature、Median、Offset、Mesh/Points to SDF Grid、Grid Laplacian</li>
+      </ul>
 
-      <h3 id="debug">Debug</h3>
-      <p class="lang-en">
-        The <strong>Debug</strong> node inspects intermediate geometry / values while authoring node trees.
-      </p>
-      <p class="lang-zh">
-        <strong>Debug</strong> 节点用于在编写节点树时检查中间几何 / 数值。
-      </p>
-
-      <h3 id="time-shift">Time Shift</h3>
-      <p class="lang-en">
-        The <strong>Time Shift</strong> node offsets evaluation time for downstream nodes.
-      </p>
-      <p class="lang-zh">
-        <strong>Time Shift</strong> 为下游节点偏移求值时间。
-      </p>
       <div class="admonition warning">
         <div class="title lang-en">Simulation cache</div>
         <div class="title lang-zh">模拟缓存</div>
         <span class="lang-en">
-          When used with a Simulation Zone, scrub to frame 1 (or otherwise reset the simulation cache)
-          after structural changes. This is native Blender simulation cache behaviour.
+          With Time Shift + Simulation Zone, scrub to frame 1 (or reset the simulation cache)
+          after structural changes — native Blender cache behaviour.
         </span>
         <span class="lang-zh">
-          与 Simulation Zone 一起使用时，结构改动后请回到第 1 帧（或重置模拟缓存）。
-          这是 Blender 原生模拟缓存行为。
+          Time Shift 与 Simulation Zone 一起使用时，结构改动后请回到第 1 帧（或重置模拟缓存）——
+          这是 Blender 原生缓存行为。
         </span>
       </div>
 
-      <h3 id="object-info-seed">Object Info — Seed</h3>
+      <!-- ===================== Math & Solver ===================== -->
+      <h2 id="math-solver-section">
+        <span class="lang-en">Math &amp; Solver</span>
+        <span class="lang-zh">数学与求解器</span>
+      </h2>
       <p class="lang-en">
-        <strong>Object Info</strong> exposes a <strong>Seed</strong> control for deterministic
-        randomness / instance variation tied to object info sampling.
+        A sparse linear-algebra path for geometry-driven problems: smoothing, diffusion,
+        pin-and-solve, and partial eigensystems. Inspired by Houdini-style sparse workflows;
+        implemented with <strong>Eigen</strong> and <strong>Spectra</strong> (not NumPy).
       </p>
       <p class="lang-zh">
-        <strong>Object Info</strong> 提供 <strong>Seed</strong>，用于与对象信息采样相关的确定性随机 / 实例变化。
+        面向几何问题的稀疏线性代数路径：平滑、扩散、钉约束求解、部分特征系统。
+        交互语义参考 Houdini 稀疏工作流；后端为 <strong>Eigen</strong> 与 <strong>Spectra</strong>
+        （不是 NumPy）。
       </p>
 
-      <h3 id="menu-switch-multi">
-        <span class="lang-en">Menu Switch — multi-select</span>
-        <span class="lang-zh">Menu Switch — 多选</span>
+      <h3 id="math-pipeline">
+        <span class="lang-en">Pipeline</span><span class="lang-zh">推荐链路</span>
+      </h3>
+      <div class="pipeline">Mesh → Mesh Laplacian → [Sparse Matrix Math] → Linear Solver → x / eigenpairs</div>
+      <ol class="lang-en">
+        <li><strong>Mesh Laplacian</strong> builds discrete Laplacian <code>L</code> (or diffusion / mass variants) as a sparse <strong>COO</strong> bundle.</li>
+        <li><strong>Sparse Matrix Math</strong> optionally adds / multiplies / combines sparse bundles.</li>
+        <li><strong>Linear Solver</strong> solves <code>Ax = b</code>, factors, multiplies, or computes eigenpairs on the sparse matrix.</li>
+      </ol>
+      <ol class="lang-zh">
+        <li><strong>Mesh Laplacian</strong> 将离散拉普拉斯 <code>L</code>（或扩散 / 质量变体）建成稀疏 <strong>COO</strong> Bundle。</li>
+        <li><strong>Sparse Matrix Math</strong> 可选地做稀疏 Bundle 加减乘组合。</li>
+        <li><strong>Linear Solver</strong> 在稀疏矩阵上求解 <code>Ax = b</code>、分解、矩阵向量乘或特征对。</li>
+      </ol>
+
+      <!-- Mesh Laplacian -->
+      <h3 id="math-laplacian">Mesh Laplacian</h3>
+      <p class="lang-en">
+        <strong>Mesh Laplacian</strong> (<code>GeometryNodeMeshLaplacian</code>) stores a
+        <em>discrete mesh Laplacian</em> as a <strong>sparse matrix in COO format</strong>
+        (Coordinate list): three equal-length lists packed into a typed Bundle.
+      </p>
+      <p class="lang-zh">
+        <strong>Mesh Laplacian</strong>（<code>GeometryNodeMeshLaplacian</code>）将
+        <em>离散网格拉普拉斯</em> 存为 <strong>COO 格式稀疏矩阵</strong>
+        （Coordinate list）：三条等长列表打包进带类型的 Bundle。
+      </p>
+
+      <h4>
+        <span class="lang-en">COO layout</span>
+        <span class="lang-zh">COO 布局</span>
+      </h4>
+      <table class="spec-table">
+        <thead>
+          <tr>
+            <th class="lang-en">Item</th><th class="lang-zh">项</th>
+            <th class="lang-en">Type</th><th class="lang-zh">类型</th>
+            <th class="lang-en">Meaning</th><th class="lang-zh">含义</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>weight</code></td>
+            <td>float list</td>
+            <td class="lang-en">Non-zero entry value <code>A[i,j]</code></td>
+            <td class="lang-zh">非零元数值 <code>A[i,j]</code></td>
+          </tr>
+          <tr>
+            <td><code>row</code></td>
+            <td>int list</td>
+            <td class="lang-en">Row index of each non-zero</td>
+            <td class="lang-zh">每个非零元的行索引</td>
+          </tr>
+          <tr>
+            <td><code>col</code></td>
+            <td>int list</td>
+            <td class="lang-en">Column index of each non-zero</td>
+            <td class="lang-zh">每个非零元的列索引</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="lang-en">
+        Bundle type marker: <code>FlatBundleType = Blender.SparseMatrix</code>.
+        Use <strong>Separate Bundle</strong> (+ Sync) to expose items. Only non-zeros are stored
+        — memory is <code>O(nnz)</code>, not <code>O(n²)</code>.
+      </p>
+      <p class="lang-zh">
+        Bundle 类型标记：<code>FlatBundleType = Blender.SparseMatrix</code>。
+        用 <strong>Separate Bundle</strong>（+ Sync）展开项。只存非零元 ——
+        内存为 <code>O(nnz)</code>，不是 <code>O(n²)</code>。
+      </p>
+
+      <h4>
+        <span class="lang-en">Weight modes &amp; options</span>
+        <span class="lang-zh">权重模式与选项</span>
+      </h4>
+      <ul class="lang-en">
+        <li><strong>Uniform</strong> — graph Laplacian with equal weight <code>−1</code> on each unique edge</li>
+        <li><strong>Cotangent</strong> — cotangent Laplacian using opposite-angle cot weights on triangle edges (standard DDG / geometry processing form)</li>
+        <li><strong>Diffusion Matrix</strong> — output <code>I + tL</code> (or <code>M + tML</code> when mass is on); <code>t</code> = Diffusion Coefficient</li>
+        <li><strong>Use Mass</strong> — lumped mass <code>M</code> (face area / 3): without diffusion yields <code>ML</code>; with diffusion yields <code>M + tML</code></li>
+      </ul>
+      <ul class="lang-zh">
+        <li><strong>Uniform</strong> — 图拉普拉斯，每条唯一边权 <code>−1</code></li>
+        <li><strong>Cotangent</strong> — 余切拉普拉斯，三角边上对顶角 cot 权重（常见 DDG / 几何处理形式）</li>
+        <li><strong>Diffusion Matrix</strong> — 输出 <code>I + tL</code>（开质量时为 <code>M + tML</code>）；<code>t</code> = Diffusion Coefficient</li>
+        <li><strong>Use Mass</strong> — 集中质量 <code>M</code>（面面积 / 3）：无扩散得 <code>ML</code>；有扩散得 <code>M + tML</code></li>
+      </ul>
+      <p class="lang-en">
+        Input mesh is triangulated if needed before assembly. Typical uses: heat diffusion,
+        biharmonic / as-rigid-as-possible style solves, spectral mesh processing (with Linear Solver eigen mode).
+      </p>
+      <p class="lang-zh">
+        必要时会先三角化再装配。典型用途：热扩散、双调和 / ARAP 类求解、谱网格处理
+        （配合 Linear Solver 特征模式）。
+      </p>
+
+      <!-- Sparse Matrix Math -->
+      <h3 id="math-sparse">Sparse Matrix Math</h3>
+      <p class="lang-en">
+        <strong>Sparse Matrix Math</strong> (<code>GeometryNodeSparseMatrixMath</code>) adds,
+        multiplies, or otherwise combines sparse matrix bundles (COO-style), with helpers to keep
+        Bundle layouts in sync for the solver pipeline.
+      </p>
+      <p class="lang-zh">
+        <strong>Sparse Matrix Math</strong>（<code>GeometryNodeSparseMatrixMath</code>）对
+        COO 风格稀疏矩阵 Bundle 做加减乘等组合，并同步 Bundle 布局以便接入求解链路。
+      </p>
+
+      <!-- Linear Solver -->
+      <h3 id="math-solver">Linear Solver</h3>
+      <p class="lang-en">
+        <strong>Linear Solver</strong> (<code>GeometryNodeLinearSolver</code>) is the main
+        consumer of sparse COO matrices. It introduces the
+        <strong>Eigen</strong> (sparse direct / iterative linear algebra) and
+        <strong>Spectra</strong> (partial eigen decomposition via mat-vec / shift-invert)
+        math libraries into Geometry Nodes.
+      </p>
+      <p class="lang-zh">
+        <strong>Linear Solver</strong>（<code>GeometryNodeLinearSolver</code>）是稀疏 COO 矩阵的主要消费端。
+        将 <strong>Eigen</strong>（稀疏直接法 / 迭代线性代数）与
+        <strong>Spectra</strong>（基于 mat-vec / shift-invert 的部分特征分解）数学库引入几何节点。
+      </p>
+
+      <h4>
+        <span class="lang-en">Libraries &amp; algorithms</span>
+        <span class="lang-zh">库与算法</span>
+      </h4>
+      <table class="spec-table">
+        <thead>
+          <tr>
+            <th class="lang-en">Library</th><th class="lang-zh">库</th>
+            <th class="lang-en">Role</th><th class="lang-zh">职责</th>
+            <th class="lang-en">Notes</th><th class="lang-zh">说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Eigen</strong></td>
+            <td class="lang-en">Sparse matrices, direct &amp; iterative solvers</td>
+            <td class="lang-zh">稀疏矩阵、直接与迭代求解</td>
+            <td class="lang-en"><code>SimplicialLLT/LDLT</code>, <code>SparseLU</code>, <code>SparseQR</code>; CG, GMRES, BiCGSTAB, … Path stays sparse (COO → <code>Eigen::SparseMatrix</code>)</td>
+            <td class="lang-zh"><code>SimplicialLLT/LDLT</code>、<code>SparseLU</code>、<code>SparseQR</code>；CG、GMRES、BiCGSTAB 等。全程稀疏（COO → <code>Eigen::SparseMatrix</code>）</td>
+          </tr>
+          <tr>
+            <td><strong>Spectra</strong> <span class="lang-en">v1.0.1</span><span class="lang-zh">v1.0.1</span></td>
+            <td class="lang-en">Partial eigenpairs (Arnoldi-family)</td>
+            <td class="lang-zh">部分特征对（Arnoldi 族）</td>
+            <td class="lang-en">SymEigs / GenEigs; SymEigsShiftSolver / GenEigsRealShiftSolver (shift-invert)</td>
+            <td class="lang-zh">SymEigs / GenEigs；SymEigsShiftSolver / GenEigsRealShiftSolver（shift-invert）</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="lang-en">
+        UI / mode layout is intentionally close to <strong>Houdini</strong> sparse solver workflows
+        (Solve / Decompose / Solve with Decomposition / Multiply). Not a NumPy / SciPy port.
+      </p>
+      <p class="lang-zh">
+        UI 与模式划分有意贴近 <strong>Houdini</strong> 稀疏求解工作流
+        （Solve / Decompose / Solve with Decomposition / Multiply）。不是 NumPy / SciPy 移植。
+      </p>
+
+      <h4>
+        <span class="lang-en">Modes</span>
+        <span class="lang-zh">模式</span>
+      </h4>
+      <table class="spec-table">
+        <thead>
+          <tr>
+            <th class="lang-en">Mode</th><th class="lang-zh">模式</th>
+            <th class="lang-en">What it does</th><th class="lang-zh">作用</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Linear System Solve</strong></td>
+            <td class="lang-en"><code>Ax = b</code> with optional pin (Dirichlet) constraints; Direct or Iterative class</td>
+            <td class="lang-zh"><code>Ax = b</code>，可选钉（Dirichlet）约束；Direct 或 Iterative 族</td>
+          </tr>
+          <tr>
+            <td><strong>Decompose → Matrix Factor</strong></td>
+            <td class="lang-en">Sparse factorization of the free block (for reuse)</td>
+            <td class="lang-zh">对 free 块做稀疏因式分解（便于复用）</td>
+          </tr>
+          <tr>
+            <td><strong>Decompose → Eigen</strong></td>
+            <td class="lang-en">Partial eigenpairs via Spectra</td>
+            <td class="lang-zh">用 Spectra 求部分特征对</td>
+          </tr>
+          <tr>
+            <td><strong>Solve with Decomposition</strong></td>
+            <td class="lang-en">Apply stored factor to new <code>b</code> (no Direct/Iterative menu)</td>
+            <td class="lang-zh">用已存 factor 对新 <code>b</code> 回代（无 Direct/Iterative 菜单）</td>
+          </tr>
+          <tr>
+            <td><strong>Multiply</strong></td>
+            <td class="lang-en"><code>y = A x</code> sparse mat-vec</td>
+            <td class="lang-zh"><code>y = A x</code> 稀疏矩阵向量乘</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h4>
+        <span class="lang-en">Direct / Iterative methods</span>
+        <span class="lang-zh">直接法 / 迭代法</span>
+      </h4>
+      <ul class="lang-en">
+        <li><strong>Direct:</strong> LLT, LDLT, LU, QR (sparse Eigen factorizations)</li>
+        <li><strong>Iterative:</strong> GMRES, DGMRES, MINRES, CG, LSCG, BiCGSTAB, IDRS</li>
+        <li><strong>Preconditioners:</strong> Identity, Diagonal, IncompleteLUT, IncompleteCholesky</li>
+      </ul>
+      <ul class="lang-zh">
+        <li><strong>直接法：</strong>LLT、LDLT、LU、QR（Eigen 稀疏分解）</li>
+        <li><strong>迭代法：</strong>GMRES、DGMRES、MINRES、CG、LSCG、BiCGSTAB、IDRS</li>
+        <li><strong>预条件：</strong>Identity、Diagonal、IncompleteLUT、IncompleteCholesky</li>
+      </ul>
+      <p class="lang-en">
+        For Laplacian / smoothing systems (SPD-ish): prefer <strong>Direct + LLT/LDLT</strong>,
+        or <strong>Iterative + CG + Diagonal</strong>. Decompose once, then multiple
+        Solve-with-Decomposition for different right-hand sides.
+      </p>
+      <p class="lang-zh">
+        拉普拉斯 / 平滑类（近似 SPD）：优先 <strong>Direct + LLT/LDLT</strong>，
+        或 <strong>Iterative + CG + Diagonal</strong>。可先 Decompose 一次，再多次
+        Solve-with-Decomposition 换右端项。
+      </p>
+
+      <h4>
+        <span class="lang-en">Data sockets</span>
+        <span class="lang-zh">数据接口</span>
+      </h4>
+      <table class="spec-table">
+        <thead>
+          <tr>
+            <th class="lang-en">Socket</th><th class="lang-zh">接口</th>
+            <th class="lang-en">Shape</th><th class="lang-zh">形状</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>A</strong></td>
+            <td class="lang-en">COO Bundle: <code>weight</code> / <code>row</code> / <code>col</code></td>
+            <td class="lang-zh">COO Bundle：<code>weight</code> / <code>row</code> / <code>col</code></td>
+          </tr>
+          <tr>
+            <td><strong>Pin</strong></td>
+            <td class="lang-en">bool list; Dirichlet values taken from matching components of <code>b</code></td>
+            <td class="lang-zh">bool list；Dirichlet 值取自 <code>b</code> 对应分量</td>
+          </tr>
+          <tr>
+            <td><strong>b / x</strong></td>
+            <td class="lang-en">float list or vector list (vector is planar: all x then y then z)</td>
+            <td class="lang-zh">float list 或 vector list（vector 为 planar：先全 x 再 y 再 z）</td>
+          </tr>
+          <tr>
+            <td><strong>Eigenvalues</strong></td>
+            <td class="lang-en">float list length <code>k</code></td>
+            <td class="lang-zh">float list，长度 <code>k</code></td>
+          </tr>
+          <tr>
+            <td><strong>Eigenvectors</strong></td>
+            <td class="lang-en">nested list: outer <code>k</code>, each a float list of length <code>n</code></td>
+            <td class="lang-zh">嵌套 list：外层 <code>k</code>，每项为长度 <code>n</code> 的 float list</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h4>
+        <span class="lang-en">Eigen / shift-invert</span>
+        <span class="lang-zh">特征分解 / shift-invert</span>
+      </h4>
+      <p class="lang-en">
+        Spectra solves partial eigenproblems. Shift-invert targets eigenvalues near a shift
+        <code>σ</code> by working on <code>(A − σI)⁻¹</code> (largest magnitude of the inverse
+        eigenvalue maps to closest-to-σ of <code>A</code>). Results are ordered by
+        <strong>|λ − σ| ascending</strong> (near → far); increasing <code>k</code> only appends
+        farther pairs without reshuffling earlier ones. Eigenvector signs are normalised
+        (largest-magnitude component &gt; 0). Full dense spectrum is only allowed for tiny
+        <code>n ≤ 512</code> as a fallback.
+      </p>
+      <p class="lang-zh">
+        Spectra 做部分特征问题。Shift-invert 通过 <code>(A − σI)⁻¹</code> 寻找靠近移位
+        <code>σ</code> 的特征值（逆特征值模最大 ⇔ 原矩阵最接近 σ）。输出按
+        <strong>|λ − σ| 升序</strong>（近→远）；增大 <code>k</code> 只在后面追加更远对，
+        不打乱前面结果。特征向量做符号规范化（最大模分量 &gt; 0）。全谱 dense 仅在
+        <code>n ≤ 512</code> 时作为回退。
+      </p>
+
+      <div class="admonition tip">
+        <div class="title lang-en">Performance rule</div>
+        <div class="title lang-zh">性能原则</div>
+        <span class="lang-en">
+          Stay sparse end-to-end. Do <strong>not</strong> densify COO into an <code>n×n</code>
+          matrix for large meshes — that path was removed after causing multi-hundred-MB spikes
+          and cubic solve cost.
+        </span>
+        <span class="lang-zh">
+          端到端保持稀疏。<strong>不要</strong>把 COO densify 成 <code>n×n</code> 稠密矩阵再求解 ——
+          大网格上会导致数百 MB 内存尖峰与三次方时间；该路径已移除。
+        </span>
+      </div>
+
+      <!-- ===================== Image Process / COP ===================== -->
+      <h2 id="image-process">Image Process (COP)</h2>
+      <p class="lang-en">
+        <strong>Image Process</strong> is a new dedicated node editor / tree type
+        (<code>ImageNodeTree</code>) for <em>image-centric</em> graphs — analogous in spirit to
+        Houdini <strong>COPs</strong> (Compositing Operators): a place to process pictures,
+        stamps, height/normal maps, and bake results without forcing the classic scene-compositor
+        workflow.
+      </p>
+      <p class="lang-zh">
+        <strong>Image Process</strong> 是新的专用节点编辑器 / 节点树类型
+        （<code>ImageNodeTree</code>），面向<strong>图像处理</strong>图 —— 精神上接近 Houdini
+        <strong>COPs</strong>（Compositing Operators）：专门处理图片、盖章、高度/法线、烘焙结果等，
+        而不必走经典场景合成器工作流。
+      </p>
+
+      <h3 id="cop-editor">
+        <span class="lang-en">Editor</span>
+        <span class="lang-zh">编辑器</span>
+      </h3>
+      <ul class="lang-en">
+        <li>UI name: <strong>Image Process</strong>; RNA: <code>ImageNodeTree</code></li>
+        <li>Description (internal): GPU-accelerated image processing node graph (compositor-style filters and transforms)</li>
+        <li>Add menus: <code>node_add_menu_image.py</code> — reuses many compositor colour / filter / transform ops, plus Image-only nodes</li>
+        <li>Asset catalog prefix: <code>Image Process</code></li>
+        <li>Distinct from <code>CompositorNodeTree</code> registration (MVP split in <code>node_image_tree.cc</code>)</li>
+      </ul>
+      <ul class="lang-zh">
+        <li>界面名称：<strong>Image Process</strong>；RNA：<code>ImageNodeTree</code></li>
+        <li>内部说明：GPU 加速的图像处理节点图（合成器风格滤镜与变换）</li>
+        <li>添加菜单：<code>node_add_menu_image.py</code> — 复用大量合成器色彩 / 滤镜 / 变换，并含 Image 专有节点</li>
+        <li>资产目录前缀：<code>Image Process</code></li>
+        <li>与 <code>CompositorNodeTree</code> 注册分离（<code>node_image_tree.cc</code> 中的 MVP 拆分）</li>
+      </ul>
+
+      <h3 id="cop-nodes">
+        <span class="lang-en">Key nodes</span>
+        <span class="lang-zh">核心节点</span>
+      </h3>
+      <ul class="lang-en">
+        <li>
+          <strong>Import Points</strong> / <strong>Rasterize Geometry</strong> —
+          bring geometry samples into image space
+        </li>
+        <li>
+          <strong>Point Stamp</strong> (<code>ImageNodePointStamp</code>) —
+          stamp points into an image; tiled parallel rasterization for dense clouds
+        </li>
+        <li>
+          <strong>Normal to Height</strong> / <strong>Height to Normal</strong> —
+          convert between normal maps and height maps
+        </li>
+        <li>
+          <strong>Bake Image</strong> (<code>ImageNodeBakeImage</code>) —
+          multi-format write (PNG, JPEG, EXR, TIFF, BMP, Targa, WebP, HDR), colour space,
+          Path / Name string sockets, top-level Bake button; manual bake only (normal cooks do not write files)
+        </li>
+        <li>
+          <strong>SDF Shape</strong> / <strong>Fractal Primitive</strong> —
+          Image-only path (<code>ImageNodeSDFShape</code> / <code>ImageNodeFractalPrimitive</code>),
+          not the Shader variants (menu fixed 2026-07-30)
+        </li>
+        <li>
+          <strong>Get / Store Bundle Item</strong> (+ Combine / Join / Separate Bundle) —
+          Utilities › Bundle for stamp maps and multi-slot bakes
+        </li>
+        <li>
+          <strong>Viewer</strong> / <strong>File Output</strong> — Image Process I/O
+        </li>
+      </ul>
+      <ul class="lang-zh">
+        <li>
+          <strong>Import Points</strong> / <strong>Rasterize Geometry</strong> —
+          将几何采样导入图像空间
+        </li>
+        <li>
+          <strong>Point Stamp</strong>（<code>ImageNodePointStamp</code>）—
+          点盖章到图像；分块并行栅格化，适合稠密点云
+        </li>
+        <li>
+          <strong>Normal to Height</strong> / <strong>Height to Normal</strong> —
+          法线贴图与高度图互转
+        </li>
+        <li>
+          <strong>Bake Image</strong>（<code>ImageNodeBakeImage</code>）—
+          多格式写出（PNG、JPEG、EXR、TIFF、BMP、Targa、WebP、HDR），色彩空间、
+          Path / Name 字符串、顶部 Bake 按钮；仅手动 Bake（普通求值不写盘）
+        </li>
+        <li>
+          <strong>SDF Shape</strong> / <strong>Fractal Primitive</strong> —
+          Image 专用路径（<code>ImageNodeSDFShape</code> / <code>ImageNodeFractalPrimitive</code>），
+          不是着色器变体（2026-07-30 修正菜单）
+        </li>
+        <li>
+          <strong>Get / Store Bundle Item</strong>（+ Combine / Join / Separate Bundle）—
+          Utilities › Bundle，用于盖章图与多槽烘焙
+        </li>
+        <li>
+          <strong>Viewer</strong> / <strong>File Output</strong> — Image Process 输入输出
+        </li>
+      </ul>
+
+      <h3 id="cop-fluid">Fluid Simulation Zone</h3>
+      <p class="lang-en">
+        Image Process includes a <strong>Fluid Simulation</strong> zone (black-box 2D Stable Fluids
+        + multigrid pressure) via <code>ImageNodeFluidSimInput</code> /
+        <code>ImageNodeFluidSimOutput</code> — for image-space fluid-like fields.
+      </p>
+      <p class="lang-zh">
+        Image Process 含 <strong>Fluid Simulation</strong> 区域（黑盒 2D Stable Fluids +
+        多重网格压力），通过 <code>ImageNodeFluidSimInput</code> /
+        <code>ImageNodeFluidSimOutput</code>，用于图像空间类流体场。
+      </p>
+
+      <!-- ===================== Shaders ===================== -->
+      <h2 id="shaders">
+        <span class="lang-en">Shaders</span>
+        <span class="lang-zh">着色器</span>
+      </h2>
+      <p class="lang-en">
+        Procedural distance-field and fractal nodes for materials. Shared math header
+        <code>NOD_sdf_math.hh</code> with Image Process; formulas from
+        <a href="https://iquilezles.org/articles/" target="_blank" rel="noopener">Inigo Quilez articles</a>
+        (MIT code snippets).
+      </p>
+      <p class="lang-zh">
+        材质用的过程距离场与分形节点。与 Image Process 共享数学头
+        <code>NOD_sdf_math.hh</code>；公式来自
+        <a href="https://iquilezles.org/articles/" target="_blank" rel="noopener">Inigo Quilez 文章</a>
+        （MIT 代码片段）。
+      </p>
+
+      <h3 id="shader-sdf">SDF Shape</h3>
+      <p class="lang-en">
+        <strong>SDF Shape</strong> (<code>ShaderNodeSDFShape</code>) outputs signed distance for
+        dozens of 3D / 2D primitives (sphere, box, torus, star, heart, …). Default Vector uses
+        <strong>Texture Coordinate → Object</strong> (not Generated/ORCO).
+      </p>
+      <p class="lang-zh">
+        <strong>SDF Shape</strong>（<code>ShaderNodeSDFShape</code>）输出数十种 3D / 2D 基元的
+        有符号距离（球、盒、环、星、心形等）。默认 Vector 使用
+        <strong>Texture Coordinate → Object</strong>（非 Generated/ORCO）。
+      </p>
+
+      <h3 id="shader-fractal">Fractal Primitive</h3>
+      <p class="lang-en">
+        <strong>Fractal Primitive</strong> (<code>ShaderNodeFractalPrimitive</code>) —
+        Mandelbrot / Julia distance-estimate style colour + distance. Smooth iteration colouring
+        follows IQ continuous iteration notes.
+      </p>
+      <p class="lang-zh">
+        <strong>Fractal Primitive</strong>（<code>ShaderNodeFractalPrimitive</code>）—
+        Mandelbrot / Julia 距离估计风格的颜色 + 距离。平滑迭代上色参考 IQ continuous iteration。
+      </p>
+
+      <!-- ===================== EEVEE ===================== -->
+      <h2 id="eevee">EEVEE &amp; Viewport</h2>
+
+      <h3 id="eevee-gpu">
+        <span class="lang-en">GPU materials</span>
+        <span class="lang-zh">GPU 材质</span>
       </h3>
       <p class="lang-en">
-        <strong>Menu Switch</strong> supports multi-selection of menu items for richer branching UIs.
+        SDF Shape and Fractal Primitive ship GLSL material functions
+        (<code>gpu_shader_material_sdf_shape.glsl</code> /
+        <code>gpu_shader_material_fractal_primitive.glsl</code> for EEVEE / GPU viewport preview
+        of the same distance fields used on CPU multi-function paths.
       </p>
       <p class="lang-zh">
-        <strong>Menu Switch</strong> 支持多选菜单项，便于更丰富的分支界面。
+        SDF Shape 与 Fractal Primitive 提供 GLSL 材质函数
+        <code>gpu_shader_material_sdf_shape.glsl</code> /
+        <code>gpu_shader_material_fractal_primitive.glsl</code>，在 EEVEE / GPU 视口预览与
+        CPU multi-function 路径同一套距离场。
       </p>
 
-      <!-- Math -->
-      <h2 id="math-solver">
-        <span class="lang-en">Math &amp; Solver</span><span class="lang-zh">数学与求解器</span>
+      <h3 id="eevee-overlay">
+        <span class="lang-en">Overlays</span>
+        <span class="lang-zh">叠加显示</span>
+      </h3>
+      <p class="lang-en">
+        Viewport attribute / Viewer text overlays are clearer for string and numeric attribute
+        inspection while debugging Geometry Nodes.
+      </p>
+      <p class="lang-zh">
+        调试几何节点时，视口属性 / Viewer 文字叠加对字符串与数值属性更清晰。
+      </p>
+
+      <!-- ===================== UI ===================== -->
+      <h2 id="user-interface">
+        <span class="lang-en">User Interface</span>
+        <span class="lang-zh">用户界面</span>
+      </h2>
+
+      <h3 id="ui-group">
+        <span class="lang-en">Node Group interface</span>
+        <span class="lang-zh">节点组接口</span>
+      </h3>
+      <ul class="lang-en">
+        <li><strong>Separator</strong> / <strong>Message</strong> — dividers and help text in group inputs/outputs</li>
+        <li><strong>Join to Next Parameter</strong> — next socket on the same row (save vertical space)</li>
+        <li><strong>Ctrl + LMB rename</strong> — rename interface sockets from the node header area with hover highlight</li>
+        <li><strong>Enable Input / Output</strong> — when disabled: hide interface, ignore external links, fall back to static defaults / Default Input</li>
+      </ul>
+      <ul class="lang-zh">
+        <li><strong>Separator</strong> / <strong>Message</strong> — 组输入输出的分隔线与说明文字</li>
+        <li><strong>Join to Next Parameter（参数并排）</strong> — 下一参数同一行，节省纵向空间</li>
+        <li><strong>Ctrl + LMB 改名</strong> — 在节点外侧接口区域快速改名，悬停高亮</li>
+        <li><strong>Enable Input / Output</strong> — 关闭时隐藏接口、忽略外部连线，输出回落静态默认 / Default Input</li>
+      </ul>
+
+      <h3 id="ui-editor">
+        <span class="lang-en">Node Editor UX</span>
+        <span class="lang-zh">节点编辑器交互</span>
+      </h3>
+      <ul class="lang-en">
+        <li><strong>Shake to detach</strong> — shaking a node detaches links; multi-insert along a chain in one gesture flow</li>
+        <li><strong>Hold U + drag</strong> — hold <code>U</code> while LMB-dragging to align nodes horizontally or vertically</li>
+        <li><strong>Spreadsheet column sort</strong> — click headers to sort attribute columns</li>
+      </ul>
+      <ul class="lang-zh">
+        <li><strong>抖动拆线</strong> — 抖动节点拆离连线；支持沿链路连续插入</li>
+        <li><strong>按住 U + 拖拽</strong> — 按住 <code>U</code> 并用 LMB 拖动，水平 / 垂直对齐</li>
+        <li><strong>Spreadsheet 列排序</strong> — 点击表头对属性列排序</li>
+      </ul>
+
+      <h3 id="ui-string">String Attributes</h3>
+      <p class="lang-en">
+        Geometry attributes support a <strong>String</strong> data type end-to-end: Named Attribute /
+        Store Named Attribute / Capture Attribute, Viewer, Join Geometry / Realize Instances
+        propagation, and spreadsheet columns.
+      </p>
+      <p class="lang-zh">
+        几何属性全链路支持 <strong>String</strong> 类型：Named Attribute /
+        Store Named Attribute / Capture Attribute、Viewer、Join Geometry / Realize Instances 传递，
+        以及电子表格列。
+      </p>
+
+      <!-- ===================== Zones ===================== -->
+      <h2 id="zones">Zones</h2>
+
+      <h3 id="zones-repeat">Repeat Zone — Break</h3>
+      <p class="lang-en">
+        Boolean early-exit on the zone output so the loop can stop before reaching the iteration count.
+      </p>
+      <p class="lang-zh">
+        区域输出端布尔早退，循环可在达到迭代次数前结束。
+      </p>
+
+      <h3 id="zones-sim">Simulation Zone — Cache Limit</h3>
+      <p class="lang-en">
+        Cap how many frames of simulation cache are retained, reducing unbounded memory growth.
+      </p>
+      <p class="lang-zh">
+        限制保留的模拟缓存帧数，避免内存无限增长。
+      </p>
+
+      <!-- ===================== Package history ===================== -->
+      <h2 id="package-history">
+        <span class="lang-en">Package history (per-period)</span>
+        <span class="lang-zh">分期内更新</span>
       </h2>
       <p class="lang-en">
-        A sparse linear-algebra path for geometry-driven problems (smoothing, diffusion, pin-and-solve, eigensystems).
+        Incremental notes tied to portable package dates (from <code>BIKINI_BUILD_INFO.txt</code>).
+        Full module docs are under <a href="#r53-index">BIKINI 5.3</a> above.
       </p>
       <p class="lang-zh">
-        面向几何问题的稀疏线性代数路径（平滑、扩散、钉约束求解、特征系统等）。
+        与便携包日期对应的增量说明（来自 <code>BIKINI_BUILD_INFO.txt</code>）。
+        完整模块文档见上方 <a href="#r53-index">BIKINI 5.3</a>。
       </p>
+
+      <h3 id="pkg-0730">2026-07-30</h3>
+      <div class="period-banner">
+        <strong class="lang-en">Modules:</strong>
+        <strong class="lang-zh">模块：</strong>
+        <span>Image Process · Shaders · Docs</span>
+      </div>
       <ul class="lang-en">
         <li>
-          <strong>Mesh Laplacian</strong> — builds a mesh Laplacian as a sparse matrix bundle
-          (uniform / cotangent-style modes; <code>I+tL</code> / mass-matrix variants where applicable)
+          <span class="status new">Image Process</span>
+          Texture menu: <strong>SDF Shape</strong> / <strong>Fractal Primitive</strong> use
+          <code>ImageNode*</code> path only (not Shader variants)
         </li>
         <li>
-          <strong>Sparse Matrix Math</strong> — add / multiply / combine sparse matrix bundles (COO-style),
-          with sync helpers for bundle layouts
-        </li>
-        <li>
-          <strong>Linear Solver</strong> — solve <code>Ax = b</code>, optional pin constraints,
-          matrix factorization, and partial eigen decomposition (sparse path; Eigen / Spectra)
+          <span class="status new">Package</span>
+          Portable <code>blender.exe</code> refresh; this bilingual release-notes page
         </li>
       </ul>
       <ul class="lang-zh">
         <li>
-          <strong>Mesh Laplacian</strong> — 将网格拉普拉斯构建为稀疏矩阵 Bundle
-          （uniform / cotangent 等；适用时含 <code>I+tL</code> / 质量矩阵变体）
+          <span class="status new">Image Process</span>
+          Texture 菜单：<strong>SDF Shape</strong> / <strong>Fractal Primitive</strong> 仅走
+          <code>ImageNode*</code> 路径（非着色器变体）
         </li>
         <li>
-          <strong>Sparse Matrix Math</strong> — 稀疏矩阵 Bundle 加减乘组合（COO 风格），含 Bundle 布局同步
-        </li>
-        <li>
-          <strong>Linear Solver</strong> — 求解 <code>Ax = b</code>，可选钉约束、矩阵分解与部分特征分解
-          （稀疏路径；Eigen / Spectra）
+          <span class="status new">Package</span>
+          便携 <code>blender.exe</code> 刷新；本中英文更新日志页
         </li>
       </ul>
 
-      <!-- Zones -->
-      <h2 id="zones">
-        <span class="lang-en">Zones</span><span class="lang-zh">区域（Zones）</span>
-      </h2>
+      <h3 id="pkg-0729">2026-07-29</h3>
+      <div class="period-banner">
+        <strong class="lang-en">Modules:</strong>
+        <strong class="lang-zh">模块：</strong>
+        <span>Image Process</span>
+      </div>
       <ul class="lang-en">
         <li>
-          <strong>Repeat Zone — Break</strong> — boolean early-exit on the zone output so the loop
-          can stop before reaching the iteration count
+          <span class="status new">Image Process</span>
+          <strong>Bake Image</strong> — multi-format, colour space, Path/Name strings, Bake button, Bundle item names
         </li>
         <li>
-          <strong>Simulation Zone — Cache Limit</strong> — cap how many frames of simulation cache
-          are retained, reducing unbounded memory growth
+          <span class="status new">Image Process</span>
+          <strong>Point Stamp</strong> — tiled parallel rasterization (faster dense clouds)
+        </li>
+        <li>
+          <span class="status new">Image Process</span>
+          <strong>Get / Store Bundle Item</strong> under Utilities › Bundle
         </li>
       </ul>
       <ul class="lang-zh">
         <li>
-          <strong>Repeat Zone — Break</strong> — 区域输出端布尔早退，循环可在达到迭代次数前结束
+          <span class="status new">Image Process</span>
+          <strong>Bake Image</strong> — 多格式、色彩空间、Path/Name、Bake 按钮、Bundle 项命名
         </li>
         <li>
-          <strong>Simulation Zone — Cache Limit</strong> — 限制保留的模拟缓存帧数，避免内存无限增长
+          <span class="status new">Image Process</span>
+          <strong>Point Stamp</strong> — 分块并行栅格化（稠密点云更快）
+        </li>
+        <li>
+          <span class="status new">Image Process</span>
+          Utilities › Bundle 下的 <strong>Get / Store Bundle Item</strong>
         </li>
       </ul>
 
-      <!-- Node Group UI -->
-      <h2 id="node-group-ui">
-        <span class="lang-en">Node Group Interface</span><span class="lang-zh">节点组接口</span>
-      </h2>
+      <h3 id="pkg-earlier">
+        <span class="lang-en">Earlier baseline</span>
+        <span class="lang-zh">更早基线</span>
+      </h3>
+      <div class="period-banner">
+        <strong class="lang-en">Modules:</strong>
+        <strong class="lang-zh">模块：</strong>
+        <span>Geometry Nodes · Math · UI · Zones · Shaders · COP foundation</span>
+      </div>
+      <p class="lang-en">Features landed before the dated package notes above (still present in this build):</p>
+      <p class="lang-zh">在上述日期包说明之前已合入、且仍存在于本构建的功能：</p>
       <ul class="lang-en">
-        <li>
-          <strong>Separator</strong> and <strong>Message</strong> items — organize group inputs/outputs
-          with visual dividers and help text
-        </li>
-        <li>
-          <strong>Join to Next Parameter</strong> — place the next socket on the same row to save vertical space
-        </li>
-        <li>
-          <strong>Ctrl + LMB rename</strong> — rename group interface sockets from the node header area,
-          with hover highlight feedback
-        </li>
-        <li>
-          <strong>Enable Input / Output</strong> — when disabled, the interface is hidden, external links
-          are ignored, and outputs fall back to static defaults / Default Input
-        </li>
+        <li><strong>Geometry Nodes:</strong> Named Portal, Geometry Clip, Loop Subdivision, K-Nearest, Debug, Time Shift, Object Info Seed, Menu Switch multi-select, SDF Grid family</li>
+        <li><strong>Math &amp; Solver:</strong> Mesh Laplacian (COO), Sparse Matrix Math, Linear Solver (Eigen + Spectra, sparse rewrite, nested eigen lists)</li>
+        <li><strong>Zones:</strong> Repeat Break, Simulation Cache Limit</li>
+        <li><strong>UI:</strong> Separator / Message / Join-to-Next / Ctrl+LMB rename / Enable I/O; shake-detach; U-align; spreadsheet sort</li>
+        <li><strong>String attributes</strong> end-to-end</li>
+        <li><strong>Image Process (COP)</strong> tree foundation + Import Points / Rasterize / Normal↔Height / Fluid Zone</li>
+        <li><strong>Shaders:</strong> SDF Shape, Fractal Primitive (+ EEVEE GLSL)</li>
       </ul>
       <ul class="lang-zh">
-        <li>
-          <strong>Separator</strong> 与 <strong>Message</strong> — 用分隔线与说明文字整理组输入/输出
-        </li>
-        <li>
-          <strong>Join to Next Parameter（参数并排）</strong> — 下一参数排在同一行，节省纵向空间
-        </li>
-        <li>
-          <strong>Ctrl + LMB 改名</strong> — 在节点外侧接口区域快速改名，悬停高亮反馈
-        </li>
-        <li>
-          <strong>Enable Input / Output</strong> — 关闭时隐藏接口、忽略外部连线，输出回落到静态默认 / Default Input
-        </li>
+        <li><strong>Geometry Nodes：</strong>Named Portal、Geometry Clip、Loop 细分、K-Nearest、Debug、Time Shift、Object Info Seed、Menu Switch 多选、SDF Grid 系列</li>
+        <li><strong>数学与求解器：</strong>Mesh Laplacian（COO）、Sparse Matrix Math、Linear Solver（Eigen + Spectra、稀疏重写、嵌套特征 list）</li>
+        <li><strong>Zones：</strong>Repeat Break、Simulation Cache Limit</li>
+        <li><strong>UI：</strong>Separator / Message / 参数并排 / Ctrl+LMB 改名 / Enable I/O；抖动拆线；U 对齐；Spreadsheet 排序</li>
+        <li><strong>String 属性</strong>全链路</li>
+        <li><strong>Image Process（COP）</strong>树基础 + Import Points / Rasterize / 法线↔高度 / Fluid Zone</li>
+        <li><strong>着色器：</strong>SDF Shape、Fractal Primitive（+ EEVEE GLSL）</li>
       </ul>
 
-      <!-- Editor UX -->
-      <h2 id="editor-ux">
-        <span class="lang-en">Node Editor UX</span><span class="lang-zh">节点编辑器交互</span>
-      </h2>
-      <ul class="lang-en">
-        <li>
-          <strong>Shake to detach</strong> — shaking a node detaches it from links; supports inserting
-          multiple nodes along a chain in one gesture flow
-        </li>
-        <li>
-          <strong>Hold U + drag</strong> — hold <code>U</code> while dragging with LMB to align nodes
-          horizontally or vertically
-        </li>
-        <li>
-          <strong>Viewport attribute overlay</strong> — clearer attribute / viewer text overlays in the 3D View
-        </li>
-        <li>
-          <strong>Spreadsheet column sort</strong> — click headers to sort attribute columns
-        </li>
-      </ul>
-      <ul class="lang-zh">
-        <li>
-          <strong>抖动拆线</strong> — 抖动节点可从连线拆离；支持沿链路连续插入多个节点
-        </li>
-        <li>
-          <strong>按住 U + 拖拽</strong> — 按住 <code>U</code> 并用 LMB 拖动，可水平 / 垂直对齐节点
-        </li>
-        <li>
-          <strong>视口属性叠加</strong> — 3D 视图中属性 / Viewer 文字叠加更清晰
-        </li>
-        <li>
-          <strong>Spreadsheet 列排序</strong> — 点击表头对属性列排序
-        </li>
-      </ul>
-
-      <!-- Image Process -->
-      <h2 id="image-process">
-        <span class="lang-en">Image Process</span><span class="lang-zh">图像处理（Image Process）</span>
-      </h2>
-      <p class="lang-en">
-        An Image Process node tree (COPs-oriented workflow) for point/image operations outside the classic
-        compositor-only path. Registered under Image Process add menus.
-      </p>
-      <p class="lang-zh">
-        Image Process 节点树（COPs 向工作流），在经典合成器之外做点/图像运算，注册于 Image Process 添加菜单。
-      </p>
-      <ul class="lang-en">
-        <li><strong>Import Points</strong> / <strong>Rasterize Geometry</strong> — bring geometry samples into image space</li>
-        <li>
-          <strong>Point Stamp</strong> — stamp points into an image; tiled parallel rasterization for dense clouds
-        </li>
-        <li>
-          <strong>Normal to Height</strong> / <strong>Height to Normal</strong> — convert between normal maps and height maps
-        </li>
-        <li>
-          <strong>Bake Image</strong> (2026-07-29) — multi-format bake (PNG, JPEG, EXR, TIFF, BMP, Targa, WebP, HDR),
-          color space, Path / Name string sockets, top-level Bake button; Bundle item naming for stamp maps
-        </li>
-        <li>
-          <strong>Get / Store Bundle Item</strong> — Image Process Utilities › Bundle (compositor lookup for stamp maps)
-        </li>
-      </ul>
-      <ul class="lang-zh">
-        <li><strong>Import Points</strong> / <strong>Rasterize Geometry</strong> — 将几何采样导入图像空间</li>
-        <li>
-          <strong>Point Stamp</strong> — 点盖章到图像；分块并行栅格化，适合稠密点云
-        </li>
-        <li>
-          <strong>Normal to Height</strong> / <strong>Height to Normal</strong> — 法线贴图与高度图互转
-        </li>
-        <li>
-          <strong>Bake Image</strong>（2026-07-29）— 多格式烘焙（PNG、JPEG、EXR、TIFF、BMP、Targa、WebP、HDR），
-          色彩空间、Path / Name 字符串、顶部 Bake 按钮；盖章图 Bundle 项命名
-        </li>
-        <li>
-          <strong>Get / Store Bundle Item</strong> — Image Process Utilities › Bundle（盖章图合成查找）
-        </li>
-      </ul>
-
-      <!-- Disabled -->
+      <!-- ===================== Disabled ===================== -->
       <h2 id="disabled">
-        <span class="lang-en">Disabled / Not shipped</span><span class="lang-zh">未启用 / 未打包</span>
+        <span class="lang-en">Disabled / Not shipped</span>
+        <span class="lang-zh">未启用 / 未打包</span>
       </h2>
       <ul class="lang-en">
         <li>
           <strong>Viewport Camera</strong> node
           <span class="status off">Disabled</span>
-          — present in development notes / Achieve List as <code>//viewport camera</code>;
-          <strong>not enabled</strong> in this portable build (not registered in add menus; not linked in <code>blender.exe</code>).
+          — development notes list it as <code>//viewport camera</code>; not registered in add menus
+          and not linked in this portable <code>blender.exe</code>.
         </li>
       </ul>
       <ul class="lang-zh">
         <li>
           <strong>Viewport Camera</strong> 节点
           <span class="status off">未启用</span>
-          — 开发笔记 / Achieve List 中记为 <code>//viewport camera</code>；
-          本便携构建中<strong>未启用</strong>（未注册到添加菜单，亦未链入 <code>blender.exe</code>）。
+          — 开发笔记中记为 <code>//viewport camera</code>；未注册到添加菜单，
+          亦未链入本便携 <code>blender.exe</code>。
         </li>
       </ul>
 
-      <!-- Known issues -->
+      <!-- ===================== Known issues ===================== -->
       <h2 id="known-issues">
-        <span class="lang-en">Known Issues</span><span class="lang-zh">已知问题</span>
+        <span class="lang-en">Known Issues</span>
+        <span class="lang-zh">已知问题</span>
       </h2>
       <ul class="lang-en">
         <li>
           <strong>Time Shift + Simulation Zone:</strong> after graph changes, return to the first frame
-          (or clear simulation cache) so cached frames do not show stale results. This is upstream cache behaviour.
+          (or clear simulation cache) so cached frames do not show stale results.
         </li>
         <li>
           This is an <strong>unofficial</strong> custom build and is not digitally signed by the Blender Foundation.
@@ -831,102 +1652,17 @@
       <ul class="lang-zh">
         <li>
           <strong>Time Shift + Simulation Zone：</strong>节点图改动后请回到第一帧（或清理模拟缓存），
-          避免缓存帧显示过期结果。此为上游缓存行为。
+          避免缓存帧显示过期结果。
         </li>
         <li>
           这是<strong>非官方</strong>自定义构建，未经 Blender Foundation 数字签名。
         </li>
       </ul>
 
-      <!-- Weekly-style summary -->
-      <h2 id="weekly-style">
-        <span class="lang-en">Weekly-style Summary</span><span class="lang-zh">周会式摘要</span>
-      </h2>
-      <p class="lang-en">
-        Condensed in the style of
-        <a href="https://devtalk.blender.org/c/meetings/28" target="_blank" rel="noopener">Nodes &amp; Physics module meetings</a>
-        (“Since the last meeting” bullet list).
-      </p>
-      <p class="lang-zh">
-        仿照
-        <a href="https://devtalk.blender.org/c/meetings/28" target="_blank" rel="noopener">Nodes &amp; Physics 模块周会</a>
-        的 “Since the last meeting” 条目列表整理。
-      </p>
-
-      <div class="meeting">
-        <h3 class="lang-en">Present</h3>
-        <h3 class="lang-zh">与会 / 现场</h3>
-        <ul>
-          <li>BIKINI portable package · <code>bin/Release</code></li>
-        </ul>
-
-        <h3 class="lang-en">Since the Last Package</h3>
-        <h3 class="lang-zh">自上一包以来</h3>
-        <ul class="lang-en">
-          <li>String attributes + viewer / viewport overlay text</li>
-          <li>Named Portal</li>
-          <li>Node group interface: Separator, Message, Join to Next, Ctrl+LMB rename</li>
-          <li>Geometry Clip (incl. mesh build optimizations)</li>
-          <li>Set Default Closure</li>
-          <li>Loop Subdivision</li>
-          <li>K-Nearest (Nearest Neighbours)</li>
-          <li>Simulation Zone Cache Limit</li>
-          <li>Geometry Debug node</li>
-          <li>Shake-detach / multi-insert; hold U align while dragging</li>
-          <li>Enable Input/Output interface hide behaviour</li>
-          <li>Spreadsheet attribute column sort</li>
-          <li>Menu Switch multi-select</li>
-          <li>Time Shift (simulation cache note applies)</li>
-          <li>Sparse Matrix Math, Linear Solver, Mesh Laplacian</li>
-          <li>Object Info Seed</li>
-          <li>Image Process: Point Stamp, Normal ↔ Height, Bake Image, Bundle items</li>
-          <li>Repeat Zone Break</li>
-        </ul>
-        <ul class="lang-zh">
-          <li>String 属性 + Viewer / 视口叠加文字</li>
-          <li>Named Portal</li>
-          <li>节点组接口：Separator、Message、Join to Next、Ctrl+LMB 改名</li>
-          <li>Geometry Clip（含网格构建优化）</li>
-          <li>Set Default Closure</li>
-          <li>Loop Subdivision</li>
-          <li>K-Nearest（最近邻）</li>
-          <li>Simulation Zone Cache Limit</li>
-          <li>Geometry Debug 节点</li>
-          <li>抖动拆线 / 连续插入；按住 U 拖拽对齐</li>
-          <li>Enable Input/Output 隐藏接口行为</li>
-          <li>Spreadsheet 属性列排序</li>
-          <li>Menu Switch 多选</li>
-          <li>Time Shift（适用模拟缓存说明）</li>
-          <li>Sparse Matrix Math、Linear Solver、Mesh Laplacian</li>
-          <li>Object Info Seed</li>
-          <li>Image Process：Point Stamp、法线↔高度、Bake Image、Bundle 项</li>
-          <li>Repeat Zone Break</li>
-        </ul>
-
-        <h3 class="lang-en">Parking Lot / Disabled</h3>
-        <h3 class="lang-zh">搁置 / 未启用</h3>
-        <ul class="lang-en">
-          <li>Viewport Camera node — kept out of this build (<code>//</code> in Achieve List)</li>
-        </ul>
-        <ul class="lang-zh">
-          <li>Viewport Camera 节点 — 本构建未启用（Achieve List 中 <code>//</code>）</li>
-        </ul>
-
-        <h3 class="lang-en">Notes</h3>
-        <h3 class="lang-zh">备注</h3>
-        <ul class="lang-en">
-          <li>Upstream reference: Blender 5.3 Geometry Nodes notes on developer.blender.org</li>
-          <li>Keep <code>blender.exe</code> next to <code>5.3</code>, <code>blender.crt</code>, <code>blender.shared</code>, <code>license</code></li>
-        </ul>
-        <ul class="lang-zh">
-          <li>上游参考：developer.blender.org 上的 Blender 5.3 Geometry Nodes 说明</li>
-          <li>请保持 <code>blender.exe</code> 与 <code>5.3</code>、<code>blender.crt</code>、<code>blender.shared</code>、<code>license</code> 同级</li>
-        </ul>
-      </div>
-
-      <!-- Package -->
+      <!-- ===================== Package ===================== -->
       <h2 id="package">
-        <span class="lang-en">Package Contents</span><span class="lang-zh">包内容</span>
+        <span class="lang-en">Package contents</span>
+        <span class="lang-zh">包内容</span>
       </h2>
       <ul class="lang-en">
         <li><code>blender.exe</code> — application</li>
@@ -948,16 +1684,16 @@
       <footer class="md-footer">
         <span class="lang-en">
           Format modelled on
-          <a href="https://developer.blender.org/docs/release_notes/5.3/geometry_nodes/" target="_blank" rel="noopener">developer.blender.org · 5.3 Geometry Nodes</a>
-          and
-          <a href="https://devtalk.blender.org/c/meetings/28" target="_blank" rel="noopener">module meeting notes</a>.
-          · Generated 2026-07-30 · Does not load with Blender. · EN / 中文 auto + manual switch.
+          <a href="https://developer.blender.org/docs/release_notes/5.3/" target="_blank" rel="noopener">developer.blender.org · 5.3 Release Notes</a>
+          (version → modules such as
+          <a href="https://developer.blender.org/docs/release_notes/5.3/geometry_nodes/" target="_blank" rel="noopener">Geometry Nodes</a>).
+          · Generated 2026-07-30 · Does not load with Blender · EN / 中文 auto + manual switch.
         </span>
         <span class="lang-zh">
           版式参考
-          <a href="https://developer.blender.org/docs/release_notes/5.3/geometry_nodes/" target="_blank" rel="noopener">developer.blender.org · 5.3 Geometry Nodes</a>
-          与
-          <a href="https://devtalk.blender.org/c/meetings/28" target="_blank" rel="noopener">模块周会笔记</a>。
+          <a href="https://developer.blender.org/docs/release_notes/5.3/" target="_blank" rel="noopener">developer.blender.org · 5.3 发布说明</a>
+          （版本 → 模块，如
+          <a href="https://developer.blender.org/docs/release_notes/5.3/geometry_nodes/" target="_blank" rel="noopener">Geometry Nodes</a>）。
           · 生成于 2026-07-30 · 不随 Blender 加载 · 支持中英文自动/手动切换。
         </span>
       </footer>
@@ -968,8 +1704,8 @@
     (function () {
       var KEY = "bikini-changelog-lang";
       var titles = {
-        en: "BIKINI: Geometry Nodes & UX — Release Notes",
-        zh: "BIKINI：几何节点与交互 — 更新日志"
+        en: "BIKINI Release Notes",
+        zh: "BIKINI 更新日志"
       };
 
       function currentLang() {
