@@ -1,7 +1,7 @@
 ﻿BIKINI custom Blender portable build
 
 Blender: 5.3.0 Alpha custom Windows x64 build
-Package date: 2026-07-30 (blender.exe reupload 4)
+Package date: 2026-07-30 (blender.exe reupload 5)
 Repository: https://github.com/blueish0930/BIKINI
 
 Usage:
