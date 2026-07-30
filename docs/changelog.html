@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -32,6 +32,12 @@
       color: var(--md-default-fg);
       background: #fafafa;
     }
+
+    /* Language visibility: default hide both until script runs, then show active */
+    html:not([data-lang]) .lang-en,
+    html:not([data-lang]) .lang-zh { visibility: hidden; }
+    html[data-lang="en"] .lang-zh { display: none !important; }
+    html[data-lang="zh"] .lang-en { display: none !important; }
 
     .md-header {
       position: sticky;
@@ -71,6 +77,46 @@
     }
 
     .md-header a:hover { color: #fff; }
+
+    .lang-switch {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 0;
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(0, 0, 0, 0.12);
+    }
+
+    .lang-switch button {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: rgba(255, 255, 255, 0.8);
+      font: inherit;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      padding: 0.28rem 0.75rem;
+      cursor: pointer;
+      line-height: 1.2;
+    }
+
+    .lang-switch button:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+    }
+
+    .lang-switch button[aria-pressed="true"] {
+      background: #fff;
+      color: #265787;
+    }
+
+    .lang-switch button:focus-visible {
+      outline: 2px solid #fff;
+      outline-offset: 1px;
+    }
 
     .layout {
       max-width: 61rem;
@@ -174,12 +220,6 @@
       word-break: break-word;
     }
 
-    hr {
-      border: 0;
-      border-top: 1px solid var(--md-border);
-      margin: 1.5rem 0;
-    }
-
     .lead {
       color: var(--md-default-fg-light);
       font-size: 0.98rem;
@@ -245,19 +285,9 @@
       margin-left: 0.35rem;
     }
 
-    .status.on {
-      color: #0a7a3e;
-      background: rgba(10, 122, 62, 0.1);
-    }
-
     .status.off {
       color: #666;
       background: rgba(0, 0, 0, 0.06);
-    }
-
-    .status.note {
-      color: #a65c00;
-      background: rgba(255, 145, 0, 0.12);
     }
 
     .toc-inline {
@@ -299,6 +329,12 @@
       margin-top: 1rem;
     }
 
+    .lang-hint {
+      font-size: 0.78rem;
+      color: var(--md-default-fg-light);
+      margin: 0 0 1rem;
+    }
+
     @media (max-width: 900px) {
       .layout { grid-template-columns: 1fr; }
       .md-sidebar {
@@ -308,73 +344,137 @@
         border-bottom: 1px solid var(--md-border);
       }
       .md-content { padding: 1.2rem 1rem 3rem; }
+      .lang-switch { margin-left: 0; }
     }
   </style>
+  <script>
+    /* Apply language ASAP to avoid flash of wrong language */
+    (function () {
+      var KEY = "bikini-changelog-lang";
+      var saved = null;
+      try { saved = localStorage.getItem(KEY); } catch (e) {}
+      var lang = (saved === "en" || saved === "zh")
+        ? saved
+        : (/^zh\b/i.test(navigator.language || (navigator.languages && navigator.languages[0]) || "")
+            ? "zh"
+            : "en");
+      document.documentElement.setAttribute("data-lang", lang);
+      document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
+    })();
+  </script>
 </head>
 <body>
 
   <header class="md-header">
     <div class="md-header__inner">
       <div class="md-header__title">
-        BIKINI<span>Release Notes</span>
+        BIKINI<span class="lang-en">Release Notes</span><span class="lang-zh">更新日志</span>
       </div>
       <a href="../readme.html">readme.html</a>
-      <a href="../BIKINI_BUILD_INFO.txt">Build Info</a>
-      <a href="https://developer.blender.org/docs/release_notes/5.3/geometry_nodes/" target="_blank" rel="noopener">Upstream 5.3 GN notes</a>
+      <a href="../BIKINI_BUILD_INFO.txt">
+        <span class="lang-en">Build Info</span><span class="lang-zh">构建信息</span>
+      </a>
+      <a href="https://developer.blender.org/docs/release_notes/5.3/geometry_nodes/" target="_blank" rel="noopener">
+        <span class="lang-en">Upstream 5.3 GN notes</span><span class="lang-zh">上游 5.3 几何节点说明</span>
+      </a>
       <a href="https://github.com/blueish0930/BIKINI" target="_blank" rel="noopener">GitHub</a>
+
+      <div class="lang-switch" role="group" aria-label="Language">
+        <button type="button" id="lang-zh" data-lang="zh" aria-pressed="false">中文</button>
+        <button type="button" id="lang-en" data-lang="en" aria-pressed="false">EN</button>
+      </div>
     </div>
   </header>
 
   <div class="layout">
     <nav class="md-sidebar" aria-label="Table of contents">
-      <h4>On this page</h4>
+      <h4 class="lang-en">On this page</h4>
+      <h4 class="lang-zh">本页目录</h4>
       <ul>
-        <li><a href="#overview">Overview</a></li>
-        <li><a href="#string-attributes">String Attributes</a></li>
-        <li><a href="#geometry-nodes">Geometry Nodes</a></li>
-        <li><a href="#math-solver">Math &amp; Solver</a></li>
-        <li><a href="#zones">Zones</a></li>
-        <li><a href="#node-group-ui">Node Group UI</a></li>
-        <li><a href="#editor-ux">Editor UX</a></li>
-        <li><a href="#image-process">Image Process</a></li>
-        <li><a href="#disabled">Disabled / WIP</a></li>
-        <li><a href="#known-issues">Known Issues</a></li>
-        <li><a href="#weekly-style">Weekly-style Summary</a></li>
+        <li><a href="#overview"><span class="lang-en">Overview</span><span class="lang-zh">概览</span></a></li>
+        <li><a href="#string-attributes"><span class="lang-en">String Attributes</span><span class="lang-zh">String 属性</span></a></li>
+        <li><a href="#geometry-nodes"><span class="lang-en">Geometry Nodes</span><span class="lang-zh">几何节点</span></a></li>
+        <li><a href="#math-solver"><span class="lang-en">Math &amp; Solver</span><span class="lang-zh">数学与求解器</span></a></li>
+        <li><a href="#zones"><span class="lang-en">Zones</span><span class="lang-zh">区域（Zones）</span></a></li>
+        <li><a href="#node-group-ui"><span class="lang-en">Node Group UI</span><span class="lang-zh">节点组接口</span></a></li>
+        <li><a href="#editor-ux"><span class="lang-en">Editor UX</span><span class="lang-zh">编辑器交互</span></a></li>
+        <li><a href="#image-process"><span class="lang-en">Image Process</span><span class="lang-zh">图像处理</span></a></li>
+        <li><a href="#disabled"><span class="lang-en">Disabled / WIP</span><span class="lang-zh">未启用 / 进行中</span></a></li>
+        <li><a href="#known-issues"><span class="lang-en">Known Issues</span><span class="lang-zh">已知问题</span></a></li>
+        <li><a href="#weekly-style"><span class="lang-en">Weekly-style Summary</span><span class="lang-zh">周会式摘要</span></a></li>
       </ul>
-      <h4>Also</h4>
+      <h4 class="lang-en">Also</h4>
+      <h4 class="lang-zh">其它</h4>
       <ul>
-        <li><a href="#package">Package contents</a></li>
+        <li><a href="#package"><span class="lang-en">Package contents</span><span class="lang-zh">包内容</span></a></li>
       </ul>
     </nav>
 
     <main class="md-content">
       <h1 id="top">BIKINI: Geometry Nodes &amp; UX</h1>
-      <p class="lead">
+
+      <p class="lang-hint lang-en">Language follows your browser (or last choice). Use the switch in the header anytime.</p>
+      <p class="lang-hint lang-zh">语言随浏览器自动选择（或记住你上次的选择）。可随时点右上角切换。</p>
+
+      <p class="lead lang-en">
         Custom features on top of Blender <strong>5.3 Alpha</strong>, documented in the same style as the
         <a href="https://developer.blender.org/docs/release_notes/5.3/geometry_nodes/" target="_blank" rel="noopener">official Geometry Nodes release notes</a>.
         Source list: <code>Achieve List</code>; verified against this portable build
         (<code>blender.exe</code> + <code>5.3/scripts/startup/bl_ui/node_add_menu_*.py</code>).
       </p>
+      <p class="lead lang-zh">
+        基于 Blender <strong>5.3 Alpha</strong> 的自定义功能说明，版式参考
+        <a href="https://developer.blender.org/docs/release_notes/5.3/geometry_nodes/" target="_blank" rel="noopener">官方 Geometry Nodes 更新说明</a>。
+        来源：<code>Achieve List</code>；并已对照本便携构建
+        （<code>blender.exe</code> + <code>5.3/scripts/startup/bl_ui/node_add_menu_*.py</code>）核实。
+      </p>
 
       <div class="admonition tip">
-        <div class="title">Note</div>
-        This HTML file is documentation only. Placing it next to <code>blender.exe</code> does
-        <strong>not</strong> affect startup or runtime.
+        <div class="title lang-en">Note</div>
+        <div class="title lang-zh">说明</div>
+        <span class="lang-en">
+          This HTML file is documentation only. Placing it next to <code>blender.exe</code> does
+          <strong>not</strong> affect startup or runtime.
+        </span>
+        <span class="lang-zh">
+          本 HTML 仅为文档。与 <code>blender.exe</code> 同目录放置
+          <strong>不会</strong> 影响启动或运行。
+        </span>
       </div>
 
       <!-- Overview -->
-      <h2 id="overview">Overview</h2>
+      <h2 id="overview">
+        <span class="lang-en">Overview</span><span class="lang-zh">概览</span>
+      </h2>
       <table class="meta-table">
-        <tr><th>Build</th><td>Blender 5.3.0 Alpha · Windows x64 · portable</td></tr>
-        <tr><th>Package date</th><td>2026-07-29</td></tr>
-        <tr><th>Repository</th><td><a href="https://github.com/blueish0930/BIKINI" target="_blank" rel="noopener">blueish0930/BIKINI</a></td></tr>
-        <tr><th>Focus</th><td>Geometry Nodes, node editor UX, Image Process (COPs-style)</td></tr>
-        <tr><th>Base</th><td>Tracks mainline Blender; features below are BIKINI additions / changes</td></tr>
+        <tr>
+          <th class="lang-en">Build</th><th class="lang-zh">构建</th>
+          <td>Blender 5.3.0 Alpha · Windows x64 · portable</td>
+        </tr>
+        <tr>
+          <th class="lang-en">Package date</th><th class="lang-zh">打包日期</th>
+          <td>2026-07-29</td>
+        </tr>
+        <tr>
+          <th class="lang-en">Repository</th><th class="lang-zh">仓库</th>
+          <td><a href="https://github.com/blueish0930/BIKINI" target="_blank" rel="noopener">blueish0930/BIKINI</a></td>
+        </tr>
+        <tr>
+          <th class="lang-en">Focus</th><th class="lang-zh">重点</th>
+          <td class="lang-en">Geometry Nodes, node editor UX, Image Process (COPs-style)</td>
+          <td class="lang-zh">几何节点、节点编辑器体验、Image Process（COPs 向）</td>
+        </tr>
+        <tr>
+          <th class="lang-en">Base</th><th class="lang-zh">基线</th>
+          <td class="lang-en">Tracks mainline Blender; features below are BIKINI additions / changes</td>
+          <td class="lang-zh">跟随 Blender 主线；下列功能为 BIKINI 新增 / 改动</td>
+        </tr>
       </table>
 
       <div class="toc-inline">
-        <div class="title">Highlights</div>
-        <ul>
+        <div class="title lang-en">Highlights</div>
+        <div class="title lang-zh">亮点</div>
+        <ul class="lang-en">
           <li>String attributes end-to-end (store / capture / viewer / viewport overlay)</li>
           <li>New nodes: Portal, Geometry Clip, Loop Subdivision, K-Nearest, Linear Solver, …</li>
           <li>Sparse matrix pipeline (Mesh Laplacian → Sparse Matrix Math → Linear Solver)</li>
@@ -382,85 +482,153 @@
           <li>Node group UI: Separator, Message, Join-to-Next, Ctrl+LMB rename</li>
           <li>Image Process: Point Stamp, Normal ↔ Height, Bake Image</li>
         </ul>
+        <ul class="lang-zh">
+          <li>String 属性全链路（存储 / 捕获 / Viewer / 视口叠加）</li>
+          <li>新节点：Portal、Geometry Clip、Loop 细分、K-Nearest、Linear Solver 等</li>
+          <li>稀疏矩阵链路（Mesh Laplacian → Sparse Matrix Math → Linear Solver）</li>
+          <li>Repeat Zone <strong>Break</strong>、Simulation Zone <strong>Cache Limit</strong>、Time Shift</li>
+          <li>节点组 UI：Separator、Message、参数并排、Ctrl+LMB 改名</li>
+          <li>Image Process：Point Stamp、法线↔高度、Bake Image</li>
+        </ul>
       </div>
 
       <!-- String -->
-      <h2 id="string-attributes">String Attributes</h2>
-      <p>
+      <h2 id="string-attributes">
+        <span class="lang-en">String Attributes</span><span class="lang-zh">String 属性</span>
+      </h2>
+      <p class="lang-en">
         Geometry attributes support a <strong>String</strong> data type across the attribute pipeline.
         This enables text-like data on points, faces, and other domains, with UI and spreadsheet support.
       </p>
-      <ul>
+      <p class="lang-zh">
+        几何属性在整条属性链路中支持 <strong>String</strong> 类型，可在点、面等域上存储文本类数据，
+        并具备 UI 与电子表格支持。
+      </p>
+      <ul class="lang-en">
         <li><strong>Named Attribute / Store Named Attribute / Capture Attribute</strong> — string domain support</li>
         <li><strong>Viewer</strong> — string values in the viewer and improved viewport attribute text overlays</li>
         <li><strong>Join Geometry / Realize Instances</strong> — string attributes propagate correctly</li>
         <li><strong>Spreadsheet</strong> — columns can be sorted (click column header)</li>
       </ul>
+      <ul class="lang-zh">
+        <li><strong>Named Attribute / Store Named Attribute / Capture Attribute</strong> — 支持 string 域</li>
+        <li><strong>Viewer</strong> — Viewer 中显示字符串，并优化视口属性文字叠加</li>
+        <li><strong>Join Geometry / Realize Instances</strong> — string 属性正确传递</li>
+        <li><strong>Spreadsheet</strong> — 点击列头可排序</li>
+      </ul>
 
       <!-- Geometry Nodes -->
-      <h2 id="geometry-nodes">Geometry Nodes</h2>
+      <h2 id="geometry-nodes">
+        <span class="lang-en">Geometry Nodes</span><span class="lang-zh">几何节点</span>
+      </h2>
 
       <h3 id="named-portal">Named Portal</h3>
-      <p>
+      <p class="lang-en">
         The <strong>Named Portal</strong> node (<code>GeometryNodeNamedPortal</code>) passes values by name
         across a node tree, similar to a lightweight global link without long noodle runs.
       </p>
+      <p class="lang-zh">
+        <strong>Named Portal</strong> 节点（<code>GeometryNodeNamedPortal</code>）按名称在节点树中传值，
+        类似轻量全局连接，避免长距离拉线。
+      </p>
 
       <h3 id="geometry-clip">Geometry Clip</h3>
-      <p>
+      <p class="lang-en">
         The <strong>Geometry Clip</strong> node clips geometry against a plane or volume-style cut.
         Mesh classification and edge topology build have been optimized for large meshes.
       </p>
-
-      <h3 id="loop-subdivision">Loop Subdivision</h3>
-      <p>
-        The <strong>Loop Subdivision</strong> node applies Loop subdivision to meshes.
+      <p class="lang-zh">
+        <strong>Geometry Clip</strong> 按平面或体式裁切几何。网格分类与边拓扑构建已针对大网格优化。
       </p>
 
-      <h3 id="k-nearest">Nearest Neighbours</h3>
-      <p>
+      <h3 id="loop-subdivision">Loop Subdivision</h3>
+      <p class="lang-en">
+        The <strong>Loop Subdivision</strong> node applies Loop subdivision to meshes.
+      </p>
+      <p class="lang-zh">
+        <strong>Loop Subdivision</strong> 对网格应用 Loop 细分。
+      </p>
+
+      <h3 id="k-nearest">
+        <span class="lang-en">Nearest Neighbours</span><span class="lang-zh">最近邻（Nearest Neighbours）</span>
+      </h3>
+      <p class="lang-en">
         The <strong>K-Nearest</strong> node (<code>GeometryNodeKNearest</code>) finds nearest neighbours
         for points / samples, useful for smoothing, clustering, and field sampling patterns.
       </p>
+      <p class="lang-zh">
+        <strong>K-Nearest</strong>（<code>GeometryNodeKNearest</code>）为点 / 采样查找最近邻，
+        适用于平滑、聚类与场采样等。
+      </p>
 
       <h3 id="set-default-closure">Set Default Closure</h3>
-      <p>
+      <p class="lang-en">
         The <strong>Set Default Closure</strong> node assigns a default closure to a closure socket
         when no external closure is connected.
       </p>
+      <p class="lang-zh">
+        <strong>Set Default Closure</strong> 在闭包 socket 未连接外部闭包时指定默认闭包。
+      </p>
 
       <h3 id="debug">Debug</h3>
-      <p>
+      <p class="lang-en">
         The <strong>Debug</strong> node inspects intermediate geometry / values while authoring node trees.
+      </p>
+      <p class="lang-zh">
+        <strong>Debug</strong> 节点用于在编写节点树时检查中间几何 / 数值。
       </p>
 
       <h3 id="time-shift">Time Shift</h3>
-      <p>
+      <p class="lang-en">
         The <strong>Time Shift</strong> node offsets evaluation time for downstream nodes.
       </p>
+      <p class="lang-zh">
+        <strong>Time Shift</strong> 为下游节点偏移求值时间。
+      </p>
       <div class="admonition warning">
-        <div class="title">Simulation cache</div>
-        When used with a Simulation Zone, scrub to frame 1 (or otherwise reset the simulation cache)
-        after structural changes. This is native Blender simulation cache behaviour.
+        <div class="title lang-en">Simulation cache</div>
+        <div class="title lang-zh">模拟缓存</div>
+        <span class="lang-en">
+          When used with a Simulation Zone, scrub to frame 1 (or otherwise reset the simulation cache)
+          after structural changes. This is native Blender simulation cache behaviour.
+        </span>
+        <span class="lang-zh">
+          与 Simulation Zone 一起使用时，结构改动后请回到第 1 帧（或重置模拟缓存）。
+          这是 Blender 原生模拟缓存行为。
+        </span>
       </div>
 
       <h3 id="object-info-seed">Object Info — Seed</h3>
-      <p>
+      <p class="lang-en">
         <strong>Object Info</strong> exposes a <strong>Seed</strong> control for deterministic
         randomness / instance variation tied to object info sampling.
       </p>
+      <p class="lang-zh">
+        <strong>Object Info</strong> 提供 <strong>Seed</strong>，用于与对象信息采样相关的确定性随机 / 实例变化。
+      </p>
 
-      <h3 id="menu-switch-multi">Menu Switch — multi-select</h3>
-      <p>
+      <h3 id="menu-switch-multi">
+        <span class="lang-en">Menu Switch — multi-select</span>
+        <span class="lang-zh">Menu Switch — 多选</span>
+      </h3>
+      <p class="lang-en">
         <strong>Menu Switch</strong> supports multi-selection of menu items for richer branching UIs.
+      </p>
+      <p class="lang-zh">
+        <strong>Menu Switch</strong> 支持多选菜单项，便于更丰富的分支界面。
       </p>
 
       <!-- Math -->
-      <h2 id="math-solver">Math &amp; Solver</h2>
-      <p>
+      <h2 id="math-solver">
+        <span class="lang-en">Math &amp; Solver</span><span class="lang-zh">数学与求解器</span>
+      </h2>
+      <p class="lang-en">
         A sparse linear-algebra path for geometry-driven problems (smoothing, diffusion, pin-and-solve, eigensystems).
       </p>
-      <ul>
+      <p class="lang-zh">
+        面向几何问题的稀疏线性代数路径（平滑、扩散、钉约束求解、特征系统等）。
+      </p>
+      <ul class="lang-en">
         <li>
           <strong>Mesh Laplacian</strong> — builds a mesh Laplacian as a sparse matrix bundle
           (uniform / cotangent-style modes; <code>I+tL</code> / mass-matrix variants where applicable)
@@ -474,10 +642,25 @@
           matrix factorization, and partial eigen decomposition (sparse path; Eigen / Spectra)
         </li>
       </ul>
+      <ul class="lang-zh">
+        <li>
+          <strong>Mesh Laplacian</strong> — 将网格拉普拉斯构建为稀疏矩阵 Bundle
+          （uniform / cotangent 等；适用时含 <code>I+tL</code> / 质量矩阵变体）
+        </li>
+        <li>
+          <strong>Sparse Matrix Math</strong> — 稀疏矩阵 Bundle 加减乘组合（COO 风格），含 Bundle 布局同步
+        </li>
+        <li>
+          <strong>Linear Solver</strong> — 求解 <code>Ax = b</code>，可选钉约束、矩阵分解与部分特征分解
+          （稀疏路径；Eigen / Spectra）
+        </li>
+      </ul>
 
       <!-- Zones -->
-      <h2 id="zones">Zones</h2>
-      <ul>
+      <h2 id="zones">
+        <span class="lang-en">Zones</span><span class="lang-zh">区域（Zones）</span>
+      </h2>
+      <ul class="lang-en">
         <li>
           <strong>Repeat Zone — Break</strong> — boolean early-exit on the zone output so the loop
           can stop before reaching the iteration count
@@ -487,13 +670,23 @@
           are retained, reducing unbounded memory growth
         </li>
       </ul>
+      <ul class="lang-zh">
+        <li>
+          <strong>Repeat Zone — Break</strong> — 区域输出端布尔早退，循环可在达到迭代次数前结束
+        </li>
+        <li>
+          <strong>Simulation Zone — Cache Limit</strong> — 限制保留的模拟缓存帧数，避免内存无限增长
+        </li>
+      </ul>
 
       <!-- Node Group UI -->
-      <h2 id="node-group-ui">Node Group Interface</h2>
-      <ul>
+      <h2 id="node-group-ui">
+        <span class="lang-en">Node Group Interface</span><span class="lang-zh">节点组接口</span>
+      </h2>
+      <ul class="lang-en">
         <li>
           <strong>Separator</strong> and <strong>Message</strong> items — organize group inputs/outputs
-          with visual dividers and help text (same spirit as panel layout polish in mainline)
+          with visual dividers and help text
         </li>
         <li>
           <strong>Join to Next Parameter</strong> — place the next socket on the same row to save vertical space
@@ -507,10 +700,26 @@
           are ignored, and outputs fall back to static defaults / Default Input
         </li>
       </ul>
+      <ul class="lang-zh">
+        <li>
+          <strong>Separator</strong> 与 <strong>Message</strong> — 用分隔线与说明文字整理组输入/输出
+        </li>
+        <li>
+          <strong>Join to Next Parameter（参数并排）</strong> — 下一参数排在同一行，节省纵向空间
+        </li>
+        <li>
+          <strong>Ctrl + LMB 改名</strong> — 在节点外侧接口区域快速改名，悬停高亮反馈
+        </li>
+        <li>
+          <strong>Enable Input / Output</strong> — 关闭时隐藏接口、忽略外部连线，输出回落到静态默认 / Default Input
+        </li>
+      </ul>
 
       <!-- Editor UX -->
-      <h2 id="editor-ux">Node Editor UX</h2>
-      <ul>
+      <h2 id="editor-ux">
+        <span class="lang-en">Node Editor UX</span><span class="lang-zh">节点编辑器交互</span>
+      </h2>
+      <ul class="lang-en">
         <li>
           <strong>Shake to detach</strong> — shaking a node detaches it from links; supports inserting
           multiple nodes along a chain in one gesture flow
@@ -526,14 +735,33 @@
           <strong>Spreadsheet column sort</strong> — click headers to sort attribute columns
         </li>
       </ul>
+      <ul class="lang-zh">
+        <li>
+          <strong>抖动拆线</strong> — 抖动节点可从连线拆离；支持沿链路连续插入多个节点
+        </li>
+        <li>
+          <strong>按住 U + 拖拽</strong> — 按住 <code>U</code> 并用 LMB 拖动，可水平 / 垂直对齐节点
+        </li>
+        <li>
+          <strong>视口属性叠加</strong> — 3D 视图中属性 / Viewer 文字叠加更清晰
+        </li>
+        <li>
+          <strong>Spreadsheet 列排序</strong> — 点击表头对属性列排序
+        </li>
+      </ul>
 
       <!-- Image Process -->
-      <h2 id="image-process">Image Process</h2>
-      <p>
+      <h2 id="image-process">
+        <span class="lang-en">Image Process</span><span class="lang-zh">图像处理（Image Process）</span>
+      </h2>
+      <p class="lang-en">
         An Image Process node tree (COPs-oriented workflow) for point/image operations outside the classic
         compositor-only path. Registered under Image Process add menus.
       </p>
-      <ul>
+      <p class="lang-zh">
+        Image Process 节点树（COPs 向工作流），在经典合成器之外做点/图像运算，注册于 Image Process 添加菜单。
+      </p>
+      <ul class="lang-en">
         <li><strong>Import Points</strong> / <strong>Rasterize Geometry</strong> — bring geometry samples into image space</li>
         <li>
           <strong>Point Stamp</strong> — stamp points into an image; tiled parallel rasterization for dense clouds
@@ -549,10 +777,28 @@
           <strong>Get / Store Bundle Item</strong> — Image Process Utilities › Bundle (compositor lookup for stamp maps)
         </li>
       </ul>
+      <ul class="lang-zh">
+        <li><strong>Import Points</strong> / <strong>Rasterize Geometry</strong> — 将几何采样导入图像空间</li>
+        <li>
+          <strong>Point Stamp</strong> — 点盖章到图像；分块并行栅格化，适合稠密点云
+        </li>
+        <li>
+          <strong>Normal to Height</strong> / <strong>Height to Normal</strong> — 法线贴图与高度图互转
+        </li>
+        <li>
+          <strong>Bake Image</strong>（2026-07-29）— 多格式烘焙（PNG、JPEG、EXR、TIFF、BMP、Targa、WebP、HDR），
+          色彩空间、Path / Name 字符串、顶部 Bake 按钮；盖章图 Bundle 项命名
+        </li>
+        <li>
+          <strong>Get / Store Bundle Item</strong> — Image Process Utilities › Bundle（盖章图合成查找）
+        </li>
+      </ul>
 
       <!-- Disabled -->
-      <h2 id="disabled">Disabled / Not shipped</h2>
-      <ul>
+      <h2 id="disabled">
+        <span class="lang-en">Disabled / Not shipped</span><span class="lang-zh">未启用 / 未打包</span>
+      </h2>
+      <ul class="lang-en">
         <li>
           <strong>Viewport Camera</strong> node
           <span class="status off">Disabled</span>
@@ -560,10 +806,20 @@
           <strong>not enabled</strong> in this portable build (not registered in add menus; not linked in <code>blender.exe</code>).
         </li>
       </ul>
+      <ul class="lang-zh">
+        <li>
+          <strong>Viewport Camera</strong> 节点
+          <span class="status off">未启用</span>
+          — 开发笔记 / Achieve List 中记为 <code>//viewport camera</code>；
+          本便携构建中<strong>未启用</strong>（未注册到添加菜单，亦未链入 <code>blender.exe</code>）。
+        </li>
+      </ul>
 
       <!-- Known issues -->
-      <h2 id="known-issues">Known Issues</h2>
-      <ul>
+      <h2 id="known-issues">
+        <span class="lang-en">Known Issues</span><span class="lang-zh">已知问题</span>
+      </h2>
+      <ul class="lang-en">
         <li>
           <strong>Time Shift + Simulation Zone:</strong> after graph changes, return to the first frame
           (or clear simulation cache) so cached frames do not show stale results. This is upstream cache behaviour.
@@ -572,23 +828,41 @@
           This is an <strong>unofficial</strong> custom build and is not digitally signed by the Blender Foundation.
         </li>
       </ul>
+      <ul class="lang-zh">
+        <li>
+          <strong>Time Shift + Simulation Zone：</strong>节点图改动后请回到第一帧（或清理模拟缓存），
+          避免缓存帧显示过期结果。此为上游缓存行为。
+        </li>
+        <li>
+          这是<strong>非官方</strong>自定义构建，未经 Blender Foundation 数字签名。
+        </li>
+      </ul>
 
-      <!-- Weekly-style summary (like Nodes & Physics module meeting) -->
-      <h2 id="weekly-style">Weekly-style Summary</h2>
-      <p>
+      <!-- Weekly-style summary -->
+      <h2 id="weekly-style">
+        <span class="lang-en">Weekly-style Summary</span><span class="lang-zh">周会式摘要</span>
+      </h2>
+      <p class="lang-en">
         Condensed in the style of
         <a href="https://devtalk.blender.org/c/meetings/28" target="_blank" rel="noopener">Nodes &amp; Physics module meetings</a>
         (“Since the last meeting” bullet list).
       </p>
+      <p class="lang-zh">
+        仿照
+        <a href="https://devtalk.blender.org/c/meetings/28" target="_blank" rel="noopener">Nodes &amp; Physics 模块周会</a>
+        的 “Since the last meeting” 条目列表整理。
+      </p>
 
       <div class="meeting">
-        <h3>Present</h3>
+        <h3 class="lang-en">Present</h3>
+        <h3 class="lang-zh">与会 / 现场</h3>
         <ul>
           <li>BIKINI portable package · <code>bin/Release</code></li>
         </ul>
 
-        <h3>Since the Last Package</h3>
-        <ul>
+        <h3 class="lang-en">Since the Last Package</h3>
+        <h3 class="lang-zh">自上一包以来</h3>
+        <ul class="lang-en">
           <li>String attributes + viewer / viewport overlay text</li>
           <li>Named Portal</li>
           <li>Node group interface: Separator, Message, Join to Next, Ctrl+LMB rename</li>
@@ -608,39 +882,127 @@
           <li>Image Process: Point Stamp, Normal ↔ Height, Bake Image, Bundle items</li>
           <li>Repeat Zone Break</li>
         </ul>
-
-        <h3>Parking Lot / Disabled</h3>
-        <ul>
-          <li>Viewport Camera node — kept out of this build (<code>//</code> in Achieve List)</li>
+        <ul class="lang-zh">
+          <li>String 属性 + Viewer / 视口叠加文字</li>
+          <li>Named Portal</li>
+          <li>节点组接口：Separator、Message、Join to Next、Ctrl+LMB 改名</li>
+          <li>Geometry Clip（含网格构建优化）</li>
+          <li>Set Default Closure</li>
+          <li>Loop Subdivision</li>
+          <li>K-Nearest（最近邻）</li>
+          <li>Simulation Zone Cache Limit</li>
+          <li>Geometry Debug 节点</li>
+          <li>抖动拆线 / 连续插入；按住 U 拖拽对齐</li>
+          <li>Enable Input/Output 隐藏接口行为</li>
+          <li>Spreadsheet 属性列排序</li>
+          <li>Menu Switch 多选</li>
+          <li>Time Shift（适用模拟缓存说明）</li>
+          <li>Sparse Matrix Math、Linear Solver、Mesh Laplacian</li>
+          <li>Object Info Seed</li>
+          <li>Image Process：Point Stamp、法线↔高度、Bake Image、Bundle 项</li>
+          <li>Repeat Zone Break</li>
         </ul>
 
-        <h3>Notes</h3>
-        <ul>
+        <h3 class="lang-en">Parking Lot / Disabled</h3>
+        <h3 class="lang-zh">搁置 / 未启用</h3>
+        <ul class="lang-en">
+          <li>Viewport Camera node — kept out of this build (<code>//</code> in Achieve List)</li>
+        </ul>
+        <ul class="lang-zh">
+          <li>Viewport Camera 节点 — 本构建未启用（Achieve List 中 <code>//</code>）</li>
+        </ul>
+
+        <h3 class="lang-en">Notes</h3>
+        <h3 class="lang-zh">备注</h3>
+        <ul class="lang-en">
           <li>Upstream reference: Blender 5.3 Geometry Nodes notes on developer.blender.org</li>
           <li>Keep <code>blender.exe</code> next to <code>5.3</code>, <code>blender.crt</code>, <code>blender.shared</code>, <code>license</code></li>
+        </ul>
+        <ul class="lang-zh">
+          <li>上游参考：developer.blender.org 上的 Blender 5.3 Geometry Nodes 说明</li>
+          <li>请保持 <code>blender.exe</code> 与 <code>5.3</code>、<code>blender.crt</code>、<code>blender.shared</code>、<code>license</code> 同级</li>
         </ul>
       </div>
 
       <!-- Package -->
-      <h2 id="package">Package Contents</h2>
-      <ul>
+      <h2 id="package">
+        <span class="lang-en">Package Contents</span><span class="lang-zh">包内容</span>
+      </h2>
+      <ul class="lang-en">
         <li><code>blender.exe</code> — application</li>
         <li><code>5.3/</code> — scripts, Python, datafiles, locales</li>
         <li><code>blender.crt/</code>, <code>blender.shared/</code>, <code>license/</code> — runtime &amp; licenses</li>
         <li><code>BIKINI_BUILD_INFO.txt</code> — short package blurb</li>
-        <li><code>changelog.html</code> — this page (safe to ship; unused at runtime)</li>
+        <li><code>docs/changelog.html</code> — this page (safe to ship; unused at runtime)</li>
         <li><code>readme.html</code> — standard Blender readme</li>
+      </ul>
+      <ul class="lang-zh">
+        <li><code>blender.exe</code> — 主程序</li>
+        <li><code>5.3/</code> — 脚本、Python、数据文件、语言包</li>
+        <li><code>blender.crt/</code>、<code>blender.shared/</code>、<code>license/</code> — 运行时与许可证</li>
+        <li><code>BIKINI_BUILD_INFO.txt</code> — 简短构建说明</li>
+        <li><code>docs/changelog.html</code> — 本页（可随包分发；运行时不加载）</li>
+        <li><code>readme.html</code> — 标准 Blender 说明</li>
       </ul>
 
       <footer class="md-footer">
-        Format modelled on
-        <a href="https://developer.blender.org/docs/release_notes/5.3/geometry_nodes/" target="_blank" rel="noopener">developer.blender.org · 5.3 Geometry Nodes</a>
-        and
-        <a href="https://devtalk.blender.org/c/meetings/28" target="_blank" rel="noopener">module meeting notes</a>.
-        · Generated 2026-07-30 · Does not load with Blender.
+        <span class="lang-en">
+          Format modelled on
+          <a href="https://developer.blender.org/docs/release_notes/5.3/geometry_nodes/" target="_blank" rel="noopener">developer.blender.org · 5.3 Geometry Nodes</a>
+          and
+          <a href="https://devtalk.blender.org/c/meetings/28" target="_blank" rel="noopener">module meeting notes</a>.
+          · Generated 2026-07-30 · Does not load with Blender. · EN / 中文 auto + manual switch.
+        </span>
+        <span class="lang-zh">
+          版式参考
+          <a href="https://developer.blender.org/docs/release_notes/5.3/geometry_nodes/" target="_blank" rel="noopener">developer.blender.org · 5.3 Geometry Nodes</a>
+          与
+          <a href="https://devtalk.blender.org/c/meetings/28" target="_blank" rel="noopener">模块周会笔记</a>。
+          · 生成于 2026-07-30 · 不随 Blender 加载 · 支持中英文自动/手动切换。
+        </span>
       </footer>
     </main>
   </div>
 
+  <script>
+    (function () {
+      var KEY = "bikini-changelog-lang";
+      var titles = {
+        en: "BIKINI: Geometry Nodes & UX — Release Notes",
+        zh: "BIKINI：几何节点与交互 — 更新日志"
+      };
+
+      function currentLang() {
+        return document.documentElement.getAttribute("data-lang") === "zh" ? "zh" : "en";
+      }
+
+      function setLang(lang) {
+        if (lang !== "en" && lang !== "zh") lang = "en";
+        document.documentElement.setAttribute("data-lang", lang);
+        document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
+        document.title = titles[lang];
+        try { localStorage.setItem(KEY, lang); } catch (e) {}
+
+        var zhBtn = document.getElementById("lang-zh");
+        var enBtn = document.getElementById("lang-en");
+        if (zhBtn) zhBtn.setAttribute("aria-pressed", lang === "zh" ? "true" : "false");
+        if (enBtn) enBtn.setAttribute("aria-pressed", lang === "en" ? "true" : "false");
+      }
+
+      function detectLang() {
+        try {
+          var saved = localStorage.getItem(KEY);
+          if (saved === "en" || saved === "zh") return saved;
+        } catch (e) {}
+        var nav = navigator.language || (navigator.languages && navigator.languages[0]) || "en";
+        return /^zh\b/i.test(nav) ? "zh" : "en";
+      }
+
+      setLang(detectLang());
+
+      document.getElementById("lang-zh").addEventListener("click", function () { setLang("zh"); });
+      document.getElementById("lang-en").addEventListener("click", function () { setLang("en"); });
+    })();
+  </script>
 </body>
 </html>
