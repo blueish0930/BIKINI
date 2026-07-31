@@ -29,6 +29,5 @@ This is an unofficial custom build and is not digitally signed by the Blender Fo
 - Point Stamp: tiled parallel rasterization (faster for dense point clouds).
 - Get Bundle Item / Store Bundle Item registered in Image Process Utilities > Bundle (compositor lookup for stamp maps).
 
-Portable refresh: blender.exe from Full_x64 Release 2026-07-31 10:21:59
-Fluid: Pavel step + cache/feedback flicker fixes
+Portable refresh: 2026-07-31 10:45:54 (fluid cache chain + mild cold seed)
 
