@@ -1,17 +1,24 @@
 BIKINI custom Blender portable build
 
 Blender: 5.3.0 Alpha custom Windows x64 build
-Package date: 2026-07-31 (pm Voronoi Voro++)
+Package date: 2026-07-31 (pm fluid stability + Voronoi Fracture)
 Repository: https://github.com/blueish0930/BIKINI
 
 Usage:
-1. Download the repository ZIP from Code -> Download ZIP (branch: main).
+1. Download the repository ZIP from Code -> Download ZIP (branch: develop).
 2. Extract the entire ZIP.
 3. Open the extracted BIKINI folder.
 4. Run blender.exe.
 
 Keep blender.exe together with the 5.3, blender.crt, blender.shared, license, and quadwild folders.
 This is an unofficial custom build and is not digitally signed by the Blender Foundation.
+
+2026-07-31 (refresh 5 — Image Process fluid + Voronoi Fracture):
+- Image Process Fluid Simulation: fix pure-black fallback, seed alpha, boundary BC.
+- Stabilize fluid numerics (velocity scale / auto-swirl caps); no full-field splat_force gain.
+- Paused param tweaks: hold last GPU frame (no multi-frame re-sim thrash); apply on play / frame advance / start reseed.
+- Geometry Nodes: Voronoi Fracture (GeometryNodeVoronoiFracture) compiled into this binary.
+- QuadWild / Instant Meshes / related geometry WIP retained from prior refreshes.
 
 2026-07-31 (refresh 4 — QRemeshify-aligned QuadWild):
 - Geometry Nodes QuadWild defaults match QRemeshify (ksami/QRemeshify).
@@ -29,13 +36,6 @@ This is an unofficial custom build and is not digitally signed by the Blender Fo
 2026-07-31 (refresh 2):
 - Fix QuadWild crash: BLI_path_join no longer accepts trailing nullptr.
 - Image Process Bake Image: compositor bake write enable API fix.
-
-2026-07-31 12:54:38:
-- Geometry Nodes: Voronoi Fracture rebuilt with Voro++ (exact 3D Voronoi cells; solid = cell intersect mesh boolean).
-- Vendored: extern/voro++ (chr1shr/voro, BSD-3). Hand-rolled KD midplane path removed.
-- Menu: Mesh -> Operations -> Voronoi Fracture (GeometryNodeVoronoiFracture).
-- Portable blender.exe refresh from Full Release build (2026-07-31 12:54:38).
-
 
 2026-07-31:
 - Geometry Nodes Instant Meshes + QuadWild; package ./quadwild/ BiMDF tools.
