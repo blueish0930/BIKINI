@@ -13,10 +13,15 @@ Usage:
 Keep blender.exe together with the 5.3, blender.crt, blender.shared, license, and quadwild folders.
 This is an unofficial custom build and is not digitally signed by the Blender Foundation.
 
+2026-07-31 (refresh 2):
+- Fix QuadWild crash: BLI_path_join no longer accepts trailing nullptr (Access Violation on node eval).
+- Image Process Bake Image: compositor:: bake write enable API linkage fix.
+- Incremental: geometry QuadWild, image bake/fluid, tangent field runtime RNA int N, nodes link.
+- Menu: Mesh -> Operations -> Instant Meshes / QuadWild; Image Process Bake / Fluid In-Out / Point Stamp / SDF / Fractal.
+
 2026-07-31:
 - Geometry Nodes: Instant Meshes + QuadWild (feature-line driven pure-quad remesh).
 - QuadWild package: ./quadwild/ (quadwild.exe + quad_from_patches.exe + config/, BiMDF, no Gurobi).
-- Menu: Mesh -> Operations -> Instant Meshes / QuadWild.
 - blender.exe rebuild with RNA registration for GeometryNodeQuadWild.
 
 2026-07-30:
@@ -29,5 +34,6 @@ This is an unofficial custom build and is not digitally signed by the Blender Fo
 - Point Stamp: tiled parallel rasterization (faster for dense point clouds).
 - Get Bundle Item / Store Bundle Item registered in Image Process Utilities > Bundle (compositor lookup for stamp maps).
 
-Portable refresh: 2026-07-31 10:45:54 (fluid cache chain + mild cold seed)
-
+2026-07-31 (push after fluid cache chain remote):
+- Rebased onto Portable fluid cache chain (cc23951).
+- Re-applied crash-fix blender.exe: QuadWild path_join + Image bake incr + Tangent Field RNA.
