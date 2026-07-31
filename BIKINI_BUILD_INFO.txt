@@ -13,27 +13,15 @@ Usage:
 Keep blender.exe together with the 5.3, blender.crt, blender.shared, license, and quadwild folders.
 This is an unofficial custom build and is not digitally signed by the Blender Foundation.
 
+2026-07-31 (refresh 3 — QuadWild works):
+- Fix QuadWild no-effect / quad_from_patches: look for output input_rem_p0_1_quadrangulation_smooth.obj (tag in filename).
+- Accept non-zero process exit if output OBJ exists (tool may crash after write).
+- Redirect child stdout/stderr to temp logs; do not delete workdir on spurious exit codes.
+- Verified: cube remesh → pure quads (e.g. ~4k faces).
+
 2026-07-31 (refresh 2):
-- Fix QuadWild crash: BLI_path_join no longer accepts trailing nullptr (Access Violation on node eval).
-- Image Process Bake Image: compositor:: bake write enable API linkage fix.
-- Incremental: geometry QuadWild, image bake/fluid, tangent field runtime RNA int N, nodes link.
-- Menu: Mesh -> Operations -> Instant Meshes / QuadWild; Image Process Bake / Fluid In-Out / Point Stamp / SDF / Fractal.
+- Fix QuadWild crash: BLI_path_join no longer accepts trailing nullptr.
+- Image Process Bake Image: compositor bake write enable API fix.
 
 2026-07-31:
-- Geometry Nodes: Instant Meshes + QuadWild (feature-line driven pure-quad remesh).
-- QuadWild package: ./quadwild/ (quadwild.exe + quad_from_patches.exe + config/, BiMDF, no Gurobi).
-- blender.exe rebuild with RNA registration for GeometryNodeQuadWild.
-
-2026-07-30:
-- Updated blender.exe (portable binary refresh).
-- Image Process texture menu: SDF Shape / Fractal Primitive use ImageNode path only (not Shader variants).
-- docs/changelog.html: bilingual EN/中文 release notes (auto language + manual switch).
-
-2026-07-29 (Image Process Bake / Point Stamp / Bundle):
-- Bake Image: multi-format (PNG/JPEG/EXR/TIFF/BMP/Targa/WebP/HDR), color space, Path/Name string sockets, top Bake button, Bundle item names.
-- Point Stamp: tiled parallel rasterization (faster for dense point clouds).
-- Get Bundle Item / Store Bundle Item registered in Image Process Utilities > Bundle (compositor lookup for stamp maps).
-
-2026-07-31 (push after fluid cache chain remote):
-- Rebased onto Portable fluid cache chain (cc23951).
-- Re-applied crash-fix blender.exe: QuadWild path_join + Image bake incr + Tangent Field RNA.
+- Geometry Nodes Instant Meshes + QuadWild; package ./quadwild/ BiMDF tools.
