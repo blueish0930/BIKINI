@@ -28,3 +28,7 @@ This is an unofficial custom build and is not digitally signed by the Blender Fo
 - Bake Image: multi-format (PNG/JPEG/EXR/TIFF/BMP/Targa/WebP/HDR), color space, Path/Name string sockets, top Bake button, Bundle item names.
 - Point Stamp: tiled parallel rasterization (faster for dense point clouds).
 - Get Bundle Item / Store Bundle Item registered in Image Process Utilities > Bundle (compositor lookup for stamp maps).
+
+Portable refresh: blender.exe from Full_x64 Release 2026-07-31 10:21:59
+Fluid: Pavel step + cache/feedback flicker fixes
+
