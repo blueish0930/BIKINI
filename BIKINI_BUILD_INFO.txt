@@ -39,3 +39,9 @@ This is an unofficial custom build and is not digitally signed by the Blender Fo
 
 2026-07-31:
 - Geometry Nodes Instant Meshes + QuadWild; package ./quadwild/ BiMDF tools.
+
+2026-07-31 (refresh 5 — full QRemeshify DLL pipeline):
+- Geometry Nodes QuadWild now calls QRemeshify lib_quadwild.dll / lib_quadpatches.dll
+  (remeshAndField2 → trace2 → quadPatches), same as the Gumroad/GitHub addon.
+- Mesh export matches plugin (face normals + f v//n); sharp features match export_sharp_features.
+- Package: quadwild/lib_quadwild.dll, lib_quadpatches.dll, config/ (from QRemeshify 1.1.0).
