@@ -13,6 +13,13 @@ Usage:
 Keep blender.exe together with the 5.3, blender.crt, blender.shared, license, and quadwild folders.
 This is an unofficial custom build and is not digitally signed by the Blender Foundation.
 
+2026-07-31 (refresh 4 — QRemeshify-aligned QuadWild):
+- Geometry Nodes QuadWild defaults match QRemeshify (ksami/QRemeshify).
+- Algorithm: QuadWild + Bi-MDF (cgg-bern/quadwild-bimdf / Pietroni SIGGRAPH 2021).
+- Prep stage: fixed alpha=0.01 scaleFact=1 (like QRemeshify remeshAndField unused params).
+- QR stage: dynamic config with Alpha/Scale sockets, alignSingularities=1, satsuma/default.json, flow SIMPLE.
+- Output tag 0 (input_rem_p0_0_quadrangulation[_smooth].obj); still accepts tag 1 / legacy names.
+
 2026-07-31 (refresh 3 — QuadWild works):
 - Fix QuadWild no-effect / quad_from_patches: look for output input_rem_p0_1_quadrangulation_smooth.obj (tag in filename).
 - Accept non-zero process exit if output OBJ exists (tool may crash after write).

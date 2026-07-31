@@ -563,13 +563,17 @@ class NODE_MT_gn_mesh_operations_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "GeometryNodeLoopSubdivision")
         self.node_operator(layout, "GeometryNodeMeshLaplacian")
         self.node_operator(layout, "GeometryNodeHeatGeodesic")
-        self.node_operator(layout, "GeometryNodeInstantMeshes")
+        self.node_operator(layout, "GeometryNodeInstantMeshes", search_weight=1.0)
+        # Houdini-style isotropic triangle remesh (pmp-library). Search: Triangle Remesh / Remesh.
+        self.node_operator(layout, "GeometryNodeTriangleRemesh",
+                           label="Triangle Remesh", search_weight=1.5)
         self.node_operator(layout, "GeometryNodeQuadWild")
         self.node_operator(layout, "GeometryNodeMeshGraphColoring")
         self.node_operator(layout, "GeometryNodeTangentField")
         self.node_operator(layout, "GeometryNodeMeshBevel")
         self.node_operator(layout, "GeometryNodeMeshBoolean")
         self.node_operator(layout, "GeometryNodeVoronoiFracture")
+        self.node_operator(layout, "GeometryNodeDelaunay3D")
         self.node_operator(layout, "GeometryNodeMeshToCurve")
         self.node_operator(layout, "GeometryNodeMeshToDensityGrid")
         self.node_operator(layout, "GeometryNodeMeshToPoints")
