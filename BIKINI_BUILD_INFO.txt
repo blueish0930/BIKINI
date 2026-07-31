@@ -1,47 +1,13 @@
-BIKINI custom Blender portable build
+﻿BIKINI custom Blender portable build
 
 Blender: 5.3.0 Alpha custom Windows x64 build
-Package date: 2026-07-31 (pm fluid stability + Voronoi Fracture)
+Package date: 2026-07-31 (refresh 6 fluid+voronoi+quadwild)
 Repository: https://github.com/blueish0930/BIKINI
 
-Usage:
-1. Download the repository ZIP from Code -> Download ZIP (branch: develop).
-2. Extract the entire ZIP.
-3. Open the extracted BIKINI folder.
-4. Run blender.exe.
+Usage: Download ZIP (branch develop), extract, run blender.exe.
+Keep blender.exe with 5.3, blender.crt, blender.shared, license, quadwild.
 
-Keep blender.exe together with the 5.3, blender.crt, blender.shared, license, and quadwild folders.
-This is an unofficial custom build and is not digitally signed by the Blender Foundation.
-
-2026-07-31 (refresh 5 — Image Process fluid + Voronoi Fracture):
-- Image Process Fluid Simulation: fix pure-black fallback, seed alpha, boundary BC.
-- Stabilize fluid numerics (velocity scale / auto-swirl caps); no full-field splat_force gain.
-- Paused param tweaks: hold last GPU frame (no multi-frame re-sim thrash); apply on play / frame advance / start reseed.
-- Geometry Nodes: Voronoi Fracture (GeometryNodeVoronoiFracture) compiled into this binary.
-- QuadWild / Instant Meshes / related geometry WIP retained from prior refreshes.
-
-2026-07-31 (refresh 4 — QRemeshify-aligned QuadWild):
-- Geometry Nodes QuadWild defaults match QRemeshify (ksami/QRemeshify).
-- Algorithm: QuadWild + Bi-MDF (cgg-bern/quadwild-bimdf / Pietroni SIGGRAPH 2021).
-- Prep stage: fixed alpha=0.01 scaleFact=1 (like QRemeshify remeshAndField unused params).
-- QR stage: dynamic config with Alpha/Scale sockets, alignSingularities=1, satsuma/default.json, flow SIMPLE.
-- Output tag 0 (input_rem_p0_0_quadrangulation[_smooth].obj); still accepts tag 1 / legacy names.
-
-2026-07-31 (refresh 3 — QuadWild works):
-- Fix QuadWild no-effect / quad_from_patches: look for output input_rem_p0_1_quadrangulation_smooth.obj (tag in filename).
-- Accept non-zero process exit if output OBJ exists (tool may crash after write).
-- Redirect child stdout/stderr to temp logs; do not delete workdir on spurious exit codes.
-- Verified: cube remesh → pure quads (e.g. ~4k faces).
-
-2026-07-31 (refresh 2):
-- Fix QuadWild crash: BLI_path_join no longer accepts trailing nullptr.
-- Image Process Bake Image: compositor bake write enable API fix.
-
-2026-07-31:
-- Geometry Nodes Instant Meshes + QuadWild; package ./quadwild/ BiMDF tools.
-
-2026-07-31 (refresh 5 — full QRemeshify DLL pipeline):
-- Geometry Nodes QuadWild now calls QRemeshify lib_quadwild.dll / lib_quadpatches.dll
-  (remeshAndField2 → trace2 → quadPatches), same as the Gumroad/GitHub addon.
-- Mesh export matches plugin (face normals + f v//n); sharp features match export_sharp_features.
-- Package: quadwild/lib_quadwild.dll, lib_quadpatches.dll, config/ (from QRemeshify 1.1.0).
+2026-07-31 (refresh 6):
+- Image Process fluid: F32 cache format fix, opaque dye alpha, velocity clamps.
+- GeometryNodeVoronoiFracture + GeometryNodeQuadWild + InstantMeshes.
+- QuadWild compile fix.
