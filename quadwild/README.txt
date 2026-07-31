@@ -1,29 +1,30 @@
-QRemeshify package for Blender Geometry Nodes (QuadWild)
-========================================================
+QRemeshify package for Geometry Nodes (QuadWild node)
+=====================================================
 
-This folder is the full QRemeshify runtime used by Geometry Nodes → QuadWild.
+This folder is a **full copy of the QRemeshify addon** used by the Geometry
+Nodes "QuadWild" node. Remesh is NOT reimplemented in C++.
 
-Upstream addon: https://github.com/ksami/QRemeshify
-Libraries:      QuadWild-BiMDF (https://github.com/cgg-bern/quadwild-bimdf)
-Paper:          Reliable Feature-Line Driven Quad-Remeshing (SIGGRAPH 2021)
-
-Required layout (next to blender.exe):
-
-  blender.exe
+Layout:
   quadwild/
-    lib_quadwild.dll
-    lib_quadpatches.dll
-    config/
-      main_config/
-      prep_config/
-      satsuma/
+    qremeshify_bridge.py     # thin CLI glue (calls addon code)
+    QRemeshify/              # exact addon (lib/, util/, operator logic via imports)
+      lib/lib_quadwild.dll
+      lib/lib_quadpatches.dll
+      lib/data.py
+      util/exporter.py
+      ...
+    config/                  # optional leftover CLI configs
+    README.txt
 
-Pipeline (identical to QRemeshify Python bindings):
-  1) remeshAndField2  → mesh_rem.obj + field
-  2) trace2           → mesh_rem_p0.obj
-  3) quadPatches      → mesh_rem_p0_0_quadrangulation[_smooth].obj
+Pipeline (same as https://github.com/ksami/QRemeshify ):
+  Geometry Node → dump mesh OBJ →
+  blender -b --python qremeshify_bridge.py -- ...
+    → QRemeshify.util.exporter (sharp + mesh)
+    → QRemeshify.lib.Quadwild.remeshAndField / trace / quadrangulate
+  → load result OBJ
 
-Optional: set environment variable QUADWILD_DIR to this package path.
+Environment:
+  QUADWILD_DIR  — alternate package path
+  QUADWILD_BRIDGE_CHILD=1 — set internally to block nested remesh
 
-CLI tools (quadwild.exe / quad_from_patches.exe) are optional leftovers and
-are NOT used by the Geometry Node when the DLLs above are present.
+Source: Gumroad / github.com/ksami/QRemeshify (GPL-3)

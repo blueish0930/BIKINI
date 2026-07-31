@@ -11,3 +11,9 @@ Keep blender.exe with 5.3, blender.crt, blender.shared, license, quadwild.
 - Image Process fluid: F32 cache format fix, opaque dye alpha, velocity clamps.
 - GeometryNodeVoronoiFracture + GeometryNodeQuadWild + InstantMeshes.
 - QuadWild compile fix.
+
+2026-07-31 (refresh 7 — QuadWild three modes):
+- Geometry Nodes QuadWild: Mode menu Remesh / Field / Layout (no N-panel).
+- Full QRemeshify plugin pipeline via headless bridge: quadwild/qremeshify_bridge.py + QRemeshify/.
+- Field stage: 4-RoSy (*.rosy) face attributes; Layout stage: patch .feature seams.
+- blender.exe rebuilt 2026-07-31 20:54 with stages wired in C++/nodes.
