@@ -17,3 +17,8 @@ Keep blender.exe with 5.3, blender.crt, blender.shared, license, quadwild.
 - Full QRemeshify plugin pipeline via headless bridge: quadwild/qremeshify_bridge.py + QRemeshify/.
 - Field stage: 4-RoSy (*.rosy) face attributes; Layout stage: patch .feature seams.
 - blender.exe rebuilt 2026-07-31 20:54 with stages wired in C++/nodes.
+
+2026-07-31 (fix fix):
+- Embedded factory startup.blend was Git LFS pointer (134 bytes) causing crash without user config.
+- Replaced with real startup.blend (~96KB) and rebuilt blender.exe.
+
