@@ -1,7 +1,7 @@
-﻿BIKINI custom Blender portable build
+BIKINI custom Blender portable build
 
 Blender: 5.3.0 Alpha custom Windows x64 build
-Package date: 2026-07-31
+Package date: 2026-07-31 (pm Voronoi Voro++)
 Repository: https://github.com/blueish0930/BIKINI
 
 Usage:
@@ -22,6 +22,13 @@ This is an unofficial custom build and is not digitally signed by the Blender Fo
 2026-07-31 (refresh 2):
 - Fix QuadWild crash: BLI_path_join no longer accepts trailing nullptr.
 - Image Process Bake Image: compositor bake write enable API fix.
+
+2026-07-31 12:54:38:
+- Geometry Nodes: Voronoi Fracture rebuilt with Voro++ (exact 3D Voronoi cells; solid = cell intersect mesh boolean).
+- Vendored: extern/voro++ (chr1shr/voro, BSD-3). Hand-rolled KD midplane path removed.
+- Menu: Mesh -> Operations -> Voronoi Fracture (GeometryNodeVoronoiFracture).
+- Portable blender.exe refresh from Full Release build (2026-07-31 12:54:38).
+
 
 2026-07-31:
 - Geometry Nodes Instant Meshes + QuadWild; package ./quadwild/ BiMDF tools.
