@@ -1,22 +1,28 @@
 ﻿BIKINI custom Blender portable build
 
 Blender: 5.3.0 Alpha custom Windows x64 build
-Package date: 2026-07-30 (blender.exe reupload 6)
+Package date: 2026-07-31
 Repository: https://github.com/blueish0930/BIKINI
 
 Usage:
-1. Download the repository ZIP from Code -> Download ZIP.
+1. Download the repository ZIP from Code -> Download ZIP (branch: main).
 2. Extract the entire ZIP.
 3. Open the extracted BIKINI folder.
 4. Run blender.exe.
 
-Keep blender.exe together with the 5.3, blender.crt, blender.shared, and license folders.
+Keep blender.exe together with the 5.3, blender.crt, blender.shared, license, and quadwild folders.
 This is an unofficial custom build and is not digitally signed by the Blender Foundation.
+
+2026-07-31:
+- Geometry Nodes: Instant Meshes + QuadWild (feature-line driven pure-quad remesh).
+- QuadWild package: ./quadwild/ (quadwild.exe + quad_from_patches.exe + config/, BiMDF, no Gurobi).
+- Menu: Mesh -> Operations -> Instant Meshes / QuadWild.
+- blender.exe rebuild with RNA registration for GeometryNodeQuadWild.
 
 2026-07-30:
 - Updated blender.exe (portable binary refresh).
 - Image Process texture menu: SDF Shape / Fractal Primitive use ImageNode path only (not Shader variants).
-- docs/changelog.html: bilingual EN/涓枃 release notes (auto language + manual switch).
+- docs/changelog.html: bilingual EN/中文 release notes (auto language + manual switch).
 
 2026-07-29 (Image Process Bake / Point Stamp / Bundle):
 - Bake Image: multi-format (PNG/JPEG/EXR/TIFF/BMP/Targa/WebP/HDR), color space, Path/Name string sockets, top Bake button, Bundle item names.
