@@ -562,6 +562,8 @@ class NODE_MT_gn_mesh_operations_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "GeometryNodeFlipFaces")
         self.node_operator(layout, "GeometryNodeLoopSubdivision")
         self.node_operator(layout, "GeometryNodeMeshLaplacian")
+        self.node_operator(layout, "GeometryNodeMeshGradient")
+        self.node_operator(layout, "GeometryNodeMeshDivergence")
         self.node_operator(layout, "GeometryNodeHeatGeodesic")
         self.node_operator(layout, "GeometryNodeInstantMeshes", search_weight=1.0)
         # Houdini-style isotropic triangle remesh (pmp-library). Search: Triangle Remesh / Remesh.
@@ -801,6 +803,7 @@ class NODE_MT_gn_utilities_field_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "GeometryNodeClusterByDistance")
         self.node_operator(layout, "GeometryNodeFieldAtIndex")
         self.node_operator(layout, "GeometryNodeFieldOnDomain")
+        self.node_operator(layout, "GeometryNodeWriteAtIndex")
         self.node_operator(layout, "GeometryNodeFieldAverage")
         self.node_operator(layout, "GeometryNodeFieldMinAndMax")
         self.node_operator(layout, "GeometryNodeFieldVariance")

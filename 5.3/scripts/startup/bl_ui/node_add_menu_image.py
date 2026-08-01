@@ -117,6 +117,8 @@ class NODE_MT_image_node_filter_base(node_add_menu.NodeMenu):
         layout.separator()
         self.node_operator(layout, "ImageNodeHeightToNormal")
         self.node_operator(layout, "ImageNodeNormalToHeight")
+        self.node_operator(layout, "ImageNodeGradient")
+        self.node_operator(layout, "ImageNodeDivergence")
         self.node_operator(layout, "ImageNodePointStamp")
         self.draw_assets_for_catalog(layout, self.bl_label)
 
