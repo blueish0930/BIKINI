@@ -77,6 +77,8 @@ class NODE_MT_image_node_color_adjust_base(node_add_menu.NodeMenu):
 
     def draw(self, _context):
         layout = self.layout
+        self.node_operator(layout, "ImageNodeHistogram")
+        layout.separator()
         self.node_operator(layout, "CompositorNodeBrightContrast")
         self.node_operator(layout, "CompositorNodeColorBalance")
         self.node_operator(layout, "CompositorNodeColorCorrection")
@@ -182,7 +184,6 @@ class NODE_MT_image_node_transform_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "CompositorNodeFlip")
         self.node_operator(layout, "ImageNodeFlip")
         self.node_operator(layout, "CompositorNodeMapUV")
-        self.node_operator(layout, "ImageNodeSampleAtPixel")
         layout.separator()
         self.node_operator(layout, "CompositorNodeLensdist")
         self.node_operator(layout, "CompositorNodeMovieDistortion")
@@ -216,7 +217,6 @@ class NODE_MT_image_node_utilities_base(node_add_menu.NodeMenu):
         if hasattr(props, "use_transform"):
             props.use_transform = self.use_transform
         layout.separator()
-        self.node_operator(layout, "ImageNodeWriteAtPixel")
         self.node_operator(layout, "NodeImplicitConversion")
         self.node_operator(layout, "CompositorNodeLevels")
         self.node_operator(layout, "CompositorNodeNormalize")
