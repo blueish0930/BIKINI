@@ -17,6 +17,7 @@ class NODE_MT_image_node_input_base(node_add_menu.NodeMenu):
     def draw(self, _context):
         layout = self.layout
         self.node_operator(layout, "CompositorNodeImage")
+        self.node_operator(layout, "ImageNodePaint")
         self.node_operator(layout, "ImageNodeRasterizeGeometry")
         self.node_operator(layout, "ImageNodeImportPoints")
         self.node_operator(layout, "CompositorNodeBokehImage")
@@ -181,6 +182,7 @@ class NODE_MT_image_node_transform_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "CompositorNodeFlip")
         self.node_operator(layout, "ImageNodeFlip")
         self.node_operator(layout, "CompositorNodeMapUV")
+        self.node_operator(layout, "ImageNodeSampleAtPixel")
         layout.separator()
         self.node_operator(layout, "CompositorNodeLensdist")
         self.node_operator(layout, "CompositorNodeMovieDistortion")
@@ -214,6 +216,7 @@ class NODE_MT_image_node_utilities_base(node_add_menu.NodeMenu):
         if hasattr(props, "use_transform"):
             props.use_transform = self.use_transform
         layout.separator()
+        self.node_operator(layout, "ImageNodeWriteAtPixel")
         self.node_operator(layout, "NodeImplicitConversion")
         self.node_operator(layout, "CompositorNodeLevels")
         self.node_operator(layout, "CompositorNodeNormalize")
