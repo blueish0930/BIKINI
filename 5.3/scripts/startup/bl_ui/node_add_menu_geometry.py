@@ -780,6 +780,8 @@ class NODE_MT_gn_utilities_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "GeometryNodeMenuSwitch")
         self.node_operator(layout, "GeometryNodeSwitch")
         layout.separator()
+        self.node_operator(layout, "NodeExpression")
+        layout.separator()
         self.draw_assets_for_catalog(layout, self.bl_label)
         layout.separator()
         self.draw_menu(layout, path="Utilities/Deprecated")

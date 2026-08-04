@@ -307,6 +307,8 @@ class NODE_MT_compositor_node_utilities_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "GeometryNodeMenuSwitch")
         self.node_operator(layout, "GeometryNodeSwitch")
         layout.separator()
+        self.node_operator(layout, "NodeExpression")
+        layout.separator()
         self.node_operator(layout, "CompositorNodeSplit")
         self.node_operator(
             layout, "CompositorNodeSwitchView",

@@ -386,8 +386,7 @@ class NODE_MT_shader_node_texture_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "ShaderNodeTexGabor")
         self.node_operator(layout, "ShaderNodeTexGradient")
         self.node_operator(layout, "ShaderNodeTexIES")
-        self.node_operator(layout, "ShaderNodeTexImage", label="Image Texture (legacy)")
-        self.node_operator(layout, "GeometryNodeImageTexture")
+        self.node_operator(layout, "ShaderNodeTexImage")
         self.node_operator(layout, "ShaderNodeTexMagic")
         self.node_operator(layout, "ShaderNodeTexNoise")
         self.node_operator(layout, "ShaderNodeTexSky")
@@ -495,6 +494,7 @@ class NODE_MT_shader_node_utilities_base(node_add_menu.NodeMenu):
         layout.separator()
         self.node_operator(layout, "GeometryNodeMenuSwitch")
         layout.separator()
+        self.node_operator(layout, "NodeExpression")
         self.node_operator(layout, "ShaderNodeHLSL")
         if cycles_shader_nodes_poll(context):
             layout.separator()
