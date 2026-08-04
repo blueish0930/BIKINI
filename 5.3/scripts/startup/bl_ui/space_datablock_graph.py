@@ -74,7 +74,6 @@ class DATABLOCK_GRAPH_MT_select(bpy.types.Menu):
         layout.operator("datablock_graph.select_box", text="Box Select")
         layout.operator("datablock_graph.select_circle", text="Circle Select")
         layout.operator("datablock_graph.select_lasso", text="Lasso Select")
-        layout.label(text="Double-click: select connected tree")
         layout.separator()
         layout.operator("datablock_graph.delete", text="Delete", icon='X')
         layout.separator()
@@ -134,6 +133,13 @@ def _ensure_keymap():
 
         if not has("datablock_graph.delete", 'X', 'PRESS', False, True):
             km.keymap_items.new("datablock_graph.delete", 'X', 'PRESS', ctrl=True)
+
+        if not has("datablock_graph.undo", 'Z', 'PRESS', False, True):
+            km.keymap_items.new("datablock_graph.undo", 'Z', 'PRESS', ctrl=True)
+        if not has("datablock_graph.redo", 'Z', 'PRESS', True, True):
+            km.keymap_items.new("datablock_graph.redo", 'Z', 'PRESS', ctrl=True, shift=True)
+        if not has("datablock_graph.redo", 'Y', 'PRESS', False, True):
+            km.keymap_items.new("datablock_graph.redo", 'Y', 'PRESS', ctrl=True)
 
         if not has("datablock_graph.select", 'LEFTMOUSE', 'CLICK', False):
             km.keymap_items.new("datablock_graph.select", 'LEFTMOUSE', 'CLICK')
