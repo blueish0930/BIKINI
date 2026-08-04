@@ -1432,6 +1432,8 @@ def km_outliner(params):
         ("outliner.collection_exclude_set", {"type": 'E', "value": 'PRESS'}, None),
         ("outliner.collection_exclude_clear", {"type": 'E', "value": 'PRESS', "alt": True}, None),
         ("outliner.hide", {"type": 'H', "value": 'PRESS'}, None),
+        ("outliner.hide", {"type": 'H', "value": 'PRESS', "shift": True},
+         {"properties": [("unselected", True)]}),
         ("outliner.unhide_all", {"type": 'H', "value": 'PRESS', "alt": True}, None),
         ("outliner.start_filter", {"type": 'F', "value": 'PRESS', "ctrl": True}, None),
         ("outliner.clear_filter", {"type": 'F', "value": 'PRESS', "alt": True}, None),
@@ -2322,6 +2324,10 @@ def km_node_editor(params):
         op_tool_optional(
             ("node.select_circle", {"type": 'C', "value": 'PRESS'}, None),
             (op_tool, "builtin.select_circle"), params),
+        # Ctrl+CLICK on type-switchable socket shape: data type popup.
+        # Ctrl+CLICK_DRAG remains link-detach (must stay CLICK_DRAG, not CLICK).
+        ("node.socket_type_menu",
+         {"type": 'LEFTMOUSE', "value": 'CLICK', "ctrl": True}, None),
         ("node.link", {"type": 'LEFTMOUSE', "value": 'CLICK_DRAG'},
          {"properties": [("detach", False)]}),
         ("node.link", {"type": 'LEFTMOUSE', "value": 'CLICK_DRAG', "ctrl": True},
