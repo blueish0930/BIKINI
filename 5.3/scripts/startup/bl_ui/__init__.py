@@ -73,6 +73,7 @@ _modules = [
 
     "space_clip",
     "space_console",
+    "space_datablock_graph",  # Data-Block Relations editor
     "space_dopesheet",
     "space_filebrowser",
     "space_graph",
@@ -126,6 +127,12 @@ def register():
 
     space_filebrowser.register_props()
     properties_paint_common.register()
+    # Data-Block Relations: ensure LMB-drag keymap after operators exist.
+    try:
+        from . import space_datablock_graph as _sdbg
+        _sdbg._ensure_keymap()
+    except Exception:
+        pass
 
     from bpy.props import (
         EnumProperty,

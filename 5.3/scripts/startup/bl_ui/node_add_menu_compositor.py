@@ -20,6 +20,7 @@ class NODE_MT_compositor_node_input_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "CompositorNodeBokehImage")
         self.node_operator(layout, "NodeGroupInput")
         self.node_operator(layout, "CompositorNodeImage")
+        self.node_operator(layout, "CompositorNodeImageProcess")
         self.node_operator(layout, "CompositorNodeImageInfo")
         self.node_operator(layout, "CompositorNodeImageCoordinates")
         self.node_operator(layout, "CompositorNodeMask")
@@ -300,6 +301,7 @@ class NODE_MT_compositor_node_utilities_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "NodeImplicitConversion")
         self.node_operator(layout, "CompositorNodeLevels")
         self.node_operator(layout, "CompositorNodeNormalize")
+        self.node_operator(layout, "FunctionNodeRandomValue")
         layout.separator()
         self.node_operator(layout, "GeometryNodeIndexSwitch")
         self.node_operator(layout, "GeometryNodeMenuSwitch")
@@ -356,8 +358,15 @@ class NODE_MT_compositor_node_math_base(node_add_menu.NodeMenu):
         self.node_operator_with_searchable_enum(context, layout, "FunctionNodeBooleanMath", "operation")
         self.node_operator(layout, "ShaderNodeClamp")
         self.node_operator(layout, "FunctionNodeCompare")
+        self.node_operator_with_searchable_enum(
+            context,
+            layout,
+            "FunctionNodeIntegerMath",
+            "operation",
+            defaults_callback=node_add_menu.set_int_math_node_default_props)
         self.node_operator_with_searchable_enum(context, layout, "FunctionNodeFloatToInt", "rounding_mode")
         self.node_operator(layout, "ShaderNodeFloatCurve")
+        self.node_operator(layout, "FunctionNodeHashValue")
         self.node_operator(layout, "ShaderNodeMapRange")
         self.node_operator_with_searchable_enum(
             context,

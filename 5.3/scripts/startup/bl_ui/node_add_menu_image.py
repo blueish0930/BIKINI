@@ -24,6 +24,8 @@ class NODE_MT_image_node_input_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "CompositorNodeRGB")
         self.node_operator(layout, "CompositorNodeImageInfo")
         self.node_operator(layout, "CompositorNodeImageCoordinates")
+        self.node_operator_with_outputs(
+            _context, layout, "ImageNodeSceneFrame", ["Frame", "Seconds"])
         self.node_operator(layout, "NodeGroupInput")
         self.draw_assets_for_catalog(layout, self.bl_label)
 
