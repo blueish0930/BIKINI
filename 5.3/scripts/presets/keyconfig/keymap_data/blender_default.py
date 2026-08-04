@@ -2283,6 +2283,14 @@ def km_node_editor(params):
         {"items": items},
     )
 
+    # BEFORE node.select: Ctrl+CLICK on type-switchable socket shape → data type popup.
+    # Poll only succeeds over group/item sockets; otherwise node.select (Ctrl+CLICK) runs.
+    # Ctrl+CLICK_DRAG remains link-detach (must stay CLICK_DRAG, not CLICK).
+    items.append(
+        ("node.socket_type_menu",
+         {"type": 'LEFTMOUSE', "value": 'CLICK', "ctrl": True}, None),
+    )
+
     if not params.legacy:
         items.extend(_template_node_select(
             type=params.select_mouse,
@@ -2324,10 +2332,6 @@ def km_node_editor(params):
         op_tool_optional(
             ("node.select_circle", {"type": 'C', "value": 'PRESS'}, None),
             (op_tool, "builtin.select_circle"), params),
-        # Ctrl+CLICK on type-switchable socket shape: data type popup.
-        # Ctrl+CLICK_DRAG remains link-detach (must stay CLICK_DRAG, not CLICK).
-        ("node.socket_type_menu",
-         {"type": 'LEFTMOUSE', "value": 'CLICK', "ctrl": True}, None),
         ("node.link", {"type": 'LEFTMOUSE', "value": 'CLICK_DRAG'},
          {"properties": [("detach", False)]}),
         ("node.link", {"type": 'LEFTMOUSE', "value": 'CLICK_DRAG', "ctrl": True},
