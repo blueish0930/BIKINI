@@ -319,6 +319,7 @@ class NODE_MT_gn_geometry_sample_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "GeometryNodeProximity")
         self.node_operator(layout, "GeometryNodeIndexOfNearest")
         self.node_operator(layout, "GeometryNodeKNearest")
+        self.node_operator(layout, "GeometryNodeRBFInterpolate")
         self.node_operator(layout, "GeometryNodeRaycast")
         self.node_operator(layout, "GeometryNodeSampleIndex")
         self.node_operator(layout, "GeometryNodeSampleNearest")
