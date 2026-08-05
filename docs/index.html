@@ -1,229 +1,700 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-lang="zh">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="BIKINI — custom Blender 5.3 build focused on Geometry Nodes, sparse solvers, Image Process (COP), and node UX.">
-  <title>BIKINI · Custom Blender Build</title>
+  <meta name="description" content="BIKINI Documentation — User Manual and Developer Docs">
+  <title>BIKINI Documentation</title>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
   <style>
+    /*
+      Hub page aligned with https://docs.blender.org/
+      Colors sampled from Blender Web Assets style.css:
+        --color-accent: hsl(204, 100%, 50%)
+        --color-accent-bg: hsla(204, 100%, 50%, .1)
+        --btn-color-bg: hsl(210, 16%, 93%)
+        --body-color-bg (footer): hsl(213, 10%, 18%)
+    */
     :root {
-      --bg: #0d1117;
-      --panel: #161b22;
-      --border: #30363d;
-      --text: #e6edf3;
-      --muted: #8b949e;
-      --accent: #58a6ff;
-      --accent2: #3fb950;
-      --warn: #d29922;
-      --font: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
-      --mono: "Cascadia Code", Consolas, monospace;
+      --color-accent-h: 204;
+      --color-accent-s: 100%;
+      --color-accent-l: 50%;
+      --color-accent: hsl(var(--color-accent-h), var(--color-accent-s), var(--color-accent-l));
+      --color-accent-bg: hsla(var(--color-accent-h), var(--color-accent-s), var(--color-accent-l), 0.1);
+      --color-accent-bg-hover: hsla(var(--color-accent-h), var(--color-accent-s), var(--color-accent-l), 0.2);
+
+      /* Layered palette — not all-white */
+      --color-bg: hsl(214, 22%, 94%);
+      --color-text: hsl(222, 22%, 18%);
+      --color-text-secondary: hsl(215, 12%, 40%);
+      --color-text-muted: hsl(215, 10%, 48%);
+
+      --nav-bg: linear-gradient(180deg, #f7f9fc 0%, #eef3f9 100%);
+      --nav-border: hsla(214, 40%, 55%, 0.22);
+      --nav-accent: hsl(204, 100%, 46%);
+      --footer-bg: hsl(213, 10%, 18%);
+      --footer-title: hsl(213, 10%, 70%);
+      --footer-text: hsl(213, 10%, 50%);
+      --footer-link: hsl(213, 10%, 62%);
+
+      --surface: #ffffff;
+      --border-radius: 1rem;
+      --box-shadow-card: 0 0.5rem 1.4rem rgba(30, 58, 95, 0.1), 0 1px 2px rgba(15, 23, 42, 0.04);
+      --max: 1120px;
+      --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+        "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
     }
+
     * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
     body {
-      margin: 0;
-      min-height: 100vh;
       font-family: var(--font);
-      color: var(--text);
-      background:
-        radial-gradient(1200px 600px at 10% -10%, rgba(88, 166, 255, 0.18), transparent 55%),
-        radial-gradient(900px 500px at 100% 0%, rgba(63, 185, 80, 0.12), transparent 50%),
-        var(--bg);
-      line-height: 1.6;
-    }
-    a { color: var(--accent); text-decoration: none; }
-    a:hover { text-decoration: underline; }
-    .wrap {
-      max-width: 52rem;
-      margin: 0 auto;
-      padding: 3rem 1.25rem 4rem;
-    }
-    .badge {
-      display: inline-block;
-      font-size: 0.72rem;
-      font-weight: 700;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: var(--accent);
-      border: 1px solid rgba(88, 166, 255, 0.35);
-      background: rgba(88, 166, 255, 0.1);
-      padding: 0.2rem 0.55rem;
-      border-radius: 999px;
-      margin-bottom: 1rem;
-    }
-    h1 {
-      margin: 0 0 0.5rem;
-      font-size: clamp(2rem, 5vw, 2.75rem);
-      font-weight: 750;
-      letter-spacing: -0.03em;
-      line-height: 1.15;
-    }
-    .tagline {
-      color: var(--muted);
-      font-size: 1.1rem;
-      margin: 0 0 1.75rem;
-      max-width: 40rem;
-    }
-    .actions {
+      font-weight: 400;
+      line-height: 1.5;
+      color: var(--color-text);
+      background: var(--color-bg);
+      min-height: 100vh;
       display: flex;
-      flex-wrap: wrap;
-      gap: 0.75rem;
-      margin-bottom: 2.5rem;
+      flex-direction: column;
+      -webkit-font-smoothing: antialiased;
     }
+
+    html[data-lang="en"] .zh { display: none !important; }
+    html[data-lang="zh"] .en { display: none !important; }
+
+    a { color: var(--color-accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* —— Navbar: cool slate + blue accent (layered, not pure white) —— */
+    .navbar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      background: var(--nav-bg);
+      border-bottom: 1px solid var(--nav-border);
+      box-shadow:
+        0 1px 0 rgba(255, 255, 255, 0.65) inset,
+        0 4px 16px rgba(30, 58, 95, 0.06);
+    }
+    .navbar::after {
+      content: "";
+      display: block;
+      height: 2px;
+      background: linear-gradient(90deg,
+        transparent 0%,
+        hsla(204, 100%, 50%, 0.55) 18%,
+        hsla(204, 100%, 46%, 0.9) 50%,
+        hsla(204, 100%, 50%, 0.55) 82%,
+        transparent 100%);
+    }
+    .navbar-inner {
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 0 1.25rem;
+      height: 3.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+    }
+    .brand {
+      color: #0f2744;
+      font-weight: 700;
+      font-size: 1.05rem;
+      letter-spacing: -0.01em;
+      text-decoration: none !important;
+    }
+    .brand::before {
+      content: "";
+      display: inline-block;
+      width: 0.45rem;
+      height: 0.45rem;
+      margin-right: 0.45rem;
+      border-radius: 50%;
+      background: var(--nav-accent);
+      box-shadow: 0 0 0 3px hsla(204, 100%, 50%, 0.18);
+      vertical-align: 0.08em;
+    }
+    .brand span {
+      font-weight: 500;
+      color: #5b6b7c;
+      margin-left: 0.4rem;
+      font-size: 0.85rem;
+    }
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 0.15rem;
+      flex-wrap: wrap;
+    }
+    .nav-links a {
+      color: #3d4f63;
+      text-decoration: none !important;
+      font-size: 0.875rem;
+      font-weight: 500;
+      padding: 0.4rem 0.7rem;
+      border-radius: 0.45rem;
+      transition: color 0.15s ease, background 0.15s ease;
+    }
+    .nav-links a:hover {
+      color: var(--nav-accent);
+      background: hsla(204, 100%, 50%, 0.1);
+    }
+    .nav-links .project {
+      color: #2a3f55;
+    }
+
+    /* Language switch on cool header */
+    .lang-switch {
+      margin-left: auto;
+      position: relative;
+      display: inline-grid;
+      grid-template-columns: 1fr 1fr;
+      align-items: center;
+      padding: 3px;
+      gap: 0;
+      flex-shrink: 0;
+      min-width: 7.2rem;
+      background: hsla(214, 30%, 100%, 0.72);
+      border: 1px solid hsla(214, 35%, 50%, 0.16);
+      border-radius: 999px;
+      box-shadow: inset 0 1px 2px rgba(15, 40, 70, 0.05);
+    }
+    .lang-switch::before {
+      content: "";
+      position: absolute;
+      top: 3px;
+      bottom: 3px;
+      left: 3px;
+      width: calc(50% - 3px);
+      border-radius: 999px;
+      background: #fff;
+      box-shadow:
+        0 1px 2px rgba(15, 40, 70, 0.08),
+        0 2px 8px rgba(15, 40, 70, 0.06);
+      transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+      z-index: 0;
+      pointer-events: none;
+    }
+    html[data-lang="en"] .lang-switch::before {
+      transform: translateX(100%);
+    }
+    .lang-switch button {
+      appearance: none;
+      position: relative;
+      z-index: 1;
+      border: 0;
+      background: transparent;
+      color: #5b6b7c;
+      font: inherit;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      padding: 0.38rem 0.7rem;
+      cursor: pointer;
+      border-radius: 999px;
+      line-height: 1.2;
+      transition: color 0.18s ease;
+    }
+    .lang-switch button:hover {
+      color: #2a3f55;
+    }
+    .lang-switch button[aria-pressed="true"] {
+      color: #0f2744;
+    }
+    .lang-switch button:focus-visible {
+      outline: 2px solid hsla(204, 100%, 50%, 0.45);
+      outline-offset: 2px;
+    }
+
+    /* —— Hero (CG background like docs.blender.org) —— */
+    .hero {
+      position: relative;
+      min-height: 280px;
+      display: flex;
+      align-items: flex-end;
+      overflow: hidden;
+      color: #fff;
+    }
+    .hero-bg {
+      position: absolute;
+      inset: 0;
+      background-image: url("https://www.blender.org/wp-content/uploads/2021/11/sprite_fright_credits_book.jpg");
+      background-position: center 40%;
+      background-size: cover;
+      background-repeat: no-repeat;
+    }
+    .hero-overlay {
+      position: absolute;
+      inset: 0;
+      background-image: linear-gradient(transparent, hsla(250, 100%, 0%, 0.55));
+      background-color: rgba(0, 0, 0, 0.18);
+    }
+    .hero-inner {
+      position: relative;
+      z-index: 1;
+      max-width: var(--max);
+      width: 100%;
+      margin: 0 auto;
+      padding: 3.5rem 1.25rem 2.6rem;
+    }
+    .hero h1 {
+      margin: 0;
+      font-size: clamp(2.1rem, 4.2vw, 2.85rem);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      text-shadow: 0 1px 12px rgba(0,0,0,0.35);
+    }
+    .hero p {
+      margin: 0.55rem 0 0;
+      color: rgba(255, 255, 255, 0.82);
+      font-size: 1rem;
+      max-width: 36rem;
+      line-height: 1.5;
+      text-shadow: 0 1px 8px rgba(0,0,0,0.35);
+    }
+    .hero-credits {
+      position: absolute;
+      right: 1.25rem;
+      bottom: 0.55rem;
+      z-index: 1;
+      font-size: 0.72rem;
+      opacity: 0.55;
+      color: #fff;
+      text-shadow: 0 0 4px #000;
+    }
+    .hero-credits a {
+      color: inherit;
+      text-decoration: none !important;
+    }
+    .hero-credits a:hover { opacity: 1; text-decoration: underline !important; }
+
+    /* —— Main content —— */
+    .main {
+      flex: 1;
+      padding: 0 0 0.5rem;
+      background:
+        radial-gradient(900px 320px at 10% 0%, hsla(204, 100%, 50%, 0.06), transparent 55%),
+        radial-gradient(700px 280px at 90% 10%, hsla(230, 50%, 60%, 0.05), transparent 50%),
+        var(--color-bg);
+    }
+    .container {
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 0 1.25rem;
+    }
+
+    /* Cards — larger radius, official light-blue buttons */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1.35rem;
+      margin-top: -2.1rem;
+      position: relative;
+      z-index: 2;
+    }
+    .card {
+      background: var(--surface);
+      border-radius: var(--border-radius);
+      box-shadow: var(--box-shadow-card);
+      display: flex;
+      flex-direction: column;
+      min-height: 14rem;
+      overflow: hidden;
+      border: 1px solid rgba(0, 0, 0, 0.04);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .card:hover {
+      transform: translateY(-2px);
+      box-shadow: rgba(149, 157, 165, 0.28) 0 0.65rem 1.8rem;
+    }
+    .card-body {
+      padding: 1.65rem 1.65rem 1.45rem;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+    }
+    .card h2 {
+      margin: 0 0 0.7rem;
+      font-size: 1.4rem;
+      font-weight: 700;
+      letter-spacing: -0.015em;
+      line-height: 1.25;
+    }
+    .card h2 a {
+      color: var(--color-text);
+      text-decoration: none !important;
+    }
+    .card h2 a:hover { color: var(--color-accent); }
+    .card p {
+      margin: 0 0 1.35rem;
+      color: var(--color-text-secondary);
+      font-size: 0.95rem;
+      line-height: 1.55;
+      flex: 1;
+    }
+
+    /* Official-style primary btn: pale blue bg + blue bold text */
     .btn {
       display: inline-flex;
       align-items: center;
+      justify-content: center;
       gap: 0.4rem;
-      padding: 0.65rem 1.1rem;
-      border-radius: 0.45rem;
-      font-weight: 650;
-      font-size: 0.95rem;
-      border: 1px solid transparent;
+      align-self: flex-start;
+      padding: 0.45rem 1.35rem;
+      font: inherit;
+      font-size: 0.9rem;
+      font-weight: 600;
+      line-height: 1.4;
       text-decoration: none !important;
-      transition: background 0.12s, border-color 0.12s;
+      border-radius: 0.6rem;
+      border: none;
+      cursor: pointer;
+      transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
     }
     .btn-primary {
-      background: var(--accent);
-      color: #0d1117;
+      color: var(--color-accent) !important;
+      background-color: var(--color-accent-bg);
     }
-    .btn-primary:hover { background: #79b8ff; }
-    .btn-secondary {
-      background: var(--panel);
-      color: var(--text);
-      border-color: var(--border);
+    .btn-primary:hover {
+      background-color: var(--color-accent-bg-hover);
+      color: hsl(204, 100%, 42%) !important;
     }
-    .btn-secondary:hover {
-      border-color: var(--accent);
-      color: var(--accent);
+    .btn-primary:active {
+      background-color: hsla(204, 100%, 50%, 0.28);
     }
-    .grid {
+
+    /* —— Footer (like blender.org footer-navigation) —— */
+    .footer-navigation {
+      margin-top: 3.5rem;
+      background: var(--footer-bg);
+      color: var(--footer-text);
+      font-size: 0.875rem;
+      line-height: 1.45;
+      padding: 3.2rem 0 1.8rem;
+    }
+    .footer-grid {
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 0 1.25rem;
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
-      gap: 0.9rem;
-      margin-bottom: 2rem;
+      grid-template-columns: 1fr 1.35fr;
+      gap: 2rem 2.5rem;
+      align-items: start;
     }
-    .card {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 0.55rem;
-      padding: 1rem 1.1rem;
-    }
-    .card h3 {
-      margin: 0 0 0.4rem;
-      font-size: 0.98rem;
-    }
-    .card p {
-      margin: 0;
-      color: var(--muted);
-      font-size: 0.88rem;
-    }
-    .section {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 0.55rem;
-      padding: 1.15rem 1.25rem;
-      margin-bottom: 1rem;
-    }
-    .section h2 {
-      margin: 0 0 0.65rem;
-      font-size: 1.05rem;
+    .sitemap-title {
+      display: block;
+      color: var(--footer-title);
       font-weight: 700;
+      font-size: 0.95rem;
+      margin: 0 0 0.85rem;
+      text-decoration: none !important;
     }
-    .section ul {
+    /* Donate module — blue-tinted panel + heart button */
+    .donate-panel {
+      background: hsla(204, 80%, 50%, 0.12);
+      border: 1px solid hsla(204, 80%, 55%, 0.22);
+      border-radius: var(--border-radius);
+      padding: 1.25rem 1.35rem 1.35rem;
+    }
+    .donate-panel .sitemap-title {
+      color: hsl(204, 60%, 78%);
+      margin-bottom: 0.65rem;
+    }
+    .donate-panel p {
+      margin: 0 0 1rem;
+      color: hsl(213, 12%, 68%);
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+    .btn-donate {
+      color: #fff !important;
+      background: linear-gradient(180deg, hsl(204, 100%, 54%) 0%, hsl(204, 100%, 44%) 100%);
+      box-shadow:
+        0.15rem 0.15rem 0.25rem rgba(0, 82, 255, 0.12),
+        0 0.25rem 0.75rem rgba(0, 82, 255, 0.28);
+      font-weight: 700;
+      padding: 0.5rem 1.25rem;
+    }
+    .btn-donate:hover {
+      background: linear-gradient(180deg, hsl(204, 100%, 58%) 0%, hsl(204, 100%, 48%) 100%);
+      box-shadow:
+        0.15rem 0.15rem 0.3rem rgba(0, 82, 255, 0.16),
+        0 0.35rem 0.9rem rgba(0, 82, 255, 0.38);
+    }
+    .btn-donate .heart {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1em;
+      height: 1em;
+      margin-right: 0.2rem;
+      line-height: 0;
+    }
+    .btn-donate .heart svg {
+      width: 1em;
+      height: 1em;
+      fill: currentColor;
+      display: block;
+    }
+
+    /*
+      Follow Me icons — plain flex row of <a>, no <ul>/<li>
+      (list styles were breaking box alignment)
+    */
+    .social-icons {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.75rem;
+      margin: 0.5rem 0 0;
+      padding: 0;
+    }
+    .social-icons a.social-btn {
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 2.75rem;
+      height: 2.75rem;
       margin: 0;
-      padding-left: 1.2rem;
-      color: var(--muted);
-      font-size: 0.92rem;
+      padding: 0;
+      border-radius: 0.65rem;
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #d0d5dd;
+      text-decoration: none !important;
+      line-height: 0;
+      flex: 0 0 2.75rem;
+      transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
     }
-    .section li { margin: 0.3rem 0; }
-    .section strong { color: var(--text); }
-    .warn {
-      border-left: 3px solid var(--warn);
-      padding-left: 0.85rem;
-      color: var(--muted);
-      font-size: 0.88rem;
-      margin-top: 0.75rem;
+    .social-icons a.social-btn:hover {
+      transform: translateY(-1px);
+      color: #fff;
+      background: hsla(204, 100%, 50%, 0.28);
+      border-color: hsla(204, 100%, 55%, 0.45);
     }
-    footer {
-      margin-top: 2.5rem;
-      padding-top: 1rem;
-      border-top: 1px solid var(--border);
-      color: var(--muted);
-      font-size: 0.82rem;
+    .social-icons a.social-btn svg {
+      width: 20px;
+      height: 20px;
+      min-width: 20px;
+      min-height: 20px;
+      display: block;
+      fill: currentColor;
+      overflow: visible;
     }
-    code {
-      font-family: var(--mono);
-      font-size: 0.86em;
-      background: rgba(110, 118, 129, 0.2);
-      padding: 0.1em 0.35em;
-      border-radius: 0.25rem;
+
+    .footer-note {
+      background: hsl(213, 10%, 14%);
+      color: var(--footer-text);
+      font-size: 0.8rem;
+      padding: 1rem 0;
+      text-align: center;
+    }
+    .footer-note a {
+      color: var(--footer-link);
+      text-decoration: none !important;
+    }
+    .footer-note a:hover { color: #fff; }
+    .footer-note .heart-inline {
+      display: inline-block;
+      width: 0.85em;
+      height: 0.85em;
+      vertical-align: -0.05em;
+      margin: 0 0.15em;
+      fill: hsl(352, 80%, 58%);
+    }
+
+    @media (max-width: 960px) {
+      .cards { grid-template-columns: 1fr; margin-top: -1.4rem; }
+      .footer-grid { grid-template-columns: 1fr; gap: 1.75rem; }
+      .nav-links .hide-sm { display: none; }
+      .hero { min-height: 220px; }
     }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="badge">Unofficial · Blender 5.3 Alpha · Windows x64</div>
-    <h1>BIKINI</h1>
-    <p class="tagline">
-      自用 / 实验向的 Blender 自定义构建：在主线之上推进
-      <strong style="color:var(--text)">Geometry Nodes</strong>、
-      <strong style="color:var(--text)">稀疏线性代数</strong>、
-      <strong style="color:var(--text)">Image Process（COP）</strong>
-      与节点编辑器体验，并随 daily / main 同步。
-    </p>
-
-    <div class="actions">
-      <a class="btn btn-primary" href="changelog.html">Release Notes 更新日志</a>
-      <a class="btn btn-secondary" href="https://github.com/blueish0930/BIKINI">GitHub 仓库</a>
-      <a class="btn btn-secondary" href="https://github.com/blueish0930/BIKINI/archive/refs/heads/main.zip" style="background:#24292f;color:#fff;border-color:#24292f;">⬇ 下载 ZIP (main)</a>
-    </div>
-
-    <div class="grid">
-      <div class="card">
-        <h3>Geometry Nodes</h3>
-        <p>Portal、Clip、Loop 细分、K-Nearest、SDF Grid 等生产向节点扩展。</p>
+  <nav class="navbar" role="navigation">
+    <div class="navbar-inner">
+      <a class="brand" href="index.html">BIKINI <span class="en">Docs</span><span class="zh">文档</span></a>
+      <div class="nav-links">
+        <a href="manual.html"><span class="en">Manual</span><span class="zh">手册</span></a>
+        <a href="changelog.html"><span class="en">Developer</span><span class="zh">开发者</span></a>
+        <a class="project" href="https://github.com/blueish0930/BIKINI" target="_blank" rel="noopener">
+          <span class="en">Project</span><span class="zh">项目</span>
+        </a>
+        <a class="hide-sm" href="https://github.com/blueish0930/BIKINI" target="_blank" rel="noopener">GitHub</a>
       </div>
-      <div class="card">
-        <h3>Math &amp; Solver</h3>
-        <p>Mesh Laplacian（COO）→ Linear Solver；Eigen + Spectra 稀疏求解与特征分解。</p>
-      </div>
-      <div class="card">
-        <h3>Image Process · COP</h3>
-        <p>专用图像节点树：Stamp、Bake、法线↔高度、Fluid Zone 等。</p>
-      </div>
-      <div class="card">
-        <h3>UX &amp; Shaders</h3>
-        <p>节点组接口、抖动拆线、U 对齐；IQ 风格 SDF / Fractal 着色器。</p>
+      <div class="lang-switch" role="group" aria-label="Language">
+        <button type="button" id="lang-zh" aria-pressed="true">中文</button>
+        <button type="button" id="lang-en" aria-pressed="false">EN</button>
       </div>
     </div>
+  </nav>
 
-    <div class="section">
-      <h2>开发目标</h2>
-      <ul>
-        <li><strong>跟主线，不 fork 成死支</strong> — 基于 Blender 5.3 Alpha / main，持续合入上游。</li>
-        <li><strong>几何节点为中枢</strong> — 把「能算的」搬进节点图：稀疏矩阵、拉普拉斯、线性系统、特征。</li>
-        <li><strong>图像节点独立成编辑器</strong> — Image Process 作为 COP 向工作流，服务贴图 / 点云栅格 / 烘焙。</li>
-        <li><strong>体验优先</strong> — 少拉线、好对齐、接口可说明、属性可读（含 String）。</li>
-        <li><strong>便携分发</strong> — Windows x64 解压即用；文档与二进制同仓，便于自测与分享。</li>
-      </ul>
-      <div class="warn">
-        非官方构建，未经 Blender Foundation 签名。请勿当作官方发行版分发。
+  <header class="hero">
+    <div class="hero-bg" aria-hidden="true"></div>
+    <div class="hero-overlay" aria-hidden="true"></div>
+    <div class="hero-inner">
+      <h1>
+        <span class="en">Documentation</span>
+        <span class="zh">文档</span>
+      </h1>
+      <p class="en">User Manual and Developer Docs for the BIKINI custom Blender build.</p>
+      <p class="zh">BIKINI 自定义 Blender 构建的用户手册与开发者文档。</p>
+    </div>
+    <div class="hero-credits">
+      <a href="https://www.youtube.com/watch?v=_cMxraX_5RE" target="_blank" rel="noopener">Sprite Fright · Blender Studio</a>
+    </div>
+  </header>
+
+  <div class="main">
+    <div class="container">
+      <div class="cards">
+        <article class="card">
+          <div class="card-body">
+            <h2><a href="manual.html">
+              <span class="en">User Manual</span>
+              <span class="zh">用户手册</span>
+            </a></h2>
+            <p class="en">
+              How to use BIKINI features — node parameters, workflows, and practical examples.
+              Structured like the official Blender Manual.
+            </p>
+            <p class="zh">
+              如何使用 BIKINI 功能：节点参数、工作流与示例说明。
+              结构参考官方 Blender User Manual。
+            </p>
+            <a class="btn btn-primary" href="manual.html">
+              <span class="en">Browse Manual</span>
+              <span class="zh">浏览手册</span>
+            </a>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-body">
+            <h2><a href="changelog.html">
+              <span class="en">Developer Docs</span>
+              <span class="zh">开发者文档</span>
+            </a></h2>
+            <p class="en">
+              Release notes and technical summaries for each module — Geometry Nodes,
+              Image Process, UI, and more.
+            </p>
+            <p class="zh">
+              各模块更新说明与技术摘要：Geometry Nodes、Image Process、界面等。
+            </p>
+            <a class="btn btn-primary" href="changelog.html">
+              <span class="en">Browse Developer Docs</span>
+              <span class="zh">浏览开发者文档</span>
+            </a>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-body">
+            <h2><a href="https://github.com/blueish0930/BIKINI" target="_blank" rel="noopener">
+              <span class="en">Project</span>
+              <span class="zh">项目</span>
+            </a></h2>
+            <p class="en">
+              Source repository, issues, and portable builds on GitHub —
+              <strong style="font-weight:600;color:var(--color-text)">blueish0930/BIKINI</strong>.
+            </p>
+            <p class="zh">
+              源码仓库、议题与便携构建均在 GitHub —
+              <strong style="font-weight:600;color:var(--color-text)">blueish0930/BIKINI</strong>。
+            </p>
+            <a class="btn btn-primary" href="https://github.com/blueish0930/BIKINI" target="_blank" rel="noopener">
+              <span class="en">Open Project</span>
+              <span class="zh">打开项目</span>
+            </a>
+          </div>
+        </article>
       </div>
     </div>
-
-    <div class="section">
-      <h2>文档</h2>
-      <ul>
-        <li><a href="changelog.html"><strong>Release Notes</strong></a> — 按「每期 → 模块」组织（仿官方 release notes），中英切换</li>
-        <li><a href="https://github.com/blueish0930/BIKINI/blob/main/README.md">仓库 README</a> — 下载与使用说明</li>
-        <li><a href="https://developer.blender.org/docs/release_notes/5.3/" target="_blank" rel="noopener">上游 Blender 5.3 Notes</a></li>
-      </ul>
-    </div>
-
-    <footer>
-      Pages · <code>blueish0930.github.io/BIKINI</code>
-      · Source: <a href="https://github.com/blueish0930/BIKINI">github.com/blueish0930/BIKINI</a>
-      · Docs live under <code>/docs</code>
-    </footer>
   </div>
+
+  <div class="footer-navigation">
+    <div class="footer-grid">
+      <!-- Follow Me — three icon buttons only -->
+      <div>
+        <div class="sitemap-title">
+          <span class="en">Follow Me</span><span class="zh">关注我</span>
+        </div>
+        <div class="social-icons">
+          <a class="social-btn" href="https://x.com/blueish0930" target="_blank" rel="noopener" title="X" aria-label="X">
+            <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path fill="currentColor" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.727-8.835L1.254 2.25H8.08l4.253 5.622L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z"/>
+            </svg>
+          </a>
+          <a class="social-btn" href="https://space.bilibili.com/3546391456516604" target="_blank" rel="noopener" title="Bilibili" aria-label="Bilibili">
+            <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path fill="currentColor" d="M17.813 4.653h.854c1.51.054 2.769.578 3.773 1.574 1.004.995 1.524 2.249 1.56 3.76v7.36c-.036 1.51-.556 2.769-1.56 3.773s-2.262 1.524-3.773 1.56H5.333c-1.51-.036-2.769-.556-3.773-1.56S.036 18.858 0 17.347v-7.36c.036-1.511.556-2.765 1.56-3.76 1.004-.996 2.262-1.52 3.773-1.574h.774l-1.174-1.12a1.234 1.234 0 0 1-.373-.906c0-.356.124-.658.373-.907l.027-.027c.267-.249.573-.373.92-.373.347 0 .653.124.92.373L9.653 4.44c.071.071.134.142.187.213h4.267a.836.836 0 0 1 .16-.213l2.853-2.747c.267-.249.573-.373.92-.373.347 0 .662.151.929.4.267.249.391.551.391.907 0 .355-.124.657-.373.906zM5.333 7.24c-.746.018-1.373.276-1.88.773-.506.498-.769 1.13-.786 1.894v7.52c.017.764.28 1.395.786 1.893.507.498 1.134.756 1.88.773h13.334c.746-.017 1.373-.275 1.88-.773.506-.498.769-1.129.786-1.893v-7.52c-.017-.765-.28-1.396-.786-1.894-.507-.497-1.134-.755-1.88-.773zM8 11.107c.373 0 .684.124.933.373.25.249.383.569.4.96v1.173c-.017.391-.15.711-.4.96-.249.25-.56.374-.933.374s-.684-.125-.933-.374c-.25-.249-.383-.569-.4-.96V12.44c0-.373.129-.689.386-.947.258-.257.574-.386.947-.386zm8 0c.373 0 .683.124.933.373.25.249.383.569.4.96v1.173c-.017.391-.15.711-.4.96-.25.25-.56.374-.933.374s-.683-.125-.933-.374c-.25-.249-.383-.569-.4-.96V12.44c.017-.391.15-.711.4-.96.25-.249.56-.373.933-.373Z"/>
+            </svg>
+          </a>
+          <a class="social-btn" href="https://www.youtube.com/@blueishhhh09" target="_blank" rel="noopener" title="YouTube" aria-label="YouTube">
+            <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path fill="currentColor" d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+            </svg>
+          </a>
+        </div>
+      </div>
+
+      <!-- Donate Me — blue panel, distinct from other modules -->
+      <div class="donate-panel">
+        <div class="sitemap-title">
+          <span class="en">Donate Me</span><span class="zh">支持我</span>
+        </div>
+        <p class="en">
+          If BIKINI helps your work, consider supporting development.
+          Unofficial custom build — not affiliated with the Blender Foundation.
+        </p>
+        <p class="zh">
+          如果 BIKINI 对你有帮助，欢迎支持后续开发。
+          非官方自定义构建，与 Blender Foundation 无关。
+        </p>
+        <a class="btn btn-donate" href="https://github.com/blueish0930/BIKINI" target="_blank" rel="noopener">
+          <span class="heart" aria-hidden="true">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+            </svg>
+          </span>
+          Donate
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-note">
+    BIKINI Documentation
+    <svg class="heart-inline" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+    <a href="https://github.com/blueish0930/BIKINI" target="_blank" rel="noopener">github.com/blueish0930/BIKINI</a>
+  </div>
+
+  <script>
+    (function () {
+      var KEYS = ["bikini-docs-lang", "bikini-changelog-lang"];
+      function setLang(l) {
+        if (l !== "en" && l !== "zh") l = "en";
+        document.documentElement.setAttribute("data-lang", l);
+        document.documentElement.lang = l === "zh" ? "zh-CN" : "en";
+        document.title = l === "zh" ? "BIKINI 文档" : "BIKINI Documentation";
+        try { KEYS.forEach(function (k) { localStorage.setItem(k, l); }); } catch (e) {}
+        document.getElementById("lang-zh").setAttribute("aria-pressed", l === "zh" ? "true" : "false");
+        document.getElementById("lang-en").setAttribute("aria-pressed", l === "en" ? "true" : "false");
+      }
+      document.getElementById("lang-zh").addEventListener("click", function () { setLang("zh"); });
+      document.getElementById("lang-en").addEventListener("click", function () { setLang("en"); });
+      try {
+        var s = localStorage.getItem(KEYS[0]) || localStorage.getItem(KEYS[1]);
+        if (s === "en" || s === "zh") setLang(s);
+        else setLang(/^zh\b/i.test(navigator.language || "") ? "zh" : "en");
+      } catch (e) { setLang("zh"); }
+    })();
+  </script>
 </body>
 </html>

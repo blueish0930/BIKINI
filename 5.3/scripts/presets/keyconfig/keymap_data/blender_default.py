@@ -2283,13 +2283,15 @@ def km_node_editor(params):
         {"items": items},
     )
 
-    # BEFORE node.select: Ctrl+CLICK on type-switchable socket shape → data type popup.
-    # Poll only succeeds over group/item sockets; otherwise node.select (Ctrl+CLICK) runs.
+    # BEFORE node.select:
+    # Ctrl+CLICK → data type; Alt+CLICK → structure/shape (Auto/Single/Field/Grid/List).
     # Ctrl+CLICK_DRAG remains link-detach (must stay CLICK_DRAG, not CLICK).
-    items.append(
+    items.extend([
         ("node.socket_type_menu",
          {"type": 'LEFTMOUSE', "value": 'CLICK', "ctrl": True}, None),
-    )
+        ("node.socket_structure_menu",
+         {"type": 'LEFTMOUSE', "value": 'CLICK', "alt": True}, None),
+    ])
 
     if not params.legacy:
         items.extend(_template_node_select(

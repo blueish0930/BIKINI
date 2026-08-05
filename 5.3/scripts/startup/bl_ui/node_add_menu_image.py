@@ -186,6 +186,7 @@ class NODE_MT_image_node_transform_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "CompositorNodeFlip")
         self.node_operator(layout, "ImageNodeFlip")
         self.node_operator(layout, "CompositorNodeMapUV")
+        self.node_operator(layout, "ImageNodeSampleAtPixel")
         layout.separator()
         self.node_operator(layout, "CompositorNodeLensdist")
         self.node_operator(layout, "CompositorNodeMovieDistortion")
@@ -207,6 +208,8 @@ class NODE_MT_image_node_utilities_base(node_add_menu.NodeMenu):
         layout.separator()
         self.draw_menu(layout, path="Utilities/Bundle")
         self.draw_menu(layout, path="Utilities/Closure")
+        layout.separator()
+        self.node_operator(layout, "ImageNodeWriteAtPixel")
         layout.separator()
         # Zones (color-only state items in Image Process).
         self.simulation_zone(layout, label="Simulation")
