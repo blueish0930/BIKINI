@@ -1,150 +1,93 @@
 # BIKINI
 
-**Unofficial custom Blender build** — Windows x64 portable, tracking **Blender 5.3 Alpha / main**.
+非官方 **Blender 5.3** 便携构建（Windows x64）。在主线之上做自己真正想用的节点、图像工具与编辑器体验。
 
-专注于 **Geometry Nodes**、**稀疏数学求解**、**Image Process（COP 向图像节点）** 与 **节点编辑器 UX** 的实验分支。随 daily 合入上游，在主线之上做自己真正想用的节点与工具。
-
-
----
-
-## 文档与站点
-
-| 链接 | 说明 |
-|------|------|
-| **[GitHub Pages · 主页](https://blueish0930.github.io/BIKINI/)** | 项目介绍与入口 |
-| **[Release Notes 更新日志](https://blueish0930.github.io/BIKINI/changelog.html)** | 按「每期 → 模块」组织（Geometry Nodes / Math & Solver / COP / Shaders / UI…），**中英切换** |
-| [仓库内 docs/](docs/) | 同源文档（离线也可打开 `docs/changelog.html`） |
-| [上游 Blender 5.3 Notes](https://developer.blender.org/docs/release_notes/5.3/) | 官方 release notes 结构参考 |
+**文档：** [主页](https://blueish0930.github.io/BIKINI/) · [更新日志](https://blueish0930.github.io/BIKINI/changelog.html) · 本地 `docs/`
 
 ---
 
-## 开发目标
+## 中文
 
-BIKINI 不是功能堆砌包，而是围绕下面几条线长期演进的 **个人 / 实验向 Blender 构建**：
+### 目标
 
-### 1. 跟主线，不当死分支
+- 跟进 **Blender main / 5.3**，不当死分叉。
+- 以 **Geometry Nodes** 为中枢，补齐几何处理、稀疏求解、交互选择与重网格等能力。
+- 新增 **GPU Texture Editor（Image Process）**：面向贴图 / 栅格 / 流体的节点图（COP 向）。
+- 改进 **节点编辑器 UX** 与调试（Portal、对齐、组接口、属性预览等）。
+- 便携分发：解压即用，文档随包。
 
-- 基线：**Blender 5.3 Alpha**，持续同步 `main` / daily。
-- 自定义功能以「可维护的增量」加在节点、编辑器与数学库上，而不是整树硬分叉。
+### 已优化 / 主要方向
 
-### 2. Geometry Nodes 作为中枢
+| 方向 | 内容概要 |
+|------|----------|
+| 几何节点 | Portal、Clip、Loop 细分、近邻、Debug、Time Shift、Select/Edit、Heat Geodesic、染色、切向场、曲线求交、Expression、Write at Index、Delaunay… |
+| 稀疏数学 | Mesh Laplacian → Sparse Matrix Math → Linear Solver（稀疏求解 / 分解 / 特征） |
+| 重网格与破碎 | Instant Meshes、QuadWild、Triangle Remesh、Voronoi Fracture |
+| 图像节点 | Point Stamp、光栅化、法线/高度、Paint、Histogram、流体区、SDF/Fractal、Bake、Sample/Write at Pixel… |
+| 着色器 | SDF Shape、Fractal、HLSL、Image Socket |
+| 界面 | 抖动拆线、U 对齐、组 Separator/Message、Ctrl/Alt 改 socket、Menu 多选、Spreadsheet 排序… |
+| 编辑器 | Data-Block Graph；合成器内嵌 GTE 组节点 |
 
-把「在几何上能算的」尽量放进节点图，形成可组合管线，例如：
+### 使用
 
-- **Named Portal**、**Geometry Clip**、**Loop Subdivision**、**K-Nearest**、**Time Shift**、**Debug**…
-- **SDF Grid** 系列（Boolean / Fillet / Laplacian / Mean / Offset…）
-- 与主线 Zones 增强：**Repeat Break**、**Simulation Cache Limit**
+1. 下载并**整包解压**（勿只拷 `blender.exe`）。
+2. 运行 `blender.exe`（同级需保留 `5.3/`、`blender.crt/`、`blender.shared/`、`license/` 等）。
+3. 详见 `BIKINI_BUILD_INFO.txt`。
 
-### 3. 稀疏线性代数（可解、可特征）
-
-面向平滑、扩散、钉约束、谱处理等几何问题：
-
-```text
-Mesh → Mesh Laplacian (COO) → Sparse Matrix Math → Linear Solver → x / eigenpairs
-```
-
-- **Mesh Laplacian**：离散拉普拉斯以 **COO** 稀疏 Bundle 存储（`weight` / `row` / `col`），Uniform / Cotangent，可选 `I+tL` 与质量矩阵。
-- **Linear Solver**：引入 **Eigen**（稀疏直接 / 迭代）与 **Spectra**（部分特征、shift-invert）；模式参考 Houdini 式 Solve / Decompose / SWD / Multiply。
-- **原则**：端到端稀疏，避免大网格 densify。
-
-### 4. Image Process = COP 向图像节点编辑器
-
-独立节点树 **`ImageNodeTree`（UI 名 Image Process）**，专门处理图片与栅格数据，而不是挤在经典场景合成器里：
-
-- Point Stamp、Rasterize / Import Points  
-- Normal ↔ Height、Bake Image（多格式）  
-- SDF Shape / Fractal Primitive（Image 路径）  
-- Fluid Simulation Zone、Bundle 工具  
-
-语义上接近 Houdini **COPs**：为贴图、点云盖章、高度图与烘焙服务。
-
-### 5. 着色器与视口
-
-- **SDF Shape / Fractal Primitive**（Inigo Quilez 公式族），Shader 与 Image 共享数学核；EEVEE / GPU 材质路径。
-- 视口属性 / Viewer 叠加、Spreadsheet 列排序等调试体验。
-
-### 6. 节点编辑器 UX
-
-少摩擦地搭图：
-
-- 节点组 **Separator / Message / 参数并排 / Ctrl+LMB 改名 / Enable I/O**  
-- **抖动拆线**、**按住 U 拖拽对齐**  
-- **String 属性** 全链路  
-
-### 7. 便携分发
-
-- 解压即用的 **Windows x64** 目录结构（`blender.exe` + `5.3/` + 运行时）。
-- 文档与构建信息随仓；**GitHub Pages** 提供可读的更新说明。
+> 非官方构建，与 Blender Foundation 无隶属关系，未做官方签名。
 
 ---
 
-## 下载与使用
+## English
 
-1. 打开仓库 → **Code → Download ZIP**（或用上方 Pages 里的下载入口）。  
-2. 解压整个目录（不要只拷 `blender.exe`）。  
-3. 运行 `blender.exe`。  
+### Goals
 
-**必须与下列内容放在同一目录树：**
+- Track **Blender main / 5.3**; keep changes as maintainable increments, not a dead fork.
+- Center on **Geometry Nodes**: geometry ops, sparse solvers, interactive select/edit, remesh.
+- Add **GPU Texture Editor (Image Process)** for image/raster/fluid node graphs (COP-like).
+- Improve **node-editor UX** and debugging.
+- Ship a **portable** Windows build with docs.
 
-- `5.3/`（脚本、Python、datafiles）  
-- `blender.crt/`、`blender.shared/`、`license/`  
+### Focus areas
 
-详见 [`BIKINI_BUILD_INFO.txt`](BIKINI_BUILD_INFO.txt)。
+Geometry Nodes (portals, clip, remesh, fracture, sparse linear algebra, expression…), Image Process (stamp, fluid, SDF/fractal, bake, paint…), shaders (SDF/HLSL), UI gestures and group interface tools, extra editors (Data-Block Graph; compositor bridge to GTE).
 
-> 这是**非官方**自定义构建，**未经 Blender Foundation 数字签名**。请勿当作官方发行版宣传或替换系统安装包。
+### Usage
 
----
+Download ZIP → extract whole tree → run `blender.exe`. Keep runtime folders next to the executable. See `BIKINI_BUILD_INFO.txt`.
 
-## 仓库结构（摘要）
-
-| 路径 | 说明 |
-|------|------|
-| `blender.exe` | 主程序（便携） |
-| `5.3/` | Blender 运行时数据与脚本 |
-| `docs/` | **GitHub Pages 源**：主页 + Release Notes |
-| `BIKINI_BUILD_INFO.txt` | 包日期与简短变更 |
-| `README.md` | 本说明 |
-
-Pages 从分支的 **`/docs`** 目录发布（见下方）。
+> Unofficial custom build; not affiliated with or signed by the Blender Foundation.
 
 ---
 
-## GitHub Pages
+## 引用资源与许可证 / Resources & licenses
 
-站点地址：
+以下为构建中**关键上游与自带库**的协议摘要。完整第三方列表见包内 [`license/`](license/)（Blender 官方许可证树）。
 
-- https://blueish0930.github.io/BIKINI/  
-- https://blueish0930.github.io/BIKINI/changelog.html  
+| 资源 / Resource | 用途 / Role | 协议 / License | 可否随本项目开源分发？ |
+|-----------------|-------------|----------------|------------------------|
+| **Blender** | 主体程序与节点框架 | **GPL-2.0-or-later** | **可以**，但必须以 **GPL 兼容** 方式发布：附带/提供对应源码，不得改成闭源专有产品冒充官方。 |
+| **Eigen** | 稀疏线性代数（Linear Solver 等） | **MPL-2.0** | 可以；保留版权与 MPL 声明，修改文件需按 MPL 要求。 |
+| **Spectra** | 部分特征分解 | **MPL-2.0** | 同上。 |
+| **Voro++** | Voronoi 破碎单元 | **BSD-3-Clause** | 可以；保留版权与免责声明。 |
+| **Instant Meshes**（上游算法/实现） | Instant Meshes 重网格 | 遵循**上游仓库许可证**（常见为 **GPL-3** 系） | 可以，但须遵守其 GPL 条款（源码可得、许可兼容）。 |
+| **QRemeshify / QuadWild** | QuadWild 节点桥接 | **GPL-3**（见 `quadwild/README.txt`） | 可以，须按 GPL-3 提供源码与许可证。 |
+| **Inigo Quilez SDF / fractal 公式** | SDF Shape、Fractal 参考 | 通常允许学习与使用（以作者页面声明为准） | 可引用实现；建议保留出处说明。 |
+| 其它 Blender 捆绑库（Python、OpenEXR、OpenVDB、Bullet…） | 运行时 | **MIT / BSD / Apache-2.0 / LGPL / Zlib…** 见 `license/` | 可以，但须**完整保留** Blender 自带的 `license/` 与归属，不得拆掉只发 exe。 |
 
-源文件：
+### 你能不能「这样开源代码发出去」？
 
-- [`docs/index.html`](docs/index.html) — 落地页  
-- [`docs/changelog.html`](docs/changelog.html) — 更新日志（仿 [developer.blender.org release notes](https://developer.blender.org/docs/release_notes/5.3/)：每期 → 模块 → 条目）  
+**可以开源，但性质是「基于 Blender 的 GPL 衍生作品」，不是 MIT 单许可证小工具。**
 
-本地预览：用浏览器直接打开 `docs/index.html` / `docs/changelog.html` 即可（纯静态，不依赖 Blender）。
+1. **Blender 本体是 GPL**：改节点、链进 `blender.exe` 的 C/C++ 代码一般需按 **GPL（或兼容许可证）** 提供源码；不能只发二进制、拒绝对应源码。  
+2. **BIKINI 自定义部分**建议明确写清：以 **GPL-2.0-or-later**（或与 Blender 相同）发布，避免和主程序冲突。  
+3. **第三方库**（Eigen、Spectra、Voro++、QuadWild…）按各自协议保留声明；**不要**把别人的代码改头换面声称「纯 MIT 自研」。  
+4. **允许**：GitHub 公开源码、发便携包、写文档与更新日志（本仓库做法）。  
+5. **不允许**：去掉 GPL/`license/`、声称官方 Blender、用闭源商业条款覆盖整棵 Blender 树。  
+6. **GPL-2-or-later + GPL-3 组件**（如部分 remesh 工具）：组合分发时通常按 **GPL-3** 兼容方式处理；保留各组件原许可证文本。
 
----
-
-## 状态与贡献
-
-- **状态**：个人实验构建，API / 节点 / 打包方式可能随时变。  
-- **平台**：当前公开包以 **Windows x64** 为主。  
-- **反馈**：Issues / Discussion 欢迎；PR 需能在你自己的构建树上验证。  
-- **上游**：功能最终若成熟，会优先考虑回馈或对齐 Blender 主线设计，而不是永久私有分叉。
-
----
-
-## 许可证与归属
-
-- Blender 本体遵循其 [许可证与第三方声明](license/)（GNU GPL 等）。  
-- 本仓库中的自定义节点与文档说明以 GPL 兼容方式随构建分发；第三方数学库（如 Eigen、Spectra）遵循各自许可证。  
-- **BIKINI** 名称与本仓库仅标识此非官方构建，与 Blender Foundation 无隶属关系。
+更细的 SPDX 文本在 `license/spdx/`。若只 fork 文档站点、不重新分发 `blender.exe`，仍建议标注 Blender / 上游版权；**一旦分发修改后的 Blender 二进制，就必须满足 GPL 源码义务。**
 
 ---
 
-## 快速链接
-
-- [Pages 主页](https://blueish0930.github.io/BIKINI/)  
-- [更新日志](https://blueish0930.github.io/BIKINI/changelog.html)  
-- [Blender 官网](https://www.blender.org/)  
-- [Blender 5.3 Geometry Nodes Notes](https://developer.blender.org/docs/release_notes/5.3/geometry_nodes/)  
+**BIKINI** 仅标识此非官方构建。站点：https://blueish0930.github.io/BIKINI/ · 仓库：https://github.com/blueish0930/BIKINI
