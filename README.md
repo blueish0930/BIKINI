@@ -4,6 +4,7 @@
 
 **文档：** [主页](https://blueish0930.github.io/BIKINI/) · [更新日志](https://blueish0930.github.io/BIKINI/changelog.html) · 本地 `docs/`
 
+**仓库：** [GitHub（站点 / 发布）](https://github.com/blueish0930/BIKINI) · [源码（projects.blender.org）](https://projects.blender.org/blueish/BIKINI)
 ---
 
 ## 中文
@@ -90,4 +91,10 @@ Download ZIP → extract whole tree → run `blender.exe`. Keep runtime folders 
 
 ---
 
-**BIKINI** 仅标识此非官方构建。站点：https://blueish0930.github.io/BIKINI/ · 仓库：https://github.com/blueish0930/BIKINI
+**BIKINI** 仅标识此非官方构建。
+
+| | |
+|--|--|
+| 站点 | https://blueish0930.github.io/BIKINI/ |
+| GitHub 仓库 | https://github.com/blueish0930/BIKINI |
+| 源码仓库 | https://projects.blender.org/blueish/BIKINI |
