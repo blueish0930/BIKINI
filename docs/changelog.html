@@ -847,6 +847,40 @@ footer.page-footer{
                 </li>
               </ul>
 
+              <h2>
+                <span class="en">Field write &amp; sample</span>
+                <span class="zh">场写入与采样</span>
+              </h2>
+              <ul class="en">
+                <li>
+                  <strong>Write at Index</strong> — scatter a field into a target domain by
+                  <strong>Target Index</strong> (source and target domains may differ).
+                  Collisions merge with <strong>Atomic Operator</strong>: Sum / Min / Max / Mean.
+                  Data Type: Float / Integer / Vector.
+                </li>
+                <li>
+                  <strong>RBF Interpolate</strong> — fit a radial-basis interpolant through
+                  Source sample Values so <code>f(xᵢ)=vᵢ</code> exactly (solves <code>Φw=v</code>,
+                  not a kernel-weighted average), then evaluate on <strong>Sample Position</strong>.
+                  Kernel panel: Type (Gaussian, Inverse Multiquadric, Linear, Cubic, Quintic, Wendland C2)
+                  and Size. Menu: Geometry → Sample. Dense solve; n ≤ 4096.
+                </li>
+              </ul>
+              <ul class="zh">
+                <li>
+                  <strong>Write at Index</strong> — 按 <strong>Target Index</strong> 将场 scatter 写入目标域
+                  （源/目标域可不同）。冲突用 <strong>Atomic Operator</strong> 归并：Sum / Min / Max / Mean。
+                  Data Type：Float / Integer / Vector。
+                </li>
+                <li>
+                  <strong>RBF Interpolate</strong> — 从 Source 采样点 Value 拟合径向基插值，
+                  采样点精确还原 <code>f(xᵢ)=vᵢ</code>（解 <code>Φw=v</code>，非核加权平均），
+                  在 <strong>Sample Position</strong> 上求值。Kernel 面板：Type
+                  （Gaussian / Inverse Multiquadric / Linear / Cubic / Quintic / Wendland C2）与 Size。
+                  菜单：Geometry → Sample。稠密求解；n ≤ 4096。
+                </li>
+              </ul>
+
               <h2>Expression</h2>
               <ul class="en">
                 <li>
@@ -970,7 +1004,7 @@ footer.page-footer{
               </ul>
             </article>
 
-            <!-- Shaders — image socket, sdf/fractal, expression only -->
+            <!-- Shaders — image socket, sdf/fractal, expression, HLSL -->
             <article class="page" id="page-shaders" data-page="shaders">
               <h1>
                 <span class="en">BIKINI 5.3: Shaders</span>
@@ -981,12 +1015,26 @@ footer.page-footer{
                 <li><strong>SDF Shape</strong> — signed-distance primitives for materials.</li>
                 <li><strong>Fractal Primitive</strong> — Mandelbrot / Julia style colour + distance.</li>
                 <li><strong>Expression</strong> — compact math / vector expressions on shader sockets.</li>
+                <li>
+                  <strong>HLSL</strong> (<code>ShaderNodeHLSL</code>) — custom HLSL subset for
+                  <strong>EEVEE</strong>: multi-line Code textbox + extendable In/Out parameters
+                  (Float / Int / Boolean / Vector / Color), translated to GLSL and linked via
+                  <code>GPU_stack_link</code>. Menu: Add → Utilities → HLSL.
+                  Default: Color + Fac → Result. Cycles has no OSL/SVM path for this node.
+                </li>
               </ul>
               <ul class="zh">
                 <li><strong>Image socket</strong> — 着色器 / 节点组可用的图像数据块接口。</li>
                 <li><strong>SDF Shape</strong> — 材质用有符号距离基元。</li>
                 <li><strong>Fractal Primitive</strong> — Mandelbrot / Julia 风格颜色 + 距离。</li>
                 <li><strong>Expression</strong> — 着色器接口上的紧凑数学 / 向量表达式。</li>
+                <li>
+                  <strong>HLSL</strong>（<code>ShaderNodeHLSL</code>）— 面向 <strong>EEVEE</strong> 的 HLSL 子集：
+                  多行 Code 文本框 + 可扩展 In/Out 参数（Float / Int / Boolean / Vector / Color），
+                  翻译为 GLSL 后经 <code>GPU_stack_link</code> 接入材质。
+                  菜单：Add → Utilities → HLSL。默认 Color + Fac → Result。
+                  Cycles 无 OSL/SVM 路径，不执行 HLSL 主体。
+                </li>
               </ul>
             </article>
 
