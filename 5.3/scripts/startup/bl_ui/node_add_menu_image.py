@@ -19,6 +19,7 @@ class NODE_MT_image_node_input_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "CompositorNodeImage")
         self.node_operator(layout, "ImageNodePaint")
         self.node_operator(layout, "ImageNodeRasterizeGeometry")
+        self.node_operator(layout, "ImageNodeCameraView")
         self.node_operator(layout, "ImageNodeImportPoints")
         self.node_operator(layout, "CompositorNodeBokehImage")
         self.node_operator(layout, "CompositorNodeRGB")
