@@ -1,0 +1,2434 @@
+OpenShadingLanguage 1.00
+# Compiled by oslc 1.15.3.0
+# options: -q -O2 -IE:/Blender_Source/intern/cycles/kernel/osl/shaders -IE:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders -o E:/build_windows_Full_x64_vc17_Release/intern/cycles/kernel/osl/shaders/node_mix.oso
+shader node_mix
+param	string	mix_type	"mix"		%read{3,865} %write{2147483647,-1}
+param	int	use_clamp	0		%read{921,921} %write{2147483647,-1}
+param	float	Fac	0.5		%read{1,1} %write{2147483647,-1}
+param	color	Color1	0 0 0		%read{6,913} %write{2147483647,-1}
+param	color	Color2	0 0 0		%read{6,914} %write{2147483647,-1}
+oparam	color	Color	0 0 0		%read{923,934} %write{6,939}
+local	float	___361_cmax	%read{286,787} %write{280,761}
+local	float	___361_cmin	%read{286,767} %write{285,766}
+local	float	___361_h	%read{316,801} %write{292,800}
+local	float	___361_s	%read{293,801} %write{290,772}
+local	float	___361_v	%read{320,801} %write{287,768}
+local	float	___361_cdelta	%read{290,779} %write{286,767}
+local	color	___361_c	%read{302,795} %write{298,779}
+local	float	___370_i	%read{384,841} %write{383,817}
+local	float	___370_f	%read{385,825} %write{384,818}
+local	float	___370_p	%read{397,844} %write{387,821}
+local	float	___370_q	%read{400,844} %write{390,824}
+local	float	___370_t	%read{397,843} %write{394,828}
+local	float	___370_h	%read{379,818} %write{373,816}
+local	float	___370_s	%read{376,826} %write{374,808}
+local	float	___370_v	%read{378,844} %write{375,809}
+local	color	___370_rgb	%read{411,845} %write{378,844}
+local	float	___415_tm	%read{21,21} %write{20,20}
+local	float	___416_tm	%read{40,87} %write{31,31}
+local	color	___416_outcol	%read{33,93} %write{32,92}
+local	float	___418_tm	%read{108,130} %write{102,102}
+local	color	___418_outcol	%read{107,137} %write{103,136}
+local	color	___423_outcol	%read{168,213} %write{167,212}
+local	float	___424_tmp	%read{174,182} %write{173,178}
+local	float	___425_tmp	%read{189,197} %write{188,193}
+local	float	___426_tmp	%read{204,212} %write{203,208}
+local	float	___427_tmp	%read{222,269} %write{221,262}
+local	float	___427_tm	%read{221,255} %write{217,217}
+local	color	___427_outcol	%read{225,270} %write{218,269}
+local	color	___428_outcol	%read{325,413} %write{274,412}
+local	color	___428_hsv2	%read{321,370} %write{320,320}
+local	color	___429_hsv	%read{373,375} %write{369,371}
+local	color	___429_tmp	%read{412,412} %write{411,411}
+local	float	___430_tm	%read{515,515} %write{417,417}
+local	color	___430_outcol	%read{420,560} %write{418,559}
+local	color	___430_hsv	%read{465,523} %write{464,519}
+local	color	___431_hsv2	%read{516,516} %write{513,513}
+local	float	___432_tm	%read{658,658} %write{564,564}
+local	color	___432_hsv	%read{657,666} %write{610,662}
+local	color	___432_hsv2	%read{659,659} %write{656,656}
+local	color	___433_outcol	%read{757,847} %write{706,846}
+local	color	___433_hsv2	%read{753,804} %write{752,752}
+local	color	___434_hsv	%read{807,809} %write{801,805}
+local	color	___434_tmp	%read{846,846} %write{845,845}
+local	float	___435_tm	%read{857,857} %write{851,851}
+local	color	___435_one	%read{853,858} %write{852,852}
+local	color	___435_scr	%read{861,861} %write{856,856}
+local	color	___436_outcol	%read{920,920} %write{868,919}
+local	color	___437_outcol	%read{939,939} %write{923,938}
+local	float	t	%read{6,917} %write{2,2}
+const	float	$const1	0		%read{2,937} %write{2147483647,-1}
+const	float	$const2	1		%read{1,936} %write{2147483647,-1}
+const	string	$const3	"clamp"		%read{0,935} %write{2147483647,-1}
+temp	float	$tmp1	%read{2,2} %write{1,1}
+const	string	$const4	"mix"		%read{3,3} %write{2147483647,-1}
+temp	int	$tmp2	%read{4,4} %write{3,3}
+const	string	$const5	"node_mix_blend"		%read{5,5} %write{2147483647,-1}
+const	string	$const6	"add"		%read{7,7} %write{2147483647,-1}
+temp	int	$tmp3	%read{8,8} %write{7,7}
+const	string	$const7	"node_mix_add"		%read{9,9} %write{2147483647,-1}
+temp	color	$tmp4	%read{11,11} %write{10,10}
+const	string	$const8	"multiply"		%read{12,12} %write{2147483647,-1}
+temp	int	$tmp5	%read{13,13} %write{12,12}
+const	string	$const9	"node_mix_mul"		%read{14,14} %write{2147483647,-1}
+temp	color	$tmp6	%read{16,16} %write{15,15}
+const	string	$const10	"screen"		%read{17,17} %write{2147483647,-1}
+temp	int	$tmp7	%read{18,18} %write{17,17}
+const	string	$const11	"node_mix_screen"		%read{19,19} %write{2147483647,-1}
+const	color	$const12	1 1 1		%read{22,852} %write{2147483647,-1}
+temp	color	$tmp9	%read{24,24} %write{21,21}
+temp	color	$tmp11	%read{23,23} %write{22,22}
+temp	color	$tmp12	%read{24,24} %write{23,23}
+temp	color	$tmp13	%read{26,26} %write{24,24}
+temp	color	$tmp15	%read{26,26} %write{25,25}
+temp	color	$tmp16	%read{27,27} %write{26,26}
+const	string	$const13	"overlay"		%read{28,28} %write{2147483647,-1}
+temp	int	$tmp17	%read{29,29} %write{28,28}
+const	string	$const14	"node_mix_overlay"		%read{30,30} %write{2147483647,-1}
+const	int	$const15	0		%read{33,928} %write{2147483647,-1}
+temp	float	$tmp18	%read{34,34} %write{33,33}
+const	float	$const16	0.5		%read{34,908} %write{2147483647,-1}
+temp	int	$tmp19	%read{35,35} %write{34,34}
+temp	float	$tmp20	%read{41,41} %write{36,36}
+const	float	$const17	2		%read{37,915} %write{2147483647,-1}
+temp	float	$tmp21	%read{39,39} %write{37,37}
+temp	float	$tmp22	%read{39,39} %write{38,38}
+temp	float	$tmp23	%read{40,40} %write{39,39}
+temp	float	$tmp24	%read{41,41} %write{40,40}
+temp	float	$tmp25	%read{42,42} %write{41,41}
+temp	float	$tmp26	%read{46,46} %write{43,43}
+temp	float	$tmp27	%read{45,45} %write{44,44}
+temp	float	$tmp28	%read{46,46} %write{45,45}
+temp	float	$tmp29	%read{47,47} %write{46,46}
+temp	float	$tmp30	%read{50,50} %write{47,47}
+temp	float	$tmp31	%read{49,49} %write{48,48}
+temp	float	$tmp32	%read{50,50} %write{49,49}
+temp	float	$tmp33	%read{51,51} %write{50,50}
+temp	float	$tmp34	%read{52,52} %write{51,51}
+const	int	$const18	1		%read{53,933} %write{2147483647,-1}
+temp	float	$tmp35	%read{54,54} %write{53,53}
+temp	int	$tmp36	%read{55,55} %write{54,54}
+temp	float	$tmp37	%read{61,61} %write{56,56}
+temp	float	$tmp38	%read{59,59} %write{57,57}
+temp	float	$tmp39	%read{59,59} %write{58,58}
+temp	float	$tmp40	%read{60,60} %write{59,59}
+temp	float	$tmp41	%read{61,61} %write{60,60}
+temp	float	$tmp42	%read{62,62} %write{61,61}
+temp	float	$tmp43	%read{66,66} %write{63,63}
+temp	float	$tmp44	%read{65,65} %write{64,64}
+temp	float	$tmp45	%read{66,66} %write{65,65}
+temp	float	$tmp46	%read{67,67} %write{66,66}
+temp	float	$tmp47	%read{70,70} %write{67,67}
+temp	float	$tmp48	%read{69,69} %write{68,68}
+temp	float	$tmp49	%read{70,70} %write{69,69}
+temp	float	$tmp50	%read{71,71} %write{70,70}
+temp	float	$tmp51	%read{72,72} %write{71,71}
+const	int	$const19	2		%read{73,938} %write{2147483647,-1}
+temp	float	$tmp52	%read{74,74} %write{73,73}
+temp	int	$tmp53	%read{75,75} %write{74,74}
+temp	float	$tmp54	%read{81,81} %write{76,76}
+temp	float	$tmp55	%read{79,79} %write{77,77}
+temp	float	$tmp56	%read{79,79} %write{78,78}
+temp	float	$tmp57	%read{80,80} %write{79,79}
+temp	float	$tmp58	%read{81,81} %write{80,80}
+temp	float	$tmp59	%read{82,82} %write{81,81}
+temp	float	$tmp60	%read{86,86} %write{83,83}
+temp	float	$tmp61	%read{85,85} %write{84,84}
+temp	float	$tmp62	%read{86,86} %write{85,85}
+temp	float	$tmp63	%read{87,87} %write{86,86}
+temp	float	$tmp64	%read{90,90} %write{87,87}
+temp	float	$tmp65	%read{89,89} %write{88,88}
+temp	float	$tmp66	%read{90,90} %write{89,89}
+temp	float	$tmp67	%read{91,91} %write{90,90}
+temp	float	$tmp68	%read{92,92} %write{91,91}
+const	string	$const20	"subtract"		%read{94,94} %write{2147483647,-1}
+temp	int	$tmp69	%read{95,95} %write{94,94}
+const	string	$const21	"node_mix_sub"		%read{96,96} %write{2147483647,-1}
+temp	color	$tmp70	%read{98,98} %write{97,97}
+const	string	$const22	"divide"		%read{99,99} %write{2147483647,-1}
+temp	int	$tmp71	%read{100,100} %write{99,99}
+const	string	$const23	"node_mix_div"		%read{101,101} %write{2147483647,-1}
+temp	float	$tmp72	%read{105,105} %write{104,104}
+temp	int	$tmp73	%read{106,106} %write{105,105}
+temp	float	$tmp74	%read{108,108} %write{107,107}
+temp	float	$tmp75	%read{113,113} %write{108,108}
+temp	float	$tmp76	%read{110,110} %write{109,109}
+temp	float	$tmp77	%read{112,112} %write{110,110}
+temp	float	$tmp78	%read{112,112} %write{111,111}
+temp	float	$tmp79	%read{113,113} %write{112,112}
+temp	float	$tmp80	%read{114,114} %write{113,113}
+temp	float	$tmp81	%read{116,116} %write{115,115}
+temp	int	$tmp82	%read{117,117} %write{116,116}
+temp	float	$tmp83	%read{119,119} %write{118,118}
+temp	float	$tmp84	%read{124,124} %write{119,119}
+temp	float	$tmp85	%read{121,121} %write{120,120}
+temp	float	$tmp86	%read{123,123} %write{121,121}
+temp	float	$tmp87	%read{123,123} %write{122,122}
+temp	float	$tmp88	%read{124,124} %write{123,123}
+temp	float	$tmp89	%read{125,125} %write{124,124}
+temp	float	$tmp90	%read{127,127} %write{126,126}
+temp	int	$tmp91	%read{128,128} %write{127,127}
+temp	float	$tmp92	%read{130,130} %write{129,129}
+temp	float	$tmp93	%read{135,135} %write{130,130}
+temp	float	$tmp94	%read{132,132} %write{131,131}
+temp	float	$tmp95	%read{134,134} %write{132,132}
+temp	float	$tmp96	%read{134,134} %write{133,133}
+temp	float	$tmp97	%read{135,135} %write{134,134}
+temp	float	$tmp98	%read{136,136} %write{135,135}
+const	string	$const24	"difference"		%read{138,138} %write{2147483647,-1}
+temp	int	$tmp99	%read{139,139} %write{138,138}
+const	string	$const25	"node_mix_diff"		%read{140,140} %write{2147483647,-1}
+temp	color	$tmp100	%read{143,143} %write{142,142}
+temp	color	$tmp101	%read{142,142} %write{141,141}
+const	string	$const26	"exclusion"		%read{144,144} %write{2147483647,-1}
+temp	int	$tmp102	%read{145,145} %write{144,144}
+const	string	$const27	"node_mix_exclusion"		%read{146,146} %write{2147483647,-1}
+temp	color	$tmp103	%read{153,153} %write{151,151}
+temp	color	$tmp104	%read{150,150} %write{147,147}
+temp	color	$tmp105	%read{149,149} %write{148,148}
+temp	color	$tmp106	%read{150,150} %write{149,149}
+temp	color	$tmp107	%read{151,151} %write{150,150}
+temp	color	$tmp108	%read{153,153} %write{152,152}
+const	string	$const28	"darken"		%read{154,154} %write{2147483647,-1}
+temp	int	$tmp109	%read{155,155} %write{154,154}
+const	string	$const29	"node_mix_dark"		%read{156,156} %write{2147483647,-1}
+temp	color	$tmp110	%read{158,158} %write{157,157}
+const	string	$const30	"lighten"		%read{159,159} %write{2147483647,-1}
+temp	int	$tmp111	%read{160,160} %write{159,159}
+const	string	$const31	"node_mix_light"		%read{161,161} %write{2147483647,-1}
+temp	color	$tmp112	%read{163,163} %write{162,162}
+const	string	$const32	"dodge"		%read{164,164} %write{2147483647,-1}
+temp	int	$tmp113	%read{165,165} %write{164,164}
+const	string	$const33	"node_mix_dodge"		%read{166,166} %write{2147483647,-1}
+temp	float	$tmp114	%read{169,169} %write{168,168}
+temp	int	$tmp115	%read{170,170} %write{169,169}
+temp	float	$tmp116	%read{172,172} %write{171,171}
+temp	float	$tmp117	%read{173,173} %write{172,172}
+temp	int	$tmp118	%read{175,175} %write{174,174}
+temp	float	$tmp119	%read{178,178} %write{177,177}
+temp	int	$tmp120	%read{180,180} %write{179,179}
+temp	float	$tmp121	%read{184,184} %write{183,183}
+temp	int	$tmp122	%read{185,185} %write{184,184}
+temp	float	$tmp123	%read{187,187} %write{186,186}
+temp	float	$tmp124	%read{188,188} %write{187,187}
+temp	int	$tmp125	%read{190,190} %write{189,189}
+temp	float	$tmp126	%read{193,193} %write{192,192}
+temp	int	$tmp127	%read{195,195} %write{194,194}
+temp	float	$tmp128	%read{199,199} %write{198,198}
+temp	int	$tmp129	%read{200,200} %write{199,199}
+temp	float	$tmp130	%read{202,202} %write{201,201}
+temp	float	$tmp131	%read{203,203} %write{202,202}
+temp	int	$tmp132	%read{205,205} %write{204,204}
+temp	float	$tmp133	%read{208,208} %write{207,207}
+temp	int	$tmp134	%read{210,210} %write{209,209}
+const	string	$const34	"burn"		%read{214,214} %write{2147483647,-1}
+temp	int	$tmp135	%read{215,215} %write{214,214}
+const	string	$const35	"node_mix_burn"		%read{216,216} %write{2147483647,-1}
+temp	float	$tmp136	%read{220,220} %write{219,219}
+temp	float	$tmp137	%read{221,221} %write{220,220}
+temp	int	$tmp138	%read{223,223} %write{222,222}
+temp	float	$tmp139	%read{226,226} %write{225,225}
+temp	float	$tmp140	%read{227,227} %write{226,226}
+temp	float	$tmp141	%read{228,228} %write{227,227}
+temp	int	$tmp142	%read{230,230} %write{229,229}
+temp	int	$tmp143	%read{233,233} %write{232,232}
+temp	float	$tmp144	%read{237,237} %write{236,236}
+temp	float	$tmp145	%read{238,238} %write{237,237}
+temp	int	$tmp146	%read{240,240} %write{239,239}
+temp	float	$tmp147	%read{243,243} %write{242,242}
+temp	float	$tmp148	%read{244,244} %write{243,243}
+temp	float	$tmp149	%read{245,245} %write{244,244}
+temp	int	$tmp150	%read{247,247} %write{246,246}
+temp	int	$tmp151	%read{250,250} %write{249,249}
+temp	float	$tmp152	%read{254,254} %write{253,253}
+temp	float	$tmp153	%read{255,255} %write{254,254}
+temp	int	$tmp154	%read{257,257} %write{256,256}
+temp	float	$tmp155	%read{260,260} %write{259,259}
+temp	float	$tmp156	%read{261,261} %write{260,260}
+temp	float	$tmp157	%read{262,262} %write{261,261}
+temp	int	$tmp158	%read{264,264} %write{263,263}
+temp	int	$tmp159	%read{267,267} %write{266,266}
+const	string	$const36	"hue"		%read{271,271} %write{2147483647,-1}
+temp	int	$tmp160	%read{272,272} %write{271,271}
+const	string	$const37	"node_mix_hue"		%read{273,273} %write{2147483647,-1}
+const	string	$const38	"rgb_to_hsv"		%read{275,756} %write{2147483647,-1}
+temp	float	$tmp161	%read{280,280} %write{276,276}
+temp	float	$tmp162	%read{280,280} %write{279,279}
+temp	float	$tmp163	%read{279,279} %write{277,277}
+temp	float	$tmp164	%read{279,279} %write{278,278}
+temp	float	$tmp165	%read{285,285} %write{281,281}
+temp	float	$tmp166	%read{285,285} %write{284,284}
+temp	float	$tmp167	%read{284,284} %write{282,282}
+temp	float	$tmp168	%read{284,284} %write{283,283}
+temp	int	$tmp169	%read{289,289} %write{288,288}
+temp	int	$tmp170	%read{294,294} %write{293,293}
+temp	color	$tmp171	%read{297,297} %write{296,296}
+temp	color	$tmp172	%read{298,298} %write{297,297}
+temp	float	$tmp173	%read{300,300} %write{299,299}
+temp	int	$tmp174	%read{301,301} %write{300,300}
+temp	float	$tmp175	%read{304,304} %write{302,302}
+temp	float	$tmp176	%read{304,304} %write{303,303}
+temp	float	$tmp177	%read{306,306} %write{305,305}
+temp	int	$tmp178	%read{307,307} %write{306,306}
+temp	float	$tmp179	%read{309,309} %write{308,308}
+temp	float	$tmp180	%read{311,311} %write{309,309}
+temp	float	$tmp181	%read{311,311} %write{310,310}
+const	float	$const39	4		%read{313,841} %write{2147483647,-1}
+temp	float	$tmp182	%read{313,313} %write{312,312}
+temp	float	$tmp183	%read{315,315} %write{313,313}
+temp	float	$tmp184	%read{315,315} %write{314,314}
+const	float	$const40	6		%read{316,816} %write{2147483647,-1}
+temp	int	$tmp185	%read{318,318} %write{317,317}
+temp	float	$tmp186	%read{322,322} %write{321,321}
+temp	int	$tmp187	%read{323,323} %write{322,322}
+temp	float	$tmp188	%read{329,329} %write{325,325}
+temp	float	$tmp189	%read{329,329} %write{328,328}
+temp	float	$tmp190	%read{328,328} %write{326,326}
+temp	float	$tmp191	%read{328,328} %write{327,327}
+temp	float	$tmp192	%read{334,334} %write{330,330}
+temp	float	$tmp193	%read{334,334} %write{333,333}
+temp	float	$tmp194	%read{333,333} %write{331,331}
+temp	float	$tmp195	%read{333,333} %write{332,332}
+temp	int	$tmp196	%read{338,338} %write{337,337}
+temp	int	$tmp197	%read{343,343} %write{342,342}
+temp	color	$tmp198	%read{346,346} %write{345,345}
+temp	color	$tmp199	%read{347,347} %write{346,346}
+temp	float	$tmp200	%read{349,349} %write{348,348}
+temp	int	$tmp201	%read{350,350} %write{349,349}
+temp	float	$tmp202	%read{353,353} %write{351,351}
+temp	float	$tmp203	%read{353,353} %write{352,352}
+temp	float	$tmp204	%read{355,355} %write{354,354}
+temp	int	$tmp205	%read{356,356} %write{355,355}
+temp	float	$tmp206	%read{358,358} %write{357,357}
+temp	float	$tmp207	%read{360,360} %write{358,358}
+temp	float	$tmp208	%read{360,360} %write{359,359}
+temp	float	$tmp209	%read{362,362} %write{361,361}
+temp	float	$tmp210	%read{364,364} %write{362,362}
+temp	float	$tmp211	%read{364,364} %write{363,363}
+temp	int	$tmp212	%read{367,367} %write{366,366}
+temp	float	$tmp213	%read{371,371} %write{370,370}
+const	string	$const41	"hsv_to_rgb"		%read{372,806} %write{2147483647,-1}
+temp	int	$tmp214	%read{377,377} %write{376,376}
+temp	int	$tmp215	%read{380,380} %write{379,379}
+temp	float	$tmp216	%read{387,387} %write{386,386}
+temp	float	$tmp217	%read{389,389} %write{388,388}
+temp	float	$tmp218	%read{390,390} %write{389,389}
+temp	float	$tmp219	%read{392,392} %write{391,391}
+temp	float	$tmp220	%read{393,393} %write{392,392}
+temp	float	$tmp221	%read{394,394} %write{393,393}
+temp	int	$tmp222	%read{396,396} %write{395,395}
+temp	int	$tmp223	%read{399,399} %write{398,398}
+temp	int	$tmp224	%read{402,402} %write{401,401}
+const	float	$const42	3		%read{404,838} %write{2147483647,-1}
+temp	int	$tmp225	%read{405,405} %write{404,404}
+temp	int	$tmp226	%read{408,408} %write{407,407}
+const	string	$const43	"saturation"		%read{414,414} %write{2147483647,-1}
+temp	int	$tmp227	%read{415,415} %write{414,414}
+const	string	$const44	"node_mix_sat"		%read{416,416} %write{2147483647,-1}
+temp	float	$tmp228	%read{424,424} %write{420,420}
+temp	float	$tmp229	%read{424,424} %write{423,423}
+temp	float	$tmp230	%read{423,423} %write{421,421}
+temp	float	$tmp231	%read{423,423} %write{422,422}
+temp	float	$tmp232	%read{429,429} %write{425,425}
+temp	float	$tmp233	%read{429,429} %write{428,428}
+temp	float	$tmp234	%read{428,428} %write{426,426}
+temp	float	$tmp235	%read{428,428} %write{427,427}
+temp	int	$tmp236	%read{433,433} %write{432,432}
+temp	int	$tmp237	%read{438,438} %write{437,437}
+temp	color	$tmp238	%read{441,441} %write{440,440}
+temp	color	$tmp239	%read{442,442} %write{441,441}
+temp	float	$tmp240	%read{444,444} %write{443,443}
+temp	int	$tmp241	%read{445,445} %write{444,444}
+temp	float	$tmp242	%read{448,448} %write{446,446}
+temp	float	$tmp243	%read{448,448} %write{447,447}
+temp	float	$tmp244	%read{450,450} %write{449,449}
+temp	int	$tmp245	%read{451,451} %write{450,450}
+temp	float	$tmp246	%read{453,453} %write{452,452}
+temp	float	$tmp247	%read{455,455} %write{453,453}
+temp	float	$tmp248	%read{455,455} %write{454,454}
+temp	float	$tmp249	%read{457,457} %write{456,456}
+temp	float	$tmp250	%read{459,459} %write{457,457}
+temp	float	$tmp251	%read{459,459} %write{458,458}
+temp	int	$tmp252	%read{462,462} %write{461,461}
+temp	float	$tmp253	%read{466,466} %write{465,465}
+temp	int	$tmp254	%read{467,467} %write{466,466}
+temp	float	$tmp255	%read{473,473} %write{469,469}
+temp	float	$tmp256	%read{473,473} %write{472,472}
+temp	float	$tmp257	%read{472,472} %write{470,470}
+temp	float	$tmp258	%read{472,472} %write{471,471}
+temp	float	$tmp259	%read{478,478} %write{474,474}
+temp	float	$tmp260	%read{478,478} %write{477,477}
+temp	float	$tmp261	%read{477,477} %write{475,475}
+temp	float	$tmp262	%read{477,477} %write{476,476}
+temp	int	$tmp263	%read{482,482} %write{481,481}
+temp	int	$tmp264	%read{487,487} %write{486,486}
+temp	color	$tmp265	%read{490,490} %write{489,489}
+temp	color	$tmp266	%read{491,491} %write{490,490}
+temp	float	$tmp267	%read{493,493} %write{492,492}
+temp	int	$tmp268	%read{494,494} %write{493,493}
+temp	float	$tmp269	%read{497,497} %write{495,495}
+temp	float	$tmp270	%read{497,497} %write{496,496}
+temp	float	$tmp271	%read{499,499} %write{498,498}
+temp	int	$tmp272	%read{500,500} %write{499,499}
+temp	float	$tmp273	%read{502,502} %write{501,501}
+temp	float	$tmp274	%read{504,504} %write{502,502}
+temp	float	$tmp275	%read{504,504} %write{503,503}
+temp	float	$tmp276	%read{506,506} %write{505,505}
+temp	float	$tmp277	%read{508,508} %write{506,506}
+temp	float	$tmp278	%read{508,508} %write{507,507}
+temp	int	$tmp279	%read{511,511} %write{510,510}
+temp	float	$tmp280	%read{515,515} %write{514,514}
+temp	float	$tmp281	%read{518,518} %write{515,515}
+temp	float	$tmp282	%read{517,517} %write{516,516}
+temp	float	$tmp283	%read{518,518} %write{517,517}
+temp	float	$tmp284	%read{519,519} %write{518,518}
+temp	int	$tmp285	%read{525,525} %write{524,524}
+temp	int	$tmp286	%read{528,528} %write{527,527}
+temp	float	$tmp287	%read{535,535} %write{534,534}
+temp	float	$tmp288	%read{537,537} %write{536,536}
+temp	float	$tmp289	%read{538,538} %write{537,537}
+temp	float	$tmp290	%read{540,540} %write{539,539}
+temp	float	$tmp291	%read{541,541} %write{540,540}
+temp	float	$tmp292	%read{542,542} %write{541,541}
+temp	int	$tmp293	%read{544,544} %write{543,543}
+temp	int	$tmp294	%read{547,547} %write{546,546}
+temp	int	$tmp295	%read{550,550} %write{549,549}
+temp	int	$tmp296	%read{553,553} %write{552,552}
+temp	int	$tmp297	%read{556,556} %write{555,555}
+const	string	$const45	"value"		%read{561,561} %write{2147483647,-1}
+temp	int	$tmp298	%read{562,562} %write{561,561}
+const	string	$const46	"node_mix_val"		%read{563,563} %write{2147483647,-1}
+temp	float	$tmp299	%read{570,570} %write{566,566}
+temp	float	$tmp300	%read{570,570} %write{569,569}
+temp	float	$tmp301	%read{569,569} %write{567,567}
+temp	float	$tmp302	%read{569,569} %write{568,568}
+temp	float	$tmp303	%read{575,575} %write{571,571}
+temp	float	$tmp304	%read{575,575} %write{574,574}
+temp	float	$tmp305	%read{574,574} %write{572,572}
+temp	float	$tmp306	%read{574,574} %write{573,573}
+temp	int	$tmp307	%read{579,579} %write{578,578}
+temp	int	$tmp308	%read{584,584} %write{583,583}
+temp	color	$tmp309	%read{587,587} %write{586,586}
+temp	color	$tmp310	%read{588,588} %write{587,587}
+temp	float	$tmp311	%read{590,590} %write{589,589}
+temp	int	$tmp312	%read{591,591} %write{590,590}
+temp	float	$tmp313	%read{594,594} %write{592,592}
+temp	float	$tmp314	%read{594,594} %write{593,593}
+temp	float	$tmp315	%read{596,596} %write{595,595}
+temp	int	$tmp316	%read{597,597} %write{596,596}
+temp	float	$tmp317	%read{599,599} %write{598,598}
+temp	float	$tmp318	%read{601,601} %write{599,599}
+temp	float	$tmp319	%read{601,601} %write{600,600}
+temp	float	$tmp320	%read{603,603} %write{602,602}
+temp	float	$tmp321	%read{605,605} %write{603,603}
+temp	float	$tmp322	%read{605,605} %write{604,604}
+temp	int	$tmp323	%read{608,608} %write{607,607}
+temp	float	$tmp324	%read{616,616} %write{612,612}
+temp	float	$tmp325	%read{616,616} %write{615,615}
+temp	float	$tmp326	%read{615,615} %write{613,613}
+temp	float	$tmp327	%read{615,615} %write{614,614}
+temp	float	$tmp328	%read{621,621} %write{617,617}
+temp	float	$tmp329	%read{621,621} %write{620,620}
+temp	float	$tmp330	%read{620,620} %write{618,618}
+temp	float	$tmp331	%read{620,620} %write{619,619}
+temp	int	$tmp332	%read{625,625} %write{624,624}
+temp	int	$tmp333	%read{630,630} %write{629,629}
+temp	color	$tmp334	%read{633,633} %write{632,632}
+temp	color	$tmp335	%read{634,634} %write{633,633}
+temp	float	$tmp336	%read{636,636} %write{635,635}
+temp	int	$tmp337	%read{637,637} %write{636,636}
+temp	float	$tmp338	%read{640,640} %write{638,638}
+temp	float	$tmp339	%read{640,640} %write{639,639}
+temp	float	$tmp340	%read{642,642} %write{641,641}
+temp	int	$tmp341	%read{643,643} %write{642,642}
+temp	float	$tmp342	%read{645,645} %write{644,644}
+temp	float	$tmp343	%read{647,647} %write{645,645}
+temp	float	$tmp344	%read{647,647} %write{646,646}
+temp	float	$tmp345	%read{649,649} %write{648,648}
+temp	float	$tmp346	%read{651,651} %write{649,649}
+temp	float	$tmp347	%read{651,651} %write{650,650}
+temp	int	$tmp348	%read{654,654} %write{653,653}
+temp	float	$tmp349	%read{658,658} %write{657,657}
+temp	float	$tmp350	%read{661,661} %write{658,658}
+temp	float	$tmp351	%read{660,660} %write{659,659}
+temp	float	$tmp352	%read{661,661} %write{660,660}
+temp	float	$tmp353	%read{662,662} %write{661,661}
+temp	int	$tmp354	%read{668,668} %write{667,667}
+temp	int	$tmp355	%read{671,671} %write{670,670}
+temp	float	$tmp356	%read{678,678} %write{677,677}
+temp	float	$tmp357	%read{680,680} %write{679,679}
+temp	float	$tmp358	%read{681,681} %write{680,680}
+temp	float	$tmp359	%read{683,683} %write{682,682}
+temp	float	$tmp360	%read{684,684} %write{683,683}
+temp	float	$tmp361	%read{685,685} %write{684,684}
+temp	int	$tmp362	%read{687,687} %write{686,686}
+temp	int	$tmp363	%read{690,690} %write{689,689}
+temp	int	$tmp364	%read{693,693} %write{692,692}
+temp	int	$tmp365	%read{696,696} %write{695,695}
+temp	int	$tmp366	%read{699,699} %write{698,698}
+const	string	$const47	"color"		%read{703,703} %write{2147483647,-1}
+temp	int	$tmp367	%read{704,704} %write{703,703}
+const	string	$const48	"node_mix_color"		%read{705,705} %write{2147483647,-1}
+temp	float	$tmp368	%read{712,712} %write{708,708}
+temp	float	$tmp369	%read{712,712} %write{711,711}
+temp	float	$tmp370	%read{711,711} %write{709,709}
+temp	float	$tmp371	%read{711,711} %write{710,710}
+temp	float	$tmp372	%read{717,717} %write{713,713}
+temp	float	$tmp373	%read{717,717} %write{716,716}
+temp	float	$tmp374	%read{716,716} %write{714,714}
+temp	float	$tmp375	%read{716,716} %write{715,715}
+temp	int	$tmp376	%read{721,721} %write{720,720}
+temp	int	$tmp377	%read{726,726} %write{725,725}
+temp	color	$tmp378	%read{729,729} %write{728,728}
+temp	color	$tmp379	%read{730,730} %write{729,729}
+temp	float	$tmp380	%read{732,732} %write{731,731}
+temp	int	$tmp381	%read{733,733} %write{732,732}
+temp	float	$tmp382	%read{736,736} %write{734,734}
+temp	float	$tmp383	%read{736,736} %write{735,735}
+temp	float	$tmp384	%read{738,738} %write{737,737}
+temp	int	$tmp385	%read{739,739} %write{738,738}
+temp	float	$tmp386	%read{741,741} %write{740,740}
+temp	float	$tmp387	%read{743,743} %write{741,741}
+temp	float	$tmp388	%read{743,743} %write{742,742}
+temp	float	$tmp389	%read{745,745} %write{744,744}
+temp	float	$tmp390	%read{747,747} %write{745,745}
+temp	float	$tmp391	%read{747,747} %write{746,746}
+temp	int	$tmp392	%read{750,750} %write{749,749}
+temp	float	$tmp393	%read{754,754} %write{753,753}
+temp	int	$tmp394	%read{755,755} %write{754,754}
+temp	float	$tmp395	%read{761,761} %write{757,757}
+temp	float	$tmp396	%read{761,761} %write{760,760}
+temp	float	$tmp397	%read{760,760} %write{758,758}
+temp	float	$tmp398	%read{760,760} %write{759,759}
+temp	float	$tmp399	%read{766,766} %write{762,762}
+temp	float	$tmp400	%read{766,766} %write{765,765}
+temp	float	$tmp401	%read{765,765} %write{763,763}
+temp	float	$tmp402	%read{765,765} %write{764,764}
+temp	int	$tmp403	%read{770,770} %write{769,769}
+temp	int	$tmp404	%read{775,775} %write{774,774}
+temp	color	$tmp405	%read{778,778} %write{777,777}
+temp	color	$tmp406	%read{779,779} %write{778,778}
+temp	float	$tmp407	%read{781,781} %write{780,780}
+temp	int	$tmp408	%read{782,782} %write{781,781}
+temp	float	$tmp409	%read{785,785} %write{783,783}
+temp	float	$tmp410	%read{785,785} %write{784,784}
+temp	float	$tmp411	%read{787,787} %write{786,786}
+temp	int	$tmp412	%read{788,788} %write{787,787}
+temp	float	$tmp413	%read{790,790} %write{789,789}
+temp	float	$tmp414	%read{792,792} %write{790,790}
+temp	float	$tmp415	%read{792,792} %write{791,791}
+temp	float	$tmp416	%read{794,794} %write{793,793}
+temp	float	$tmp417	%read{796,796} %write{794,794}
+temp	float	$tmp418	%read{796,796} %write{795,795}
+temp	int	$tmp419	%read{799,799} %write{798,798}
+temp	float	$tmp420	%read{803,803} %write{802,802}
+temp	float	$tmp421	%read{805,805} %write{804,804}
+temp	int	$tmp422	%read{811,811} %write{810,810}
+temp	int	$tmp423	%read{814,814} %write{813,813}
+temp	float	$tmp424	%read{821,821} %write{820,820}
+temp	float	$tmp425	%read{823,823} %write{822,822}
+temp	float	$tmp426	%read{824,824} %write{823,823}
+temp	float	$tmp427	%read{826,826} %write{825,825}
+temp	float	$tmp428	%read{827,827} %write{826,826}
+temp	float	$tmp429	%read{828,828} %write{827,827}
+temp	int	$tmp430	%read{830,830} %write{829,829}
+temp	int	$tmp431	%read{833,833} %write{832,832}
+temp	int	$tmp432	%read{836,836} %write{835,835}
+temp	int	$tmp433	%read{839,839} %write{838,838}
+temp	int	$tmp434	%read{842,842} %write{841,841}
+const	string	$const49	"soft_light"		%read{848,848} %write{2147483647,-1}
+temp	int	$tmp435	%read{849,849} %write{848,848}
+const	string	$const50	"node_mix_soft"		%read{850,850} %write{2147483647,-1}
+temp	color	$tmp436	%read{855,855} %write{853,853}
+temp	color	$tmp437	%read{855,855} %write{854,854}
+temp	color	$tmp438	%read{856,856} %write{855,855}
+temp	color	$tmp439	%read{864,864} %write{857,857}
+temp	color	$tmp440	%read{859,859} %write{858,858}
+temp	color	$tmp441	%read{860,860} %write{859,859}
+temp	color	$tmp442	%read{862,862} %write{860,860}
+temp	color	$tmp443	%read{862,862} %write{861,861}
+temp	color	$tmp444	%read{863,863} %write{862,862}
+temp	color	$tmp445	%read{864,864} %write{863,863}
+const	string	$const51	"linear_light"		%read{865,865} %write{2147483647,-1}
+temp	int	$tmp446	%read{866,866} %write{865,865}
+const	string	$const52	"node_mix_linear"		%read{867,867} %write{2147483647,-1}
+temp	float	$tmp447	%read{870,870} %write{869,869}
+temp	int	$tmp448	%read{871,871} %write{870,870}
+temp	float	$tmp449	%read{877,877} %write{872,872}
+temp	float	$tmp450	%read{874,874} %write{873,873}
+temp	float	$tmp451	%read{875,875} %write{874,874}
+temp	float	$tmp452	%read{876,876} %write{875,875}
+temp	float	$tmp453	%read{877,877} %write{876,876}
+temp	float	$tmp454	%read{878,878} %write{877,877}
+temp	float	$tmp455	%read{884,884} %write{879,879}
+temp	float	$tmp456	%read{881,881} %write{880,880}
+temp	float	$tmp457	%read{882,882} %write{881,881}
+temp	float	$tmp458	%read{883,883} %write{882,882}
+temp	float	$tmp459	%read{884,884} %write{883,883}
+temp	float	$tmp460	%read{885,885} %write{884,884}
+temp	float	$tmp461	%read{887,887} %write{886,886}
+temp	int	$tmp462	%read{888,888} %write{887,887}
+temp	float	$tmp463	%read{894,894} %write{889,889}
+temp	float	$tmp464	%read{891,891} %write{890,890}
+temp	float	$tmp465	%read{892,892} %write{891,891}
+temp	float	$tmp466	%read{893,893} %write{892,892}
+temp	float	$tmp467	%read{894,894} %write{893,893}
+temp	float	$tmp468	%read{895,895} %write{894,894}
+temp	float	$tmp469	%read{901,901} %write{896,896}
+temp	float	$tmp470	%read{898,898} %write{897,897}
+temp	float	$tmp471	%read{899,899} %write{898,898}
+temp	float	$tmp472	%read{900,900} %write{899,899}
+temp	float	$tmp473	%read{901,901} %write{900,900}
+temp	float	$tmp474	%read{902,902} %write{901,901}
+temp	float	$tmp475	%read{904,904} %write{903,903}
+temp	int	$tmp476	%read{905,905} %write{904,904}
+temp	float	$tmp477	%read{911,911} %write{906,906}
+temp	float	$tmp478	%read{908,908} %write{907,907}
+temp	float	$tmp479	%read{909,909} %write{908,908}
+temp	float	$tmp480	%read{910,910} %write{909,909}
+temp	float	$tmp481	%read{911,911} %write{910,910}
+temp	float	$tmp482	%read{912,912} %write{911,911}
+temp	float	$tmp483	%read{918,918} %write{913,913}
+temp	float	$tmp484	%read{915,915} %write{914,914}
+temp	float	$tmp485	%read{916,916} %write{915,915}
+temp	float	$tmp486	%read{917,917} %write{916,916}
+temp	float	$tmp487	%read{918,918} %write{917,917}
+temp	float	$tmp488	%read{919,919} %write{918,918}
+const	string	$const53	"node_mix_clamp"		%read{922,922} %write{2147483647,-1}
+temp	float	$tmp489	%read{928,928} %write{927,927}
+temp	float	$tmp490	%read{926,926} %write{924,924}
+temp	float	$tmp491	%read{927,927} %write{926,926}
+temp	float	$tmp492	%read{933,933} %write{932,932}
+temp	float	$tmp493	%read{931,931} %write{929,929}
+temp	float	$tmp494	%read{932,932} %write{931,931}
+temp	float	$tmp495	%read{938,938} %write{937,937}
+temp	float	$tmp496	%read{936,936} %write{934,934}
+temp	float	$tmp497	%read{937,937} %write{936,936}
+code ___main___
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:282
+#   float t = clamp(Fac, 0.0, 1.0);
+	functioncall	$const3 3 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{282} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
+# float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
+	min		$tmp1 Fac $const2 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
+	max		t $tmp1 $const1 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:284
+#   if (mix_type == "mix")
+	eq		$tmp2 mix_type $const4 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{284} %argrw{"wrr"}
+	if		$tmp2 7 7 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:285
+#     Color = node_mix_blend(t, Color1, Color2);
+	functioncall	$const5 7 	%line{285} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:10
+#   return mix(col1, col2, t);
+	mix		Color Color1 Color2 t 	%line{10} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:286
+#   if (mix_type == "add")
+	eq		$tmp3 mix_type $const6 	%line{286} %argrw{"wrr"}
+	if		$tmp3 12 12 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:287
+#     Color = node_mix_add(t, Color1, Color2);
+	functioncall	$const7 12 	%line{287} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:15
+#   return mix(col1, col1 + col2, t);
+	add		$tmp4 Color1 Color2 	%line{15} %argrw{"wrr"}
+	mix		Color Color1 $tmp4 t 	%argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:288
+#   if (mix_type == "multiply")
+	eq		$tmp5 mix_type $const8 	%line{288} %argrw{"wrr"}
+	if		$tmp5 17 17 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:289
+#     Color = node_mix_mul(t, Color1, Color2);
+	functioncall	$const9 17 	%line{289} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:20
+#   return mix(col1, col1 * col2, t);
+	mul		$tmp6 Color1 Color2 	%line{20} %argrw{"wrr"}
+	mix		Color Color1 $tmp6 t 	%argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:290
+#   if (mix_type == "screen")
+	eq		$tmp7 mix_type $const10 	%line{290} %argrw{"wrr"}
+	if		$tmp7 28 28 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:291
+#     Color = node_mix_screen(t, Color1, Color2);
+	functioncall	$const11 28 	%line{291} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:25
+#   float tm = 1.0 - t;
+	sub		___415_tm $const2 t 	%line{25} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:27
+#   return color(1.0) - (color(tm) + t * (color(1.0) - col2)) * (color(1.0) - col1);
+	assign		$tmp9 ___415_tm 	%line{27} %argrw{"wr"}
+	sub		$tmp11 $const12 Color2 	%argrw{"wrr"}
+	mul		$tmp12 t $tmp11 	%argrw{"wrr"}
+	add		$tmp13 $tmp9 $tmp12 	%argrw{"wrr"}
+	sub		$tmp15 $const12 Color1 	%argrw{"wrr"}
+	mul		$tmp16 $tmp13 $tmp15 	%argrw{"wrr"}
+	sub		Color $const12 $tmp16 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:292
+#   if (mix_type == "overlay")
+	eq		$tmp17 mix_type $const13 	%line{292} %argrw{"wrr"}
+	if		$tmp17 94 94 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:293
+#     Color = node_mix_overlay(t, Color1, Color2);
+	functioncall	$const14 94 	%line{293} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:32
+#   float tm = 1.0 - t;
+	sub		___416_tm $const2 t 	%line{32} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:34
+#   color outcol = col1;
+	assign		___416_outcol Color1 	%line{34} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:36
+#   if (outcol[0] < 0.5)
+	compref		$tmp18 ___416_outcol $const15 	%line{36} %argrw{"wrr"}
+	lt		$tmp19 $tmp18 $const16 	%argrw{"wrr"}
+	if		$tmp19 43 53 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:37
+#     outcol[0] *= tm + 2.0 * t * col2[0];
+	compref		$tmp20 ___416_outcol $const15 	%line{37} %argrw{"wrr"}
+	mul		$tmp21 $const17 t 	%argrw{"wrr"}
+	compref		$tmp22 Color2 $const15 	%argrw{"wrr"}
+	mul		$tmp23 $tmp21 $tmp22 	%argrw{"wrr"}
+	add		$tmp24 ___416_tm $tmp23 	%argrw{"wrr"}
+	mul		$tmp25 $tmp20 $tmp24 	%argrw{"wrr"}
+	compassign	___416_outcol $const15 $tmp25 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:39
+#     outcol[0] = 1.0 - (tm + 2.0 * t * (1.0 - col2[0])) * (1.0 - outcol[0]);
+	mul		$tmp26 $const17 t 	%line{39} %argrw{"wrr"}
+	compref		$tmp27 Color2 $const15 	%argrw{"wrr"}
+	sub		$tmp28 $const2 $tmp27 	%argrw{"wrr"}
+	mul		$tmp29 $tmp26 $tmp28 	%argrw{"wrr"}
+	add		$tmp30 ___416_tm $tmp29 	%argrw{"wrr"}
+	compref		$tmp31 ___416_outcol $const15 	%argrw{"wrr"}
+	sub		$tmp32 $const2 $tmp31 	%argrw{"wrr"}
+	mul		$tmp33 $tmp30 $tmp32 	%argrw{"wrr"}
+	sub		$tmp34 $const2 $tmp33 	%argrw{"wrr"}
+	compassign	___416_outcol $const15 $tmp34 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:41
+#   if (outcol[1] < 0.5)
+	compref		$tmp35 ___416_outcol $const18 	%line{41} %argrw{"wrr"}
+	lt		$tmp36 $tmp35 $const16 	%argrw{"wrr"}
+	if		$tmp36 63 73 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:42
+#     outcol[1] *= tm + 2.0 * t * col2[1];
+	compref		$tmp37 ___416_outcol $const18 	%line{42} %argrw{"wrr"}
+	mul		$tmp38 $const17 t 	%argrw{"wrr"}
+	compref		$tmp39 Color2 $const18 	%argrw{"wrr"}
+	mul		$tmp40 $tmp38 $tmp39 	%argrw{"wrr"}
+	add		$tmp41 ___416_tm $tmp40 	%argrw{"wrr"}
+	mul		$tmp42 $tmp37 $tmp41 	%argrw{"wrr"}
+	compassign	___416_outcol $const18 $tmp42 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:44
+#     outcol[1] = 1.0 - (tm + 2.0 * t * (1.0 - col2[1])) * (1.0 - outcol[1]);
+	mul		$tmp43 $const17 t 	%line{44} %argrw{"wrr"}
+	compref		$tmp44 Color2 $const18 	%argrw{"wrr"}
+	sub		$tmp45 $const2 $tmp44 	%argrw{"wrr"}
+	mul		$tmp46 $tmp43 $tmp45 	%argrw{"wrr"}
+	add		$tmp47 ___416_tm $tmp46 	%argrw{"wrr"}
+	compref		$tmp48 ___416_outcol $const18 	%argrw{"wrr"}
+	sub		$tmp49 $const2 $tmp48 	%argrw{"wrr"}
+	mul		$tmp50 $tmp47 $tmp49 	%argrw{"wrr"}
+	sub		$tmp51 $const2 $tmp50 	%argrw{"wrr"}
+	compassign	___416_outcol $const18 $tmp51 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:46
+#   if (outcol[2] < 0.5)
+	compref		$tmp52 ___416_outcol $const19 	%line{46} %argrw{"wrr"}
+	lt		$tmp53 $tmp52 $const16 	%argrw{"wrr"}
+	if		$tmp53 83 93 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:47
+#     outcol[2] *= tm + 2.0 * t * col2[2];
+	compref		$tmp54 ___416_outcol $const19 	%line{47} %argrw{"wrr"}
+	mul		$tmp55 $const17 t 	%argrw{"wrr"}
+	compref		$tmp56 Color2 $const19 	%argrw{"wrr"}
+	mul		$tmp57 $tmp55 $tmp56 	%argrw{"wrr"}
+	add		$tmp58 ___416_tm $tmp57 	%argrw{"wrr"}
+	mul		$tmp59 $tmp54 $tmp58 	%argrw{"wrr"}
+	compassign	___416_outcol $const19 $tmp59 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:49
+#     outcol[2] = 1.0 - (tm + 2.0 * t * (1.0 - col2[2])) * (1.0 - outcol[2]);
+	mul		$tmp60 $const17 t 	%line{49} %argrw{"wrr"}
+	compref		$tmp61 Color2 $const19 	%argrw{"wrr"}
+	sub		$tmp62 $const2 $tmp61 	%argrw{"wrr"}
+	mul		$tmp63 $tmp60 $tmp62 	%argrw{"wrr"}
+	add		$tmp64 ___416_tm $tmp63 	%argrw{"wrr"}
+	compref		$tmp65 ___416_outcol $const19 	%argrw{"wrr"}
+	sub		$tmp66 $const2 $tmp65 	%argrw{"wrr"}
+	mul		$tmp67 $tmp64 $tmp66 	%argrw{"wrr"}
+	sub		$tmp68 $const2 $tmp67 	%argrw{"wrr"}
+	compassign	___416_outcol $const19 $tmp68 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:51
+#   return outcol;
+	assign		Color ___416_outcol 	%line{51} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:294
+#   if (mix_type == "subtract")
+	eq		$tmp69 mix_type $const20 	%line{294} %argrw{"wrr"}
+	if		$tmp69 99 99 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:295
+#     Color = node_mix_sub(t, Color1, Color2);
+	functioncall	$const21 99 	%line{295} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:56
+#   return mix(col1, col1 - col2, t);
+	sub		$tmp70 Color1 Color2 	%line{56} %argrw{"wrr"}
+	mix		Color Color1 $tmp70 t 	%argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:296
+#   if (mix_type == "divide")
+	eq		$tmp71 mix_type $const22 	%line{296} %argrw{"wrr"}
+	if		$tmp71 138 138 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:297
+#     Color = node_mix_div(t, Color1, Color2);
+	functioncall	$const23 138 	%line{297} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:61
+#   float tm = 1.0 - t;
+	sub		___418_tm $const2 t 	%line{61} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:63
+#   color outcol = col1;
+	assign		___418_outcol Color1 	%line{63} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:65
+#   if (col2[0] != 0.0)
+	compref		$tmp72 Color2 $const15 	%line{65} %argrw{"wrr"}
+	neq		$tmp73 $tmp72 $const1 	%argrw{"wrr"}
+	if		$tmp73 115 115 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:66
+#     outcol[0] = tm * outcol[0] + t * outcol[0] / col2[0];
+	compref		$tmp74 ___418_outcol $const15 	%line{66} %argrw{"wrr"}
+	mul		$tmp75 ___418_tm $tmp74 	%argrw{"wrr"}
+	compref		$tmp76 ___418_outcol $const15 	%argrw{"wrr"}
+	mul		$tmp77 t $tmp76 	%argrw{"wrr"}
+	compref		$tmp78 Color2 $const15 	%argrw{"wrr"}
+	div		$tmp79 $tmp77 $tmp78 	%argrw{"wrr"}
+	add		$tmp80 $tmp75 $tmp79 	%argrw{"wrr"}
+	compassign	___418_outcol $const15 $tmp80 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:67
+#   if (col2[1] != 0.0)
+	compref		$tmp81 Color2 $const18 	%line{67} %argrw{"wrr"}
+	neq		$tmp82 $tmp81 $const1 	%argrw{"wrr"}
+	if		$tmp82 126 126 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:68
+#     outcol[1] = tm * outcol[1] + t * outcol[1] / col2[1];
+	compref		$tmp83 ___418_outcol $const18 	%line{68} %argrw{"wrr"}
+	mul		$tmp84 ___418_tm $tmp83 	%argrw{"wrr"}
+	compref		$tmp85 ___418_outcol $const18 	%argrw{"wrr"}
+	mul		$tmp86 t $tmp85 	%argrw{"wrr"}
+	compref		$tmp87 Color2 $const18 	%argrw{"wrr"}
+	div		$tmp88 $tmp86 $tmp87 	%argrw{"wrr"}
+	add		$tmp89 $tmp84 $tmp88 	%argrw{"wrr"}
+	compassign	___418_outcol $const18 $tmp89 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:69
+#   if (col2[2] != 0.0)
+	compref		$tmp90 Color2 $const19 	%line{69} %argrw{"wrr"}
+	neq		$tmp91 $tmp90 $const1 	%argrw{"wrr"}
+	if		$tmp91 137 137 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:70
+#     outcol[2] = tm * outcol[2] + t * outcol[2] / col2[2];
+	compref		$tmp92 ___418_outcol $const19 	%line{70} %argrw{"wrr"}
+	mul		$tmp93 ___418_tm $tmp92 	%argrw{"wrr"}
+	compref		$tmp94 ___418_outcol $const19 	%argrw{"wrr"}
+	mul		$tmp95 t $tmp94 	%argrw{"wrr"}
+	compref		$tmp96 Color2 $const19 	%argrw{"wrr"}
+	div		$tmp97 $tmp95 $tmp96 	%argrw{"wrr"}
+	add		$tmp98 $tmp93 $tmp97 	%argrw{"wrr"}
+	compassign	___418_outcol $const19 $tmp98 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:72
+#   return outcol;
+	assign		Color ___418_outcol 	%line{72} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:298
+#   if (mix_type == "difference")
+	eq		$tmp99 mix_type $const24 	%line{298} %argrw{"wrr"}
+	if		$tmp99 144 144 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:299
+#     Color = node_mix_diff(t, Color1, Color2);
+	functioncall	$const25 144 	%line{299} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:77
+#   return mix(col1, abs(col1 - col2), t);
+	sub		$tmp101 Color1 Color2 	%line{77} %argrw{"wrr"}
+	abs		$tmp100 $tmp101 	%argrw{"wr"}
+	mix		Color Color1 $tmp100 t 	%argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:300
+#   if (mix_type == "exclusion")
+	eq		$tmp102 mix_type $const26 	%line{300} %argrw{"wrr"}
+	if		$tmp102 154 154 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:301
+#     Color = node_mix_exclusion(t, Color1, Color2);
+	functioncall	$const27 154 	%line{301} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:82
+#   return max(mix(col1, col1 + col2 - 2.0 * col1 * col2, t), 0.0);
+	add		$tmp104 Color1 Color2 	%line{82} %argrw{"wrr"}
+	mul		$tmp105 $const17 Color1 	%argrw{"wrr"}
+	mul		$tmp106 $tmp105 Color2 	%argrw{"wrr"}
+	sub		$tmp107 $tmp104 $tmp106 	%argrw{"wrr"}
+	mix		$tmp103 Color1 $tmp107 t 	%argrw{"wrrr"}
+	assign		$tmp108 $const1 	%argrw{"wr"}
+	max		Color $tmp103 $tmp108 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:302
+#   if (mix_type == "darken")
+	eq		$tmp109 mix_type $const28 	%line{302} %argrw{"wrr"}
+	if		$tmp109 159 159 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:303
+#     Color = node_mix_dark(t, Color1, Color2);
+	functioncall	$const29 159 	%line{303} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:87
+#   return mix(col1, min(col1, col2), t);
+	min		$tmp110 Color1 Color2 	%line{87} %argrw{"wrr"}
+	mix		Color Color1 $tmp110 t 	%argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:304
+#   if (mix_type == "lighten")
+	eq		$tmp111 mix_type $const30 	%line{304} %argrw{"wrr"}
+	if		$tmp111 164 164 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:305
+#     Color = node_mix_light(t, Color1, Color2);
+	functioncall	$const31 164 	%line{305} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:92
+#   return mix(col1, max(col1, col2), t);
+	max		$tmp112 Color1 Color2 	%line{92} %argrw{"wrr"}
+	mix		Color Color1 $tmp112 t 	%argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:306
+#   if (mix_type == "dodge")
+	eq		$tmp113 mix_type $const32 	%line{306} %argrw{"wrr"}
+	if		$tmp113 214 214 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:307
+#     Color = node_mix_dodge(t, Color1, Color2);
+	functioncall	$const33 214 	%line{307} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:97
+#   color outcol = col1;
+	assign		___423_outcol Color1 	%line{97} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:99
+#   if (outcol[0] != 0.0) {
+	compref		$tmp114 ___423_outcol $const15 	%line{99} %argrw{"wrr"}
+	neq		$tmp115 $tmp114 $const1 	%argrw{"wrr"}
+	if		$tmp115 183 183 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:100
+#     float tmp = 1.0 - t * col2[0];
+	compref		$tmp116 Color2 $const15 	%line{100} %argrw{"wrr"}
+	mul		$tmp117 t $tmp116 	%argrw{"wrr"}
+	sub		___424_tmp $const2 $tmp117 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:101
+#     if (tmp <= 0.0)
+	le		$tmp118 ___424_tmp $const1 	%line{101} %argrw{"wrr"}
+	if		$tmp118 177 183 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:102
+#       outcol[0] = 1.0;
+	compassign	___423_outcol $const15 $const2 	%line{102} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:103
+#     else if ((tmp = outcol[0] / tmp) > 1.0)
+	compref		$tmp119 ___423_outcol $const15 	%line{103} %argrw{"wrr"}
+	div		___424_tmp $tmp119 ___424_tmp 	%argrw{"wrr"}
+	gt		$tmp120 ___424_tmp $const2 	%argrw{"wrr"}
+	if		$tmp120 182 183 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:104
+#       outcol[0] = 1.0;
+	compassign	___423_outcol $const15 $const2 	%line{104} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:106
+#       outcol[0] = tmp;
+	compassign	___423_outcol $const15 ___424_tmp 	%line{106} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:108
+#   if (outcol[1] != 0.0) {
+	compref		$tmp121 ___423_outcol $const18 	%line{108} %argrw{"wrr"}
+	neq		$tmp122 $tmp121 $const1 	%argrw{"wrr"}
+	if		$tmp122 198 198 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:109
+#     float tmp = 1.0 - t * col2[1];
+	compref		$tmp123 Color2 $const18 	%line{109} %argrw{"wrr"}
+	mul		$tmp124 t $tmp123 	%argrw{"wrr"}
+	sub		___425_tmp $const2 $tmp124 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:110
+#     if (tmp <= 0.0)
+	le		$tmp125 ___425_tmp $const1 	%line{110} %argrw{"wrr"}
+	if		$tmp125 192 198 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:111
+#       outcol[1] = 1.0;
+	compassign	___423_outcol $const18 $const2 	%line{111} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:112
+#     else if ((tmp = outcol[1] / tmp) > 1.0)
+	compref		$tmp126 ___423_outcol $const18 	%line{112} %argrw{"wrr"}
+	div		___425_tmp $tmp126 ___425_tmp 	%argrw{"wrr"}
+	gt		$tmp127 ___425_tmp $const2 	%argrw{"wrr"}
+	if		$tmp127 197 198 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:113
+#       outcol[1] = 1.0;
+	compassign	___423_outcol $const18 $const2 	%line{113} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:115
+#       outcol[1] = tmp;
+	compassign	___423_outcol $const18 ___425_tmp 	%line{115} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:117
+#   if (outcol[2] != 0.0) {
+	compref		$tmp128 ___423_outcol $const19 	%line{117} %argrw{"wrr"}
+	neq		$tmp129 $tmp128 $const1 	%argrw{"wrr"}
+	if		$tmp129 213 213 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:118
+#     float tmp = 1.0 - t * col2[2];
+	compref		$tmp130 Color2 $const19 	%line{118} %argrw{"wrr"}
+	mul		$tmp131 t $tmp130 	%argrw{"wrr"}
+	sub		___426_tmp $const2 $tmp131 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:119
+#     if (tmp <= 0.0)
+	le		$tmp132 ___426_tmp $const1 	%line{119} %argrw{"wrr"}
+	if		$tmp132 207 213 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:120
+#       outcol[2] = 1.0;
+	compassign	___423_outcol $const19 $const2 	%line{120} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:121
+#     else if ((tmp = outcol[2] / tmp) > 1.0)
+	compref		$tmp133 ___423_outcol $const19 	%line{121} %argrw{"wrr"}
+	div		___426_tmp $tmp133 ___426_tmp 	%argrw{"wrr"}
+	gt		$tmp134 ___426_tmp $const2 	%argrw{"wrr"}
+	if		$tmp134 212 213 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:122
+#       outcol[2] = 1.0;
+	compassign	___423_outcol $const19 $const2 	%line{122} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:124
+#       outcol[2] = tmp;
+	compassign	___423_outcol $const19 ___426_tmp 	%line{124} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:127
+#   return outcol;
+	assign		Color ___423_outcol 	%line{127} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:308
+#   if (mix_type == "burn")
+	eq		$tmp135 mix_type $const34 	%line{308} %argrw{"wrr"}
+	if		$tmp135 271 271 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:309
+#     Color = node_mix_burn(t, Color1, Color2);
+	functioncall	$const35 271 	%line{309} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:132
+#   float tmp, tm = 1.0 - t;
+	sub		___427_tm $const2 t 	%line{132} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:134
+#   color outcol = col1;
+	assign		___427_outcol Color1 	%line{134} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:136
+#   tmp = tm + t * col2[0];
+	compref		$tmp136 Color2 $const15 	%line{136} %argrw{"wrr"}
+	mul		$tmp137 t $tmp136 	%argrw{"wrr"}
+	add		___427_tmp ___427_tm $tmp137 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:137
+#   if (tmp <= 0.0)
+	le		$tmp138 ___427_tmp $const1 	%line{137} %argrw{"wrr"}
+	if		$tmp138 225 236 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:138
+#     outcol[0] = 0.0;
+	compassign	___427_outcol $const15 $const1 	%line{138} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:139
+#   else if ((tmp = (1.0 - (1.0 - outcol[0]) / tmp)) < 0.0)
+	compref		$tmp139 ___427_outcol $const15 	%line{139} %argrw{"wrr"}
+	sub		$tmp140 $const2 $tmp139 	%argrw{"wrr"}
+	div		$tmp141 $tmp140 ___427_tmp 	%argrw{"wrr"}
+	sub		___427_tmp $const2 $tmp141 	%argrw{"wrr"}
+	lt		$tmp142 ___427_tmp $const1 	%argrw{"wrr"}
+	if		$tmp142 232 236 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:140
+#     outcol[0] = 0.0;
+	compassign	___427_outcol $const15 $const1 	%line{140} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:141
+#   else if (tmp > 1.0)
+	gt		$tmp143 ___427_tmp $const2 	%line{141} %argrw{"wrr"}
+	if		$tmp143 235 236 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:142
+#     outcol[0] = 1.0;
+	compassign	___427_outcol $const15 $const2 	%line{142} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:144
+#     outcol[0] = tmp;
+	compassign	___427_outcol $const15 ___427_tmp 	%line{144} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:146
+#   tmp = tm + t * col2[1];
+	compref		$tmp144 Color2 $const18 	%line{146} %argrw{"wrr"}
+	mul		$tmp145 t $tmp144 	%argrw{"wrr"}
+	add		___427_tmp ___427_tm $tmp145 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:147
+#   if (tmp <= 0.0)
+	le		$tmp146 ___427_tmp $const1 	%line{147} %argrw{"wrr"}
+	if		$tmp146 242 253 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:148
+#     outcol[1] = 0.0;
+	compassign	___427_outcol $const18 $const1 	%line{148} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:149
+#   else if ((tmp = (1.0 - (1.0 - outcol[1]) / tmp)) < 0.0)
+	compref		$tmp147 ___427_outcol $const18 	%line{149} %argrw{"wrr"}
+	sub		$tmp148 $const2 $tmp147 	%argrw{"wrr"}
+	div		$tmp149 $tmp148 ___427_tmp 	%argrw{"wrr"}
+	sub		___427_tmp $const2 $tmp149 	%argrw{"wrr"}
+	lt		$tmp150 ___427_tmp $const1 	%argrw{"wrr"}
+	if		$tmp150 249 253 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:150
+#     outcol[1] = 0.0;
+	compassign	___427_outcol $const18 $const1 	%line{150} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:151
+#   else if (tmp > 1.0)
+	gt		$tmp151 ___427_tmp $const2 	%line{151} %argrw{"wrr"}
+	if		$tmp151 252 253 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:152
+#     outcol[1] = 1.0;
+	compassign	___427_outcol $const18 $const2 	%line{152} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:154
+#     outcol[1] = tmp;
+	compassign	___427_outcol $const18 ___427_tmp 	%line{154} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:156
+#   tmp = tm + t * col2[2];
+	compref		$tmp152 Color2 $const19 	%line{156} %argrw{"wrr"}
+	mul		$tmp153 t $tmp152 	%argrw{"wrr"}
+	add		___427_tmp ___427_tm $tmp153 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:157
+#   if (tmp <= 0.0)
+	le		$tmp154 ___427_tmp $const1 	%line{157} %argrw{"wrr"}
+	if		$tmp154 259 270 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:158
+#     outcol[2] = 0.0;
+	compassign	___427_outcol $const19 $const1 	%line{158} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:159
+#   else if ((tmp = (1.0 - (1.0 - outcol[2]) / tmp)) < 0.0)
+	compref		$tmp155 ___427_outcol $const19 	%line{159} %argrw{"wrr"}
+	sub		$tmp156 $const2 $tmp155 	%argrw{"wrr"}
+	div		$tmp157 $tmp156 ___427_tmp 	%argrw{"wrr"}
+	sub		___427_tmp $const2 $tmp157 	%argrw{"wrr"}
+	lt		$tmp158 ___427_tmp $const1 	%argrw{"wrr"}
+	if		$tmp158 266 270 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:160
+#     outcol[2] = 0.0;
+	compassign	___427_outcol $const19 $const1 	%line{160} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:161
+#   else if (tmp > 1.0)
+	gt		$tmp159 ___427_tmp $const2 	%line{161} %argrw{"wrr"}
+	if		$tmp159 269 270 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:162
+#     outcol[2] = 1.0;
+	compassign	___427_outcol $const19 $const2 	%line{162} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:164
+#     outcol[2] = tmp;
+	compassign	___427_outcol $const19 ___427_tmp 	%line{164} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:166
+#   return outcol;
+	assign		Color ___427_outcol 	%line{166} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:310
+#   if (mix_type == "hue")
+	eq		$tmp160 mix_type $const36 	%line{310} %argrw{"wrr"}
+	if		$tmp160 414 414 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:311
+#     Color = node_mix_hue(t, Color1, Color2);
+	functioncall	$const37 414 	%line{311} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:171
+#   color outcol = col1;
+	assign		___428_outcol Color1 	%line{171} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:172
+#   color hsv2 = rgb_to_hsv(col2);
+	functioncall	$const38 321 	%line{172} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:85
+#   cmax = max(rgb[0], max(rgb[1], rgb[2]));
+	compref		$tmp161 Color2 $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h"} %line{85} %argrw{"wrr"}
+	compref		$tmp163 Color2 $const18 	%argrw{"wrr"}
+	compref		$tmp164 Color2 $const19 	%argrw{"wrr"}
+	max		$tmp162 $tmp163 $tmp164 	%argrw{"wrr"}
+	max		___361_cmax $tmp161 $tmp162 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:86
+#   cmin = min(rgb[0], min(rgb[1], rgb[2]));
+	compref		$tmp165 Color2 $const15 	%line{86} %argrw{"wrr"}
+	compref		$tmp167 Color2 $const18 	%argrw{"wrr"}
+	compref		$tmp168 Color2 $const19 	%argrw{"wrr"}
+	min		$tmp166 $tmp167 $tmp168 	%argrw{"wrr"}
+	min		___361_cmin $tmp165 $tmp166 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:87
+#   cdelta = cmax - cmin;
+	sub		___361_cdelta ___361_cmax ___361_cmin 	%line{87} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:89
+#   v = cmax;
+	assign		___361_v ___361_cmax 	%line{89} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:91
+#   if (cmax != 0.0) {
+	neq		$tmp169 ___361_cmax $const1 	%line{91} %argrw{"wrr"}
+	if		$tmp169 291 293 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:92
+#     s = cdelta / cmax;
+	div		___361_s ___361_cdelta ___361_cmax 	%line{92} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:95
+#     s = 0.0;
+	assign		___361_s $const1 	%line{95} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:96
+#     h = 0.0;
+	assign		___361_h $const1 	%line{96} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:99
+#   if (s == 0.0) {
+	eq		$tmp170 ___361_s $const1 	%line{99} %argrw{"wrr"}
+	if		$tmp170 296 320 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:100
+#     h = 0.0;
+	assign		___361_h $const1 	%line{100} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:103
+#     c = (color(cmax, cmax, cmax) - rgb) / cdelta;
+	color		$tmp171 ___361_cmax ___361_cmax ___361_cmax 	%line{103} %argrw{"wrrr"}
+	sub		$tmp172 $tmp171 Color2 	%argrw{"wrr"}
+	div		___361_c $tmp172 ___361_cdelta 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:105
+#     if (rgb[0] == cmax) {
+	compref		$tmp173 Color2 $const15 	%line{105} %argrw{"wrr"}
+	eq		$tmp174 $tmp173 ___361_cmax 	%argrw{"wrr"}
+	if		$tmp174 305 316 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:106
+#       h = c[2] - c[1];
+	compref		$tmp175 ___361_c $const19 	%line{106} %argrw{"wrr"}
+	compref		$tmp176 ___361_c $const18 	%argrw{"wrr"}
+	sub		___361_h $tmp175 $tmp176 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:108
+#     else if (rgb[1] == cmax) {
+	compref		$tmp177 Color2 $const18 	%line{108} %argrw{"wrr"}
+	eq		$tmp178 $tmp177 ___361_cmax 	%argrw{"wrr"}
+	if		$tmp178 312 316 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:109
+#       h = 2.0 + c[0] - c[2];
+	compref		$tmp179 ___361_c $const15 	%line{109} %argrw{"wrr"}
+	add		$tmp180 $const17 $tmp179 	%argrw{"wrr"}
+	compref		$tmp181 ___361_c $const19 	%argrw{"wrr"}
+	sub		___361_h $tmp180 $tmp181 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:112
+#       h = 4.0 + c[1] - c[0];
+	compref		$tmp182 ___361_c $const18 	%line{112} %argrw{"wrr"}
+	add		$tmp183 $const39 $tmp182 	%argrw{"wrr"}
+	compref		$tmp184 ___361_c $const15 	%argrw{"wrr"}
+	sub		___361_h $tmp183 $tmp184 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:115
+#     h /= 6.0;
+	div		___361_h ___361_h $const40 	%line{115} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:117
+#     if (h < 0.0) {
+	lt		$tmp185 ___361_h $const1 	%line{117} %argrw{"wrr"}
+	if		$tmp185 320 320 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:118
+#       h += 1.0;
+	add		___361_h ___361_h $const2 	%line{118} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:122
+#   return color(h, s, v);
+	color		___428_hsv2 ___361_h ___361_s ___361_v 	%line{122} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:174
+#   if (hsv2[1] != 0.0) {
+	compref		$tmp186 ___428_hsv2 $const18 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{174} %argrw{"wrr"}
+	neq		$tmp187 $tmp186 $const1 	%argrw{"wrr"}
+	if		$tmp187 413 413 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:175
+#     color hsv = rgb_to_hsv(outcol);
+	functioncall	$const38 370 	%line{175} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:85
+#   cmax = max(rgb[0], max(rgb[1], rgb[2]));
+	compref		$tmp188 ___428_outcol $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h"} %line{85} %argrw{"wrr"}
+	compref		$tmp190 ___428_outcol $const18 	%argrw{"wrr"}
+	compref		$tmp191 ___428_outcol $const19 	%argrw{"wrr"}
+	max		$tmp189 $tmp190 $tmp191 	%argrw{"wrr"}
+	max		___361_cmax $tmp188 $tmp189 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:86
+#   cmin = min(rgb[0], min(rgb[1], rgb[2]));
+	compref		$tmp192 ___428_outcol $const15 	%line{86} %argrw{"wrr"}
+	compref		$tmp194 ___428_outcol $const18 	%argrw{"wrr"}
+	compref		$tmp195 ___428_outcol $const19 	%argrw{"wrr"}
+	min		$tmp193 $tmp194 $tmp195 	%argrw{"wrr"}
+	min		___361_cmin $tmp192 $tmp193 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:87
+#   cdelta = cmax - cmin;
+	sub		___361_cdelta ___361_cmax ___361_cmin 	%line{87} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:89
+#   v = cmax;
+	assign		___361_v ___361_cmax 	%line{89} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:91
+#   if (cmax != 0.0) {
+	neq		$tmp196 ___361_cmax $const1 	%line{91} %argrw{"wrr"}
+	if		$tmp196 340 342 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:92
+#     s = cdelta / cmax;
+	div		___361_s ___361_cdelta ___361_cmax 	%line{92} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:95
+#     s = 0.0;
+	assign		___361_s $const1 	%line{95} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:96
+#     h = 0.0;
+	assign		___361_h $const1 	%line{96} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:99
+#   if (s == 0.0) {
+	eq		$tmp197 ___361_s $const1 	%line{99} %argrw{"wrr"}
+	if		$tmp197 345 369 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:100
+#     h = 0.0;
+	assign		___361_h $const1 	%line{100} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:103
+#     c = (color(cmax, cmax, cmax) - rgb) / cdelta;
+	color		$tmp198 ___361_cmax ___361_cmax ___361_cmax 	%line{103} %argrw{"wrrr"}
+	sub		$tmp199 $tmp198 ___428_outcol 	%argrw{"wrr"}
+	div		___361_c $tmp199 ___361_cdelta 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:105
+#     if (rgb[0] == cmax) {
+	compref		$tmp200 ___428_outcol $const15 	%line{105} %argrw{"wrr"}
+	eq		$tmp201 $tmp200 ___361_cmax 	%argrw{"wrr"}
+	if		$tmp201 354 365 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:106
+#       h = c[2] - c[1];
+	compref		$tmp202 ___361_c $const19 	%line{106} %argrw{"wrr"}
+	compref		$tmp203 ___361_c $const18 	%argrw{"wrr"}
+	sub		___361_h $tmp202 $tmp203 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:108
+#     else if (rgb[1] == cmax) {
+	compref		$tmp204 ___428_outcol $const18 	%line{108} %argrw{"wrr"}
+	eq		$tmp205 $tmp204 ___361_cmax 	%argrw{"wrr"}
+	if		$tmp205 361 365 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:109
+#       h = 2.0 + c[0] - c[2];
+	compref		$tmp206 ___361_c $const15 	%line{109} %argrw{"wrr"}
+	add		$tmp207 $const17 $tmp206 	%argrw{"wrr"}
+	compref		$tmp208 ___361_c $const19 	%argrw{"wrr"}
+	sub		___361_h $tmp207 $tmp208 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:112
+#       h = 4.0 + c[1] - c[0];
+	compref		$tmp209 ___361_c $const18 	%line{112} %argrw{"wrr"}
+	add		$tmp210 $const39 $tmp209 	%argrw{"wrr"}
+	compref		$tmp211 ___361_c $const15 	%argrw{"wrr"}
+	sub		___361_h $tmp210 $tmp211 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:115
+#     h /= 6.0;
+	div		___361_h ___361_h $const40 	%line{115} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:117
+#     if (h < 0.0) {
+	lt		$tmp212 ___361_h $const1 	%line{117} %argrw{"wrr"}
+	if		$tmp212 369 369 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:118
+#       h += 1.0;
+	add		___361_h ___361_h $const2 	%line{118} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:122
+#   return color(h, s, v);
+	color		___429_hsv ___361_h ___361_s ___361_v 	%line{122} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:176
+#     hsv[0] = hsv2[0];
+	compref		$tmp213 ___428_hsv2 $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{176} %argrw{"wrr"}
+	compassign	___429_hsv $const15 $tmp213 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:177
+#     color tmp = hsv_to_rgb(hsv);
+	functioncall	$const41 412 	%line{177} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:130
+#   h = hsv[0];
+	compref		___370_h ___429_hsv $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h"} %line{130} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:131
+#   s = hsv[1];
+	compref		___370_s ___429_hsv $const18 	%line{131} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:132
+#   v = hsv[2];
+	compref		___370_v ___429_hsv $const19 	%line{132} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:134
+#   if (s == 0.0) {
+	eq		$tmp214 ___370_s $const1 	%line{134} %argrw{"wrr"}
+	if		$tmp214 379 411 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:135
+#     rgb = color(v, v, v);
+	color		___370_rgb ___370_v ___370_v ___370_v 	%line{135} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:138
+#     if (h == 1.0) {
+	eq		$tmp215 ___370_h $const2 	%line{138} %argrw{"wrr"}
+	if		$tmp215 382 382 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:139
+#       h = 0.0;
+	assign		___370_h $const1 	%line{139} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:142
+#     h *= 6.0;
+	mul		___370_h ___370_h $const40 	%line{142} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:143
+#     i = floor(h);
+	floor		___370_i ___370_h 	%line{143} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:144
+#     f = h - i;
+	sub		___370_f ___370_h ___370_i 	%line{144} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:145
+#     rgb = color(f, f, f);
+	color		___370_rgb ___370_f ___370_f ___370_f 	%line{145} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:146
+#     p = v * (1.0 - s);
+	sub		$tmp216 $const2 ___370_s 	%line{146} %argrw{"wrr"}
+	mul		___370_p ___370_v $tmp216 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:147
+#     q = v * (1.0 - (s * f));
+	mul		$tmp217 ___370_s ___370_f 	%line{147} %argrw{"wrr"}
+	sub		$tmp218 $const2 $tmp217 	%argrw{"wrr"}
+	mul		___370_q ___370_v $tmp218 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:148
+#     t = v * (1.0 - (s * (1.0 - f)));
+	sub		$tmp219 $const2 ___370_f 	%line{148} %argrw{"wrr"}
+	mul		$tmp220 ___370_s $tmp219 	%argrw{"wrr"}
+	sub		$tmp221 $const2 $tmp220 	%argrw{"wrr"}
+	mul		___370_t ___370_v $tmp221 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:150
+#     if (i == 0.0) {
+	eq		$tmp222 ___370_i $const1 	%line{150} %argrw{"wrr"}
+	if		$tmp222 398 411 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:151
+#       rgb = color(v, t, p);
+	color		___370_rgb ___370_v ___370_t ___370_p 	%line{151} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:153
+#     else if (i == 1.0) {
+	eq		$tmp223 ___370_i $const2 	%line{153} %argrw{"wrr"}
+	if		$tmp223 401 411 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:154
+#       rgb = color(q, v, p);
+	color		___370_rgb ___370_q ___370_v ___370_p 	%line{154} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:156
+#     else if (i == 2.0) {
+	eq		$tmp224 ___370_i $const17 	%line{156} %argrw{"wrr"}
+	if		$tmp224 404 411 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:157
+#       rgb = color(p, v, t);
+	color		___370_rgb ___370_p ___370_v ___370_t 	%line{157} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:159
+#     else if (i == 3.0) {
+	eq		$tmp225 ___370_i $const42 	%line{159} %argrw{"wrr"}
+	if		$tmp225 407 411 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:160
+#       rgb = color(p, q, v);
+	color		___370_rgb ___370_p ___370_q ___370_v 	%line{160} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:162
+#     else if (i == 4.0) {
+	eq		$tmp226 ___370_i $const39 	%line{162} %argrw{"wrr"}
+	if		$tmp226 410 411 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:163
+#       rgb = color(t, p, v);
+	color		___370_rgb ___370_t ___370_p ___370_v 	%line{163} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:166
+#       rgb = color(v, p, q);
+	color		___370_rgb ___370_v ___370_p ___370_q 	%line{166} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:170
+#   return rgb;
+	assign		___429_tmp ___370_rgb 	%line{170} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:179
+#     outcol = mix(outcol, tmp, t);
+	mix		___428_outcol ___428_outcol ___429_tmp t 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{179} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:182
+#   return outcol;
+	assign		Color ___428_outcol 	%line{182} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:312
+#   if (mix_type == "saturation")
+	eq		$tmp227 mix_type $const43 	%line{312} %argrw{"wrr"}
+	if		$tmp227 561 561 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:313
+#     Color = node_mix_sat(t, Color1, Color2);
+	functioncall	$const44 561 	%line{313} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:187
+#   float tm = 1.0 - t;
+	sub		___430_tm $const2 t 	%line{187} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:189
+#   color outcol = col1;
+	assign		___430_outcol Color1 	%line{189} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:191
+#   color hsv = rgb_to_hsv(outcol);
+	functioncall	$const38 465 	%line{191} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:85
+#   cmax = max(rgb[0], max(rgb[1], rgb[2]));
+	compref		$tmp228 ___430_outcol $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h"} %line{85} %argrw{"wrr"}
+	compref		$tmp230 ___430_outcol $const18 	%argrw{"wrr"}
+	compref		$tmp231 ___430_outcol $const19 	%argrw{"wrr"}
+	max		$tmp229 $tmp230 $tmp231 	%argrw{"wrr"}
+	max		___361_cmax $tmp228 $tmp229 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:86
+#   cmin = min(rgb[0], min(rgb[1], rgb[2]));
+	compref		$tmp232 ___430_outcol $const15 	%line{86} %argrw{"wrr"}
+	compref		$tmp234 ___430_outcol $const18 	%argrw{"wrr"}
+	compref		$tmp235 ___430_outcol $const19 	%argrw{"wrr"}
+	min		$tmp233 $tmp234 $tmp235 	%argrw{"wrr"}
+	min		___361_cmin $tmp232 $tmp233 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:87
+#   cdelta = cmax - cmin;
+	sub		___361_cdelta ___361_cmax ___361_cmin 	%line{87} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:89
+#   v = cmax;
+	assign		___361_v ___361_cmax 	%line{89} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:91
+#   if (cmax != 0.0) {
+	neq		$tmp236 ___361_cmax $const1 	%line{91} %argrw{"wrr"}
+	if		$tmp236 435 437 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:92
+#     s = cdelta / cmax;
+	div		___361_s ___361_cdelta ___361_cmax 	%line{92} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:95
+#     s = 0.0;
+	assign		___361_s $const1 	%line{95} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:96
+#     h = 0.0;
+	assign		___361_h $const1 	%line{96} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:99
+#   if (s == 0.0) {
+	eq		$tmp237 ___361_s $const1 	%line{99} %argrw{"wrr"}
+	if		$tmp237 440 464 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:100
+#     h = 0.0;
+	assign		___361_h $const1 	%line{100} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:103
+#     c = (color(cmax, cmax, cmax) - rgb) / cdelta;
+	color		$tmp238 ___361_cmax ___361_cmax ___361_cmax 	%line{103} %argrw{"wrrr"}
+	sub		$tmp239 $tmp238 ___430_outcol 	%argrw{"wrr"}
+	div		___361_c $tmp239 ___361_cdelta 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:105
+#     if (rgb[0] == cmax) {
+	compref		$tmp240 ___430_outcol $const15 	%line{105} %argrw{"wrr"}
+	eq		$tmp241 $tmp240 ___361_cmax 	%argrw{"wrr"}
+	if		$tmp241 449 460 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:106
+#       h = c[2] - c[1];
+	compref		$tmp242 ___361_c $const19 	%line{106} %argrw{"wrr"}
+	compref		$tmp243 ___361_c $const18 	%argrw{"wrr"}
+	sub		___361_h $tmp242 $tmp243 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:108
+#     else if (rgb[1] == cmax) {
+	compref		$tmp244 ___430_outcol $const18 	%line{108} %argrw{"wrr"}
+	eq		$tmp245 $tmp244 ___361_cmax 	%argrw{"wrr"}
+	if		$tmp245 456 460 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:109
+#       h = 2.0 + c[0] - c[2];
+	compref		$tmp246 ___361_c $const15 	%line{109} %argrw{"wrr"}
+	add		$tmp247 $const17 $tmp246 	%argrw{"wrr"}
+	compref		$tmp248 ___361_c $const19 	%argrw{"wrr"}
+	sub		___361_h $tmp247 $tmp248 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:112
+#       h = 4.0 + c[1] - c[0];
+	compref		$tmp249 ___361_c $const18 	%line{112} %argrw{"wrr"}
+	add		$tmp250 $const39 $tmp249 	%argrw{"wrr"}
+	compref		$tmp251 ___361_c $const15 	%argrw{"wrr"}
+	sub		___361_h $tmp250 $tmp251 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:115
+#     h /= 6.0;
+	div		___361_h ___361_h $const40 	%line{115} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:117
+#     if (h < 0.0) {
+	lt		$tmp252 ___361_h $const1 	%line{117} %argrw{"wrr"}
+	if		$tmp252 464 464 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:118
+#       h += 1.0;
+	add		___361_h ___361_h $const2 	%line{118} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:122
+#   return color(h, s, v);
+	color		___430_hsv ___361_h ___361_s ___361_v 	%line{122} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:193
+#   if (hsv[1] != 0.0) {
+	compref		$tmp253 ___430_hsv $const18 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{193} %argrw{"wrr"}
+	neq		$tmp254 $tmp253 $const1 	%argrw{"wrr"}
+	if		$tmp254 560 560 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:194
+#     color hsv2 = rgb_to_hsv(col2);
+	functioncall	$const38 514 	%line{194} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:85
+#   cmax = max(rgb[0], max(rgb[1], rgb[2]));
+	compref		$tmp255 Color2 $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h"} %line{85} %argrw{"wrr"}
+	compref		$tmp257 Color2 $const18 	%argrw{"wrr"}
+	compref		$tmp258 Color2 $const19 	%argrw{"wrr"}
+	max		$tmp256 $tmp257 $tmp258 	%argrw{"wrr"}
+	max		___361_cmax $tmp255 $tmp256 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:86
+#   cmin = min(rgb[0], min(rgb[1], rgb[2]));
+	compref		$tmp259 Color2 $const15 	%line{86} %argrw{"wrr"}
+	compref		$tmp261 Color2 $const18 	%argrw{"wrr"}
+	compref		$tmp262 Color2 $const19 	%argrw{"wrr"}
+	min		$tmp260 $tmp261 $tmp262 	%argrw{"wrr"}
+	min		___361_cmin $tmp259 $tmp260 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:87
+#   cdelta = cmax - cmin;
+	sub		___361_cdelta ___361_cmax ___361_cmin 	%line{87} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:89
+#   v = cmax;
+	assign		___361_v ___361_cmax 	%line{89} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:91
+#   if (cmax != 0.0) {
+	neq		$tmp263 ___361_cmax $const1 	%line{91} %argrw{"wrr"}
+	if		$tmp263 484 486 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:92
+#     s = cdelta / cmax;
+	div		___361_s ___361_cdelta ___361_cmax 	%line{92} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:95
+#     s = 0.0;
+	assign		___361_s $const1 	%line{95} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:96
+#     h = 0.0;
+	assign		___361_h $const1 	%line{96} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:99
+#   if (s == 0.0) {
+	eq		$tmp264 ___361_s $const1 	%line{99} %argrw{"wrr"}
+	if		$tmp264 489 513 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:100
+#     h = 0.0;
+	assign		___361_h $const1 	%line{100} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:103
+#     c = (color(cmax, cmax, cmax) - rgb) / cdelta;
+	color		$tmp265 ___361_cmax ___361_cmax ___361_cmax 	%line{103} %argrw{"wrrr"}
+	sub		$tmp266 $tmp265 Color2 	%argrw{"wrr"}
+	div		___361_c $tmp266 ___361_cdelta 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:105
+#     if (rgb[0] == cmax) {
+	compref		$tmp267 Color2 $const15 	%line{105} %argrw{"wrr"}
+	eq		$tmp268 $tmp267 ___361_cmax 	%argrw{"wrr"}
+	if		$tmp268 498 509 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:106
+#       h = c[2] - c[1];
+	compref		$tmp269 ___361_c $const19 	%line{106} %argrw{"wrr"}
+	compref		$tmp270 ___361_c $const18 	%argrw{"wrr"}
+	sub		___361_h $tmp269 $tmp270 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:108
+#     else if (rgb[1] == cmax) {
+	compref		$tmp271 Color2 $const18 	%line{108} %argrw{"wrr"}
+	eq		$tmp272 $tmp271 ___361_cmax 	%argrw{"wrr"}
+	if		$tmp272 505 509 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:109
+#       h = 2.0 + c[0] - c[2];
+	compref		$tmp273 ___361_c $const15 	%line{109} %argrw{"wrr"}
+	add		$tmp274 $const17 $tmp273 	%argrw{"wrr"}
+	compref		$tmp275 ___361_c $const19 	%argrw{"wrr"}
+	sub		___361_h $tmp274 $tmp275 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:112
+#       h = 4.0 + c[1] - c[0];
+	compref		$tmp276 ___361_c $const18 	%line{112} %argrw{"wrr"}
+	add		$tmp277 $const39 $tmp276 	%argrw{"wrr"}
+	compref		$tmp278 ___361_c $const15 	%argrw{"wrr"}
+	sub		___361_h $tmp277 $tmp278 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:115
+#     h /= 6.0;
+	div		___361_h ___361_h $const40 	%line{115} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:117
+#     if (h < 0.0) {
+	lt		$tmp279 ___361_h $const1 	%line{117} %argrw{"wrr"}
+	if		$tmp279 513 513 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:118
+#       h += 1.0;
+	add		___361_h ___361_h $const2 	%line{118} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:122
+#   return color(h, s, v);
+	color		___431_hsv2 ___361_h ___361_s ___361_v 	%line{122} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:196
+#     hsv[1] = tm * hsv[1] + t * hsv2[1];
+	compref		$tmp280 ___430_hsv $const18 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{196} %argrw{"wrr"}
+	mul		$tmp281 ___430_tm $tmp280 	%argrw{"wrr"}
+	compref		$tmp282 ___431_hsv2 $const18 	%argrw{"wrr"}
+	mul		$tmp283 t $tmp282 	%argrw{"wrr"}
+	add		$tmp284 $tmp281 $tmp283 	%argrw{"wrr"}
+	compassign	___430_hsv $const18 $tmp284 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:197
+#     outcol = hsv_to_rgb(hsv);
+	functioncall	$const41 560 	%line{197} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:130
+#   h = hsv[0];
+	compref		___370_h ___430_hsv $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h"} %line{130} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:131
+#   s = hsv[1];
+	compref		___370_s ___430_hsv $const18 	%line{131} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:132
+#   v = hsv[2];
+	compref		___370_v ___430_hsv $const19 	%line{132} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:134
+#   if (s == 0.0) {
+	eq		$tmp285 ___370_s $const1 	%line{134} %argrw{"wrr"}
+	if		$tmp285 527 559 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:135
+#     rgb = color(v, v, v);
+	color		___370_rgb ___370_v ___370_v ___370_v 	%line{135} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:138
+#     if (h == 1.0) {
+	eq		$tmp286 ___370_h $const2 	%line{138} %argrw{"wrr"}
+	if		$tmp286 530 530 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:139
+#       h = 0.0;
+	assign		___370_h $const1 	%line{139} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:142
+#     h *= 6.0;
+	mul		___370_h ___370_h $const40 	%line{142} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:143
+#     i = floor(h);
+	floor		___370_i ___370_h 	%line{143} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:144
+#     f = h - i;
+	sub		___370_f ___370_h ___370_i 	%line{144} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:145
+#     rgb = color(f, f, f);
+	color		___370_rgb ___370_f ___370_f ___370_f 	%line{145} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:146
+#     p = v * (1.0 - s);
+	sub		$tmp287 $const2 ___370_s 	%line{146} %argrw{"wrr"}
+	mul		___370_p ___370_v $tmp287 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:147
+#     q = v * (1.0 - (s * f));
+	mul		$tmp288 ___370_s ___370_f 	%line{147} %argrw{"wrr"}
+	sub		$tmp289 $const2 $tmp288 	%argrw{"wrr"}
+	mul		___370_q ___370_v $tmp289 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:148
+#     t = v * (1.0 - (s * (1.0 - f)));
+	sub		$tmp290 $const2 ___370_f 	%line{148} %argrw{"wrr"}
+	mul		$tmp291 ___370_s $tmp290 	%argrw{"wrr"}
+	sub		$tmp292 $const2 $tmp291 	%argrw{"wrr"}
+	mul		___370_t ___370_v $tmp292 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:150
+#     if (i == 0.0) {
+	eq		$tmp293 ___370_i $const1 	%line{150} %argrw{"wrr"}
+	if		$tmp293 546 559 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:151
+#       rgb = color(v, t, p);
+	color		___370_rgb ___370_v ___370_t ___370_p 	%line{151} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:153
+#     else if (i == 1.0) {
+	eq		$tmp294 ___370_i $const2 	%line{153} %argrw{"wrr"}
+	if		$tmp294 549 559 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:154
+#       rgb = color(q, v, p);
+	color		___370_rgb ___370_q ___370_v ___370_p 	%line{154} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:156
+#     else if (i == 2.0) {
+	eq		$tmp295 ___370_i $const17 	%line{156} %argrw{"wrr"}
+	if		$tmp295 552 559 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:157
+#       rgb = color(p, v, t);
+	color		___370_rgb ___370_p ___370_v ___370_t 	%line{157} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:159
+#     else if (i == 3.0) {
+	eq		$tmp296 ___370_i $const42 	%line{159} %argrw{"wrr"}
+	if		$tmp296 555 559 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:160
+#       rgb = color(p, q, v);
+	color		___370_rgb ___370_p ___370_q ___370_v 	%line{160} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:162
+#     else if (i == 4.0) {
+	eq		$tmp297 ___370_i $const39 	%line{162} %argrw{"wrr"}
+	if		$tmp297 558 559 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:163
+#       rgb = color(t, p, v);
+	color		___370_rgb ___370_t ___370_p ___370_v 	%line{163} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:166
+#       rgb = color(v, p, q);
+	color		___370_rgb ___370_v ___370_p ___370_q 	%line{166} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:170
+#   return rgb;
+	assign		___430_outcol ___370_rgb 	%line{170} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:200
+#   return outcol;
+	assign		Color ___430_outcol 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{200} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:314
+#   if (mix_type == "value")
+	eq		$tmp298 mix_type $const45 	%line{314} %argrw{"wrr"}
+	if		$tmp298 703 703 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:315
+#     Color = node_mix_val(t, Color1, Color2);
+	functioncall	$const46 703 	%line{315} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:205
+#   float tm = 1.0 - t;
+	sub		___432_tm $const2 t 	%line{205} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:207
+#   color hsv = rgb_to_hsv(col1);
+	functioncall	$const38 611 	%line{207} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:85
+#   cmax = max(rgb[0], max(rgb[1], rgb[2]));
+	compref		$tmp299 Color1 $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h"} %line{85} %argrw{"wrr"}
+	compref		$tmp301 Color1 $const18 	%argrw{"wrr"}
+	compref		$tmp302 Color1 $const19 	%argrw{"wrr"}
+	max		$tmp300 $tmp301 $tmp302 	%argrw{"wrr"}
+	max		___361_cmax $tmp299 $tmp300 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:86
+#   cmin = min(rgb[0], min(rgb[1], rgb[2]));
+	compref		$tmp303 Color1 $const15 	%line{86} %argrw{"wrr"}
+	compref		$tmp305 Color1 $const18 	%argrw{"wrr"}
+	compref		$tmp306 Color1 $const19 	%argrw{"wrr"}
+	min		$tmp304 $tmp305 $tmp306 	%argrw{"wrr"}
+	min		___361_cmin $tmp303 $tmp304 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:87
+#   cdelta = cmax - cmin;
+	sub		___361_cdelta ___361_cmax ___361_cmin 	%line{87} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:89
+#   v = cmax;
+	assign		___361_v ___361_cmax 	%line{89} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:91
+#   if (cmax != 0.0) {
+	neq		$tmp307 ___361_cmax $const1 	%line{91} %argrw{"wrr"}
+	if		$tmp307 581 583 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:92
+#     s = cdelta / cmax;
+	div		___361_s ___361_cdelta ___361_cmax 	%line{92} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:95
+#     s = 0.0;
+	assign		___361_s $const1 	%line{95} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:96
+#     h = 0.0;
+	assign		___361_h $const1 	%line{96} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:99
+#   if (s == 0.0) {
+	eq		$tmp308 ___361_s $const1 	%line{99} %argrw{"wrr"}
+	if		$tmp308 586 610 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:100
+#     h = 0.0;
+	assign		___361_h $const1 	%line{100} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:103
+#     c = (color(cmax, cmax, cmax) - rgb) / cdelta;
+	color		$tmp309 ___361_cmax ___361_cmax ___361_cmax 	%line{103} %argrw{"wrrr"}
+	sub		$tmp310 $tmp309 Color1 	%argrw{"wrr"}
+	div		___361_c $tmp310 ___361_cdelta 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:105
+#     if (rgb[0] == cmax) {
+	compref		$tmp311 Color1 $const15 	%line{105} %argrw{"wrr"}
+	eq		$tmp312 $tmp311 ___361_cmax 	%argrw{"wrr"}
+	if		$tmp312 595 606 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:106
+#       h = c[2] - c[1];
+	compref		$tmp313 ___361_c $const19 	%line{106} %argrw{"wrr"}
+	compref		$tmp314 ___361_c $const18 	%argrw{"wrr"}
+	sub		___361_h $tmp313 $tmp314 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:108
+#     else if (rgb[1] == cmax) {
+	compref		$tmp315 Color1 $const18 	%line{108} %argrw{"wrr"}
+	eq		$tmp316 $tmp315 ___361_cmax 	%argrw{"wrr"}
+	if		$tmp316 602 606 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:109
+#       h = 2.0 + c[0] - c[2];
+	compref		$tmp317 ___361_c $const15 	%line{109} %argrw{"wrr"}
+	add		$tmp318 $const17 $tmp317 	%argrw{"wrr"}
+	compref		$tmp319 ___361_c $const19 	%argrw{"wrr"}
+	sub		___361_h $tmp318 $tmp319 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:112
+#       h = 4.0 + c[1] - c[0];
+	compref		$tmp320 ___361_c $const18 	%line{112} %argrw{"wrr"}
+	add		$tmp321 $const39 $tmp320 	%argrw{"wrr"}
+	compref		$tmp322 ___361_c $const15 	%argrw{"wrr"}
+	sub		___361_h $tmp321 $tmp322 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:115
+#     h /= 6.0;
+	div		___361_h ___361_h $const40 	%line{115} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:117
+#     if (h < 0.0) {
+	lt		$tmp323 ___361_h $const1 	%line{117} %argrw{"wrr"}
+	if		$tmp323 610 610 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:118
+#       h += 1.0;
+	add		___361_h ___361_h $const2 	%line{118} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:122
+#   return color(h, s, v);
+	color		___432_hsv ___361_h ___361_s ___361_v 	%line{122} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:208
+#   color hsv2 = rgb_to_hsv(col2);
+	functioncall	$const38 657 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{208} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:85
+#   cmax = max(rgb[0], max(rgb[1], rgb[2]));
+	compref		$tmp324 Color2 $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h"} %line{85} %argrw{"wrr"}
+	compref		$tmp326 Color2 $const18 	%argrw{"wrr"}
+	compref		$tmp327 Color2 $const19 	%argrw{"wrr"}
+	max		$tmp325 $tmp326 $tmp327 	%argrw{"wrr"}
+	max		___361_cmax $tmp324 $tmp325 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:86
+#   cmin = min(rgb[0], min(rgb[1], rgb[2]));
+	compref		$tmp328 Color2 $const15 	%line{86} %argrw{"wrr"}
+	compref		$tmp330 Color2 $const18 	%argrw{"wrr"}
+	compref		$tmp331 Color2 $const19 	%argrw{"wrr"}
+	min		$tmp329 $tmp330 $tmp331 	%argrw{"wrr"}
+	min		___361_cmin $tmp328 $tmp329 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:87
+#   cdelta = cmax - cmin;
+	sub		___361_cdelta ___361_cmax ___361_cmin 	%line{87} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:89
+#   v = cmax;
+	assign		___361_v ___361_cmax 	%line{89} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:91
+#   if (cmax != 0.0) {
+	neq		$tmp332 ___361_cmax $const1 	%line{91} %argrw{"wrr"}
+	if		$tmp332 627 629 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:92
+#     s = cdelta / cmax;
+	div		___361_s ___361_cdelta ___361_cmax 	%line{92} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:95
+#     s = 0.0;
+	assign		___361_s $const1 	%line{95} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:96
+#     h = 0.0;
+	assign		___361_h $const1 	%line{96} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:99
+#   if (s == 0.0) {
+	eq		$tmp333 ___361_s $const1 	%line{99} %argrw{"wrr"}
+	if		$tmp333 632 656 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:100
+#     h = 0.0;
+	assign		___361_h $const1 	%line{100} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:103
+#     c = (color(cmax, cmax, cmax) - rgb) / cdelta;
+	color		$tmp334 ___361_cmax ___361_cmax ___361_cmax 	%line{103} %argrw{"wrrr"}
+	sub		$tmp335 $tmp334 Color2 	%argrw{"wrr"}
+	div		___361_c $tmp335 ___361_cdelta 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:105
+#     if (rgb[0] == cmax) {
+	compref		$tmp336 Color2 $const15 	%line{105} %argrw{"wrr"}
+	eq		$tmp337 $tmp336 ___361_cmax 	%argrw{"wrr"}
+	if		$tmp337 641 652 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:106
+#       h = c[2] - c[1];
+	compref		$tmp338 ___361_c $const19 	%line{106} %argrw{"wrr"}
+	compref		$tmp339 ___361_c $const18 	%argrw{"wrr"}
+	sub		___361_h $tmp338 $tmp339 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:108
+#     else if (rgb[1] == cmax) {
+	compref		$tmp340 Color2 $const18 	%line{108} %argrw{"wrr"}
+	eq		$tmp341 $tmp340 ___361_cmax 	%argrw{"wrr"}
+	if		$tmp341 648 652 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:109
+#       h = 2.0 + c[0] - c[2];
+	compref		$tmp342 ___361_c $const15 	%line{109} %argrw{"wrr"}
+	add		$tmp343 $const17 $tmp342 	%argrw{"wrr"}
+	compref		$tmp344 ___361_c $const19 	%argrw{"wrr"}
+	sub		___361_h $tmp343 $tmp344 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:112
+#       h = 4.0 + c[1] - c[0];
+	compref		$tmp345 ___361_c $const18 	%line{112} %argrw{"wrr"}
+	add		$tmp346 $const39 $tmp345 	%argrw{"wrr"}
+	compref		$tmp347 ___361_c $const15 	%argrw{"wrr"}
+	sub		___361_h $tmp346 $tmp347 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:115
+#     h /= 6.0;
+	div		___361_h ___361_h $const40 	%line{115} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:117
+#     if (h < 0.0) {
+	lt		$tmp348 ___361_h $const1 	%line{117} %argrw{"wrr"}
+	if		$tmp348 656 656 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:118
+#       h += 1.0;
+	add		___361_h ___361_h $const2 	%line{118} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:122
+#   return color(h, s, v);
+	color		___432_hsv2 ___361_h ___361_s ___361_v 	%line{122} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:210
+#   hsv[2] = tm * hsv[2] + t * hsv2[2];
+	compref		$tmp349 ___432_hsv $const19 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{210} %argrw{"wrr"}
+	mul		$tmp350 ___432_tm $tmp349 	%argrw{"wrr"}
+	compref		$tmp351 ___432_hsv2 $const19 	%argrw{"wrr"}
+	mul		$tmp352 t $tmp351 	%argrw{"wrr"}
+	add		$tmp353 $tmp350 $tmp352 	%argrw{"wrr"}
+	compassign	___432_hsv $const19 $tmp353 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:212
+#   return hsv_to_rgb(hsv);
+	functioncall	$const41 703 	%line{212} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:130
+#   h = hsv[0];
+	compref		___370_h ___432_hsv $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h"} %line{130} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:131
+#   s = hsv[1];
+	compref		___370_s ___432_hsv $const18 	%line{131} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:132
+#   v = hsv[2];
+	compref		___370_v ___432_hsv $const19 	%line{132} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:134
+#   if (s == 0.0) {
+	eq		$tmp354 ___370_s $const1 	%line{134} %argrw{"wrr"}
+	if		$tmp354 670 702 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:135
+#     rgb = color(v, v, v);
+	color		___370_rgb ___370_v ___370_v ___370_v 	%line{135} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:138
+#     if (h == 1.0) {
+	eq		$tmp355 ___370_h $const2 	%line{138} %argrw{"wrr"}
+	if		$tmp355 673 673 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:139
+#       h = 0.0;
+	assign		___370_h $const1 	%line{139} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:142
+#     h *= 6.0;
+	mul		___370_h ___370_h $const40 	%line{142} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:143
+#     i = floor(h);
+	floor		___370_i ___370_h 	%line{143} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:144
+#     f = h - i;
+	sub		___370_f ___370_h ___370_i 	%line{144} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:145
+#     rgb = color(f, f, f);
+	color		___370_rgb ___370_f ___370_f ___370_f 	%line{145} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:146
+#     p = v * (1.0 - s);
+	sub		$tmp356 $const2 ___370_s 	%line{146} %argrw{"wrr"}
+	mul		___370_p ___370_v $tmp356 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:147
+#     q = v * (1.0 - (s * f));
+	mul		$tmp357 ___370_s ___370_f 	%line{147} %argrw{"wrr"}
+	sub		$tmp358 $const2 $tmp357 	%argrw{"wrr"}
+	mul		___370_q ___370_v $tmp358 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:148
+#     t = v * (1.0 - (s * (1.0 - f)));
+	sub		$tmp359 $const2 ___370_f 	%line{148} %argrw{"wrr"}
+	mul		$tmp360 ___370_s $tmp359 	%argrw{"wrr"}
+	sub		$tmp361 $const2 $tmp360 	%argrw{"wrr"}
+	mul		___370_t ___370_v $tmp361 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:150
+#     if (i == 0.0) {
+	eq		$tmp362 ___370_i $const1 	%line{150} %argrw{"wrr"}
+	if		$tmp362 689 702 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:151
+#       rgb = color(v, t, p);
+	color		___370_rgb ___370_v ___370_t ___370_p 	%line{151} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:153
+#     else if (i == 1.0) {
+	eq		$tmp363 ___370_i $const2 	%line{153} %argrw{"wrr"}
+	if		$tmp363 692 702 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:154
+#       rgb = color(q, v, p);
+	color		___370_rgb ___370_q ___370_v ___370_p 	%line{154} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:156
+#     else if (i == 2.0) {
+	eq		$tmp364 ___370_i $const17 	%line{156} %argrw{"wrr"}
+	if		$tmp364 695 702 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:157
+#       rgb = color(p, v, t);
+	color		___370_rgb ___370_p ___370_v ___370_t 	%line{157} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:159
+#     else if (i == 3.0) {
+	eq		$tmp365 ___370_i $const42 	%line{159} %argrw{"wrr"}
+	if		$tmp365 698 702 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:160
+#       rgb = color(p, q, v);
+	color		___370_rgb ___370_p ___370_q ___370_v 	%line{160} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:162
+#     else if (i == 4.0) {
+	eq		$tmp366 ___370_i $const39 	%line{162} %argrw{"wrr"}
+	if		$tmp366 701 702 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:163
+#       rgb = color(t, p, v);
+	color		___370_rgb ___370_t ___370_p ___370_v 	%line{163} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:166
+#       rgb = color(v, p, q);
+	color		___370_rgb ___370_v ___370_p ___370_q 	%line{166} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:170
+#   return rgb;
+	assign		Color ___370_rgb 	%line{170} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:316
+#   if (mix_type == "color")
+	eq		$tmp367 mix_type $const47 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{316} %argrw{"wrr"}
+	if		$tmp367 848 848 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:317
+#     Color = node_mix_color(t, Color1, Color2);
+	functioncall	$const48 848 	%line{317} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:217
+#   color outcol = col1;
+	assign		___433_outcol Color1 	%line{217} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:218
+#   color hsv2 = rgb_to_hsv(col2);
+	functioncall	$const38 753 	%line{218} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:85
+#   cmax = max(rgb[0], max(rgb[1], rgb[2]));
+	compref		$tmp368 Color2 $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h"} %line{85} %argrw{"wrr"}
+	compref		$tmp370 Color2 $const18 	%argrw{"wrr"}
+	compref		$tmp371 Color2 $const19 	%argrw{"wrr"}
+	max		$tmp369 $tmp370 $tmp371 	%argrw{"wrr"}
+	max		___361_cmax $tmp368 $tmp369 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:86
+#   cmin = min(rgb[0], min(rgb[1], rgb[2]));
+	compref		$tmp372 Color2 $const15 	%line{86} %argrw{"wrr"}
+	compref		$tmp374 Color2 $const18 	%argrw{"wrr"}
+	compref		$tmp375 Color2 $const19 	%argrw{"wrr"}
+	min		$tmp373 $tmp374 $tmp375 	%argrw{"wrr"}
+	min		___361_cmin $tmp372 $tmp373 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:87
+#   cdelta = cmax - cmin;
+	sub		___361_cdelta ___361_cmax ___361_cmin 	%line{87} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:89
+#   v = cmax;
+	assign		___361_v ___361_cmax 	%line{89} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:91
+#   if (cmax != 0.0) {
+	neq		$tmp376 ___361_cmax $const1 	%line{91} %argrw{"wrr"}
+	if		$tmp376 723 725 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:92
+#     s = cdelta / cmax;
+	div		___361_s ___361_cdelta ___361_cmax 	%line{92} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:95
+#     s = 0.0;
+	assign		___361_s $const1 	%line{95} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:96
+#     h = 0.0;
+	assign		___361_h $const1 	%line{96} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:99
+#   if (s == 0.0) {
+	eq		$tmp377 ___361_s $const1 	%line{99} %argrw{"wrr"}
+	if		$tmp377 728 752 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:100
+#     h = 0.0;
+	assign		___361_h $const1 	%line{100} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:103
+#     c = (color(cmax, cmax, cmax) - rgb) / cdelta;
+	color		$tmp378 ___361_cmax ___361_cmax ___361_cmax 	%line{103} %argrw{"wrrr"}
+	sub		$tmp379 $tmp378 Color2 	%argrw{"wrr"}
+	div		___361_c $tmp379 ___361_cdelta 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:105
+#     if (rgb[0] == cmax) {
+	compref		$tmp380 Color2 $const15 	%line{105} %argrw{"wrr"}
+	eq		$tmp381 $tmp380 ___361_cmax 	%argrw{"wrr"}
+	if		$tmp381 737 748 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:106
+#       h = c[2] - c[1];
+	compref		$tmp382 ___361_c $const19 	%line{106} %argrw{"wrr"}
+	compref		$tmp383 ___361_c $const18 	%argrw{"wrr"}
+	sub		___361_h $tmp382 $tmp383 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:108
+#     else if (rgb[1] == cmax) {
+	compref		$tmp384 Color2 $const18 	%line{108} %argrw{"wrr"}
+	eq		$tmp385 $tmp384 ___361_cmax 	%argrw{"wrr"}
+	if		$tmp385 744 748 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:109
+#       h = 2.0 + c[0] - c[2];
+	compref		$tmp386 ___361_c $const15 	%line{109} %argrw{"wrr"}
+	add		$tmp387 $const17 $tmp386 	%argrw{"wrr"}
+	compref		$tmp388 ___361_c $const19 	%argrw{"wrr"}
+	sub		___361_h $tmp387 $tmp388 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:112
+#       h = 4.0 + c[1] - c[0];
+	compref		$tmp389 ___361_c $const18 	%line{112} %argrw{"wrr"}
+	add		$tmp390 $const39 $tmp389 	%argrw{"wrr"}
+	compref		$tmp391 ___361_c $const15 	%argrw{"wrr"}
+	sub		___361_h $tmp390 $tmp391 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:115
+#     h /= 6.0;
+	div		___361_h ___361_h $const40 	%line{115} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:117
+#     if (h < 0.0) {
+	lt		$tmp392 ___361_h $const1 	%line{117} %argrw{"wrr"}
+	if		$tmp392 752 752 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:118
+#       h += 1.0;
+	add		___361_h ___361_h $const2 	%line{118} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:122
+#   return color(h, s, v);
+	color		___433_hsv2 ___361_h ___361_s ___361_v 	%line{122} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:220
+#   if (hsv2[1] != 0.0) {
+	compref		$tmp393 ___433_hsv2 $const18 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{220} %argrw{"wrr"}
+	neq		$tmp394 $tmp393 $const1 	%argrw{"wrr"}
+	if		$tmp394 847 847 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:221
+#     color hsv = rgb_to_hsv(outcol);
+	functioncall	$const38 802 	%line{221} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:85
+#   cmax = max(rgb[0], max(rgb[1], rgb[2]));
+	compref		$tmp395 ___433_outcol $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h"} %line{85} %argrw{"wrr"}
+	compref		$tmp397 ___433_outcol $const18 	%argrw{"wrr"}
+	compref		$tmp398 ___433_outcol $const19 	%argrw{"wrr"}
+	max		$tmp396 $tmp397 $tmp398 	%argrw{"wrr"}
+	max		___361_cmax $tmp395 $tmp396 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:86
+#   cmin = min(rgb[0], min(rgb[1], rgb[2]));
+	compref		$tmp399 ___433_outcol $const15 	%line{86} %argrw{"wrr"}
+	compref		$tmp401 ___433_outcol $const18 	%argrw{"wrr"}
+	compref		$tmp402 ___433_outcol $const19 	%argrw{"wrr"}
+	min		$tmp400 $tmp401 $tmp402 	%argrw{"wrr"}
+	min		___361_cmin $tmp399 $tmp400 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:87
+#   cdelta = cmax - cmin;
+	sub		___361_cdelta ___361_cmax ___361_cmin 	%line{87} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:89
+#   v = cmax;
+	assign		___361_v ___361_cmax 	%line{89} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:91
+#   if (cmax != 0.0) {
+	neq		$tmp403 ___361_cmax $const1 	%line{91} %argrw{"wrr"}
+	if		$tmp403 772 774 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:92
+#     s = cdelta / cmax;
+	div		___361_s ___361_cdelta ___361_cmax 	%line{92} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:95
+#     s = 0.0;
+	assign		___361_s $const1 	%line{95} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:96
+#     h = 0.0;
+	assign		___361_h $const1 	%line{96} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:99
+#   if (s == 0.0) {
+	eq		$tmp404 ___361_s $const1 	%line{99} %argrw{"wrr"}
+	if		$tmp404 777 801 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:100
+#     h = 0.0;
+	assign		___361_h $const1 	%line{100} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:103
+#     c = (color(cmax, cmax, cmax) - rgb) / cdelta;
+	color		$tmp405 ___361_cmax ___361_cmax ___361_cmax 	%line{103} %argrw{"wrrr"}
+	sub		$tmp406 $tmp405 ___433_outcol 	%argrw{"wrr"}
+	div		___361_c $tmp406 ___361_cdelta 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:105
+#     if (rgb[0] == cmax) {
+	compref		$tmp407 ___433_outcol $const15 	%line{105} %argrw{"wrr"}
+	eq		$tmp408 $tmp407 ___361_cmax 	%argrw{"wrr"}
+	if		$tmp408 786 797 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:106
+#       h = c[2] - c[1];
+	compref		$tmp409 ___361_c $const19 	%line{106} %argrw{"wrr"}
+	compref		$tmp410 ___361_c $const18 	%argrw{"wrr"}
+	sub		___361_h $tmp409 $tmp410 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:108
+#     else if (rgb[1] == cmax) {
+	compref		$tmp411 ___433_outcol $const18 	%line{108} %argrw{"wrr"}
+	eq		$tmp412 $tmp411 ___361_cmax 	%argrw{"wrr"}
+	if		$tmp412 793 797 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:109
+#       h = 2.0 + c[0] - c[2];
+	compref		$tmp413 ___361_c $const15 	%line{109} %argrw{"wrr"}
+	add		$tmp414 $const17 $tmp413 	%argrw{"wrr"}
+	compref		$tmp415 ___361_c $const19 	%argrw{"wrr"}
+	sub		___361_h $tmp414 $tmp415 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:112
+#       h = 4.0 + c[1] - c[0];
+	compref		$tmp416 ___361_c $const18 	%line{112} %argrw{"wrr"}
+	add		$tmp417 $const39 $tmp416 	%argrw{"wrr"}
+	compref		$tmp418 ___361_c $const15 	%argrw{"wrr"}
+	sub		___361_h $tmp417 $tmp418 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:115
+#     h /= 6.0;
+	div		___361_h ___361_h $const40 	%line{115} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:117
+#     if (h < 0.0) {
+	lt		$tmp419 ___361_h $const1 	%line{117} %argrw{"wrr"}
+	if		$tmp419 801 801 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:118
+#       h += 1.0;
+	add		___361_h ___361_h $const2 	%line{118} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:122
+#   return color(h, s, v);
+	color		___434_hsv ___361_h ___361_s ___361_v 	%line{122} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:222
+#     hsv[0] = hsv2[0];
+	compref		$tmp420 ___433_hsv2 $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{222} %argrw{"wrr"}
+	compassign	___434_hsv $const15 $tmp420 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:223
+#     hsv[1] = hsv2[1];
+	compref		$tmp421 ___433_hsv2 $const18 	%line{223} %argrw{"wrr"}
+	compassign	___434_hsv $const18 $tmp421 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:224
+#     color tmp = hsv_to_rgb(hsv);
+	functioncall	$const41 846 	%line{224} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:130
+#   h = hsv[0];
+	compref		___370_h ___434_hsv $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h"} %line{130} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:131
+#   s = hsv[1];
+	compref		___370_s ___434_hsv $const18 	%line{131} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:132
+#   v = hsv[2];
+	compref		___370_v ___434_hsv $const19 	%line{132} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:134
+#   if (s == 0.0) {
+	eq		$tmp422 ___370_s $const1 	%line{134} %argrw{"wrr"}
+	if		$tmp422 813 845 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:135
+#     rgb = color(v, v, v);
+	color		___370_rgb ___370_v ___370_v ___370_v 	%line{135} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:138
+#     if (h == 1.0) {
+	eq		$tmp423 ___370_h $const2 	%line{138} %argrw{"wrr"}
+	if		$tmp423 816 816 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:139
+#       h = 0.0;
+	assign		___370_h $const1 	%line{139} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:142
+#     h *= 6.0;
+	mul		___370_h ___370_h $const40 	%line{142} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:143
+#     i = floor(h);
+	floor		___370_i ___370_h 	%line{143} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:144
+#     f = h - i;
+	sub		___370_f ___370_h ___370_i 	%line{144} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:145
+#     rgb = color(f, f, f);
+	color		___370_rgb ___370_f ___370_f ___370_f 	%line{145} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:146
+#     p = v * (1.0 - s);
+	sub		$tmp424 $const2 ___370_s 	%line{146} %argrw{"wrr"}
+	mul		___370_p ___370_v $tmp424 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:147
+#     q = v * (1.0 - (s * f));
+	mul		$tmp425 ___370_s ___370_f 	%line{147} %argrw{"wrr"}
+	sub		$tmp426 $const2 $tmp425 	%argrw{"wrr"}
+	mul		___370_q ___370_v $tmp426 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:148
+#     t = v * (1.0 - (s * (1.0 - f)));
+	sub		$tmp427 $const2 ___370_f 	%line{148} %argrw{"wrr"}
+	mul		$tmp428 ___370_s $tmp427 	%argrw{"wrr"}
+	sub		$tmp429 $const2 $tmp428 	%argrw{"wrr"}
+	mul		___370_t ___370_v $tmp429 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:150
+#     if (i == 0.0) {
+	eq		$tmp430 ___370_i $const1 	%line{150} %argrw{"wrr"}
+	if		$tmp430 832 845 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:151
+#       rgb = color(v, t, p);
+	color		___370_rgb ___370_v ___370_t ___370_p 	%line{151} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:153
+#     else if (i == 1.0) {
+	eq		$tmp431 ___370_i $const2 	%line{153} %argrw{"wrr"}
+	if		$tmp431 835 845 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:154
+#       rgb = color(q, v, p);
+	color		___370_rgb ___370_q ___370_v ___370_p 	%line{154} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:156
+#     else if (i == 2.0) {
+	eq		$tmp432 ___370_i $const17 	%line{156} %argrw{"wrr"}
+	if		$tmp432 838 845 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:157
+#       rgb = color(p, v, t);
+	color		___370_rgb ___370_p ___370_v ___370_t 	%line{157} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:159
+#     else if (i == 3.0) {
+	eq		$tmp433 ___370_i $const42 	%line{159} %argrw{"wrr"}
+	if		$tmp433 841 845 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:160
+#       rgb = color(p, q, v);
+	color		___370_rgb ___370_p ___370_q ___370_v 	%line{160} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:162
+#     else if (i == 4.0) {
+	eq		$tmp434 ___370_i $const39 	%line{162} %argrw{"wrr"}
+	if		$tmp434 844 845 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:163
+#       rgb = color(t, p, v);
+	color		___370_rgb ___370_t ___370_p ___370_v 	%line{163} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:166
+#       rgb = color(v, p, q);
+	color		___370_rgb ___370_v ___370_p ___370_q 	%line{166} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:170
+#   return rgb;
+	assign		___434_tmp ___370_rgb 	%line{170} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:226
+#     outcol = mix(outcol, tmp, t);
+	mix		___433_outcol ___433_outcol ___434_tmp t 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{226} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:229
+#   return outcol;
+	assign		Color ___433_outcol 	%line{229} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:318
+#   if (mix_type == "soft_light")
+	eq		$tmp435 mix_type $const49 	%line{318} %argrw{"wrr"}
+	if		$tmp435 865 865 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:319
+#     Color = node_mix_soft(t, Color1, Color2);
+	functioncall	$const50 865 	%line{319} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:234
+#   float tm = 1.0 - t;
+	sub		___435_tm $const2 t 	%line{234} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:236
+#   color one = color(1.0);
+	assign		___435_one $const12 	%line{236} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:237
+#   color scr = one - (one - col2) * (one - col1);
+	sub		$tmp436 ___435_one Color2 	%line{237} %argrw{"wrr"}
+	sub		$tmp437 ___435_one Color1 	%argrw{"wrr"}
+	mul		$tmp438 $tmp436 $tmp437 	%argrw{"wrr"}
+	sub		___435_scr ___435_one $tmp438 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:239
+#   return tm * col1 + t * ((one - col1) * col2 * col1 + col1 * scr);
+	mul		$tmp439 ___435_tm Color1 	%line{239} %argrw{"wrr"}
+	sub		$tmp440 ___435_one Color1 	%argrw{"wrr"}
+	mul		$tmp441 $tmp440 Color2 	%argrw{"wrr"}
+	mul		$tmp442 $tmp441 Color1 	%argrw{"wrr"}
+	mul		$tmp443 Color1 ___435_scr 	%argrw{"wrr"}
+	add		$tmp444 $tmp442 $tmp443 	%argrw{"wrr"}
+	mul		$tmp445 t $tmp444 	%argrw{"wrr"}
+	add		Color $tmp439 $tmp445 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:320
+#   if (mix_type == "linear_light")
+	eq		$tmp446 mix_type $const51 	%line{320} %argrw{"wrr"}
+	if		$tmp446 921 921 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:321
+#     Color = node_mix_linear(t, Color1, Color2);
+	functioncall	$const52 921 	%line{321} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:244
+#   color outcol = col1;
+	assign		___436_outcol Color1 	%line{244} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:246
+#   if (col2[0] > 0.5)
+	compref		$tmp447 Color2 $const15 	%line{246} %argrw{"wrr"}
+	gt		$tmp448 $tmp447 $const16 	%argrw{"wrr"}
+	if		$tmp448 879 886 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:247
+#     outcol[0] = col1[0] + t * (2.0 * (col2[0] - 0.5));
+	compref		$tmp449 Color1 $const15 	%line{247} %argrw{"wrr"}
+	compref		$tmp450 Color2 $const15 	%argrw{"wrr"}
+	sub		$tmp451 $tmp450 $const16 	%argrw{"wrr"}
+	mul		$tmp452 $const17 $tmp451 	%argrw{"wrr"}
+	mul		$tmp453 t $tmp452 	%argrw{"wrr"}
+	add		$tmp454 $tmp449 $tmp453 	%argrw{"wrr"}
+	compassign	___436_outcol $const15 $tmp454 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:249
+#     outcol[0] = col1[0] + t * (2.0 * (col2[0]) - 1.0);
+	compref		$tmp455 Color1 $const15 	%line{249} %argrw{"wrr"}
+	compref		$tmp456 Color2 $const15 	%argrw{"wrr"}
+	mul		$tmp457 $const17 $tmp456 	%argrw{"wrr"}
+	sub		$tmp458 $tmp457 $const2 	%argrw{"wrr"}
+	mul		$tmp459 t $tmp458 	%argrw{"wrr"}
+	add		$tmp460 $tmp455 $tmp459 	%argrw{"wrr"}
+	compassign	___436_outcol $const15 $tmp460 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:251
+#   if (col2[1] > 0.5)
+	compref		$tmp461 Color2 $const18 	%line{251} %argrw{"wrr"}
+	gt		$tmp462 $tmp461 $const16 	%argrw{"wrr"}
+	if		$tmp462 896 903 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:252
+#     outcol[1] = col1[1] + t * (2.0 * (col2[1] - 0.5));
+	compref		$tmp463 Color1 $const18 	%line{252} %argrw{"wrr"}
+	compref		$tmp464 Color2 $const18 	%argrw{"wrr"}
+	sub		$tmp465 $tmp464 $const16 	%argrw{"wrr"}
+	mul		$tmp466 $const17 $tmp465 	%argrw{"wrr"}
+	mul		$tmp467 t $tmp466 	%argrw{"wrr"}
+	add		$tmp468 $tmp463 $tmp467 	%argrw{"wrr"}
+	compassign	___436_outcol $const18 $tmp468 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:254
+#     outcol[1] = col1[1] + t * (2.0 * (col2[1]) - 1.0);
+	compref		$tmp469 Color1 $const18 	%line{254} %argrw{"wrr"}
+	compref		$tmp470 Color2 $const18 	%argrw{"wrr"}
+	mul		$tmp471 $const17 $tmp470 	%argrw{"wrr"}
+	sub		$tmp472 $tmp471 $const2 	%argrw{"wrr"}
+	mul		$tmp473 t $tmp472 	%argrw{"wrr"}
+	add		$tmp474 $tmp469 $tmp473 	%argrw{"wrr"}
+	compassign	___436_outcol $const18 $tmp474 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:256
+#   if (col2[2] > 0.5)
+	compref		$tmp475 Color2 $const19 	%line{256} %argrw{"wrr"}
+	gt		$tmp476 $tmp475 $const16 	%argrw{"wrr"}
+	if		$tmp476 913 920 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:257
+#     outcol[2] = col1[2] + t * (2.0 * (col2[2] - 0.5));
+	compref		$tmp477 Color1 $const19 	%line{257} %argrw{"wrr"}
+	compref		$tmp478 Color2 $const19 	%argrw{"wrr"}
+	sub		$tmp479 $tmp478 $const16 	%argrw{"wrr"}
+	mul		$tmp480 $const17 $tmp479 	%argrw{"wrr"}
+	mul		$tmp481 t $tmp480 	%argrw{"wrr"}
+	add		$tmp482 $tmp477 $tmp481 	%argrw{"wrr"}
+	compassign	___436_outcol $const19 $tmp482 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:259
+#     outcol[2] = col1[2] + t * (2.0 * (col2[2]) - 1.0);
+	compref		$tmp483 Color1 $const19 	%line{259} %argrw{"wrr"}
+	compref		$tmp484 Color2 $const19 	%argrw{"wrr"}
+	mul		$tmp485 $const17 $tmp484 	%argrw{"wrr"}
+	sub		$tmp486 $tmp485 $const2 	%argrw{"wrr"}
+	mul		$tmp487 t $tmp486 	%argrw{"wrr"}
+	add		$tmp488 $tmp483 $tmp487 	%argrw{"wrr"}
+	compassign	___436_outcol $const19 $tmp488 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:261
+#   return outcol;
+	assign		Color ___436_outcol 	%line{261} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:323
+#   if (use_clamp)
+	if		use_clamp 940 940 	%line{323} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:324
+#     Color = node_mix_clamp(Color);
+	functioncall	$const53 940 	%line{324} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:266
+#   color outcol = col;
+	assign		___437_outcol Color 	%line{266} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:268
+#   outcol[0] = clamp(col[0], 0.0, 1.0);
+	compref		$tmp490 Color $const15 	%line{268} %argrw{"wrr"}
+	functioncall	$const3 928 	%argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
+# float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
+	min		$tmp491 $tmp490 $const2 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
+	max		$tmp489 $tmp491 $const1 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:268
+#   outcol[0] = clamp(col[0], 0.0, 1.0);
+	compassign	___437_outcol $const15 $tmp489 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{268} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:269
+#   outcol[1] = clamp(col[1], 0.0, 1.0);
+	compref		$tmp493 Color $const18 	%line{269} %argrw{"wrr"}
+	functioncall	$const3 933 	%argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
+# float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
+	min		$tmp494 $tmp493 $const2 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
+	max		$tmp492 $tmp494 $const1 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:269
+#   outcol[1] = clamp(col[1], 0.0, 1.0);
+	compassign	___437_outcol $const18 $tmp492 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{269} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:270
+#   outcol[2] = clamp(col[2], 0.0, 1.0);
+	compref		$tmp496 Color $const19 	%line{270} %argrw{"wrr"}
+	functioncall	$const3 938 	%argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
+# float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
+	min		$tmp497 $tmp496 $const2 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
+	max		$tmp495 $tmp497 $const1 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:270
+#   outcol[2] = clamp(col[2], 0.0, 1.0);
+	compassign	___437_outcol $const19 $tmp495 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{270} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:272
+#   return outcol;
+	assign		Color ___437_outcol 	%line{272} %argrw{"wr"}
+	end

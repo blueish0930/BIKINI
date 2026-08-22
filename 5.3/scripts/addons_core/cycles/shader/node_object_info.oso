@@ -1,0 +1,42 @@
+OpenShadingLanguage 1.00
+# Compiled by oslc 1.15.3.0
+# options: -q -O2 -IE:/Blender_Source/intern/cycles/kernel/osl/shaders -IE:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders -o E:/build_windows_Full_x64_vc17_Release/intern/cycles/kernel/osl/shaders/node_object_info.oso
+shader node_object_info
+oparam	point	Location	0 0 0		%read{2147483647,-1} %write{0,0}
+oparam	color	Color	1 1 1		%read{2147483647,-1} %write{1,1}
+oparam	float	Alpha	1		%read{2147483647,-1} %write{2,2}
+oparam	float	ObjectIndex	0		%read{2147483647,-1} %write{3,3}
+oparam	float	MaterialIndex	0		%read{2147483647,-1} %write{4,4}
+oparam	float	Random	0		%read{2147483647,-1} %write{5,5}
+temp	int	$tmp1	%read{2147483647,-1} %write{0,0}
+const	string	$const1	"object:location"		%read{0,0} %write{2147483647,-1}
+temp	int	$tmp2	%read{2147483647,-1} %write{1,1}
+const	string	$const2	"object:color"		%read{1,1} %write{2147483647,-1}
+temp	int	$tmp3	%read{2147483647,-1} %write{2,2}
+const	string	$const3	"object:alpha"		%read{2,2} %write{2147483647,-1}
+temp	int	$tmp4	%read{2147483647,-1} %write{3,3}
+const	string	$const4	"object:index"		%read{3,3} %write{2147483647,-1}
+temp	int	$tmp5	%read{2147483647,-1} %write{4,4}
+const	string	$const5	"material:index"		%read{4,4} %write{2147483647,-1}
+temp	int	$tmp6	%read{2147483647,-1} %write{5,5}
+const	string	$const6	"object:random"		%read{5,5} %write{2147483647,-1}
+code ___main___
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_object_info.osl:14
+#   getattribute("object:location", Location);
+	getattribute	$tmp1 $const1 Location 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_object_info.osl"} %line{14} %argrw{"wrw"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_object_info.osl:15
+#   getattribute("object:color", Color);
+	getattribute	$tmp2 $const2 Color 	%line{15} %argrw{"wrw"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_object_info.osl:16
+#   getattribute("object:alpha", Alpha);
+	getattribute	$tmp3 $const3 Alpha 	%line{16} %argrw{"wrw"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_object_info.osl:17
+#   getattribute("object:index", ObjectIndex);
+	getattribute	$tmp4 $const4 ObjectIndex 	%line{17} %argrw{"wrw"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_object_info.osl:18
+#   getattribute("material:index", MaterialIndex);
+	getattribute	$tmp5 $const5 MaterialIndex 	%line{18} %argrw{"wrw"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_object_info.osl:19
+#   getattribute("object:random", Random);
+	getattribute	$tmp6 $const6 Random 	%line{19} %argrw{"wrw"}
+	end

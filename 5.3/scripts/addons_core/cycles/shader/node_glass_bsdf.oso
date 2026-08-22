@@ -1,0 +1,94 @@
+OpenShadingLanguage 1.00
+# Compiled by oslc 1.15.3.0
+# options: -q -O2 -IE:/Blender_Source/intern/cycles/kernel/osl/shaders -IE:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders -o E:/build_windows_Full_x64_vc17_Release/intern/cycles/kernel/osl/shaders/node_glass_bsdf.oso
+shader node_glass_bsdf
+param	color	Color	0.800000012 0.800000012 0.800000012		%read{1,1} %write{2147483647,-1}
+param	string	distribution	"ggx"		%read{22,22} %write{2147483647,-1}
+param	float	Roughness	0.200000003		%read{3,3} %write{2147483647,-1}
+param	float	IOR	1.45000005		%read{6,6} %write{2147483647,-1}
+param	float	ThinFilmThickness	0		%read{22,22} %write{2147483647,-1}
+param	float	ThinFilmIOR	1.33000004		%read{9,10} %write{2147483647,-1}
+param	normal	Normal	0 0 0		%read{22,22} %write{0,0} %initexpr
+oparam	closure color	BSDF			%read{2147483647,-1} %write{22,22}
+global	normal	N	%read{0,0} %write{2147483647,-1}
+local	float	___349_f0	%read{18,18} %write{17,17}
+local	color	base_color	%read{22,22} %write{1,1}
+local	float	r2	%read{5,22} %write{4,5}
+local	float	eta	%read{9,21} %write{6,13}
+local	float	thinfilm_ior	%read{22,22} %write{9,10}
+local	color	F0	%read{22,22} %write{19,19}
+local	color	F90	%read{22,22} %write{20,20}
+const	color	$const1	0 0 0		%read{1,1} %write{2147483647,-1}
+const	float	$const2	0		%read{4,4} %write{2147483647,-1}
+const	float	$const3	1		%read{3,16} %write{2147483647,-1}
+const	string	$const4	"clamp"		%read{2,2} %write{2147483647,-1}
+temp	float	$tmp2	%read{4,4} %write{3,3}
+const	float	$const5	9.99999975e-06		%read{6,6} %write{2147483647,-1}
+temp	int	$tmp3	%read{8,8} %write{7,7}
+temp	int	$tmp4	%read{12,12} %write{11,11}
+temp	float	$tmp5	%read{19,19} %write{18,18}
+const	string	$const6	"F0_from_ior"		%read{14,14} %write{2147483647,-1}
+temp	float	$tmp6	%read{17,17} %write{15,15}
+temp	float	$tmp7	%read{17,17} %write{16,16}
+const	color	$const7	1 1 1		%read{20,20} %write{2147483647,-1}
+const	vector	$const8	0 0 0		%read{22,22} %write{2147483647,-1}
+temp	float	$tmp9	%read{22,22} %write{21,21}
+const	string	$const9	"thinfilm_thickness"		%read{22,22} %write{2147483647,-1}
+const	string	$const10	"thinfilm_ior"		%read{22,22} %write{2147483647,-1}
+const	string	$const11	"generalized_schlick_bsdf"		%read{22,22} %write{2147483647,-1}
+code Normal
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_glass_bsdf.osl:14
+#                        normal Normal = N,
+	assign		Normal N 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_glass_bsdf.osl"} %line{14} %argrw{"wr"}
+code ___main___
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_glass_bsdf.osl:17
+#   color base_color = max(Color, color(0.0));
+	max		base_color Color $const1 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_glass_bsdf.osl"} %line{17} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_glass_bsdf.osl:18
+#   float r2 = clamp(Roughness, 0.0, 1.0);
+	functioncall	$const4 5 	%line{18} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
+# float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
+	min		$tmp2 Roughness $const3 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
+	max		r2 $tmp2 $const2 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_glass_bsdf.osl:19
+#   r2 = r2 * r2;
+	mul		r2 r2 r2 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_glass_bsdf.osl"} %line{19} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_glass_bsdf.osl:20
+#   float eta = max(IOR, 1e-5);
+	max		eta IOR $const5 	%line{20} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_glass_bsdf.osl:21
+#   float thinfilm_ior = backfacing() ? ThinFilmIOR / eta : ThinFilmIOR;
+	backfacing	$tmp3 	%line{21} %argrw{"w"}
+	if		$tmp3 10 11 	%argrw{"r"}
+	div		thinfilm_ior ThinFilmIOR eta 	%argrw{"wrr"}
+	assign		thinfilm_ior ThinFilmIOR 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_glass_bsdf.osl:22
+#   eta = backfacing() ? 1.0 / eta : eta;
+	backfacing	$tmp4 	%line{22} %argrw{"w"}
+	if		$tmp4 14 14 	%argrw{"r"}
+	div		eta $const3 eta 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_glass_bsdf.osl:23
+#   color F0 = F0_from_ior(eta);
+	functioncall	$const6 19 	%line{23} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_fresnel.h:42
+#   float f0 = (eta - 1.0) / (eta + 1.0);
+	sub		$tmp6 eta $const3 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_fresnel.h"} %line{42} %argrw{"wrr"}
+	add		$tmp7 eta $const3 	%argrw{"wrr"}
+	div		___349_f0 $tmp6 $tmp7 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_fresnel.h:43
+#   return f0 * f0;
+	mul		$tmp5 ___349_f0 ___349_f0 	%line{43} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_glass_bsdf.osl:23
+#   color F0 = F0_from_ior(eta);
+	assign		F0 $tmp5 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_glass_bsdf.osl"} %line{23} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_glass_bsdf.osl:24
+#   color F90 = color(1.0);
+	assign		F90 $const7 	%line{24} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_glass_bsdf.osl:34
+#                                   -eta,
+	neg		$tmp9 eta 	%line{34} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_glass_bsdf.osl:26
+#   BSDF = generalized_schlick_bsdf(Normal,
+	closure		BSDF $const11 Normal $const8 base_color base_color r2 r2 F0 F90 $tmp9 distribution $const9 ThinFilmThickness $const10 thinfilm_ior 	%line{26} %argrw{"wrrrrrrrrrrrrrrr"}
+	end

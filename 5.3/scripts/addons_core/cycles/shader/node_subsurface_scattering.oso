@@ -1,0 +1,50 @@
+OpenShadingLanguage 1.00
+# Compiled by oslc 1.15.3.0
+# options: -q -O2 -IE:/Blender_Source/intern/cycles/kernel/osl/shaders -IE:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders -o E:/build_windows_Full_x64_vc17_Release/intern/cycles/kernel/osl/shaders/node_subsurface_scattering.oso
+shader node_subsurface_scattering
+param	color	Color	0.800000012 0.800000012 0.800000012		%read{1,1} %write{2147483647,-1}
+param	float	Scale	1		%read{2,2} %write{2147483647,-1}
+param	vector	Radius	0.100000001 0.100000001 0.100000001		%read{2,2} %write{2147483647,-1}
+param	float	IOR	1.39999998		%read{6,6} %write{2147483647,-1}
+param	float	Roughness	1		%read{4,4} %write{2147483647,-1}
+param	float	Anisotropy	0		%read{6,6} %write{2147483647,-1}
+param	string	method	"random_walk"		%read{6,6} %write{2147483647,-1}
+param	normal	Normal	0 0 0		%read{6,6} %write{0,0} %initexpr
+oparam	closure color	BSSRDF			%read{2147483647,-1} %write{7,7}
+global	normal	N	%read{0,0} %write{2147483647,-1}
+local	color	base_color	%read{6,7} %write{1,1}
+const	color	$const1	0 0 0		%read{1,1} %write{2147483647,-1}
+temp	closure color	$tmp2	%read{7,7} %write{6,6}
+temp	vector	$tmp3	%read{6,6} %write{2,2}
+const	string	$const2	"ior"		%read{6,6} %write{2147483647,-1}
+const	string	$const3	"anisotropy"		%read{6,6} %write{2147483647,-1}
+const	string	$const4	"roughness"		%read{6,6} %write{2147483647,-1}
+temp	float	$tmp4	%read{6,6} %write{5,5}
+const	float	$const5	0		%read{5,5} %write{2147483647,-1}
+const	float	$const6	1		%read{4,4} %write{2147483647,-1}
+const	string	$const7	"clamp"		%read{3,3} %write{2147483647,-1}
+temp	float	$tmp5	%read{5,5} %write{4,4}
+const	string	$const8	"bssrdf"		%read{6,6} %write{2147483647,-1}
+code Normal
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_subsurface_scattering.osl:14
+#                                   normal Normal = N,
+	assign		Normal N 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_subsurface_scattering.osl"} %line{14} %argrw{"wr"}
+code ___main___
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_subsurface_scattering.osl:17
+#   color base_color = max(Color, color(0.0));
+	max		base_color Color $const1 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_subsurface_scattering.osl"} %line{17} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_subsurface_scattering.osl:20
+#                                Scale * Radius,
+	mul		$tmp3 Scale Radius 	%line{20} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_subsurface_scattering.osl:27
+#                                clamp(Roughness, 0.0, 1.0));
+	functioncall	$const7 6 	%line{27} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
+# float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
+	min		$tmp5 Roughness $const6 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
+	max		$tmp4 $tmp5 $const5 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_subsurface_scattering.osl:18
+#   BSSRDF = base_color * bssrdf(method,
+	closure		$tmp2 $const8 method Normal $tmp3 base_color $const2 IOR $const3 Anisotropy $const4 $tmp4 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_subsurface_scattering.osl"} %line{18} %argrw{"wrrrrrrrrrrr"}
+	mul		BSSRDF $tmp2 base_color 	%argrw{"wrr"}
+	end

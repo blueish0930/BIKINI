@@ -1,0 +1,1337 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-lang="zh" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="BIKINI Release Notes — Blender 5.3 custom build">
+  <title>Geometry Nodes - BIKINI Release Notes</title>
+<style>
+/* Synced with manual.html */
+
+/* Match docs.blender.org Furo theme (light) — official color tokens */
+:root{
+  --font-stack:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji";
+  --font-stack--monospace:"SFMono-Regular",Menlo,Consolas,Monaco,"Liberation Mono","Lucida Console",monospace;
+  --color-foreground-primary:#000;
+  --color-foreground-secondary:#5a5c63;
+  --color-foreground-muted:#6b6f76;
+  --color-foreground-border:#878787;
+  --color-background-primary:#fff;
+  --color-background-secondary:#f8f9fb;
+  --color-background-hover:#efeff4;
+  --color-background-border:#eeebee;
+  --color-brand-primary:#0a4bff;
+  --color-brand-content:#2757dd;
+  --color-inline-code-background:var(--color-background-secondary);
+  --color-header-background:var(--color-background-primary);
+  --color-header-border:var(--color-background-border);
+  --color-sidebar-background:var(--color-background-secondary);
+  --color-sidebar-background-border:var(--color-background-border);
+  --color-sidebar-link-text:var(--color-foreground-secondary);
+  --color-sidebar-caption-text:var(--color-foreground-muted);
+  --color-sidebar-section-text:var(--color-foreground-primary);
+  --color-link:var(--color-brand-content);
+  --color-table-header-background:var(--color-background-secondary);
+  --color-table-border:var(--color-background-border);
+  --sidebar-width:15.5rem;
+  --header-height:2.5rem;
+  --font-size--normal:100%;
+  --font-size--small:92%;
+  --font-size--small--2:87.5%;
+  --sidebar-item-font-size:var(--font-size--small);
+  --sidebar-item-line-height:1.35rem;
+  --sidebar-item-spacing-vertical:.45rem;
+  --sidebar-item-spacing-horizontal:1rem;
+  --sidebar-left-inset:.4rem;
+  font-size:18px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;
+  font-family:var(--font-stack);
+  color:var(--color-foreground-primary);
+  background:var(--color-background-primary);
+  line-height:1.5;
+  font-size:inherit;
+  -webkit-font-smoothing:antialiased;
+}
+/* Wide screens: continuous sidebar gray from viewport left through the nav column */
+@media(min-width:72.01rem){
+  body{
+    background-image:linear-gradient(
+      to right,
+      var(--color-sidebar-background) 0,
+      var(--color-sidebar-background) calc((100vw - 72rem) / 2 + var(--sidebar-left-inset) + var(--sidebar-width)),
+      var(--color-background-primary) calc((100vw - 72rem) / 2 + var(--sidebar-left-inset) + var(--sidebar-width))
+    );
+    background-attachment:fixed;
+  }
+}
+html[data-lang="en"] .zh{display:none!important}
+html[data-lang="zh"] .en{display:none!important}
+
+/* Header — plain white like Furo */
+.md-header{
+  position:sticky;top:0;z-index:40;
+  background:var(--color-header-background);
+  border-bottom:1px solid var(--color-header-border);
+}
+.md-header__inner{
+  max-width:72rem;margin:0 auto;padding:0 1.25rem 0 var(--sidebar-left-inset);
+  height:var(--header-height);
+  display:flex;align-items:center;gap:1rem;
+}
+.md-header__title{
+  font-weight:700;font-size:1.1rem;
+  color:var(--color-foreground-primary);
+}
+.md-header__title .sub{
+  font-weight:400;color:var(--color-foreground-secondary);
+  margin-left:.35rem;font-size:.95rem;
+}
+.md-header a{
+  color:var(--color-foreground-secondary);
+  text-decoration:none;font-size:var(--font-size--small);
+  font-weight:400;
+}
+.md-header a:hover{color:var(--color-foreground-primary)}
+.lang-switch{
+  margin-left:auto;display:inline-flex;gap:0;
+  border:1px solid var(--color-background-border);
+  border-radius:.2rem;overflow:hidden;
+  background:var(--color-background-secondary);
+}
+.lang-switch button{
+  appearance:none;border:0;background:transparent;
+  font:inherit;font-size:var(--font-size--small--2);
+  color:var(--color-foreground-secondary);
+  padding:.3rem .65rem;cursor:pointer;
+}
+.lang-switch button[aria-pressed="true"]{
+  color:var(--color-foreground-primary);
+  background:var(--color-background-primary);
+  font-weight:600;
+}
+.nav-toggle{
+  display:none;appearance:none;border:0;background:transparent;
+  color:var(--color-foreground-primary);font-size:1.15rem;cursor:pointer;
+}
+
+/* Layout: smaller left inset; continuous sidebar bg */
+.md-main__inner{
+  display:flex;
+  min-height:calc(100vh - var(--header-height));
+  max-width:72rem;
+  margin:0 auto;
+  padding:0 1.25rem 0 0;
+  gap:0;
+  background:linear-gradient(
+    to right,
+    var(--color-sidebar-background) 0,
+    var(--color-sidebar-background) calc(var(--sidebar-left-inset) + var(--sidebar-width)),
+    var(--color-background-primary) calc(var(--sidebar-left-inset) + var(--sidebar-width))
+  );
+}
+.md-sidebar{
+  width:var(--sidebar-width);min-width:var(--sidebar-width);
+  background:var(--color-sidebar-background);
+  border-right:1px solid var(--color-sidebar-background-border);
+  position:sticky;top:var(--header-height);align-self:flex-start;
+  height:calc(100vh - var(--header-height));
+  overflow:auto;
+  padding:1rem .4rem 2.5rem var(--sidebar-left-inset);
+  margin:0;
+}
+.md-nav__title{
+  padding:.25rem var(--sidebar-item-spacing-horizontal) .5rem;
+  font-size:var(--font-size--small--2);
+  font-weight:700;
+  color:var(--color-sidebar-caption-text);
+  text-transform:uppercase;
+  letter-spacing:.04em;
+}
+.md-nav__list{list-style:none;margin:0;padding:0}
+
+/* Intro / Achieve — gray like official secondary links (not blue) */
+.md-nav__list > .md-nav__item > .md-nav__link{
+  display:block;
+  padding:var(--sidebar-item-spacing-vertical) var(--sidebar-item-spacing-horizontal);
+  color:var(--color-sidebar-link-text);
+  text-decoration:none;
+  font-size:var(--sidebar-item-font-size);
+  font-weight:500;
+  line-height:var(--sidebar-item-line-height);
+  background:transparent;
+  border:0;border-radius:0;box-shadow:none;
+}
+.md-nav__list > .md-nav__item > .md-nav__link:hover{
+  color:var(--color-foreground-primary);
+  background:var(--color-background-hover);
+}
+.md-nav__list > .md-nav__item > .md-nav__link.is-active{
+  color:var(--color-foreground-primary);
+  font-weight:600;
+  background:transparent;
+  box-shadow:none;
+}
+
+/* Categories (parent) — black/gray, never brand blue */
+.nav-version{
+  margin:0;border:0;border-radius:0;
+  background:transparent;overflow:visible;
+}
+.nav-version > summary{
+  list-style:none;cursor:pointer;user-select:none;
+  display:flex;align-items:center;gap:.4rem;
+  padding:var(--sidebar-item-spacing-vertical) var(--sidebar-item-spacing-horizontal);
+  font-size:var(--sidebar-item-font-size);
+  font-weight:600;
+  color:var(--color-sidebar-section-text);
+  background:transparent;
+  text-transform:none;letter-spacing:normal;
+  border:0;
+}
+.nav-version[open] > summary{
+  border:0;background:transparent;
+}
+.nav-version > summary::-webkit-details-marker{display:none}
+.nav-version > summary::before{
+  content:"";
+  width:.35em;height:.35em;
+  border-right:1.5px solid var(--color-foreground-muted);
+  border-bottom:1.5px solid var(--color-foreground-muted);
+  transform:rotate(-45deg);
+  margin-right:.15rem;
+  flex-shrink:0;
+  transition:transform .15s ease;
+  opacity:.75;
+}
+.nav-version[open] > summary::before{
+  transform:rotate(45deg);
+  margin-top:-.1em;
+}
+.nav-version > summary:hover{
+  color:var(--color-foreground-primary);
+  background:var(--color-background-hover);
+}
+.nav-version > summary .count{
+  margin-left:auto;
+  font-size:var(--font-size--small--2);
+  font-weight:400;
+  color:var(--color-foreground-muted);
+  background:transparent;
+  padding:0;
+  border-radius:0;
+}
+/* Child list: vertical nest line */
+.nav-version > ul{
+  margin:0 0 .4rem .9rem;
+  padding:.1rem 0 .35rem .7rem;
+  border-left:1px solid #d0d2d8;
+  background:transparent;
+}
+.nav-version > ul .md-nav__link{
+  display:block;
+  position:relative;
+  padding:calc(var(--sidebar-item-spacing-vertical) * .85)
+          var(--sidebar-item-spacing-horizontal)
+          calc(var(--sidebar-item-spacing-vertical) * .85)
+          .55rem;
+  font-size:var(--sidebar-item-font-size);
+  font-weight:400;
+  line-height:var(--sidebar-item-line-height);
+  color:var(--color-sidebar-link-text);
+  text-decoration:none;
+  border-radius:0;margin:0;
+  background:transparent;box-shadow:none;border:0;
+}
+.nav-version > ul .md-nav__link::before{
+  content:"";
+  position:absolute;
+  left:-.7rem;
+  top:50%;
+  width:.45rem;
+  height:0;
+  border-top:1px solid #d0d2d8;
+}
+.nav-version > ul .md-nav__link:hover{
+  color:var(--color-foreground-primary);
+  background:var(--color-background-hover);
+}
+.nav-version > ul .md-nav__link.is-active{
+  color:var(--color-foreground-primary);
+  font-weight:600;
+  background:transparent;
+  box-shadow:none;
+}
+
+/* Content */
+.md-content{flex:1;min-width:0;background:var(--color-background-primary)}
+.md-content__inner{
+  max-width:48rem;
+  padding:1.5rem 2rem 3rem 1.75rem;
+  font-size:1.05rem;
+}
+.page{display:none}.page.is-active{display:block}
+h1{
+  margin:0 0 .75rem;
+  font-size:2.05em;font-weight:700;line-height:1.25;
+  color:var(--color-foreground-primary);
+  border:0;
+}
+h2{
+  margin:1.75rem 0 1rem;
+  font-size:1.45em;font-weight:700;
+  color:var(--color-foreground-primary);
+  border-bottom:1px solid var(--color-background-border);
+  padding-bottom:.35em;
+}
+h3{
+  margin:1.25rem 0 .75rem;
+  font-size:1.2em;font-weight:700;
+  color:var(--color-foreground-primary);
+}
+p{margin:0 0 1em;max-width:none}
+.lead{color:var(--color-foreground-secondary)}
+ul,ol{margin:0 0 1em;padding-left:1.4em;color:var(--color-foreground-primary)}
+li{margin:.25em 0}
+a{color:var(--color-link);text-decoration:none}
+a:hover{text-decoration:underline}
+code{
+  font-family:var(--font-stack--monospace);
+  font-size:var(--font-size--small--2);
+  background:var(--color-inline-code-background);
+  padding:.1em .3em;border-radius:.2rem;
+  color:var(--color-foreground-primary);
+}
+
+/* Tables — Furo-like simple */
+.io-table{
+  width:100%;max-width:46rem;
+  border-collapse:collapse;
+  margin:0 0 1.25em;
+  font-size:var(--font-size--normal);
+}
+.io-table th,.io-table td{
+  text-align:left;vertical-align:top;
+  padding:.5rem .65rem;
+  border-bottom:1px solid var(--color-table-border);
+}
+.io-table thead th{
+  background:var(--color-table-header-background);
+  font-weight:700;
+  color:var(--color-foreground-primary);
+}
+.io-table th{font-weight:700;color:var(--color-foreground-primary)}
+.io-table td{color:var(--color-foreground-primary)}
+.io-table .type{
+  display:inline;margin-left:.35rem;
+  font-size:var(--font-size--small--2);
+  font-weight:400;
+  color:var(--color-foreground-muted);
+  background:transparent;padding:0;border-radius:0;
+}
+.io-table .when{
+  margin-top:.35rem;padding:0;
+  background:transparent;border-radius:0;
+  font-size:var(--font-size--small);
+  color:var(--color-foreground-secondary);
+}
+.io-table .when code{
+  background:var(--color-inline-code-background);
+  color:var(--color-foreground-primary);
+}
+.io-table .desc{margin:0 0 .35rem;color:var(--color-foreground-primary);line-height:1.5}
+.io-table .menu-line{margin:.2rem 0;color:var(--color-foreground-secondary);font-size:var(--font-size--small)}
+.io-table .def{margin-top:.2rem;font-size:var(--font-size--small);color:var(--color-foreground-secondary)}
+.io-table tr.mode-row{background:var(--color-background-secondary)}
+.io-table tr.mode-row th,.io-table tr.mode-row td{background:transparent}
+
+.note-inline{font-size:var(--font-size--small);color:var(--color-foreground-secondary)}
+.muted{color:var(--color-foreground-muted)}
+
+/* Admonition tip — Furo important/tip style, no blue box */
+.admonition{
+  margin:1em 0;max-width:46rem;
+  border-left:.2rem solid #00bfa5;
+  background:transparent;
+  border-radius:0;
+  padding:.5rem 0 .5rem 1rem;
+}
+.admonition .title{
+  font-weight:700;margin:0 0 .35em;
+  color:var(--color-foreground-primary);
+  font-size:var(--font-size--normal);
+}
+.admonition p{margin:0 0 .4em}
+.admonition p:last-child{margin-bottom:0}
+
+.node-badge{
+  display:block;
+  font-size:var(--font-size--small);
+  font-weight:400;
+  color:var(--color-foreground-muted);
+  background:transparent;
+  padding:0;margin:0 0 .75rem;
+  border-radius:0;
+}
+.node-badge code{
+  background:var(--color-inline-code-background);
+  font-weight:400;
+}
+.src{color:var(--color-foreground-secondary);font-size:var(--font-size--small);margin-top:1.5rem}
+
+/* Status chips — muted, not bright blue */
+.st{
+  display:inline-block;padding:.05em .4em;border-radius:.15rem;
+  font-size:var(--font-size--small--2);font-weight:600;
+  background:var(--color-background-secondary);
+  color:var(--color-foreground-secondary);
+  border:1px solid var(--color-background-border);
+}
+.st.ok{color:#21632c;border-color:#38a84d55;background:transparent}
+.st.wf{color:var(--color-foreground-secondary);background:transparent}
+.st.miss{color:#b30000;border-color:#ff5c5c55;background:transparent}
+.st.off{color:var(--color-foreground-muted);background:transparent}
+
+footer.page-footer{
+  margin-top:2.5em;padding-top:1em;
+  border-top:1px solid var(--color-background-border);
+  color:var(--color-foreground-secondary);
+  font-size:var(--font-size--small);
+}
+
+@media(max-width:960px){
+  .md-main__inner{
+    flex-direction:column;padding:0 1rem;max-width:none;
+    background:var(--color-background-primary);
+  }
+  .md-sidebar{
+    position:fixed;left:0;top:var(--header-height);z-index:35;
+    width:min(16rem,90vw);margin-left:0;padding-left:.75rem;
+    transform:translateX(-105%);transition:transform .18s;
+    box-shadow:none;
+  }
+  .nav-open .md-sidebar{transform:none;box-shadow:2px 0 12px rgba(0,0,0,.08)}
+  .nav-toggle{display:inline-flex}
+  .md-header__inner{padding:0 1rem;max-width:none}
+}
+
+
+/* Changelog HTML wrappers */
+.md-container{display:flex;flex-direction:column;min-height:calc(100vh - var(--header-height))}
+.md-main{flex:1;display:block}
+.md-main__inner{display:flex}
+.md-nav{font-size:inherit}
+.md-nav__item{margin:0}
+.md-nav__section{margin-top:.5rem;padding-top:.35rem;border-top:1px solid var(--color-background-border)}
+.md-nav__section .md-nav__title{padding-top:.35rem}
+.md-nav__link{
+  display:block;margin:0;
+  padding:var(--sidebar-item-spacing-vertical) var(--sidebar-item-spacing-horizontal);
+  color:var(--color-sidebar-link-text);text-decoration:none;
+  font-size:var(--sidebar-item-font-size);font-weight:400;
+  line-height:var(--sidebar-item-line-height);
+  background:transparent!important;box-shadow:none!important;border-radius:0;
+}
+.md-nav__link:hover{color:var(--color-foreground-primary);background:var(--color-background-hover)!important}
+.md-nav__link--active,.md-nav__link.is-active{
+  color:var(--color-foreground-primary)!important;font-weight:600;
+  background:transparent!important;box-shadow:none!important;
+}
+.nav-version .tag{
+  margin-left:auto;font-size:var(--font-size--small--2);font-weight:400;
+  color:var(--color-foreground-muted);background:transparent;padding:0;
+}
+.md-header__links{display:flex;align-items:center;gap:.75rem;margin-left:.35rem}
+.md-typeset h1{margin:0 0 .75rem;font-size:2.05em;font-weight:700;line-height:1.25;color:var(--color-foreground-primary);border:0}
+.md-typeset h2{margin:1.75rem 0 1rem;font-size:1.45em;font-weight:700;color:var(--color-foreground-primary);border-bottom:1px solid var(--color-background-border);padding-bottom:.35em;scroll-margin-top:calc(var(--header-height) + .5rem)}
+.md-typeset h3{margin:1.25rem 0 .75rem;font-size:1.2em;font-weight:700;color:var(--color-foreground-primary);scroll-margin-top:calc(var(--header-height) + .5rem)}
+.md-typeset p{margin:0 0 1em}
+.md-typeset a{color:var(--color-link);text-decoration:none}
+.md-typeset a:hover{text-decoration:underline}
+.md-typeset ul,.md-typeset ol{margin:0 0 1em;padding-left:1.4em}
+.md-typeset li{margin:.25em 0}
+.md-typeset li + li{margin-top:.15em}
+.md-typeset strong{font-weight:700;color:var(--color-foreground-primary)}
+.md-typeset code{font-family:var(--font-stack--monospace);font-size:var(--font-size--small--2);background:var(--color-inline-code-background);padding:.1em .3em;border-radius:.2rem;color:var(--color-foreground-primary);word-break:break-word}
+.md-typeset .meta{color:var(--color-foreground-secondary);font-size:var(--font-size--small);margin:-.3em 0 1.2em}
+.md-typeset .admonition,.admonition{
+  margin:1em 0;max-width:48rem;border-left:.2rem solid #00bfa5;background:transparent;border-radius:0;padding:.5rem 0 .5rem 1rem
+}
+.md-typeset .admonition.warning,.admonition.warning{border-left-color:#ff9100}
+.md-typeset .admonition-title,.admonition .admonition-title,.admonition .title{
+  font-weight:700;margin:0 0 .35em;padding:0;background:transparent;color:var(--color-foreground-primary)
+}
+.md-typeset .admonition.warning .admonition-title,.admonition.warning .admonition-title{background:transparent}
+.module-index{columns:2;column-gap:2rem;max-width:36rem;list-style:none;padding-left:0;margin:.5em 0 1.2em}
+.module-index li{break-inside:avoid;margin:.15em 0}
+.module-index a{display:inline-block;padding:.08em 0}
+.md-footer-meta{margin-top:2.5em;padding-top:1em;border-top:1px solid var(--color-background-border);color:var(--color-foreground-secondary);font-size:var(--font-size--small);line-height:1.5}
+/* nest line for changelog children */
+.nav-version > ul{margin:0 0 .4rem .9rem;padding:.1rem 0 .35rem .7rem;border-left:1px solid #d0d2d8}
+.nav-version > ul .md-nav__link{position:relative;padding-left:.55rem}
+.nav-version > ul .md-nav__link::before{
+  content:"";position:absolute;left:-.7rem;top:50%;width:.45rem;height:0;border-top:1px solid #d0d2d8
+}
+.nav-version > summary{font-weight:600;color:var(--color-sidebar-section-text)}
+.nav-version > summary:hover{color:var(--color-foreground-primary);background:var(--color-background-hover)}
+
+  </style>
+</head>
+<body>
+  <header class="md-header">
+    <div class="md-header__inner">
+      <button type="button" class="nav-toggle" id="nav-toggle" aria-label="Menu">☰</button>
+      <div class="md-header__title">
+        BIKINI
+        <span class="sub en">Developer Docs</span>
+        <span class="sub zh">开发者文档</span>
+      </div>
+      <nav class="md-header__links">
+        <a href="index.html"><span class="en">Docs</span><span class="zh">文档</span></a>
+        <a href="manual.html"><span class="en">Manual</span><span class="zh">手册</span></a>
+        <a href="https://github.com/blueish0930/BIKINI" target="_blank" rel="noopener">GitHub</a>
+      </nav>
+      <div class="lang-switch" role="group" aria-label="Language">
+        <button type="button" id="lang-zh" data-lang="zh" aria-pressed="true">中文</button>
+        <button type="button" id="lang-en" data-lang="en" aria-pressed="false">EN</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="md-container">
+    <div class="md-main">
+      <div class="md-main__inner">
+
+        <!-- Primary navigation -->
+        <aside class="md-sidebar" id="sidebar" aria-label="Navigation">
+          <nav class="md-nav">
+            <div class="md-nav__title">
+              <span class="en">Developer Docs</span>
+              <span class="zh">开发者文档</span>
+            </div>
+            <ul class="md-nav__list">
+              <li class="md-nav__item">
+                <details class="nav-version" open>
+                  <summary>
+                    BIKINI 5.3
+                    <span class="tag">Alpha</span>
+                  </summary>
+                  <ul class="md-nav__list">
+                    <li class="md-nav__item">
+                      <a class="md-nav__link md-nav__link--active" href="#overview" data-page="overview">
+                        <span class="en">Overview</span><span class="zh">概览</span>
+                      </a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#geometry-nodes" data-page="geometry-nodes">Geometry Nodes</a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#user-interface" data-page="user-interface">
+                        <span class="en">User Interface</span><span class="zh">用户界面</span>
+                      </a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#shaders" data-page="shaders">
+                        <span class="en">Shaders</span><span class="zh">着色器</span>
+                      </a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#image-process" data-page="image-process">
+                        Image Process
+                      </a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#editors" data-page="editors">
+                        <span class="en">Editors</span><span class="zh">编辑器</span>
+                      </a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#eevee" data-page="eevee">EEVEE &amp; Viewport</a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#zones" data-page="zones">Zones</a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#known-issues" data-page="known-issues">
+                        <span class="en">Known Issues</span><span class="zh">已知问题</span>
+                      </a>
+                    </li>
+                  </ul>
+                </details>
+              </li>
+            </ul>
+
+            <div class="md-nav__section">
+              <div class="md-nav__title">
+                <span class="en">Documentation</span><span class="zh">文档站</span>
+              </div>
+              <ul class="md-nav__list">
+                <li class="md-nav__item">
+                  <a class="md-nav__link" href="index.html">
+                    <span class="en">Docs home</span><span class="zh">文档首页</span>
+                  </a>
+                </li>
+                <li class="md-nav__item">
+                  <a class="md-nav__link" href="manual.html">
+                    <span class="en">User Manual</span><span class="zh">用户手册</span>
+                  </a>
+                </li>
+              </ul>
+            </div>
+          </nav>
+        </aside>
+
+        <!-- Content -->
+        <main class="md-content">
+          <div class="md-content__inner md-typeset">
+
+            <!-- Overview -->
+            <article class="page is-active" id="page-overview" data-page="overview">
+              <h1>
+                <span class="en">BIKINI 5.3 Release Notes</span>
+                <span class="zh">BIKINI 5.3 更新说明</span>
+              </h1>
+              <p class="meta">
+                Blender 5.3.0 Alpha · Windows x64 ·
+                <span class="en">portable</span><span class="zh">便携包</span>
+                · 2026-07-31
+              </p>
+              <p class="en">
+                Custom features on top of Blender 5.3 Alpha. Organised like the official
+                <a href="https://developer.blender.org/docs/release_notes/5.3/" target="_blank" rel="noopener">Blender 5.3 release notes</a>
+                (version → modules). Choose a module in the left navigation.
+              </p>
+              <p class="zh">
+                基于 Blender 5.3 Alpha 的自定义功能。版式对齐官方
+                <a href="https://developer.blender.org/docs/release_notes/5.3/" target="_blank" rel="noopener">Blender 5.3 发布说明</a>
+                （版本 → 模块）。请从左侧导航选择模块。
+              </p>
+
+              <div class="admonition">
+                <p class="admonition-title">
+                  <span class="en">Documentation only</span>
+                  <span class="zh">仅文档</span>
+                </p>
+                <p class="en">This page does not load with <code>blender.exe</code> and has no effect on runtime.</p>
+                <p class="zh">本页不随 <code>blender.exe</code> 加载，不影响运行时。</p>
+              </div>
+
+              <h2>
+                <span class="en">Modules</span><span class="zh">模块</span>
+              </h2>
+              <ul class="module-index">
+                <li><a href="#geometry-nodes" data-page="geometry-nodes">Geometry Nodes</a></li>
+                <li><a href="#user-interface" data-page="user-interface"><span class="en">User Interface</span><span class="zh">用户界面</span></a></li>
+                <li><a href="#shaders" data-page="shaders"><span class="en">Shaders</span><span class="zh">着色器</span></a></li>
+                <li><a href="#image-process" data-page="image-process">Image Process</a></li>
+                <li><a href="#editors" data-page="editors"><span class="en">Editors</span><span class="zh">编辑器</span></a></li>
+                <li><a href="#eevee" data-page="eevee">EEVEE &amp; Viewport</a></li>
+                <li><a href="#zones" data-page="zones">Zones</a></li>
+                <li><a href="#known-issues" data-page="known-issues"><span class="en">Known Issues</span><span class="zh">已知问题</span></a></li>
+              </ul>
+            </article>
+
+            <!-- Geometry Nodes — content strictly from Achieve List -->
+            <article class="page" id="page-geometry-nodes" data-page="geometry-nodes">
+              <h1>BIKINI 5.3: Geometry Nodes</h1>
+              <p class="en">
+                Custom geometry nodes and related workflows. Layout modelled on
+                <a href="https://developer.blender.org/docs/release_notes/5.3/geometry_nodes/" target="_blank" rel="noopener">Blender 5.3 Geometry Nodes notes</a>.
+              </p>
+              <p class="zh">
+                自定义几何节点与相关工作流。版式参考
+                <a href="https://developer.blender.org/docs/release_notes/5.3/geometry_nodes/" target="_blank" rel="noopener">Blender 5.3 Geometry Nodes 说明</a>。
+              </p>
+
+              <h2>
+                <span class="en">Attributes</span><span class="zh">属性</span>
+              </h2>
+              <ul class="en">
+                <li>
+                  <strong>String attributes</strong> are supported end-to-end
+                  (Named Attribute, Store Named Attribute, Capture Attribute, Viewer,
+                  geometry propagation, and spreadsheet columns).
+                </li>
+              </ul>
+              <ul class="zh">
+                <li>
+                  <strong>String 属性</strong>全链路支持
+                  （Named Attribute、Store Named Attribute、Capture Attribute、Viewer、
+                  几何传递与电子表格列）。
+                </li>
+              </ul>
+
+              <h2>Portal &amp; Clip</h2>
+              <ul class="en">
+                <li>
+                  <strong>Named Portal</strong> / <strong>Store Named Portal</strong> —
+                  pass values by name across a node tree without long noodle runs.
+                </li>
+                <li>
+                  <strong>Geometry Clip</strong> — clip geometry against a plane / cut.
+                </li>
+              </ul>
+              <ul class="zh">
+                <li>
+                  <strong>Named Portal</strong> / <strong>Store Named Portal</strong> —
+                  按名称在节点树中传值，避免长距离拉线。
+                </li>
+                <li>
+                  <strong>Geometry Clip</strong> — 按平面或裁切几何。
+                </li>
+              </ul>
+
+              <h2>
+                <span class="en">Closures</span><span class="zh">闭包</span>
+              </h2>
+              <ul class="en">
+                <li>
+                  <strong>Set Default Closure</strong> — specify a default closure when no external closure is connected.
+                </li>
+              </ul>
+              <ul class="zh">
+                <li>
+                  <strong>Set Default Closure</strong> — 未连接外部闭包时设置默认闭包。
+                </li>
+              </ul>
+
+              <h2>
+                <span class="en">Subdivision</span><span class="zh">细分</span>
+              </h2>
+              <ul class="en">
+                <li>
+                  <strong>Loop Subdivision</strong> — classic Loop subdivision for triangle meshes.
+                </li>
+              </ul>
+              <ul class="zh">
+                <li>
+                  <strong>Loop Subdivision</strong> — 三角网格的经典 Loop 细分。
+                </li>
+              </ul>
+
+              <h2>
+                <span class="en">Nearest neighbours</span><span class="zh">最近邻</span>
+              </h2>
+              <ul class="en">
+                <li>
+                  <strong>K-Nearest</strong> — find nearest neighbours for points / samples
+                  (smoothing, clustering, field sampling).
+                </li>
+              </ul>
+              <ul class="zh">
+                <li>
+                  <strong>K-Nearest</strong> — 点 / 采样的最近邻查询（平滑、聚类、场采样）。
+                </li>
+              </ul>
+
+              <h2>
+                <span class="en">Debug &amp; time</span><span class="zh">调试与时间</span>
+              </h2>
+              <ul class="en">
+                <li><strong>Debug</strong> — inspect intermediate geometry / values while authoring.</li>
+                <li>
+                  <strong>Time Shift</strong> — offset evaluation time for downstream nodes.
+                  With a Simulation Zone, return to frame 1 (or reset cache) after structural changes
+                  (native Blender cache behaviour).
+                </li>
+                <li><strong>Object Info → Seed</strong> — deterministic randomness / instance variation.</li>
+              </ul>
+              <ul class="zh">
+                <li><strong>Debug</strong> — 编写时检查中间几何 / 数值。</li>
+                <li>
+                  <strong>Time Shift</strong> — 为下游偏移求值时间。
+                  与模拟区联用时，结构改动后需回到第一帧重置 cache（原生行为）。
+                </li>
+                <li><strong>Object Info → Seed</strong> — 确定性随机 / 实例变化。</li>
+              </ul>
+
+              <h2>
+                <span class="en">Select &amp; edit</span><span class="zh">选择与编辑</span>
+              </h2>
+              <ul class="en">
+                <li>
+                  <strong>Select Elements</strong> — domain selection helpers (points / edges / faces)
+                  and field-driven masks.
+                </li>
+                <li>
+                  <strong>Edit Elements</strong> — temporarily enter free Mesh Edit Mode on the cooked
+                  upstream result; store the full edited mesh back on the node (with Reset).
+                </li>
+              </ul>
+              <ul class="zh">
+                <li>
+                  <strong>Select Elements</strong> — 域选择（点 / 边 / 面）与场驱动遮罩。
+                </li>
+                <li>
+                  <strong>Edit Elements</strong> — 对上游结果临时进入自由 Mesh Edit Mode，
+                  将完整编辑结果存回节点（含 Reset）。
+                </li>
+              </ul>
+
+              <h2>
+                <span class="en">Geodesic, remesh &amp; fracture</span>
+                <span class="zh">测地线、重拓扑与破碎</span>
+              </h2>
+              <ul class="en">
+                <li>
+                  <strong>Heat Geodesic</strong> — approximate surface distance from selected sources
+                  via the heat method.
+                </li>
+                <li>
+                  <strong>Instant Meshes</strong> — field-aligned remeshing (quad or triangle output).
+                </li>
+                <li>
+                  <strong>QuadWild</strong> — remesh / field / layout stages (QRemeshify pipeline).
+                </li>
+                <li>
+                  <strong>Triangle Remesh</strong> — isotropic remeshing (uniform or curvature-adaptive).
+                </li>
+                <li>
+                  <strong>Voronoi Fracture</strong> — fracture from point / vertex sites
+                  (Voro++ neighbour planes, half-space clipping).
+                </li>
+              </ul>
+              <ul class="zh">
+                <li>
+                  <strong>Heat Geodesic</strong> — 热方法近似曲面测地距离。
+                </li>
+                <li>
+                  <strong>Instant Meshes</strong> — 场对齐重拓扑（四边形或三角形输出）。
+                </li>
+                <li>
+                  <strong>QuadWild</strong> — Remesh / Field / Layout 三阶段（QRemeshify 管线）。
+                </li>
+                <li>
+                  <strong>Triangle Remesh</strong> — 各向同性三角重拓扑（均匀或曲率自适应）。
+                </li>
+                <li>
+                  <strong>Voronoi Fracture</strong> — 点 / 顶点站点破碎（Voro++ 邻接平面、半空间裁切）。
+                </li>
+              </ul>
+
+              <h2>
+                <span class="en">Graph coloring &amp; fields</span>
+                <span class="zh">图染色与场</span>
+              </h2>
+              <ul class="en">
+                <li>
+                  <strong>Mesh Graph Coloring</strong> — color the vertex 1-ring graph
+                  so adjacent vertices get different integer IDs.
+                </li>
+                <li>
+                  <strong>Tangent Field</strong> — smooth N-RoSy tangent field on the mesh.
+                </li>
+                <li>
+                  <strong>Gradient</strong> / <strong>Divergence</strong> — differential operators
+                  on scalar / vector fields.
+                </li>
+                <li>
+                  <strong>Curve Intersection</strong> — detect / sample curve intersections.
+                </li>
+              </ul>
+              <ul class="zh">
+                <li>
+                  <strong>Mesh Graph Coloring</strong> — 顶点一环邻接图染色，相邻顶点不同整数 ID。
+                </li>
+                <li>
+                  <strong>Tangent Field</strong> — 平滑 N-RoSy 切向场。
+                </li>
+                <li>
+                  <strong>Gradient</strong> / <strong>Divergence</strong> — 标量 / 向量场微分算子。
+                </li>
+                <li>
+                  <strong>Curve Intersection</strong> — 曲线相交检测 / 采样。
+                </li>
+              </ul>
+
+              <h2>
+                <span class="en">Field write &amp; sample</span>
+                <span class="zh">场写入与采样</span>
+              </h2>
+              <ul class="en">
+                <li>
+                  <strong>Write at Index</strong> — scatter a field into a target domain by
+                  <strong>Target Index</strong> (source and target domains may differ).
+                  Collisions merge with <strong>Atomic Operator</strong>: Sum / Min / Max / Mean.
+                  Data Type: Float / Integer / Vector.
+                </li>
+                <li>
+                  <strong>RBF Interpolate</strong> — fit a radial-basis interpolant through
+                  Source sample Values so <code>f(xᵢ)=vᵢ</code> exactly (solves <code>Φw=v</code>,
+                  not a kernel-weighted average), then evaluate on <strong>Sample Position</strong>.
+                  Kernel panel: Type (Gaussian, Inverse Multiquadric, Linear, Cubic, Quintic, Wendland C2)
+                  and Size. Menu: Geometry → Sample. Dense solve; n ≤ 4096.
+                </li>
+              </ul>
+              <ul class="zh">
+                <li>
+                  <strong>Write at Index</strong> — 按 <strong>Target Index</strong> 将场 scatter 写入目标域
+                  （源/目标域可不同）。冲突用 <strong>Atomic Operator</strong> 归并：Sum / Min / Max / Mean。
+                  Data Type：Float / Integer / Vector。
+                </li>
+                <li>
+                  <strong>RBF Interpolate</strong> — 从 Source 采样点 Value 拟合径向基插值，
+                  采样点精确还原 <code>f(xᵢ)=vᵢ</code>（解 <code>Φw=v</code>，非核加权平均），
+                  在 <strong>Sample Position</strong> 上求值。Kernel 面板：Type
+                  （Gaussian / Inverse Multiquadric / Linear / Cubic / Quintic / Wendland C2）与 Size。
+                  菜单：Geometry → Sample。稠密求解；n ≤ 4096。
+                </li>
+              </ul>
+
+              <h2>Expression</h2>
+              <ul class="en">
+                <li>
+                  <strong>Expression</strong> — evaluate a typed expression string on field / socket inputs,
+                  with <strong>autocomplete</strong> for identifiers, functions, and syntax.
+                </li>
+              </ul>
+              <ul class="zh">
+                <li>
+                  <strong>Expression</strong> — 对场 / 接口输入求值类型化表达式，
+                  支持标识符、函数与语法的<strong>自动补全</strong>。
+                </li>
+              </ul>
+
+              <h2 id="gn-sparse-math">
+                <span class="en">Sparse matrix math</span>
+                <span class="zh">稀疏矩阵数学</span>
+              </h2>
+              <p class="en">
+                Geometry Nodes path for sparse linear algebra on meshes.
+                Backend: <strong>Eigen</strong> + <strong>Spectra</strong>.
+                (A dedicated Solver / physics category will come later when true physics solvers land.)
+              </p>
+              <p class="zh">
+                几何节点内的稀疏线性代数路径。后端：<strong>Eigen</strong> + <strong>Spectra</strong>。
+                （真正的物理 Solver 分类会在后续物理求解器落地后再单独开栏。）
+              </p>
+              <p><code>Mesh → Mesh Laplacian → [Sparse Matrix Math] → Linear Solver</code></p>
+              <ul class="en">
+                <li>
+                  <strong>Mesh Laplacian</strong> — discrete mesh Laplacian as a sparse COO bundle
+                  (weight / row / col). Modes: Uniform, Cotangent; optional diffusion / mass.
+                </li>
+                <li>
+                  <strong>Sparse Matrix Math</strong> — add / multiply / combine sparse matrix bundles.
+                </li>
+                <li>
+                  <strong>Linear Solver</strong> — solve <code>Ax = b</code>, factor, multiply, or partial eigenpairs
+                  on sparse matrices (optional pin constraints).
+                </li>
+              </ul>
+              <ul class="zh">
+                <li>
+                  <strong>Mesh Laplacian</strong> — 离散网格拉普拉斯，稀疏 COO Bundle
+                  （weight / row / col）。模式：Uniform、Cotangent；可选扩散 / 质量。
+                </li>
+                <li>
+                  <strong>Sparse Matrix Math</strong> — 稀疏矩阵 Bundle 加减乘组合。
+                </li>
+                <li>
+                  <strong>Linear Solver</strong> — 在稀疏矩阵上求解 <code>Ax = b</code>、分解、乘积或部分特征对
+                  （可选钉约束）。
+                </li>
+              </ul>
+
+              <div class="admonition warning">
+                <p class="admonition-title">
+                  <span class="en">Simulation cache</span>
+                  <span class="zh">模拟缓存</span>
+                </p>
+                <p class="en">
+                  Time Shift + Simulation Zone: scrub to frame 1 (or reset the simulation cache)
+                  after structural changes.
+                </p>
+                <p class="zh">
+                  Time Shift 与模拟区：结构改动后请回到第 1 帧（或重置模拟缓存）。
+                </p>
+              </div>
+            </article>
+
+            <!-- User Interface — from Achieve List UI section + enable I/O -->
+            <article class="page" id="page-user-interface" data-page="user-interface">
+              <h1>
+                <span class="en">BIKINI 5.3: User Interface</span>
+                <span class="zh">BIKINI 5.3：用户界面</span>
+              </h1>
+
+              <h2>
+                <span class="en">Node Group interface</span><span class="zh">节点组接口</span>
+              </h2>
+              <ul class="en">
+                <li><strong>Separator</strong> / <strong>Message</strong> — dividers and help text on group inputs/outputs.</li>
+                <li><strong>Join to next parameter</strong> — place the next socket on the same row.</li>
+                <li><strong>Ctrl + LMB rename</strong> — rename group parameters with hover highlight.</li>
+                <li><strong>Enable Input / Output</strong> — when disabled: hide interface, ignore external links, fall back to defaults.</li>
+                <li><strong>Menu multi-select</strong> — multi-select menu items with list output.</li>
+              </ul>
+              <ul class="zh">
+                <li><strong>Separator</strong> / <strong>Message</strong> — 节点组输入输出分隔线与说明。</li>
+                <li><strong>参数并排</strong> — 下一参数同一行。</li>
+                <li><strong>Ctrl + LMB 改名</strong> — 节点组参数改名，高亮提示。</li>
+                <li><strong>Enable Input / Output</strong> — 关闭时隐藏接口、忽略外部连线，回落默认。</li>
+                <li><strong>Menu 多选</strong> — 菜单多选，输出 list。</li>
+              </ul>
+
+              <h2>
+                <span class="en">Socket shortcuts</span><span class="zh">接口快捷操作</span>
+              </h2>
+              <ul class="en">
+                <li><strong>Ctrl + LMB on socket</strong> — change socket data type.</li>
+                <li><strong>Alt + LMB on socket</strong> — change socket shape.</li>
+              </ul>
+              <ul class="zh">
+                <li><strong>Ctrl + LMB 接口</strong> — 修改接口数据类型。</li>
+                <li><strong>Alt + LMB 接口</strong> — 修改接口形状。</li>
+              </ul>
+
+              <h2>
+                <span class="en">Node editor &amp; spreadsheet</span>
+                <span class="zh">节点编辑器与电子表格</span>
+              </h2>
+              <ul class="en">
+                <li><strong>Shake to detach</strong> — shake a node to detach links; multi-insert along a chain.</li>
+                <li><strong>Hold U + drag</strong> — align nodes horizontally or vertically.</li>
+                <li><strong>Spreadsheet sort</strong> — click headers to sort attribute columns.</li>
+              </ul>
+              <ul class="zh">
+                <li><strong>抖动分离</strong> — 抖动节点拆线；可连续插入多个节点。</li>
+                <li><strong>按住 U + 拖动</strong> — 水平 / 垂直对齐节点。</li>
+                <li><strong>电子表格排序</strong> — 点击表头对属性列排序。</li>
+              </ul>
+            </article>
+
+            <!-- Shaders — image socket, sdf/fractal, expression, HLSL -->
+            <article class="page" id="page-shaders" data-page="shaders">
+              <h1>
+                <span class="en">BIKINI 5.3: Shaders</span>
+                <span class="zh">BIKINI 5.3：着色器</span>
+              </h1>
+              <ul class="en">
+                <li><strong>Image socket</strong> — image data-block socket type for shader / group wiring.</li>
+                <li><strong>SDF Shape</strong> — signed-distance primitives for materials.</li>
+                <li><strong>Fractal Primitive</strong> — Mandelbrot / Julia style colour + distance.</li>
+                <li><strong>Expression</strong> — compact math / vector expressions on shader sockets.</li>
+                <li>
+                  <strong>HLSL</strong> (<code>ShaderNodeHLSL</code>) — custom HLSL subset for
+                  <strong>EEVEE</strong>: multi-line Code textbox + extendable In/Out parameters
+                  (Float / Int / Boolean / Vector / Color), translated to GLSL and linked via
+                  <code>GPU_stack_link</code>. Menu: Add → Utilities → HLSL.
+                  Default: Color + Fac → Result. Cycles has no OSL/SVM path for this node.
+                </li>
+              </ul>
+              <ul class="zh">
+                <li><strong>Image socket</strong> — 着色器 / 节点组可用的图像数据块接口。</li>
+                <li><strong>SDF Shape</strong> — 材质用有符号距离基元。</li>
+                <li><strong>Fractal Primitive</strong> — Mandelbrot / Julia 风格颜色 + 距离。</li>
+                <li><strong>Expression</strong> — 着色器接口上的紧凑数学 / 向量表达式。</li>
+                <li>
+                  <strong>HLSL</strong>（<code>ShaderNodeHLSL</code>）— 面向 <strong>EEVEE</strong> 的 HLSL 子集：
+                  多行 Code 文本框 + 可扩展 In/Out 参数（Float / Int / Boolean / Vector / Color），
+                  翻译为 GLSL 后经 <code>GPU_stack_link</code> 接入材质。
+                  菜单：Add → Utilities → HLSL。默认 Color + Fac → Result。
+                  Cycles 无 OSL/SVM 路径，不执行 HLSL 主体。
+                </li>
+              </ul>
+            </article>
+
+            <!-- Image Process / GPU Texture Editor — from Achieve List -->
+            <article class="page" id="page-image-process" data-page="image-process">
+              <h1>BIKINI 5.3: Image Process</h1>
+              <p class="en">
+                Dedicated image node tree (<code>ImageNodeTree</code>), also referred to as the
+                <strong>GPU Texture Editor</strong>.
+              </p>
+              <p class="zh">
+                专用图像节点树（<code>ImageNodeTree</code>），亦称 <strong>GPU Texture Editor</strong>。
+              </p>
+
+              <h2>
+                <span class="en">Nodes</span><span class="zh">节点</span>
+              </h2>
+              <ul class="en">
+                <li><strong>Point Stamp</strong> — stamp points into an image.</li>
+                <li><strong>Normal to Height</strong> — convert normal maps to height maps.</li>
+                <li><strong>Simulation</strong> — image-space simulation workflows in the graph.</li>
+                <li><strong>Rasterize Geometry</strong> — bring geometry samples into image space.</li>
+                <li><strong>Fluid Sim</strong> — fluid simulation zone in Image Process.</li>
+                <li><strong>Sample at Pixel</strong> / <strong>Write at Pixel</strong> — read or write by pixel coordinate.</li>
+                <li><strong>Paint</strong> — interactive paint into the image graph.</li>
+                <li><strong>Histogram</strong> — channel / intensity distribution.</li>
+                <li><strong>SDF Shape</strong> / <strong>Fractal</strong> — Image Process path (not the shader variants).</li>
+              </ul>
+              <ul class="zh">
+                <li><strong>Point Stamp</strong> — 点盖章到图像。</li>
+                <li><strong>Normal to Height</strong> — 法线转高度。</li>
+                <li><strong>Simulation</strong> — 图像空间模拟工作流。</li>
+                <li><strong>Rasterize Geometry</strong> — 几何采样栅格化到图像。</li>
+                <li><strong>Fluid Sim</strong> — Image Process 流体模拟区域。</li>
+                <li><strong>Sample at Pixel</strong> / <strong>Write at Pixel</strong> — 按像素坐标读写。</li>
+                <li><strong>Paint</strong> — 在图像节点图中绘制。</li>
+                <li><strong>Histogram</strong> — 通道 / 强度分布。</li>
+                <li><strong>SDF Shape</strong> / <strong>Fractal</strong> — Image Process 路径（非着色器变体）。</li>
+              </ul>
+
+              <h2>
+                <span class="en">Compositor</span><span class="zh">合成器</span>
+              </h2>
+              <ul class="en">
+                <li>
+                  <strong>Compositor bridge</strong> — drive Image Process from the classic compositor
+                  and return cooked results (接通合成器).
+                </li>
+              </ul>
+              <ul class="zh">
+                <li>
+                  <strong>接通合成器</strong> — 从经典合成器驱动 Image Process 并取回结果。
+                </li>
+              </ul>
+            </article>
+
+            <!-- Editors -->
+            <article class="page" id="page-editors" data-page="editors">
+              <h1>
+                <span class="en">BIKINI 5.3: Editors</span>
+                <span class="zh">BIKINI 5.3：编辑器</span>
+              </h1>
+              <ul class="en">
+                <li>
+                  <strong>Data-block reference graph</strong> — visualise data-block reference relationships
+                  (who uses whom).
+                </li>
+                <li>
+                  <strong>GPU Texture Editor</strong> — see
+                  <a href="#image-process" data-page="image-process">Image Process</a>.
+                </li>
+              </ul>
+              <ul class="zh">
+                <li>
+                  <strong>Data-block reference graph</strong> — 可视化数据块引用关系（谁引用谁）。
+                </li>
+                <li>
+                  <strong>GPU Texture Editor</strong> — 见
+                  <a href="#image-process" data-page="image-process">Image Process</a>。
+                </li>
+              </ul>
+            </article>
+
+            <!-- EEVEE -->
+            <article class="page" id="page-eevee" data-page="eevee">
+              <h1>BIKINI 5.3: EEVEE &amp; Viewport</h1>
+              <ul class="en">
+                <li>
+                  <strong>Viewport overlay attribute preview</strong> — clearer attribute / Viewer text
+                  overlays for string and numeric attributes.
+                </li>
+                <li>
+                  SDF Shape / Fractal Primitive include GPU material paths for EEVEE viewport preview.
+                </li>
+              </ul>
+              <ul class="zh">
+                <li>
+                  <strong>视口叠加层属性预览优化</strong> — 字符串与数值属性的属性 / Viewer 文字叠加更清晰。
+                </li>
+                <li>
+                  SDF Shape / Fractal Primitive 提供 EEVEE 视口预览的 GPU 材质路径。
+                </li>
+              </ul>
+            </article>
+
+            <!-- Zones — Cache Limit + Repeat Break from list -->
+            <article class="page" id="page-zones" data-page="zones">
+              <h1>BIKINI 5.3: Zones</h1>
+              <ul class="en">
+                <li>
+                  <strong>Repeat Zone — Break</strong> — boolean early-exit before the iteration count is reached.
+                </li>
+                <li>
+                  <strong>Simulation Zone — Cache Limit</strong> — cap how many frames of simulation cache are retained.
+                </li>
+              </ul>
+              <ul class="zh">
+                <li>
+                  <strong>Repeat Zone — Break</strong> — 在达到迭代次数前布尔早退。
+                </li>
+                <li>
+                  <strong>Simulation Zone — Cache Limit</strong> — 限制模拟缓存保留帧数。
+                </li>
+              </ul>
+            </article>
+
+            <!-- Known Issues -->
+            <article class="page" id="page-known-issues" data-page="known-issues">
+              <h1>
+                <span class="en">BIKINI 5.3: Known Issues</span>
+                <span class="zh">BIKINI 5.3：已知问题</span>
+              </h1>
+              <ul class="en">
+                <li>
+                  <strong>Viewport Camera</strong> — listed in development notes as
+                  <code>//viewport camera</code>; not registered / not shipped in this build.
+                </li>
+                <li>
+                  <strong>Time Shift + Simulation Zone</strong> — after graph changes, return to the first frame
+                  or clear simulation cache.
+                </li>
+                <li>
+                  Unofficial custom build; not signed by the Blender Foundation.
+                </li>
+              </ul>
+              <ul class="zh">
+                <li>
+                  <strong>Viewport Camera</strong> — 开发笔记中记为
+                  <code>//viewport camera</code>；本构建未注册 / 未打包。
+                </li>
+                <li>
+                  <strong>Time Shift + 模拟区</strong> — 节点图改动后请回到第一帧或清理模拟缓存。
+                </li>
+                <li>
+                  非官方自定义构建，未经 Blender Foundation 签名。
+                </li>
+              </ul>
+            </article>
+
+            <footer class="md-footer-meta">
+              <span class="en">
+                Typography &amp; layout aligned with
+                <a href="https://developer.blender.org/docs/release_notes/5.3/geometry_nodes/" target="_blank" rel="noopener">developer.blender.org</a>
+                (Same visual style as User Manual). Does not load with Blender.
+              </span>
+              <span class="zh">
+                字体与版式对齐
+                <a href="https://developer.blender.org/docs/release_notes/5.3/geometry_nodes/" target="_blank" rel="noopener">developer.blender.org</a>
+                （与用户手册同一套视觉风格）。不随 Blender 加载。
+              </span>
+            </footer>
+          </div>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var KEYS = ["bikini-changelog-lang", "bikini-docs-lang"];
+      var pages = document.querySelectorAll(".page");
+      var links = document.querySelectorAll("[data-page]");
+      var titles = {
+        en: {
+          overview: "BIKINI · Developer Docs",
+          "geometry-nodes": "Geometry Nodes - BIKINI Developer Docs",
+          "user-interface": "User Interface - BIKINI Developer Docs",
+          shaders: "Shaders - BIKINI Developer Docs",
+          "image-process": "Image Process - BIKINI Developer Docs",
+          editors: "Editors - BIKINI Developer Docs",
+          eevee: "EEVEE & Viewport - BIKINI Developer Docs",
+          zones: "Zones - BIKINI Developer Docs",
+          "known-issues": "Known Issues - BIKINI Developer Docs"
+        },
+        zh: {
+          overview: "BIKINI · 开发者文档",
+          "geometry-nodes": "Geometry Nodes - BIKINI 开发者文档",
+          "user-interface": "用户界面 - BIKINI 开发者文档",
+          shaders: "着色器 - BIKINI 开发者文档",
+          "image-process": "Image Process - BIKINI 开发者文档",
+          editors: "编辑器 - BIKINI 开发者文档",
+          eevee: "EEVEE & Viewport - BIKINI 开发者文档",
+          zones: "Zones - BIKINI 开发者文档",
+          "known-issues": "已知问题 - BIKINI 开发者文档"
+        }
+      };
+
+      function lang() {
+        return document.documentElement.getAttribute("data-lang") === "zh" ? "zh" : "en";
+      }
+
+      function setLang(l) {
+        if (l !== "en" && l !== "zh") l = "en";
+        document.documentElement.setAttribute("data-lang", l);
+        document.documentElement.lang = l === "zh" ? "zh-CN" : "en";
+        try {
+          KEYS.forEach(function (k) { localStorage.setItem(k, l); });
+        } catch (e) {}
+        var zh = document.getElementById("lang-zh");
+        var en = document.getElementById("lang-en");
+        if (zh) zh.setAttribute("aria-pressed", l === "zh" ? "true" : "false");
+        if (en) en.setAttribute("aria-pressed", l === "en" ? "true" : "false");
+        var active = document.querySelector(".page.is-active");
+        var id = active ? active.getAttribute("data-page") : "overview";
+        document.title = (titles[l] && titles[l][id]) || titles[l].overview;
+      }
+
+      function showPage(id, push) {
+        if (!id) id = "overview";
+        var found = false;
+        pages.forEach(function (p) {
+          var on = p.getAttribute("data-page") === id;
+          p.classList.toggle("is-active", on);
+          if (on) found = true;
+        });
+        if (!found) {
+          id = "overview";
+          pages.forEach(function (p) {
+            p.classList.toggle("is-active", p.getAttribute("data-page") === id);
+          });
+        }
+        document.querySelectorAll(".md-sidebar .md-nav__link[data-page]").forEach(function (a) {
+          a.classList.toggle("md-nav__link--active", a.getAttribute("data-page") === id);
+        });
+        document.title = (titles[lang()] && titles[lang()][id]) || "BIKINI · Release Notes";
+        if (push !== false) history.replaceState(null, "", "#" + id);
+        window.scrollTo(0, 0);
+        document.body.classList.remove("nav-open");
+      }
+
+      function pageFromHash() {
+        var h = (location.hash || "#overview").replace(/^#/, "") || "overview";
+        /* Legacy: math-solver merged into Geometry Nodes */
+        if (h === "math-solver") return "geometry-nodes";
+        var pageIds = {};
+        pages.forEach(function (p) { pageIds[p.getAttribute("data-page")] = true; });
+        if (pageIds[h]) return h;
+        var el = document.getElementById(h);
+        if (el) {
+          var art = el.closest(".page");
+          if (art) return art.getAttribute("data-page");
+        }
+        return "overview";
+      }
+
+      links.forEach(function (a) {
+        a.addEventListener("click", function (e) {
+          var id = a.getAttribute("data-page");
+          if (!id) return;
+          e.preventDefault();
+          showPage(id);
+        });
+      });
+
+      window.addEventListener("hashchange", function () {
+        showPage(pageFromHash(), false);
+      });
+
+      document.getElementById("lang-zh").addEventListener("click", function () { setLang("zh"); });
+      document.getElementById("lang-en").addEventListener("click", function () { setLang("en"); });
+      document.getElementById("nav-toggle").addEventListener("click", function () {
+        document.body.classList.toggle("nav-open");
+      });
+
+      try {
+        var saved = localStorage.getItem(KEYS[0]) || localStorage.getItem(KEYS[1]);
+        if (saved === "en" || saved === "zh") setLang(saved);
+        else {
+          var nav = navigator.language || "en";
+          setLang(/^zh\b/i.test(nav) ? "zh" : "en");
+        }
+      } catch (e) {
+        setLang("zh");
+      }
+
+      showPage(pageFromHash(), false);
+    })();
+  </script>
+</body>
+</html>

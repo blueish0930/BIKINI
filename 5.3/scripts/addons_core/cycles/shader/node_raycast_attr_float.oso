@@ -1,0 +1,12 @@
+OpenShadingLanguage 1.00
+# Compiled by oslc 1.15.3.0
+# options: -q -O2 -IE:/Blender_Source/intern/cycles/kernel/osl/shaders -IE:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders -o E:/build_windows_Full_x64_vc17_Release/intern/cycles/kernel/osl/shaders/node_raycast_attr_float.oso
+shader node_raycast_attr_float
+param	int	attribute_index	0		%read{0,0} %write{2147483647,-1}
+param	float[32]	float_attributes	0		%read{0,0} %write{2147483647,-1}
+oparam	float	value	0		%read{2147483647,-1} %write{0,0}
+code ___main___
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_raycast_attr_float.osl:11
+#   value = float_attributes[attribute_index];
+	aref		value float_attributes attribute_index 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_raycast_attr_float.osl"} %line{11} %argrw{"wrr"}
+	end

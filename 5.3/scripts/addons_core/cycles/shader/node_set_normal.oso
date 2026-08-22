@@ -1,0 +1,23 @@
+OpenShadingLanguage 1.00
+# Compiled by oslc 1.15.3.0
+# options: -q -O2 -IE:/Blender_Source/intern/cycles/kernel/osl/shaders -IE:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders -o E:/build_windows_Full_x64_vc17_Release/intern/cycles/kernel/osl/shaders/node_set_normal.oso
+surface node_set_normal
+param	normal	Direction	0 0 0		%read{2,3} %write{0,0} %initexpr
+oparam	normal	Normal	0 0 0		%read{2147483647,-1} %write{1,3} %initexpr
+global	normal	N	%read{0,1} %write{2,2}
+code Direction
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_set_normal.osl:7
+# surface node_set_normal(normal Direction = N, output normal Normal = N)
+	assign		Direction N 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_set_normal.osl"} %line{7} %argrw{"wr"}
+code Normal
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_set_normal.osl:7
+# surface node_set_normal(normal Direction = N, output normal Normal = N)
+	assign		Normal N 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_set_normal.osl"} %line{7} %argrw{"wr"}
+code ___main___
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_set_normal.osl:9
+#   N = Direction;
+	assign		N Direction 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_set_normal.osl"} %line{9} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_set_normal.osl:10
+#   Normal = Direction;
+	assign		Normal Direction 	%line{10} %argrw{"wr"}
+	end

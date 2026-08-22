@@ -1,0 +1,1032 @@
+OpenShadingLanguage 1.00
+# Compiled by oslc 1.15.3.0
+# options: -q -O2 -IE:/Blender_Source/intern/cycles/kernel/osl/shaders -IE:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders -o E:/build_windows_Full_x64_vc17_Release/intern/cycles/kernel/osl/shaders/node_gabor_texture.oso
+shader node_gabor_texture
+param	int	use_mapping	0		%read{2,2} %write{2147483647,-1}
+param	matrix	mapping	0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0		%read{3,3} %write{2147483647,-1}
+param	string	type	"2D"		%read{13,156} %write{2147483647,-1}
+param	point	Vector	0 0 0		%read{1,1} %write{0,0} %initexpr
+param	float	Scale	5		%read{4,4} %write{2147483647,-1}
+param	float	Frequency	2		%read{9,9} %write{2147483647,-1}
+param	float	Anisotropy	1		%read{6,6} %write{2147483647,-1}
+param	float	Orientation2D	0.785398185		%read{65,65} %write{2147483647,-1}
+param	point	Orientation3D	1.41421354 1.41421354 0		%read{158,158} %write{2147483647,-1}
+oparam	float	Value	0		%read{2147483647,-1} %write{346,346}
+oparam	float	Phase	0		%read{2147483647,-1} %write{349,349}
+oparam	float	Intensity	0		%read{2147483647,-1} %write{356,356}
+global	point	P	%read{0,0} %write{2147483647,-1}
+local	float	___531_distance_squared	%read{28,147} %write{28,147}
+local	float	___531_hann_window	%read{28,147} %write{28,147}
+local	float	___531_gaussian_envelop	%read{28,147} %write{28,147}
+local	float	___531_windowed_gaussian_envelope	%read{28,147} %write{28,147}
+local	float	___531_frequency_vector.x	%read{28,147} %write{28,147} %mystruct{___531_frequency_vector} %mystructfield{0}
+local	float	___531_frequency_vector.y	%read{28,147} %write{28,147} %mystruct{___531_frequency_vector} %mystructfield{1}
+local	float	___531_angle	%read{28,147} %write{28,147}
+local	float	___531_phasor.x	%read{28,147} %write{28,147} %mystruct{___531_phasor} %mystructfield{0}
+local	float	___531_phasor.y	%read{28,147} %write{28,147} %mystruct{___531_phasor} %mystructfield{1}
+local	float	___532_integral_of_gabor_squared	%read{154,154} %write{151,151}
+local	float	___532_second_moment	%read{153,153} %write{152,152}
+local	float	___533_noise.x	%read{28,147} %write{28,147} %mystruct{___533_noise} %mystructfield{0}
+local	float	___533_noise.y	%read{28,147} %write{28,147} %mystruct{___533_noise} %mystructfield{1}
+local	int	___534_i	%read{28,147} %write{28,147}
+local	point	___535_seed_for_orientation	%read{28,147} %write{28,147}
+local	point	___535_seed_for_kernel_center	%read{28,147} %write{28,147}
+local	point	___535_seed_for_weight	%read{28,147} %write{28,147}
+local	float	___535_random_orientation	%read{28,147} %write{28,147}
+local	float	___535_orientation	%read{28,147} %write{28,147}
+local	float	___535_kernel_center.x	%read{28,147} %write{28,147} %mystruct{___535_kernel_center} %mystructfield{0}
+local	float	___535_kernel_center.y	%read{28,147} %write{28,147} %mystruct{___535_kernel_center} %mystructfield{1}
+local	float	___535_position_in_kernel_space.x	%read{28,147} %write{28,147} %mystruct{___535_position_in_kernel_space} %mystructfield{0}
+local	float	___535_position_in_kernel_space.y	%read{28,147} %write{28,147} %mystruct{___535_position_in_kernel_space} %mystructfield{1}
+local	float	___535_weight	%read{28,147} %write{28,147}
+local	float	___537_cell_position.x	%read{22,147} %write{19,19} %mystruct{___537_cell_position} %mystructfield{0}
+local	float	___537_cell_position.y	%read{23,147} %write{20,20} %mystruct{___537_cell_position} %mystructfield{1}
+local	float	___537_local_position.x	%read{28,147} %write{22,22} %mystruct{___537_local_position} %mystructfield{0}
+local	float	___537_local_position.y	%read{28,147} %write{23,23} %mystruct{___537_local_position} %mystructfield{1}
+local	float	___537_sum.x	%read{28,148} %write{24,147} %mystruct{___537_sum} %mystructfield{0}
+local	float	___537_sum.y	%read{28,149} %write{25,147} %mystruct{___537_sum} %mystructfield{1}
+local	int	___538_j	%read{28,147} %write{27,147}
+local	int	___540_i	%read{28,147} %write{28,147}
+local	float	___541_cell_offset.x	%read{28,147} %write{28,147} %mystruct{___541_cell_offset} %mystructfield{0}
+local	float	___541_cell_offset.y	%read{28,147} %write{28,147} %mystruct{___541_cell_offset} %mystructfield{1}
+local	float	___541_current_cell_position.x	%read{28,147} %write{28,147} %mystruct{___541_current_cell_position} %mystructfield{0}
+local	float	___541_current_cell_position.y	%read{28,147} %write{28,147} %mystruct{___541_current_cell_position} %mystructfield{1}
+local	float	___541_position_in_cell_space.x	%read{28,147} %write{28,147} %mystruct{___541_position_in_cell_space} %mystructfield{0}
+local	float	___541_position_in_cell_space.y	%read{28,147} %write{28,147} %mystruct{___541_position_in_cell_space} %mystructfield{1}
+local	float	___542_distance_squared	%read{167,333} %write{167,333}
+local	float	___542_hann_window	%read{167,333} %write{167,333}
+local	float	___542_gaussian_envelop	%read{167,333} %write{167,333}
+local	float	___542_windowed_gaussian_envelope	%read{167,333} %write{167,333}
+local	point	___542_frequency_vector	%read{167,333} %write{167,333}
+local	float	___542_angle	%read{167,333} %write{167,333}
+local	float	___542_phasor.x	%read{167,333} %write{167,333} %mystruct{___542_phasor} %mystructfield{0}
+local	float	___542_phasor.y	%read{167,333} %write{167,333} %mystruct{___542_phasor} %mystructfield{1}
+local	float	___543_integral_of_gabor_squared	%read{340,340} %write{337,337}
+local	float	___543_second_moment	%read{339,339} %write{338,338}
+local	float	___544_inclination	%read{167,333} %write{167,333}
+local	float	___544_azimuth	%read{167,333} %write{167,333}
+local	float	___544_random_angles.x	%read{167,333} %write{167,333} %mystruct{___544_random_angles} %mystructfield{0}
+local	float	___544_random_angles.y	%read{167,333} %write{167,333} %mystruct{___544_random_angles} %mystructfield{1}
+local	float	___546_noise.x	%read{167,333} %write{167,333} %mystruct{___546_noise} %mystructfield{0}
+local	float	___546_noise.y	%read{167,333} %write{167,333} %mystruct{___546_noise} %mystructfield{1}
+local	int	___547_i	%read{167,333} %write{167,333}
+local	float	___548_seed_for_orientation.x	%read{167,333} %write{167,333} %mystruct{___548_seed_for_orientation} %mystructfield{0}
+local	float	___548_seed_for_orientation.y	%read{167,333} %write{167,333} %mystruct{___548_seed_for_orientation} %mystructfield{1}
+local	float	___548_seed_for_orientation.z	%read{167,333} %write{167,333} %mystruct{___548_seed_for_orientation} %mystructfield{2}
+local	float	___548_seed_for_orientation.w	%read{167,333} %write{167,333} %mystruct{___548_seed_for_orientation} %mystructfield{3}
+local	float	___548_seed_for_kernel_center.x	%read{167,333} %write{167,333} %mystruct{___548_seed_for_kernel_center} %mystructfield{0}
+local	float	___548_seed_for_kernel_center.y	%read{167,333} %write{167,333} %mystruct{___548_seed_for_kernel_center} %mystructfield{1}
+local	float	___548_seed_for_kernel_center.z	%read{167,333} %write{167,333} %mystruct{___548_seed_for_kernel_center} %mystructfield{2}
+local	float	___548_seed_for_kernel_center.w	%read{167,333} %write{167,333} %mystruct{___548_seed_for_kernel_center} %mystructfield{3}
+local	float	___548_seed_for_weight.x	%read{167,333} %write{167,333} %mystruct{___548_seed_for_weight} %mystructfield{0}
+local	float	___548_seed_for_weight.y	%read{167,333} %write{167,333} %mystruct{___548_seed_for_weight} %mystructfield{1}
+local	float	___548_seed_for_weight.z	%read{167,333} %write{167,333} %mystruct{___548_seed_for_weight} %mystructfield{2}
+local	float	___548_seed_for_weight.w	%read{167,333} %write{167,333} %mystruct{___548_seed_for_weight} %mystructfield{3}
+local	point	___548_orientation	%read{167,333} %write{167,333}
+local	point	___548_kernel_center	%read{167,333} %write{167,333}
+local	point	___548_position_in_kernel_space	%read{167,333} %write{167,333}
+local	float	___548_weight	%read{167,333} %write{167,333}
+local	point	___550_cell_position	%read{162,333} %write{161,161}
+local	point	___550_local_position	%read{167,333} %write{162,162}
+local	float	___550_sum.x	%read{167,334} %write{163,333} %mystruct{___550_sum} %mystructfield{0}
+local	float	___550_sum.y	%read{167,335} %write{164,333} %mystruct{___550_sum} %mystructfield{1}
+local	int	___551_k	%read{167,333} %write{166,333}
+local	int	___553_j	%read{167,333} %write{167,333}
+local	int	___555_i	%read{167,333} %write{167,333}
+local	point	___556_cell_offset	%read{167,333} %write{167,333}
+local	point	___556_current_cell_position	%read{167,333} %write{167,333}
+local	point	___556_position_in_cell_space	%read{167,333} %write{167,333}
+local	point	coordinates	%read{3,4} %write{1,3}
+local	point	scaled_coordinates	%read{15,162} %write{4,4}
+local	float	isotropy	%read{28,333} %write{8,8}
+local	float	frequency	%read{28,333} %write{9,9}
+local	float	phasor.x	%read{347,352} %write{10,334} %mystruct{phasor} %mystructfield{0}
+local	float	phasor.y	%read{344,353} %write{11,335} %mystruct{phasor} %mystructfield{1}
+local	float	standard_deviation	%read{343,343} %write{12,341}
+local	point	___559_orientation	%read{167,333} %write{159,159}
+local	float	normalization_factor	%read{344,356} %write{343,343}
+const	float	$const1	1		%read{6,291} %write{2147483647,-1}
+temp	float	$tmp1	%read{8,8} %write{7,7}
+const	float	$const2	0		%read{7,208} %write{2147483647,-1}
+const	string	$const3	"clamp"		%read{5,5} %write{2147483647,-1}
+temp	float	$tmp2	%read{7,7} %write{6,6}
+const	float	$const4	0.00100000005		%read{9,9} %write{2147483647,-1}
+const	string	$const5	"2D"		%read{13,13} %write{2147483647,-1}
+temp	int	$tmp3	%read{14,14} %write{13,13}
+temp	float	$tmp4.x	%read{19,22} %write{15,15}
+temp	float	$tmp4.y	%read{20,23} %write{16,16}
+const	int	$const6	0		%read{15,217} %write{2147483647,-1}
+const	int	$const7	1		%read{16,333} %write{2147483647,-1}
+const	string	$const8	"compute_2d_gabor_noise"		%read{17,17} %write{2147483647,-1}
+const	string	$const9	"floor"		%read{18,18} %write{2147483647,-1}
+const	string	$const10	"__operator__sub__"		%read{21,79} %write{2147483647,-1}
+const	int	$const11	-1		%read{27,174} %write{2147483647,-1}
+temp	int	$tmp5	%read{28,147} %write{28,147}
+temp	int	$tmp6	%read{26,147} %write{27,147}
+temp	int	$tmp7	%read{28,147} %write{28,147}
+temp	int	$tmp8	%read{28,147} %write{28,147}
+const	string	$const12	"__operator__add__"		%read{36,325} %write{2147483647,-1}
+temp	float	$tmp9.x	%read{28,147} %write{28,147}
+temp	float	$tmp9.y	%read{28,147} %write{28,147}
+const	string	$const13	"compute_2d_gabor_noise_cell"		%read{42,42} %write{2147483647,-1}
+const	int	$const14	8		%read{47,188} %write{2147483647,-1}
+temp	int	$tmp10	%read{28,147} %write{28,147}
+temp	int	$tmp11	%read{28,147} %write{28,147}
+const	int	$const15	3		%read{49,204} %write{2147483647,-1}
+temp	int	$tmp12	%read{28,147} %write{28,147}
+temp	float	$tmp13	%read{28,147} %write{28,147}
+temp	int	$tmp14	%read{28,147} %write{28,147}
+temp	int	$tmp15	%read{28,147} %write{28,147}
+temp	float	$tmp16	%read{28,147} %write{28,147}
+temp	int	$tmp17	%read{28,147} %write{28,147}
+const	int	$const16	2		%read{57,212} %write{2147483647,-1}
+temp	int	$tmp18	%read{28,147} %write{28,147}
+temp	float	$tmp19	%read{28,147} %write{28,147}
+temp	float	$tmp20	%read{28,147} %write{28,147}
+const	string	$const17	"hash_vector3_to_float"		%read{60,89} %write{2147483647,-1}
+const	float	$const18	0.5		%read{62,346} %write{2147483647,-1}
+temp	float	$tmp21	%read{28,147} %write{28,147}
+const	float	$const19	3.14159274		%read{63,348} %write{2147483647,-1}
+temp	float	$tmp22	%read{28,147} %write{28,147}
+const	string	$const20	"hash_vector3_to_vector2"		%read{66,66} %write{2147483647,-1}
+temp	point	$tmp23	%read{28,147} %write{28,147}
+temp	float	$tmp24	%read{28,147} %write{28,147}
+temp	float	$tmp25	%read{28,147} %write{28,147}
+temp	float	$tmp26	%read{28,147} %write{28,147}
+temp	point	$tmp27	%read{28,147} %write{28,147}
+temp	float	$tmp28	%read{28,147} %write{28,147}
+temp	float	$tmp29	%read{28,147} %write{28,147}
+temp	float	$tmp30	%read{28,147} %write{28,147}
+temp	float	$tmp31	%read{28,147} %write{28,147}
+const	string	$const21	"dot"		%read{82,115} %write{2147483647,-1}
+temp	float	$tmp32	%read{28,147} %write{28,147}
+temp	float	$tmp33	%read{28,147} %write{28,147}
+temp	int	$tmp34	%read{28,147} %write{28,147}
+temp	float	$tmp35	%read{28,147} %write{28,147}
+temp	int	$tmp36	%read{28,147} %write{28,147}
+const	float	$const22	-1		%read{93,290} %write{2147483647,-1}
+temp	float	$tmp37.x	%read{28,147} %write{28,147}
+temp	float	$tmp37.y	%read{28,147} %write{28,147}
+temp	float	$tmp38.x	%read{28,147} %write{28,147}
+temp	float	$tmp38.y	%read{28,147} %write{28,147}
+const	string	$const23	"compute_2d_gabor_kernel"		%read{95,95} %write{2147483647,-1}
+temp	float	$tmp39	%read{28,147} %write{28,147}
+temp	float	$tmp40	%read{28,147} %write{28,147}
+temp	float	$tmp41	%read{28,147} %write{28,147}
+temp	float	$tmp42	%read{28,147} %write{28,147}
+temp	float	$tmp43	%read{28,147} %write{28,147}
+const	float	$const24	-3.14159274		%read{104,298} %write{2147483647,-1}
+temp	float	$tmp44	%read{28,147} %write{28,147}
+temp	float	$tmp45.x	%read{28,147} %write{28,147}
+temp	float	$tmp45.y	%read{28,147} %write{28,147}
+const	string	$const25	"__operator__mul__"		%read{109,315} %write{2147483647,-1}
+temp	float	$tmp46.x	%read{28,147} %write{28,147}
+temp	float	$tmp46.y	%read{28,147} %write{28,147}
+const	float	$const26	6.28318548		%read{119,349} %write{2147483647,-1}
+temp	float	$tmp47	%read{28,147} %write{28,147}
+temp	float	$tmp48	%read{28,147} %write{28,147}
+temp	float	$tmp49	%read{28,147} %write{28,147}
+temp	float	$tmp50.x	%read{28,147} %write{28,147}
+temp	float	$tmp50.y	%read{28,147} %write{28,147}
+temp	float	$tmp51.x	%read{28,147} %write{28,147}
+temp	float	$tmp51.y	%read{28,147} %write{28,147}
+temp	int	$tmp52	%read{2147483647,-1} %write{28,147}
+temp	int	$tmp53	%read{2147483647,-1} %write{28,147}
+const	string	$const27	"compute_2d_gabor_standard_deviation"		%read{150,150} %write{2147483647,-1}
+const	float	$const28	0.25		%read{151,151} %write{2147483647,-1}
+temp	float	$tmp54	%read{154,154} %write{153,153}
+const	float	$const29	8		%read{153,339} %write{2147483647,-1}
+temp	float	$tmp55	%read{155,155} %write{154,154}
+const	string	$const30	"3D"		%read{156,156} %write{2147483647,-1}
+temp	int	$tmp56	%read{157,157} %write{156,156}
+temp	vector	$tmp57	%read{159,159} %write{158,158}
+const	string	$const31	"compute_3d_gabor_noise"		%read{160,160} %write{2147483647,-1}
+temp	int	$tmp58	%read{167,333} %write{167,333}
+temp	int	$tmp59	%read{165,333} %write{166,333}
+temp	int	$tmp60	%read{167,333} %write{167,333}
+temp	int	$tmp61	%read{167,333} %write{167,333}
+temp	int	$tmp62	%read{167,333} %write{167,333}
+temp	int	$tmp63	%read{167,333} %write{167,333}
+temp	float	$tmp64	%read{167,333} %write{167,333}
+temp	float	$tmp65	%read{167,333} %write{167,333}
+temp	float	$tmp66	%read{167,333} %write{167,333}
+temp	float	$tmp67.x	%read{167,333} %write{167,333}
+temp	float	$tmp67.y	%read{167,333} %write{167,333}
+const	string	$const32	"compute_3d_gabor_noise_cell"		%read{183,183} %write{2147483647,-1}
+temp	int	$tmp68	%read{167,333} %write{167,333}
+temp	int	$tmp69	%read{167,333} %write{167,333}
+temp	int	$tmp70	%read{167,333} %write{167,333}
+temp	int	$tmp71	%read{167,333} %write{167,333}
+temp	int	$tmp72	%read{167,333} %write{167,333}
+temp	int	$tmp73	%read{167,333} %write{167,333}
+temp	int	$tmp74	%read{167,333} %write{167,333}
+const	string	$const33	"compute_3d_orientation"		%read{207,207} %write{2147483647,-1}
+temp	int	$tmp75	%read{167,333} %write{167,333}
+temp	float	$tmp76	%read{167,333} %write{167,333}
+temp	float	$tmp77	%read{167,333} %write{167,333}
+temp	float	$tmp78	%read{167,333} %write{167,333}
+temp	float	$tmp79	%read{167,333} %write{167,333}
+temp	float	$tmp80	%read{167,333} %write{167,333}
+temp	float	$tmp81	%read{167,333} %write{167,333}
+temp	float	$tmp82.x	%read{167,333} %write{167,333}
+temp	float	$tmp82.y	%read{167,333} %write{167,333}
+const	string	$const34	"length"		%read{219,350} %write{2147483647,-1}
+const	string	$const35	"hypot"		%read{220,351} %write{2147483647,-1}
+temp	float	$tmp83	%read{167,333} %write{167,333}
+temp	float	$tmp84	%read{167,333} %write{167,333}
+temp	float	$tmp85	%read{167,333} %write{167,333}
+temp	float	$tmp86	%read{167,333} %write{167,333}
+temp	float	$tmp87.x	%read{167,333} %write{167,333}
+temp	float	$tmp87.y	%read{167,333} %write{167,333}
+const	string	$const36	"hash_vector4_to_vector2"		%read{228,228} %write{2147483647,-1}
+temp	float	$tmp88.x	%read{167,333} %write{167,333}
+temp	float	$tmp88.y	%read{167,333} %write{167,333}
+temp	float	$tmp88.z	%read{167,333} %write{167,333}
+temp	float	$tmp88.w	%read{167,333} %write{167,333}
+const	string	$const37	"hash_vector4_to_float"		%read{233,285} %write{2147483647,-1}
+temp	point	$tmp89	%read{167,333} %write{167,333}
+temp	float	$tmp90.x	%read{167,333} %write{167,333}
+temp	float	$tmp90.y	%read{167,333} %write{167,333}
+temp	float	$tmp90.z	%read{167,333} %write{167,333}
+temp	float	$tmp90.w	%read{167,333} %write{167,333}
+temp	point	$tmp91	%read{167,333} %write{167,333}
+temp	float	$tmp92.x	%read{167,333} %write{167,333}
+temp	float	$tmp92.y	%read{167,333} %write{167,333}
+temp	float	$tmp93	%read{167,333} %write{167,333}
+temp	float	$tmp94	%read{167,333} %write{167,333}
+temp	float	$tmp95	%read{167,333} %write{167,333}
+temp	float	$tmp96	%read{167,333} %write{167,333}
+temp	float	$tmp97	%read{167,333} %write{167,333}
+temp	float	$tmp98	%read{167,333} %write{167,333}
+temp	float	$tmp99	%read{167,333} %write{167,333}
+temp	float	$tmp100	%read{167,333} %write{167,333}
+temp	float	$tmp101	%read{167,333} %write{167,333}
+const	string	$const38	"hash_vector4_to_vector3"		%read{261,261} %write{2147483647,-1}
+temp	float	$tmp102	%read{167,333} %write{167,333}
+temp	point	$tmp103	%read{167,333} %write{167,333}
+temp	float	$tmp104	%read{167,333} %write{167,333}
+temp	float	$tmp105.x	%read{167,333} %write{167,333}
+temp	float	$tmp105.y	%read{167,333} %write{167,333}
+temp	float	$tmp105.z	%read{167,333} %write{167,333}
+temp	float	$tmp105.w	%read{167,333} %write{167,333}
+temp	point	$tmp106	%read{167,333} %write{167,333}
+temp	float	$tmp107	%read{167,333} %write{167,333}
+temp	float	$tmp108.x	%read{167,333} %write{167,333}
+temp	float	$tmp108.y	%read{167,333} %write{167,333}
+temp	float	$tmp108.z	%read{167,333} %write{167,333}
+temp	float	$tmp108.w	%read{167,333} %write{167,333}
+temp	point	$tmp109	%read{167,333} %write{167,333}
+temp	float	$tmp110	%read{167,333} %write{167,333}
+temp	int	$tmp111	%read{167,333} %write{167,333}
+temp	float	$tmp112	%read{167,333} %write{167,333}
+temp	point	$tmp113	%read{167,333} %write{167,333}
+temp	int	$tmp114	%read{167,333} %write{167,333}
+temp	float	$tmp115.x	%read{167,333} %write{167,333}
+temp	float	$tmp115.y	%read{167,333} %write{167,333}
+temp	float	$tmp116.x	%read{167,333} %write{167,333}
+temp	float	$tmp116.y	%read{167,333} %write{167,333}
+const	string	$const39	"compute_3d_gabor_kernel"		%read{292,292} %write{2147483647,-1}
+temp	float	$tmp117	%read{167,333} %write{167,333}
+temp	float	$tmp118	%read{167,333} %write{167,333}
+temp	float	$tmp119	%read{167,333} %write{167,333}
+temp	float	$tmp120	%read{167,333} %write{167,333}
+temp	float	$tmp121	%read{167,333} %write{167,333}
+temp	float	$tmp122.x	%read{167,333} %write{167,333}
+temp	float	$tmp122.y	%read{167,333} %write{167,333}
+temp	float	$tmp123.x	%read{167,333} %write{167,333}
+temp	float	$tmp123.y	%read{167,333} %write{167,333}
+temp	int	$tmp124	%read{2147483647,-1} %write{167,333}
+temp	int	$tmp125	%read{2147483647,-1} %write{167,333}
+temp	int	$tmp126	%read{2147483647,-1} %write{167,333}
+const	string	$const40	"compute_3d_gabor_standard_deviation"		%read{336,336} %write{2147483647,-1}
+const	float	$const41	0.176776692		%read{337,337} %write{2147483647,-1}
+temp	float	$tmp127	%read{340,340} %write{339,339}
+temp	float	$tmp128	%read{341,341} %write{340,340}
+const	string	$const42	"Unknown type!"		%read{342,342} %write{2147483647,-1}
+const	float	$const43	6		%read{343,343} %write{2147483647,-1}
+temp	float	$tmp129	%read{345,345} %write{344,344}
+temp	float	$tmp130	%read{346,346} %write{345,345}
+temp	float	$tmp131	%read{348,348} %write{347,347}
+temp	float	$tmp132	%read{349,349} %write{348,348}
+temp	float	$tmp133	%read{356,356} %write{355,355}
+temp	float	$tmp134	%read{354,354} %write{352,352}
+temp	float	$tmp135	%read{354,354} %write{353,353}
+temp	float	$tmp136	%read{355,355} %write{354,354}
+code Vector
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:289
+#                           vector3 Vector = P,
+	assign		Vector P 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{289} %argrw{"wr"}
+code ___main___
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:299
+#   vector3 coordinates = Vector;
+	assign		coordinates Vector 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{299} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:300
+#   if (use_mapping) {
+	if		use_mapping 4 4 	%line{300} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:301
+#     coordinates = transform(mapping, coordinates);
+	transform	coordinates mapping coordinates 	%line{301} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:304
+#   vector3 scaled_coordinates = coordinates * Scale;
+	mul		scaled_coordinates coordinates Scale 	%line{304} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:305
+#   float isotropy = 1.0 - clamp(Anisotropy, 0.0, 1.0);
+	functioncall	$const3 8 	%line{305} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
+# float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
+	min		$tmp2 Anisotropy $const1 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
+	max		$tmp1 $tmp2 $const2 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:305
+#   float isotropy = 1.0 - clamp(Anisotropy, 0.0, 1.0);
+	sub		isotropy $const1 $tmp1 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{305} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:306
+#   float frequency = max(0.001, Frequency);
+	max		frequency $const4 Frequency 	%line{306} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:308
+#   vector2 phasor = vector2(0.0, 0.0);
+	assign		phasor.x $const2 	%line{308} %argrw{"wr"}
+	assign		phasor.y $const2 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:309
+#   float standard_deviation = 1.0;
+	assign		standard_deviation $const1 	%line{309} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:310
+#   if (type == "2D") {
+	eq		$tmp3 type $const5 	%line{310} %argrw{"wrr"}
+	if		$tmp3 156 343 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:312
+#         vector2(scaled_coordinates.x, scaled_coordinates.y), frequency, isotropy, Orientation2D);
+	compref		$tmp4.x scaled_coordinates $const6 	%line{312} %argrw{"wrr"}
+	compref		$tmp4.y scaled_coordinates $const7 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:311
+#     phasor = compute_2d_gabor_noise(
+	functioncall	$const8 150 	%line{311} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:157
+#   vector2 cell_position = floor(coordinates);
+	functioncall	$const9 21 	%line{157} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h:157
+#     return vector2 (floor(a.x), floor(a.y));
+	floor		___537_cell_position.x $tmp4.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %argrw{"wr"}
+	floor		___537_cell_position.y $tmp4.y 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:339
+# 
+	functioncall	$const10 24 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{339} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h:53
+#     return vector2(a.x - b.x, a.y - b.y);
+	sub		___537_local_position.x $tmp4.x ___537_cell_position.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{53} %argrw{"wrr"}
+	sub		___537_local_position.y $tmp4.y ___537_cell_position.y 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:160
+#   vector2 sum = vector2(0.0, 0.0);
+	assign		___537_sum.x $const2 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{160} %argrw{"wr"}
+	assign		___537_sum.y $const2 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:161
+#   for (int j = -1; j <= 1; j++) {
+	for		$tmp6 28 30 146 148 	%line{161} %argrw{"r"}
+	assign		___538_j $const11 	%argrw{"wr"}
+	le		$tmp5 ___538_j $const7 	%argrw{"wrr"}
+	neq		$tmp6 $tmp5 $const6 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:162
+#     for (int i = -1; i <= 1; i++) {
+	for		$tmp8 32 34 144 146 	%line{162} %argrw{"r"}
+	assign		___540_i $const11 	%argrw{"wr"}
+	le		$tmp7 ___540_i $const7 	%argrw{"wrr"}
+	neq		$tmp8 $tmp7 $const6 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:163
+#       vector2 cell_offset = vector2(i, j);
+	assign		___541_cell_offset.x ___540_i 	%line{163} %argrw{"wr"}
+	assign		___541_cell_offset.y ___538_j 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:339
+# 
+	functioncall	$const12 39 	%line{339} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h:28
+#     return vector2(a.x + b.x, a.y + b.y);
+	add		___541_current_cell_position.x ___537_cell_position.x ___541_cell_offset.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{28} %argrw{"wrr"}
+	add		___541_current_cell_position.y ___537_cell_position.y ___541_cell_offset.y 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:339
+# 
+	functioncall	$const10 42 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{339} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h:53
+#     return vector2(a.x - b.x, a.y - b.y);
+	sub		___541_position_in_cell_space.x ___537_local_position.x ___541_cell_offset.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{53} %argrw{"wrr"}
+	sub		___541_position_in_cell_space.y ___537_local_position.y ___541_cell_offset.y 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:166
+#       sum += compute_2d_gabor_noise_cell(
+	functioncall	$const13 141 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{166} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:118
+#   vector2 noise = vector2(0.0, 0.0);
+	assign		___533_noise.x $const2 	%line{118} %argrw{"wr"}
+	assign		___533_noise.y $const2 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:119
+#   for (int i = 0; i < IMPULSES_COUNT; ++i) {
+	for		$tmp11 47 49 137 138 	%line{119} %argrw{"r"}
+	assign		___534_i $const6 	%argrw{"wr"}
+	lt		$tmp10 ___534_i $const14 	%argrw{"wrr"}
+	neq		$tmp11 $tmp10 $const6 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:121
+#     vector3 seed_for_orientation = vector3(cell.x, cell.y, i * 3);
+	mul		$tmp12 ___534_i $const15 	%line{121} %argrw{"wrr"}
+	assign		$tmp13 $tmp12 	%argrw{"wr"}
+	point		___535_seed_for_orientation ___541_current_cell_position.x ___541_current_cell_position.y $tmp13 	%argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:122
+#     vector3 seed_for_kernel_center = vector3(cell.x, cell.y, i * 3 + 1);
+	mul		$tmp14 ___534_i $const15 	%line{122} %argrw{"wrr"}
+	add		$tmp15 $tmp14 $const7 	%argrw{"wrr"}
+	assign		$tmp16 $tmp15 	%argrw{"wr"}
+	point		___535_seed_for_kernel_center ___541_current_cell_position.x ___541_current_cell_position.y $tmp16 	%argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:123
+#     vector3 seed_for_weight = vector3(cell.x, cell.y, i * 3 + 2);
+	mul		$tmp17 ___534_i $const15 	%line{123} %argrw{"wrr"}
+	add		$tmp18 $tmp17 $const16 	%argrw{"wrr"}
+	assign		$tmp19 $tmp18 	%argrw{"wr"}
+	point		___535_seed_for_weight ___541_current_cell_position.x ___541_current_cell_position.y $tmp19 	%argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:129
+#     float random_orientation = (hash_vector3_to_float(seed_for_orientation) - 0.5) * M_PI;
+	functioncall	$const17 62 	%line{129} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_hash.h:82
+#   return hashnoise(k);
+	hashnoise	$tmp20 ___535_seed_for_orientation 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_hash.h"} %line{82} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:129
+#     float random_orientation = (hash_vector3_to_float(seed_for_orientation) - 0.5) * M_PI;
+	sub		$tmp21 $tmp20 $const18 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{129} %argrw{"wrr"}
+	mul		___535_random_orientation $tmp21 $const19 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:130
+#     float orientation = base_orientation + random_orientation * isotropy;
+	mul		$tmp22 ___535_random_orientation isotropy 	%line{130} %argrw{"wrr"}
+	add		___535_orientation Orientation2D $tmp22 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:132
+#     vector2 kernel_center = hash_vector3_to_vector2(seed_for_kernel_center);
+	functioncall	$const20 79 	%line{132} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_hash.h:174
+#   return vector2(hash_vector3_to_float(vector3(k.x, k.y, k.z)),
+	compref		$tmp24 ___535_seed_for_kernel_center $const6 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_hash.h"} %line{174} %argrw{"wrr"}
+	compref		$tmp25 ___535_seed_for_kernel_center $const7 	%argrw{"wrr"}
+	compref		$tmp26 ___535_seed_for_kernel_center $const16 	%argrw{"wrr"}
+	point		$tmp23 $tmp24 $tmp25 $tmp26 	%argrw{"wrrr"}
+	functioncall	$const17 73 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_hash.h:82
+#   return hashnoise(k);
+	hashnoise	___535_kernel_center.x $tmp23 	%line{82} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_hash.h:175
+#                  hash_vector3_to_float(vector3(k.z, k.x, k.y)));
+	compref		$tmp28 ___535_seed_for_kernel_center $const16 	%line{175} %argrw{"wrr"}
+	compref		$tmp29 ___535_seed_for_kernel_center $const6 	%argrw{"wrr"}
+	compref		$tmp30 ___535_seed_for_kernel_center $const7 	%argrw{"wrr"}
+	point		$tmp27 $tmp28 $tmp29 $tmp30 	%argrw{"wrrr"}
+	functioncall	$const17 79 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_hash.h:82
+#   return hashnoise(k);
+	hashnoise	___535_kernel_center.y $tmp27 	%line{82} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:339
+# 
+	functioncall	$const10 82 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{339} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h:53
+#     return vector2(a.x - b.x, a.y - b.y);
+	sub		___535_position_in_kernel_space.x ___541_position_in_cell_space.x ___535_kernel_center.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{53} %argrw{"wrr"}
+	sub		___535_position_in_kernel_space.y ___541_position_in_cell_space.y ___535_kernel_center.y 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:137
+#     if (dot(position_in_kernel_space, position_in_kernel_space) >= 1.0) {
+	functioncall	$const21 86 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{137} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h:187
+#     return (a.x * b.x + a.y * b.y);
+	mul		$tmp32 ___535_position_in_kernel_space.x ___535_position_in_kernel_space.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{187} %argrw{"wrr"}
+	mul		$tmp33 ___535_position_in_kernel_space.y ___535_position_in_kernel_space.y 	%argrw{"wrr"}
+	add		$tmp31 $tmp32 $tmp33 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:137
+#     if (dot(position_in_kernel_space, position_in_kernel_space) >= 1.0) {
+	ge		$tmp34 $tmp31 $const1 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{137} %argrw{"wrr"}
+	if		$tmp34 89 89 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:138
+#       continue;
+	continue	%line{138}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:143
+#     float weight = hash_vector3_to_float(seed_for_weight) < 0.5 ? -1.0 : 1.0;
+	functioncall	$const17 91 	%line{143} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_hash.h:82
+#   return hashnoise(k);
+	hashnoise	$tmp35 ___535_seed_for_weight 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_hash.h"} %line{82} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:143
+#     float weight = hash_vector3_to_float(seed_for_weight) < 0.5 ? -1.0 : 1.0;
+	lt		$tmp36 $tmp35 $const18 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{143} %argrw{"wrr"}
+	if		$tmp36 94 95 	%argrw{"r"}
+	assign		___535_weight $const22 	%argrw{"wr"}
+	assign		___535_weight $const1 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:145
+#     noise += weight * compute_2d_gabor_kernel(position_in_kernel_space, frequency, orientation);
+	functioncall	$const23 128 	%line{145} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:63
+#   float distance_squared = dot(position, position);
+	functioncall	$const21 100 	%line{63} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h:187
+#     return (a.x * b.x + a.y * b.y);
+	mul		$tmp39 ___535_position_in_kernel_space.x ___535_position_in_kernel_space.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{187} %argrw{"wrr"}
+	mul		$tmp40 ___535_position_in_kernel_space.y ___535_position_in_kernel_space.y 	%argrw{"wrr"}
+	add		___531_distance_squared $tmp39 $tmp40 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:64
+#   float hann_window = 0.5 + 0.5 * cos(M_PI * distance_squared);
+	mul		$tmp42 $const19 ___531_distance_squared 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{64} %argrw{"wrr"}
+	cos		$tmp41 $tmp42 	%argrw{"wr"}
+	mul		$tmp43 $const18 $tmp41 	%argrw{"wrr"}
+	add		___531_hann_window $const18 $tmp43 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:65
+#   float gaussian_envelop = exp(-M_PI * distance_squared);
+	mul		$tmp44 $const24 ___531_distance_squared 	%line{65} %argrw{"wrr"}
+	exp		___531_gaussian_envelop $tmp44 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:66
+#   float windowed_gaussian_envelope = gaussian_envelop * hann_window;
+	mul		___531_windowed_gaussian_envelope ___531_gaussian_envelop ___531_hann_window 	%line{66} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:68
+#   vector2 frequency_vector = frequency * vector2(cos(orientation), sin(orientation));
+	cos		$tmp45.x ___535_orientation 	%line{68} %argrw{"wr"}
+	sin		$tmp45.y ___535_orientation 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:339
+# 
+	functioncall	$const25 115 	%line{339} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h:98
+#     return b * vector2(a, a);
+	assign		$tmp46.x frequency 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{98} %argrw{"wr"}
+	assign		$tmp46.y frequency 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:339
+# 
+	functioncall	$const25 115 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{339} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h:78
+#     return vector2(a.x * b.x, a.y * b.y);
+	mul		___531_frequency_vector.x $tmp45.x $tmp46.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{78} %argrw{"wrr"}
+	mul		___531_frequency_vector.y $tmp45.y $tmp46.y 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:69
+#   float angle = 2.0 * M_PI * dot(position, frequency_vector);
+	functioncall	$const21 119 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{69} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h:187
+#     return (a.x * b.x + a.y * b.y);
+	mul		$tmp48 ___535_position_in_kernel_space.x ___531_frequency_vector.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{187} %argrw{"wrr"}
+	mul		$tmp49 ___535_position_in_kernel_space.y ___531_frequency_vector.y 	%argrw{"wrr"}
+	add		$tmp47 $tmp48 $tmp49 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:69
+#   float angle = 2.0 * M_PI * dot(position, frequency_vector);
+	mul		___531_angle $const26 $tmp47 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{69} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:70
+#   vector2 phasor = vector2(cos(angle), sin(angle));
+	cos		___531_phasor.x ___531_angle 	%line{70} %argrw{"wr"}
+	sin		___531_phasor.y ___531_angle 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:339
+# 
+	functioncall	$const25 128 	%line{339} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h:98
+#     return b * vector2(a, a);
+	assign		$tmp50.x ___531_windowed_gaussian_envelope 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{98} %argrw{"wr"}
+	assign		$tmp50.y ___531_windowed_gaussian_envelope 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:339
+# 
+	functioncall	$const25 128 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{339} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h:78
+#     return vector2(a.x * b.x, a.y * b.y);
+	mul		$tmp38.x ___531_phasor.x $tmp50.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{78} %argrw{"wrr"}
+	mul		$tmp38.y ___531_phasor.y $tmp50.y 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:339
+# 
+	functioncall	$const25 134 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{339} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h:98
+#     return b * vector2(a, a);
+	assign		$tmp51.x ___535_weight 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{98} %argrw{"wr"}
+	assign		$tmp51.y ___535_weight 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:339
+# 
+	functioncall	$const25 134 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{339} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h:78
+#     return vector2(a.x * b.x, a.y * b.y);
+	mul		$tmp37.x $tmp38.x $tmp51.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{78} %argrw{"wrr"}
+	mul		$tmp37.y $tmp38.y $tmp51.y 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:339
+# 
+	functioncall	$const12 137 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{339} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h:28
+#     return vector2(a.x + b.x, a.y + b.y);
+	add		___533_noise.x ___533_noise.x $tmp37.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{28} %argrw{"wrr"}
+	add		___533_noise.y ___533_noise.y $tmp37.y 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:119
+#   for (int i = 0; i < IMPULSES_COUNT; ++i) {
+	add		___534_i ___534_i $const7 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{119} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:147
+#   return noise;
+	assign		$tmp9.x ___533_noise.x 	%line{147} %argrw{"wr"}
+	assign		$tmp9.y ___533_noise.y 	%argrw{"wr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:339
+# 
+	functioncall	$const12 144 	%line{339} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h:28
+#     return vector2(a.x + b.x, a.y + b.y);
+	add		___537_sum.x ___537_sum.x $tmp9.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{28} %argrw{"wrr"}
+	add		___537_sum.y ___537_sum.y $tmp9.y 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:162
+#     for (int i = -1; i <= 1; i++) {
+	assign		$tmp52 ___540_i 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{162} %argrw{"wr"}
+	add		___540_i ___540_i $const7 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:161
+#   for (int j = -1; j <= 1; j++) {
+	assign		$tmp53 ___538_j 	%line{161} %argrw{"wr"}
+	add		___538_j ___538_j $const7 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:171
+#   return sum;
+	assign		phasor.x ___537_sum.x 	%line{171} %argrw{"wr"}
+	assign		phasor.y ___537_sum.y 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:313
+#     standard_deviation = compute_2d_gabor_standard_deviation();
+	functioncall	$const27 156 	%line{313} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:103
+#   float integral_of_gabor_squared = 0.25;
+	assign		___532_integral_of_gabor_squared $const28 	%line{103} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:104
+#   float second_moment = 0.5;
+	assign		___532_second_moment $const18 	%line{104} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:105
+#   return sqrt(IMPULSES_COUNT * second_moment * integral_of_gabor_squared);
+	mul		$tmp54 $const29 ___532_second_moment 	%line{105} %argrw{"wrr"}
+	mul		$tmp55 $tmp54 ___532_integral_of_gabor_squared 	%argrw{"wrr"}
+	sqrt		standard_deviation $tmp55 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:315
+#   else if (type == "3D") {
+	eq		$tmp56 type $const30 	%line{315} %argrw{"wrr"}
+	if		$tmp56 342 343 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:316
+#     vector3 orientation = normalize(vector(Orientation3D));
+	assign		$tmp57 Orientation3D 	%line{316} %argrw{"wr"}
+	normalize	___559_orientation $tmp57 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:317
+#     phasor = compute_3d_gabor_noise(scaled_coordinates, frequency, isotropy, orientation);
+	functioncall	$const31 336 	%line{317} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:267
+#   vector3 cell_position = floor(coordinates);
+	floor		___550_cell_position scaled_coordinates 	%line{267} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:268
+#   vector3 local_position = coordinates - cell_position;
+	sub		___550_local_position scaled_coordinates ___550_cell_position 	%line{268} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:270
+#   vector2 sum = vector2(0.0, 0.0);
+	assign		___550_sum.x $const2 	%line{270} %argrw{"wr"}
+	assign		___550_sum.y $const2 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:271
+#   for (int k = -1; k <= 1; k++) {
+	for		$tmp59 167 169 332 334 	%line{271} %argrw{"r"}
+	assign		___551_k $const11 	%argrw{"wr"}
+	le		$tmp58 ___551_k $const7 	%argrw{"wrr"}
+	neq		$tmp59 $tmp58 $const6 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:272
+#     for (int j = -1; j <= 1; j++) {
+	for		$tmp61 171 173 330 332 	%line{272} %argrw{"r"}
+	assign		___553_j $const11 	%argrw{"wr"}
+	le		$tmp60 ___553_j $const7 	%argrw{"wrr"}
+	neq		$tmp61 $tmp60 $const6 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:273
+#       for (int i = -1; i <= 1; i++) {
+	for		$tmp63 175 177 328 330 	%line{273} %argrw{"r"}
+	assign		___555_i $const11 	%argrw{"wr"}
+	le		$tmp62 ___555_i $const7 	%argrw{"wrr"}
+	neq		$tmp63 $tmp62 $const6 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:274
+#         vector3 cell_offset = vector3(i, j, k);
+	assign		$tmp64 ___555_i 	%line{274} %argrw{"wr"}
+	assign		$tmp65 ___553_j 	%argrw{"wr"}
+	assign		$tmp66 ___551_k 	%argrw{"wr"}
+	point		___556_cell_offset $tmp64 $tmp65 $tmp66 	%argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:275
+#         vector3 current_cell_position = cell_position + cell_offset;
+	add		___556_current_cell_position ___550_cell_position ___556_cell_offset 	%line{275} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:276
+#         vector3 position_in_cell_space = local_position - cell_offset;
+	sub		___556_position_in_cell_space ___550_local_position ___556_cell_offset 	%line{276} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:277
+#         sum += compute_3d_gabor_noise_cell(
+	functioncall	$const32 325 	%line{277} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:234
+#   vector2 noise = vector2(0.0, 0.0);
+	assign		___546_noise.x $const2 	%line{234} %argrw{"wr"}
+	assign		___546_noise.y $const2 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:235
+#   for (int i = 0; i < IMPULSES_COUNT; ++i) {
+	for		$tmp69 188 190 321 322 	%line{235} %argrw{"r"}
+	assign		___547_i $const6 	%argrw{"wr"}
+	lt		$tmp68 ___547_i $const14 	%argrw{"wrr"}
+	neq		$tmp69 $tmp68 $const6 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:237
+#     vector4 seed_for_orientation = vector4(cell.x, cell.y, cell.z, i * 3);
+	compref		___548_seed_for_orientation.x ___556_current_cell_position $const6 	%line{237} %argrw{"wrr"}
+	compref		___548_seed_for_orientation.y ___556_current_cell_position $const7 	%argrw{"wrr"}
+	compref		___548_seed_for_orientation.z ___556_current_cell_position $const16 	%argrw{"wrr"}
+	mul		$tmp70 ___547_i $const15 	%argrw{"wrr"}
+	assign		___548_seed_for_orientation.w $tmp70 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:238
+#     vector4 seed_for_kernel_center = vector4(cell.x, cell.y, cell.z, i * 3 + 1);
+	compref		___548_seed_for_kernel_center.x ___556_current_cell_position $const6 	%line{238} %argrw{"wrr"}
+	compref		___548_seed_for_kernel_center.y ___556_current_cell_position $const7 	%argrw{"wrr"}
+	compref		___548_seed_for_kernel_center.z ___556_current_cell_position $const16 	%argrw{"wrr"}
+	mul		$tmp71 ___547_i $const15 	%argrw{"wrr"}
+	add		$tmp72 $tmp71 $const7 	%argrw{"wrr"}
+	assign		___548_seed_for_kernel_center.w $tmp72 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:239
+#     vector4 seed_for_weight = vector4(cell.x, cell.y, cell.z, i * 3 + 2);
+	compref		___548_seed_for_weight.x ___556_current_cell_position $const6 	%line{239} %argrw{"wrr"}
+	compref		___548_seed_for_weight.y ___556_current_cell_position $const7 	%argrw{"wrr"}
+	compref		___548_seed_for_weight.z ___556_current_cell_position $const16 	%argrw{"wrr"}
+	mul		$tmp73 ___547_i $const15 	%argrw{"wrr"}
+	add		$tmp74 $tmp73 $const16 	%argrw{"wrr"}
+	assign		___548_seed_for_weight.w $tmp74 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:241
+#     vector3 orientation = compute_3d_orientation(base_orientation, isotropy, seed_for_orientation);
+	functioncall	$const33 261 	%line{241} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:208
+#   if (isotropy == 0.0) {
+	eq		$tmp75 isotropy $const2 	%line{208} %argrw{"wrr"}
+	if		$tmp75 212 212 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:209
+#     return orientation;
+	assign		___548_orientation ___559_orientation 	%line{209} %argrw{"wr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:213
+#   float inclination = acos(orientation.z);
+	compref		$tmp76 ___559_orientation $const16 	%line{213} %argrw{"wrr"}
+	acos		___544_inclination $tmp76 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:214
+#   float azimuth = sign(orientation.y) *
+	compref		$tmp78 ___559_orientation $const7 	%line{214} %argrw{"wrr"}
+	sign		$tmp77 $tmp78 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:215
+#                   acos(orientation.x / length(vector2(orientation.x, orientation.y)));
+	compref		$tmp80 ___559_orientation $const6 	%line{215} %argrw{"wrr"}
+	compref		$tmp82.x ___559_orientation $const6 	%argrw{"wrr"}
+	compref		$tmp82.y ___559_orientation $const7 	%argrw{"wrr"}
+	functioncall	$const34 225 	%argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h:192
+#     return hypot (a.x, a.y);
+	functioncall	$const35 225 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{192} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:101
+# float hypot (float a, float b) { return sqrt (a*a + b*b); }
+	mul		$tmp83 $tmp82.x $tmp82.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{101} %argrw{"wrr"}
+	mul		$tmp84 $tmp82.y $tmp82.y 	%argrw{"wrr"}
+	add		$tmp85 $tmp83 $tmp84 	%argrw{"wrr"}
+	sqrt		$tmp81 $tmp85 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:215
+#                   acos(orientation.x / length(vector2(orientation.x, orientation.y)));
+	div		$tmp86 $tmp80 $tmp81 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{215} %argrw{"wrr"}
+	acos		$tmp79 $tmp86 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:214
+#   float azimuth = sign(orientation.y) *
+	mul		___544_azimuth $tmp77 $tmp79 	%line{214} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:221
+#   vector2 random_angles = hash_vector4_to_vector2(seed) * M_PI;
+	functioncall	$const36 243 	%line{221} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_hash.h:180
+#   return vector2(hash_vector4_to_float(vector4(k.x, k.y, k.z, k.w)),
+	assign		$tmp88.x ___548_seed_for_orientation.x 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_hash.h"} %line{180} %argrw{"wr"}
+	assign		$tmp88.y ___548_seed_for_orientation.y 	%argrw{"wr"}
+	assign		$tmp88.z ___548_seed_for_orientation.z 	%argrw{"wr"}
+	assign		$tmp88.w ___548_seed_for_orientation.w 	%argrw{"wr"}
+	functioncall	$const37 236 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_hash.h:87
+#   return hashnoise(vector3(k.x, k.y, k.z), k.w);
+	point		$tmp89 $tmp88.x $tmp88.y $tmp88.z 	%line{87} %argrw{"wrrr"}
+	hashnoise	$tmp87.x $tmp89 $tmp88.w 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_hash.h:181
+#                  hash_vector4_to_float(vector4(k.z, k.x, k.w, k.y)));
+	assign		$tmp90.x ___548_seed_for_orientation.z 	%line{181} %argrw{"wr"}
+	assign		$tmp90.y ___548_seed_for_orientation.x 	%argrw{"wr"}
+	assign		$tmp90.z ___548_seed_for_orientation.w 	%argrw{"wr"}
+	assign		$tmp90.w ___548_seed_for_orientation.y 	%argrw{"wr"}
+	functioncall	$const37 243 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_hash.h:87
+#   return hashnoise(vector3(k.x, k.y, k.z), k.w);
+	point		$tmp91 $tmp90.x $tmp90.y $tmp90.z 	%line{87} %argrw{"wrrr"}
+	hashnoise	$tmp87.y $tmp91 $tmp90.w 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:339
+# 
+	functioncall	$const25 249 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{339} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h:88
+#     return a * vector2(b, b);
+	assign		$tmp92.x $const19 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{88} %argrw{"wr"}
+	assign		$tmp92.y $const19 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:339
+# 
+	functioncall	$const25 249 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{339} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h:78
+#     return vector2(a.x * b.x, a.y * b.y);
+	mul		___544_random_angles.x $tmp87.x $tmp92.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{78} %argrw{"wrr"}
+	mul		___544_random_angles.y $tmp87.y $tmp92.y 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:222
+#   inclination += random_angles.x * isotropy;
+	mul		$tmp93 ___544_random_angles.x isotropy 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{222} %argrw{"wrr"}
+	add		___544_inclination ___544_inclination $tmp93 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:223
+#   azimuth += random_angles.y * isotropy;
+	mul		$tmp94 ___544_random_angles.y isotropy 	%line{223} %argrw{"wrr"}
+	add		___544_azimuth ___544_azimuth $tmp94 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:227
+#       sin(inclination) * cos(azimuth), sin(inclination) * sin(azimuth), cos(inclination));
+	sin		$tmp95 ___544_inclination 	%line{227} %argrw{"wr"}
+	cos		$tmp96 ___544_azimuth 	%argrw{"wr"}
+	mul		$tmp97 $tmp95 $tmp96 	%argrw{"wrr"}
+	sin		$tmp98 ___544_inclination 	%argrw{"wr"}
+	sin		$tmp99 ___544_azimuth 	%argrw{"wr"}
+	mul		$tmp100 $tmp98 $tmp99 	%argrw{"wrr"}
+	cos		$tmp101 ___544_inclination 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:226
+#   return vector3(
+	point		___548_orientation $tmp97 $tmp100 $tmp101 	%line{226} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:243
+#     vector3 kernel_center = hash_vector4_to_vector3(seed_for_kernel_center);
+	functioncall	$const38 280 	%line{243} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_hash.h:160
+#   return vector3(hash_vector4_to_float(k),
+	functioncall	$const37 265 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_hash.h"} %line{160} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_hash.h:87
+#   return hashnoise(vector3(k.x, k.y, k.z), k.w);
+	point		$tmp103 ___548_seed_for_kernel_center.x ___548_seed_for_kernel_center.y ___548_seed_for_kernel_center.z 	%line{87} %argrw{"wrrr"}
+	hashnoise	$tmp102 $tmp103 ___548_seed_for_kernel_center.w 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_hash.h:161
+#                  hash_vector4_to_float(vector4(k.z, k.x, k.w, k.y)),
+	assign		$tmp105.x ___548_seed_for_kernel_center.z 	%line{161} %argrw{"wr"}
+	assign		$tmp105.y ___548_seed_for_kernel_center.x 	%argrw{"wr"}
+	assign		$tmp105.z ___548_seed_for_kernel_center.w 	%argrw{"wr"}
+	assign		$tmp105.w ___548_seed_for_kernel_center.y 	%argrw{"wr"}
+	functioncall	$const37 272 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_hash.h:87
+#   return hashnoise(vector3(k.x, k.y, k.z), k.w);
+	point		$tmp106 $tmp105.x $tmp105.y $tmp105.z 	%line{87} %argrw{"wrrr"}
+	hashnoise	$tmp104 $tmp106 $tmp105.w 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_hash.h:162
+#                  hash_vector4_to_float(vector4(k.w, k.z, k.y, k.x)));
+	assign		$tmp108.x ___548_seed_for_kernel_center.w 	%line{162} %argrw{"wr"}
+	assign		$tmp108.y ___548_seed_for_kernel_center.z 	%argrw{"wr"}
+	assign		$tmp108.z ___548_seed_for_kernel_center.y 	%argrw{"wr"}
+	assign		$tmp108.w ___548_seed_for_kernel_center.x 	%argrw{"wr"}
+	functioncall	$const37 279 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_hash.h:87
+#   return hashnoise(vector3(k.x, k.y, k.z), k.w);
+	point		$tmp109 $tmp108.x $tmp108.y $tmp108.z 	%line{87} %argrw{"wrrr"}
+	hashnoise	$tmp107 $tmp109 $tmp108.w 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_hash.h:160
+#   return vector3(hash_vector4_to_float(k),
+	point		___548_kernel_center $tmp102 $tmp104 $tmp107 	%line{160} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:244
+#     vector3 position_in_kernel_space = position - kernel_center;
+	sub		___548_position_in_kernel_space ___556_position_in_cell_space ___548_kernel_center 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{244} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:248
+#     if (dot(position_in_kernel_space, position_in_kernel_space) >= 1.0) {
+	dot		$tmp110 ___548_position_in_kernel_space ___548_position_in_kernel_space 	%line{248} %argrw{"wrr"}
+	ge		$tmp111 $tmp110 $const1 	%argrw{"wrr"}
+	if		$tmp111 285 285 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:249
+#       continue;
+	continue	%line{249}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:254
+#     float weight = hash_vector4_to_float(seed_for_weight) < 0.5 ? -1.0 : 1.0;
+	functioncall	$const37 288 	%line{254} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_hash.h:87
+#   return hashnoise(vector3(k.x, k.y, k.z), k.w);
+	point		$tmp113 ___548_seed_for_weight.x ___548_seed_for_weight.y ___548_seed_for_weight.z 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_hash.h"} %line{87} %argrw{"wrrr"}
+	hashnoise	$tmp112 $tmp113 ___548_seed_for_weight.w 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:254
+#     float weight = hash_vector4_to_float(seed_for_weight) < 0.5 ? -1.0 : 1.0;
+	lt		$tmp114 $tmp112 $const18 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{254} %argrw{"wrr"}
+	if		$tmp114 291 292 	%argrw{"r"}
+	assign		___548_weight $const22 	%argrw{"wr"}
+	assign		___548_weight $const1 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:256
+#     noise += weight * compute_3d_gabor_kernel(position_in_kernel_space, frequency, orientation);
+	functioncall	$const39 312 	%line{256} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:180
+#   float distance_squared = dot(position, position);
+	dot		___542_distance_squared ___548_position_in_kernel_space ___548_position_in_kernel_space 	%line{180} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:181
+#   float hann_window = 0.5 + 0.5 * cos(M_PI * distance_squared);
+	mul		$tmp118 $const19 ___542_distance_squared 	%line{181} %argrw{"wrr"}
+	cos		$tmp117 $tmp118 	%argrw{"wr"}
+	mul		$tmp119 $const18 $tmp117 	%argrw{"wrr"}
+	add		___542_hann_window $const18 $tmp119 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:182
+#   float gaussian_envelop = exp(-M_PI * distance_squared);
+	mul		$tmp120 $const24 ___542_distance_squared 	%line{182} %argrw{"wrr"}
+	exp		___542_gaussian_envelop $tmp120 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:183
+#   float windowed_gaussian_envelope = gaussian_envelop * hann_window;
+	mul		___542_windowed_gaussian_envelope ___542_gaussian_envelop ___542_hann_window 	%line{183} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:185
+#   vector3 frequency_vector = frequency * orientation;
+	mul		___542_frequency_vector frequency ___548_orientation 	%line{185} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:186
+#   float angle = 2.0 * M_PI * dot(position, frequency_vector);
+	dot		$tmp121 ___548_position_in_kernel_space ___542_frequency_vector 	%line{186} %argrw{"wrr"}
+	mul		___542_angle $const26 $tmp121 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:187
+#   vector2 phasor = vector2(cos(angle), sin(angle));
+	cos		___542_phasor.x ___542_angle 	%line{187} %argrw{"wr"}
+	sin		___542_phasor.y ___542_angle 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:339
+# 
+	functioncall	$const25 312 	%line{339} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h:98
+#     return b * vector2(a, a);
+	assign		$tmp122.x ___542_windowed_gaussian_envelope 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{98} %argrw{"wr"}
+	assign		$tmp122.y ___542_windowed_gaussian_envelope 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:339
+# 
+	functioncall	$const25 312 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{339} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h:78
+#     return vector2(a.x * b.x, a.y * b.y);
+	mul		$tmp116.x ___542_phasor.x $tmp122.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{78} %argrw{"wrr"}
+	mul		$tmp116.y ___542_phasor.y $tmp122.y 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:339
+# 
+	functioncall	$const25 318 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{339} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h:98
+#     return b * vector2(a, a);
+	assign		$tmp123.x ___548_weight 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{98} %argrw{"wr"}
+	assign		$tmp123.y ___548_weight 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:339
+# 
+	functioncall	$const25 318 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{339} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h:78
+#     return vector2(a.x * b.x, a.y * b.y);
+	mul		$tmp115.x $tmp116.x $tmp123.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{78} %argrw{"wrr"}
+	mul		$tmp115.y $tmp116.y $tmp123.y 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:339
+# 
+	functioncall	$const12 321 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{339} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h:28
+#     return vector2(a.x + b.x, a.y + b.y);
+	add		___546_noise.x ___546_noise.x $tmp115.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{28} %argrw{"wrr"}
+	add		___546_noise.y ___546_noise.y $tmp115.y 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:235
+#   for (int i = 0; i < IMPULSES_COUNT; ++i) {
+	add		___547_i ___547_i $const7 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{235} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:258
+#   return noise;
+	assign		$tmp67.x ___546_noise.x 	%line{258} %argrw{"wr"}
+	assign		$tmp67.y ___546_noise.y 	%argrw{"wr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:339
+# 
+	functioncall	$const12 328 	%line{339} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h:28
+#     return vector2(a.x + b.x, a.y + b.y);
+	add		___550_sum.x ___550_sum.x $tmp67.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{28} %argrw{"wrr"}
+	add		___550_sum.y ___550_sum.y $tmp67.y 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:273
+#       for (int i = -1; i <= 1; i++) {
+	assign		$tmp124 ___555_i 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{273} %argrw{"wr"}
+	add		___555_i ___555_i $const7 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:272
+#     for (int j = -1; j <= 1; j++) {
+	assign		$tmp125 ___553_j 	%line{272} %argrw{"wr"}
+	add		___553_j ___553_j $const7 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:271
+#   for (int k = -1; k <= 1; k++) {
+	assign		$tmp126 ___551_k 	%line{271} %argrw{"wr"}
+	add		___551_k ___551_k $const7 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:283
+#   return sum;
+	assign		phasor.x ___550_sum.x 	%line{283} %argrw{"wr"}
+	assign		phasor.y ___550_sum.y 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:318
+#     standard_deviation = compute_3d_gabor_standard_deviation();
+	functioncall	$const40 342 	%line{318} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:197
+#   float integral_of_gabor_squared = 1.0 / (4.0 * M_SQRT2);
+	assign		___543_integral_of_gabor_squared $const41 	%line{197} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:198
+#   float second_moment = 0.5;
+	assign		___543_second_moment $const18 	%line{198} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:199
+#   return sqrt(IMPULSES_COUNT * second_moment * integral_of_gabor_squared);
+	mul		$tmp127 $const29 ___543_second_moment 	%line{199} %argrw{"wrr"}
+	mul		$tmp128 $tmp127 ___543_integral_of_gabor_squared 	%argrw{"wrr"}
+	sqrt		standard_deviation $tmp128 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:321
+#     error("Unknown type!");
+	error		$const42 	%line{321} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:326
+#   float normalization_factor = 6.0 * standard_deviation;
+	mul		normalization_factor $const43 standard_deviation 	%line{326} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:330
+#   Value = (phasor.y / normalization_factor) * 0.5 + 0.5;
+	div		$tmp129 phasor.y normalization_factor 	%line{330} %argrw{"wrr"}
+	mul		$tmp130 $tmp129 $const18 	%argrw{"wrr"}
+	add		Value $tmp130 $const18 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:334
+#   Phase = (atan2(phasor.y, phasor.x) + M_PI) / (2.0 * M_PI);
+	atan2		$tmp131 phasor.y phasor.x 	%line{334} %argrw{"wrr"}
+	add		$tmp132 $tmp131 $const19 	%argrw{"wrr"}
+	div		Phase $tmp132 $const26 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:337
+#   Intensity = length(phasor) / normalization_factor;
+	functioncall	$const34 356 	%line{337} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h:192
+#     return hypot (a.x, a.y);
+	functioncall	$const35 356 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{192} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:101
+# float hypot (float a, float b) { return sqrt (a*a + b*b); }
+	mul		$tmp134 phasor.x phasor.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{101} %argrw{"wrr"}
+	mul		$tmp135 phasor.y phasor.y 	%argrw{"wrr"}
+	add		$tmp136 $tmp134 $tmp135 	%argrw{"wrr"}
+	sqrt		$tmp133 $tmp136 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl:337
+#   Intensity = length(phasor) / normalization_factor;
+	div		Intensity $tmp133 normalization_factor 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gabor_texture.osl"} %line{337} %argrw{"wrr"}
+	end

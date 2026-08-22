@@ -1,0 +1,335 @@
+OpenShadingLanguage 1.00
+# Compiled by oslc 1.15.3.0
+# options: -q -O2 -IE:/Blender_Source/intern/cycles/kernel/osl/shaders -IE:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders -o E:/build_windows_Full_x64_vc17_Release/intern/cycles/kernel/osl/shaders/node_scatter_volume.oso
+shader node_scatter_volume
+param	string	phase	"Henyey-Greenstein"		%read{2,11} %write{2147483647,-1}
+param	color	Color	0.800000012 0.800000012 0.800000012		%read{104,104} %write{2147483647,-1}
+param	float	Density	1		%read{103,103} %write{2147483647,-1}
+param	float	Anisotropy	0		%read{7,101} %write{2147483647,-1}
+param	float	IOR	1.33000004		%read{4,4} %write{2147483647,-1}
+param	float	Backscatter	0.100000001		%read{4,4} %write{2147483647,-1}
+param	float	Alpha	0.5		%read{7,7} %write{2147483647,-1}
+param	float	Diameter	20		%read{14,14} %write{2147483647,-1}
+oparam	closure color	Volume			%read{2147483647,-1} %write{105,105}
+local	float	___370_d	%read{15,90} %write{14,14}
+local	float	___372_log_d	%read{31,54} %write{30,30}
+local	float	___372_a	%read{36,36} %write{33,33}
+local	float	___372_b	%read{36,36} %write{35,35}
+local	float	___372_c	%read{45,45} %write{41,41}
+local	float	___373_log_d	%read{60,75} %write{59,59}
+local	float	___373_temp	%read{75,75} %write{63,63}
+local	closure color	___374_scatter	%read{102,102} %write{1,101}
+local	float	___378_param.g_HG	%read{94,94} %write{18,81} %mystruct{___378_param} %mystructfield{0}
+local	float	___378_param.g_D	%read{95,95} %write{22,85} %mystruct{___378_param} %mystructfield{1}
+local	float	___378_param.alpha	%read{95,95} %write{23,89} %mystruct{___378_param} %mystructfield{2}
+local	float	___378_param.mixture	%read{97,99} %write{26,93} %mystruct{___378_param} %mystructfield{3}
+local	closure color	scatter_closure	%read{105,105} %write{102,102}
+const	string	$const1	"scatter"		%read{0,0} %write{2147483647,-1}
+const	int	$const2	0		%read{1,1} %write{2147483647,-1}
+const	string	$const3	"Fournier-Forand"		%read{2,2} %write{2147483647,-1}
+temp	int	$tmp1	%read{3,3} %write{2,2}
+const	string	$const4	"fournier_forand"		%read{4,4} %write{2147483647,-1}
+const	string	$const5	"Draine"		%read{5,5} %write{2147483647,-1}
+temp	int	$tmp2	%read{6,6} %write{5,5}
+const	string	$const6	"draine"		%read{7,95} %write{2147483647,-1}
+const	string	$const7	"Rayleigh"		%read{8,8} %write{2147483647,-1}
+temp	int	$tmp3	%read{9,9} %write{8,8}
+const	string	$const8	"rayleigh"		%read{10,10} %write{2147483647,-1}
+const	string	$const9	"Mie"		%read{11,11} %write{2147483647,-1}
+temp	int	$tmp4	%read{12,12} %write{11,11}
+const	string	$const10	"phase_mie_fitted_parameters"		%read{13,13} %write{2147483647,-1}
+const	float	$const11	0		%read{14,103} %write{2147483647,-1}
+const	float	$const12	0.100000001		%read{15,15} %write{2147483647,-1}
+temp	int	$tmp5	%read{16,16} %write{15,15}
+const	float	$const13	13.8000002		%read{17,17} %write{2147483647,-1}
+temp	float	$tmp6	%read{18,18} %write{17,17}
+const	float	$const14	1.14559996		%read{19,19} %write{2147483647,-1}
+temp	float	$tmp7	%read{22,22} %write{19,19}
+temp	float	$tmp8	%read{22,22} %write{21,21}
+const	float	$const15	9.29043961		%read{20,20} %write{2147483647,-1}
+temp	float	$tmp9	%read{21,21} %write{20,20}
+const	float	$const16	250		%read{23,48} %write{2147483647,-1}
+const	float	$const17	0.252977014		%read{26,26} %write{2147483647,-1}
+const	float	$const18	312.983002		%read{25,25} %write{2147483647,-1}
+temp	float	$tmp10	%read{25,25} %write{24,24}
+const	float	$const19	4.30000019		%read{24,24} %write{2147483647,-1}
+temp	float	$tmp11	%read{26,26} %write{25,25}
+const	float	$const20	1.5		%read{28,28} %write{2147483647,-1}
+temp	int	$tmp12	%read{29,29} %write{28,28}
+const	float	$const21	0.238603994		%read{31,31} %write{2147483647,-1}
+temp	float	$tmp13	%read{33,33} %write{31,31}
+const	float	$const22	1.00667		%read{32,32} %write{2147483647,-1}
+temp	float	$tmp14	%read{33,33} %write{32,32}
+const	float	$const23	0.507521987		%read{35,35} %write{2147483647,-1}
+const	float	$const24	0.156770006		%read{34,34} %write{2147483647,-1}
+temp	float	$tmp15	%read{35,35} %write{34,34}
+const	float	$const25	1.19692004		%read{38,38} %write{2147483647,-1}
+temp	float	$tmp16	%read{38,38} %write{37,37}
+temp	float	$tmp17	%read{37,37} %write{36,36}
+temp	float	$tmp18	%read{40,40} %write{38,38}
+const	float	$const26	1.37932003		%read{39,39} %write{2147483647,-1}
+temp	float	$tmp19	%read{40,40} %write{39,39}
+temp	float	$tmp20	%read{41,41} %write{40,40}
+const	float	$const27	0.0625834987		%read{41,41} %write{2147483647,-1}
+const	float	$const28	0.861999989		%read{44,44} %write{2147483647,-1}
+const	float	$const29	0.143000007		%read{42,42} %write{2147483647,-1}
+temp	float	$tmp21	%read{43,43} %write{42,42}
+temp	float	$tmp22	%read{44,44} %write{43,43}
+const	float	$const30	0.379685014		%read{46,46} %write{2147483647,-1}
+temp	float	$tmp23	%read{46,46} %write{45,45}
+temp	float	$tmp24	%read{47,47} %write{46,46}
+const	float	$const31	0.344213009		%read{47,47} %write{2147483647,-1}
+const	float	$const32	0.146209002		%read{52,52} %write{2147483647,-1}
+temp	float	$tmp25	%read{52,52} %write{51,51}
+const	float	$const33	3.38706994		%read{49,49} %write{2147483647,-1}
+temp	float	$tmp26	%read{50,50} %write{49,49}
+const	float	$const34	2.11192989		%read{50,50} %write{2147483647,-1}
+temp	float	$tmp27	%read{51,51} %write{50,50}
+temp	float	$tmp28	%read{53,53} %write{52,52}
+const	float	$const35	0.316071987		%read{53,53} %write{2147483647,-1}
+temp	float	$tmp29	%read{55,55} %write{53,53}
+const	float	$const36	0.0778917		%read{54,54} %write{2147483647,-1}
+temp	float	$tmp30	%read{55,55} %write{54,54}
+const	float	$const37	5		%read{57,57} %write{2147483647,-1}
+temp	int	$tmp31	%read{58,58} %write{57,57}
+const	float	$const38	5.68946981		%read{62,62} %write{2147483647,-1}
+temp	float	$tmp32	%read{61,61} %write{60,60}
+const	float	$const39	0.0292149		%read{61,61} %write{2147483647,-1}
+temp	float	$tmp33	%read{62,62} %write{61,61}
+temp	float	$tmp34	%read{63,63} %write{62,62}
+const	float	$const40	0.0604931004		%read{65,65} %write{2147483647,-1}
+temp	float	$tmp35	%read{65,65} %write{64,64}
+temp	float	$tmp36	%read{66,66} %write{65,65}
+const	float	$const41	0.940256		%read{66,66} %write{2147483647,-1}
+const	float	$const42	0.500410974		%read{72,72} %write{2147483647,-1}
+const	float	$const43	0.0812869966		%read{71,71} %write{2147483647,-1}
+const	float	$const44	-2		%read{67,67} %write{2147483647,-1}
+temp	float	$tmp37	%read{69,69} %write{67,67}
+temp	float	$tmp38	%read{69,69} %write{68,68}
+temp	float	$tmp39	%read{70,70} %write{69,69}
+const	float	$const45	1.27550995		%read{70,70} %write{2147483647,-1}
+temp	float	$tmp40	%read{71,71} %write{70,70}
+temp	float	$tmp41	%read{72,72} %write{71,71}
+const	float	$const46	7.30354023		%read{73,73} %write{2147483647,-1}
+temp	float	$tmp42	%read{74,74} %write{73,73}
+const	float	$const47	6.31675005		%read{74,74} %write{2147483647,-1}
+const	float	$const48	0.0269140005		%read{76,76} %write{2147483647,-1}
+temp	float	$tmp43	%read{76,76} %write{75,75}
+temp	float	$tmp44	%read{77,77} %write{76,76}
+const	float	$const49	0.376399994		%read{77,77} %write{2147483647,-1}
+const	float	$const50	-0.0990566984		%read{80,80} %write{2147483647,-1}
+const	float	$const51	1.67154002		%read{79,79} %write{2147483647,-1}
+temp	float	$tmp45	%read{80,80} %write{79,79}
+temp	float	$tmp46	%read{81,81} %write{80,80}
+const	float	$const52	-2.20678997		%read{83,83} %write{2147483647,-1}
+const	float	$const53	3.91029		%read{82,82} %write{2147483647,-1}
+temp	float	$tmp47	%read{83,83} %write{82,82}
+temp	float	$tmp48	%read{84,84} %write{83,83}
+const	float	$const54	0.428934008		%read{84,84} %write{2147483647,-1}
+temp	float	$tmp49	%read{85,85} %write{84,84}
+const	float	$const55	3.62489009		%read{88,88} %write{2147483647,-1}
+const	float	$const56	8.29288006		%read{87,87} %write{2147483647,-1}
+const	float	$const57	5.52825022		%read{86,86} %write{2147483647,-1}
+temp	float	$tmp50	%read{87,87} %write{86,86}
+temp	float	$tmp51	%read{88,88} %write{87,87}
+temp	float	$tmp52	%read{89,89} %write{88,88}
+const	float	$const58	-0.599084973		%read{91,91} %write{2147483647,-1}
+const	float	$const59	0.641583025		%read{90,90} %write{2147483647,-1}
+temp	float	$tmp53	%read{91,91} %write{90,90}
+temp	float	$tmp54	%read{92,92} %write{91,91}
+const	float	$const60	0.665888011		%read{92,92} %write{2147483647,-1}
+temp	float	$tmp55	%read{93,93} %write{92,92}
+temp	closure color	$tmp56	%read{98,98} %write{94,94}
+const	string	$const61	"henyey_greenstein"		%read{94,101} %write{2147483647,-1}
+temp	closure color	$tmp57	%read{99,99} %write{95,95}
+const	string	$const62	"mix"		%read{96,96} %write{2147483647,-1}
+temp	float	$tmp58	%read{98,98} %write{97,97}
+const	float	$const64	1		%read{97,97} %write{2147483647,-1}
+temp	closure color	$tmp59	%read{100,100} %write{98,98}
+temp	closure color	$tmp60	%read{100,100} %write{99,99}
+temp	float	$tmp61	%read{104,104} %write{103,103}
+temp	color	$tmp62	%read{105,105} %write{104,104}
+code ___main___
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_scatter_volume.osl:17
+#   closure color scatter_closure = scatter(phase, Anisotropy, IOR, Backscatter, Alpha, Diameter);
+	functioncall	$const1 103 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_scatter_volume.osl"} %line{17} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:54
+#   closure color scatter = 0;
+	assign		___374_scatter $const2 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h"} %line{54} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:55
+#   if (phase == "Fournier-Forand") {
+	eq		$tmp1 phase $const3 	%line{55} %argrw{"wrr"}
+	if		$tmp1 5 102 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:56
+#     scatter = fournier_forand(Backscatter, IOR);
+	closure		___374_scatter $const4 Backscatter IOR 	%line{56} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:58
+#   else if (phase == "Draine") {
+	eq		$tmp2 phase $const5 	%line{58} %argrw{"wrr"}
+	if		$tmp2 8 102 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:59
+#     scatter = draine(Anisotropy, Alpha);
+	closure		___374_scatter $const6 Anisotropy Alpha 	%line{59} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:61
+#   else if (phase == "Rayleigh") {
+	eq		$tmp3 phase $const7 	%line{61} %argrw{"wrr"}
+	if		$tmp3 11 102 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:62
+#     scatter = rayleigh();
+	closure		___374_scatter $const8 	%line{62} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:64
+#   else if (phase == "Mie") {
+	eq		$tmp4 phase $const9 	%line{64} %argrw{"wrr"}
+	if		$tmp4 101 102 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:67
+#     MieParameters param = phase_mie_fitted_parameters(Diameter);
+	functioncall	$const10 94 	%line{67} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:16
+#   float d = max(Diameter, 0.0);
+	max		___370_d Diameter $const11 	%line{16} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:17
+#   if (d <= 0.1) {
+	le		$tmp5 ___370_d $const12 	%line{17} %argrw{"wrr"}
+	if		$tmp5 28 28 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:19
+#     return {13.8 * d * d, 1.1456 * d * sin(9.29044 * d), 250.0, 0.252977 - 312.983 * pow(d, 4.3)};
+	mul		$tmp6 $const13 ___370_d 	%line{19} %argrw{"wrr"}
+	mul		___378_param.g_HG $tmp6 ___370_d 	%argrw{"wrr"}
+	mul		$tmp7 $const14 ___370_d 	%argrw{"wrr"}
+	mul		$tmp9 $const15 ___370_d 	%argrw{"wrr"}
+	sin		$tmp8 $tmp9 	%argrw{"wr"}
+	mul		___378_param.g_D $tmp7 $tmp8 	%argrw{"wrr"}
+	assign		___378_param.alpha $const16 	%argrw{"wr"}
+	pow		$tmp10 ___370_d $const19 	%argrw{"wrr"}
+	mul		$tmp11 $const18 $tmp10 	%argrw{"wrr"}
+	sub		___378_param.mixture $const17 $tmp11 	%argrw{"wrr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:22
+#   if (d < 1.5) {
+	lt		$tmp12 ___370_d $const20 	%line{22} %argrw{"wrr"}
+	if		$tmp12 57 57 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:24
+#     float log_d = log(d);
+	log		___372_log_d ___370_d 	%line{24} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:25
+#     float a = (log_d - 0.238604) * (log_d + 1.00667);
+	sub		$tmp13 ___372_log_d $const21 	%line{25} %argrw{"wrr"}
+	add		$tmp14 ___372_log_d $const22 	%argrw{"wrr"}
+	mul		___372_a $tmp13 $tmp14 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:26
+#     float b = 0.507522 - 0.15677 * log_d;
+	mul		$tmp15 $const24 ___372_log_d 	%line{26} %argrw{"wrr"}
+	sub		___372_b $const23 $tmp15 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:27
+#     float c = 1.19692 * cos(a / b) + 1.37932 * log_d + 0.0625835;
+	div		$tmp17 ___372_a ___372_b 	%line{27} %argrw{"wrr"}
+	cos		$tmp16 $tmp17 	%argrw{"wr"}
+	mul		$tmp18 $const25 $tmp16 	%argrw{"wrr"}
+	mul		$tmp19 $const26 ___372_log_d 	%argrw{"wrr"}
+	add		$tmp20 $tmp18 $tmp19 	%argrw{"wrr"}
+	add		___372_c $tmp20 $const27 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:28
+#     return {0.862 - 0.143 * log_d * log_d,
+	mul		$tmp21 $const29 ___372_log_d 	%line{28} %argrw{"wrr"}
+	mul		$tmp22 $tmp21 ___372_log_d 	%argrw{"wrr"}
+	sub		___378_param.g_HG $const28 $tmp22 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:29
+#             0.379685 * cos(c) + 0.344213,
+	cos		$tmp23 ___372_c 	%line{29} %argrw{"wr"}
+	mul		$tmp24 $const30 $tmp23 	%argrw{"wrr"}
+	add		___378_param.g_D $tmp24 $const31 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:28
+#     return {0.862 - 0.143 * log_d * log_d,
+	assign		___378_param.alpha $const16 	%line{28} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:31
+#             0.146209 * cos(3.38707 * log_d + 2.11193) + 0.316072 + 0.0778917 * log_d};
+	mul		$tmp26 $const33 ___372_log_d 	%line{31} %argrw{"wrr"}
+	add		$tmp27 $tmp26 $const34 	%argrw{"wrr"}
+	cos		$tmp25 $tmp27 	%argrw{"wr"}
+	mul		$tmp28 $const32 $tmp25 	%argrw{"wrr"}
+	add		$tmp29 $tmp28 $const35 	%argrw{"wrr"}
+	mul		$tmp30 $const36 ___372_log_d 	%argrw{"wrr"}
+	add		___378_param.mixture $tmp29 $tmp30 	%argrw{"wrr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:34
+#   if (d < 5.0) {
+	lt		$tmp31 ___370_d $const37 	%line{34} %argrw{"wrr"}
+	if		$tmp31 79 79 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:36
+#     float log_d = log(d);
+	log		___373_log_d ___370_d 	%line{36} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:37
+#     float temp = cos(5.68947 * (log(log_d) - 0.0292149));
+	log		$tmp32 ___373_log_d 	%line{37} %argrw{"wr"}
+	sub		$tmp33 $tmp32 $const39 	%argrw{"wrr"}
+	mul		$tmp34 $const38 $tmp33 	%argrw{"wrr"}
+	cos		___373_temp $tmp34 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:38
+#     return {0.0604931 * log(log_d) + 0.940256,
+	log		$tmp35 ___373_log_d 	%line{38} %argrw{"wr"}
+	mul		$tmp36 $const40 $tmp35 	%argrw{"wrr"}
+	add		___378_param.g_HG $tmp36 $const41 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:39
+#             0.500411 - (0.081287 / (-2.0 * log_d + tan(log_d) + 1.27551)),
+	mul		$tmp37 $const44 ___373_log_d 	%line{39} %argrw{"wrr"}
+	tan		$tmp38 ___373_log_d 	%argrw{"wr"}
+	add		$tmp39 $tmp37 $tmp38 	%argrw{"wrr"}
+	add		$tmp40 $tmp39 $const45 	%argrw{"wrr"}
+	div		$tmp41 $const43 $tmp40 	%argrw{"wrr"}
+	sub		___378_param.g_D $const42 $tmp41 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:40
+#             7.30354 * log_d + 6.31675,
+	mul		$tmp42 $const46 ___373_log_d 	%line{40} %argrw{"wrr"}
+	add		___378_param.alpha $tmp42 $const47 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:41
+#             0.026914 * (log_d - temp) + 0.3764};
+	sub		$tmp43 ___373_log_d ___373_temp 	%line{41} %argrw{"wrr"}
+	mul		$tmp44 $const48 $tmp43 	%argrw{"wrr"}
+	add		___378_param.mixture $tmp44 $const49 	%argrw{"wrr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:45
+#   return {exp(-0.0990567 / (d - 1.67154)),
+	sub		$tmp45 ___370_d $const51 	%line{45} %argrw{"wrr"}
+	div		$tmp46 $const50 $tmp45 	%argrw{"wrr"}
+	exp		___378_param.g_HG $tmp46 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:46
+#           exp(-2.20679 / (d + 3.91029) - 0.428934),
+	add		$tmp47 ___370_d $const53 	%line{46} %argrw{"wrr"}
+	div		$tmp48 $const52 $tmp47 	%argrw{"wrr"}
+	sub		$tmp49 $tmp48 $const54 	%argrw{"wrr"}
+	exp		___378_param.g_D $tmp49 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:47
+#           exp(3.62489 - 8.29288 / (d + 5.52825)),
+	add		$tmp50 ___370_d $const57 	%line{47} %argrw{"wrr"}
+	div		$tmp51 $const56 $tmp50 	%argrw{"wrr"}
+	sub		$tmp52 $const55 $tmp51 	%argrw{"wrr"}
+	exp		___378_param.alpha $tmp52 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:48
+#           exp(-0.599085 / (d - 0.641583) - 0.665888)};
+	sub		$tmp53 ___370_d $const59 	%line{48} %argrw{"wrr"}
+	div		$tmp54 $const58 $tmp53 	%argrw{"wrr"}
+	sub		$tmp55 $tmp54 $const60 	%argrw{"wrr"}
+	exp		___378_param.mixture $tmp55 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:68
+#     scatter = mix(henyey_greenstein(param.g_HG), draine(param.g_D, param.alpha), param.mixture);
+	closure		$tmp56 $const61 ___378_param.g_HG 	%line{68} %argrw{"wrr"}
+	closure		$tmp57 $const6 ___378_param.g_D ___378_param.alpha 	%argrw{"wrrr"}
+	functioncall	$const62 101 	%argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:164
+# closure color mix (closure color x, closure color y, float a) { return x*(1-a) + y*a; }
+	sub		$tmp58 $const64 ___378_param.mixture 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{164} %argrw{"wrr"}
+	mul		$tmp59 $tmp56 $tmp58 	%argrw{"wrr"}
+	mul		$tmp60 $tmp57 ___378_param.mixture 	%argrw{"wrr"}
+	add		___374_scatter $tmp59 $tmp60 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:71
+#     scatter = henyey_greenstein(Anisotropy);
+	closure		___374_scatter $const61 Anisotropy 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h"} %line{71} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:73
+#   return scatter;
+	assign		scatter_closure ___374_scatter 	%line{73} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_scatter_volume.osl:19
+#   Volume = (Color * max(Density, 0.0)) * scatter_closure;
+	max		$tmp61 Density $const11 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_scatter_volume.osl"} %line{19} %argrw{"wrr"}
+	mul		$tmp62 Color $tmp61 	%argrw{"wrr"}
+	mul		Volume scatter_closure $tmp62 	%argrw{"wrr"}
+	end

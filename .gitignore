@@ -1,0 +1,47 @@
+# Debug symbols and linker output are not part of the portable user build.
+*.pdb
+*.lib
+*.exp
+
+# Build-time helper executables installed beside Blender but not needed by users.
+/datatoc.exe
+/makesdna.exe
+/makesrna.exe
+/msgfmt.exe
+/shader_tool.exe
+/zstd_compress.exe
+
+# Local packaging and temporary files.
+*.log
+*.tmp
+*.bak
+*.manifest.json
+*.sha256
+/BIKINI-Blender-*.zip
+
+# Local backup / previous binaries (not the shipping build).
+/blender.exe.old*
+/blender.exe.prev*
+/blender.exe.bak*
+/blender.exe.pre*
+/blender.exe.locked*
+/blender.exe.stale*
+/blender.exe.*.bak
+
+# Dev / verification builds and helper scripts (not the portable product).
+/blender_enable_io_verify.exe
+/blender_timeshift_interactive.exe
+/verify_*.py
+/verify_*.cmd
+/test_capture_crash*.py
+/test_*.py
+
+# Python byte-code generated when this portable build is run locally.
+__pycache__/
+*.py[cod]
+
+# Common editor/OS metadata.
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

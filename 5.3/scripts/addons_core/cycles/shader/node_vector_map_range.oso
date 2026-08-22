@@ -1,0 +1,547 @@
+OpenShadingLanguage 1.00
+# Compiled by oslc 1.15.3.0
+# options: -q -O2 -IE:/Blender_Source/intern/cycles/kernel/osl/shaders -IE:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders -o E:/build_windows_Full_x64_vc17_Release/intern/cycles/kernel/osl/shaders/node_vector_map_range.oso
+shader node_vector_map_range
+param	string	range_type	"linear"		%read{6,109} %write{2147483647,-1}
+param	int	use_clamp	0		%read{182,182} %write{2147483647,-1}
+param	point	VectorIn	1 1 1		%read{0,0} %write{2147483647,-1}
+param	point	From_Min_FLOAT3	0 0 0		%read{1,1} %write{2147483647,-1}
+param	point	From_Max_FLOAT3	1 1 1		%read{2,2} %write{2147483647,-1}
+param	point	To_Min_FLOAT3	0 0 0		%read{3,3} %write{2147483647,-1}
+param	point	To_Max_FLOAT3	1 1 1		%read{4,4} %write{2147483647,-1}
+param	point	Steps_FLOAT3	4 4 4		%read{5,5} %write{2147483647,-1}
+oparam	point	VectorOut	0 0 0		%read{188,228} %write{181,234}
+local	point	factor	%read{8,180} %write{0,178}
+local	point	from_min	%read{8,152} %write{1,1}
+local	point	from_max	%read{9,152} %write{2,2}
+local	point	to_min	%read{179,229} %write{3,3}
+local	point	to_max	%read{179,230} %write{4,4}
+local	point	steps	%read{36,66} %write{5,5}
+const	string	$const1	"stepped"		%read{6,6} %write{2147483647,-1}
+temp	int	$tmp1	%read{7,7} %write{6,6}
+temp	vector	$tmp2	%read{11,27} %write{8,8}
+temp	vector	$tmp3	%read{12,28} %write{9,9}
+const	string	$const2	"safe_divide"		%read{10,172} %write{2147483647,-1}
+temp	float	$tmp4	%read{35,35} %write{16,17}
+const	int	$const3	0		%read{11,200} %write{2147483647,-1}
+temp	float	$tmp5	%read{16,16} %write{11,11}
+temp	float	$tmp6	%read{14,16} %write{12,12}
+const	float	$const4	0		%read{14,176} %write{2147483647,-1}
+temp	int	$tmp7	%read{15,15} %write{14,14}
+temp	float	$tmp8	%read{35,35} %write{24,25}
+const	int	$const5	1		%read{19,217} %write{2147483647,-1}
+temp	float	$tmp9	%read{24,24} %write{19,19}
+temp	float	$tmp10	%read{22,24} %write{20,20}
+temp	int	$tmp11	%read{23,23} %write{22,22}
+temp	float	$tmp12	%read{35,35} %write{32,33}
+const	int	$const6	2		%read{27,234} %write{2147483647,-1}
+temp	float	$tmp13	%read{32,32} %write{27,27}
+temp	float	$tmp14	%read{30,32} %write{28,28}
+temp	int	$tmp15	%read{31,31} %write{30,30}
+temp	float	$tmp16	%read{69,69} %write{45,46}
+temp	float	$tmp17	%read{37,37} %write{36,36}
+temp	int	$tmp18	%read{38,38} %write{37,37}
+temp	float	$tmp19	%read{45,45} %write{43,43}
+temp	float	$tmp20	%read{42,42} %write{39,39}
+temp	float	$tmp21	%read{41,41} %write{40,40}
+const	float	$const7	1		%read{41,140} %write{2147483647,-1}
+temp	float	$tmp22	%read{42,42} %write{41,41}
+temp	float	$tmp23	%read{43,43} %write{42,42}
+temp	float	$tmp24	%read{45,45} %write{44,44}
+temp	float	$tmp25	%read{69,69} %write{56,57}
+temp	float	$tmp26	%read{48,48} %write{47,47}
+temp	int	$tmp27	%read{49,49} %write{48,48}
+temp	float	$tmp28	%read{56,56} %write{54,54}
+temp	float	$tmp29	%read{53,53} %write{50,50}
+temp	float	$tmp30	%read{52,52} %write{51,51}
+temp	float	$tmp31	%read{53,53} %write{52,52}
+temp	float	$tmp32	%read{54,54} %write{53,53}
+temp	float	$tmp33	%read{56,56} %write{55,55}
+temp	float	$tmp34	%read{69,69} %write{67,68}
+temp	float	$tmp35	%read{59,59} %write{58,58}
+temp	int	$tmp36	%read{60,60} %write{59,59}
+temp	float	$tmp37	%read{67,67} %write{65,65}
+temp	float	$tmp38	%read{64,64} %write{61,61}
+temp	float	$tmp39	%read{63,63} %write{62,62}
+temp	float	$tmp40	%read{64,64} %write{63,63}
+temp	float	$tmp41	%read{65,65} %write{64,64}
+temp	float	$tmp42	%read{67,67} %write{66,66}
+const	string	$const8	"smoothstep"		%read{70,70} %write{2147483647,-1}
+temp	int	$tmp43	%read{71,71} %write{70,70}
+temp	vector	$tmp44	%read{75,91} %write{72,72}
+temp	vector	$tmp45	%read{76,92} %write{73,73}
+temp	float	$tmp46	%read{99,99} %write{80,81}
+temp	float	$tmp47	%read{80,80} %write{75,75}
+temp	float	$tmp48	%read{78,80} %write{76,76}
+temp	int	$tmp49	%read{79,79} %write{78,78}
+temp	float	$tmp50	%read{99,99} %write{88,89}
+temp	float	$tmp51	%read{88,88} %write{83,83}
+temp	float	$tmp52	%read{86,88} %write{84,84}
+temp	int	$tmp53	%read{87,87} %write{86,86}
+temp	float	$tmp54	%read{99,99} %write{96,97}
+temp	float	$tmp55	%read{96,96} %write{91,91}
+temp	float	$tmp56	%read{94,96} %write{92,92}
+temp	int	$tmp57	%read{95,95} %write{94,94}
+temp	point	$tmp58	%read{104,104} %write{100,100}
+temp	point	$tmp59	%read{103,103} %write{101,101}
+const	string	$const9	"clamp"		%read{102,231} %write{2147483647,-1}
+temp	point	$tmp60	%read{104,104} %write{103,103}
+const	float	$const10	3		%read{106,106} %write{2147483647,-1}
+const	float	$const11	2		%read{105,105} %write{2147483647,-1}
+temp	point	$tmp61	%read{106,106} %write{105,105}
+temp	point	$tmp62	%read{108,108} %write{106,106}
+temp	point	$tmp63	%read{108,108} %write{107,107}
+const	string	$const12	"smootherstep"		%read{109,109} %write{2147483647,-1}
+temp	int	$tmp64	%read{110,110} %write{109,109}
+temp	vector	$tmp65	%read{114,130} %write{111,111}
+temp	vector	$tmp66	%read{115,131} %write{112,112}
+temp	float	$tmp67	%read{138,138} %write{119,120}
+temp	float	$tmp68	%read{119,119} %write{114,114}
+temp	float	$tmp69	%read{117,119} %write{115,115}
+temp	int	$tmp70	%read{118,118} %write{117,117}
+temp	float	$tmp71	%read{138,138} %write{127,128}
+temp	float	$tmp72	%read{127,127} %write{122,122}
+temp	float	$tmp73	%read{125,127} %write{123,123}
+temp	int	$tmp74	%read{126,126} %write{125,125}
+temp	float	$tmp75	%read{138,138} %write{135,136}
+temp	float	$tmp76	%read{135,135} %write{130,130}
+temp	float	$tmp77	%read{133,135} %write{131,131}
+temp	int	$tmp78	%read{134,134} %write{133,133}
+temp	point	$tmp79	%read{143,143} %write{139,139}
+temp	point	$tmp80	%read{142,142} %write{140,140}
+temp	point	$tmp81	%read{143,143} %write{142,142}
+temp	point	$tmp82	%read{145,145} %write{144,144}
+temp	point	$tmp83	%read{150,150} %write{145,145}
+const	float	$const13	6		%read{146,146} %write{2147483647,-1}
+temp	point	$tmp84	%read{147,147} %write{146,146}
+const	float	$const14	15		%read{147,147} %write{2147483647,-1}
+temp	point	$tmp85	%read{148,148} %write{147,147}
+temp	point	$tmp86	%read{149,149} %write{148,148}
+const	float	$const15	10		%read{149,149} %write{2147483647,-1}
+temp	point	$tmp87	%read{150,150} %write{149,149}
+temp	vector	$tmp88	%read{154,170} %write{151,151}
+temp	vector	$tmp89	%read{155,171} %write{152,152}
+temp	float	$tmp90	%read{178,178} %write{159,160}
+temp	float	$tmp91	%read{159,159} %write{154,154}
+temp	float	$tmp92	%read{157,159} %write{155,155}
+temp	int	$tmp93	%read{158,158} %write{157,157}
+temp	float	$tmp94	%read{178,178} %write{167,168}
+temp	float	$tmp95	%read{167,167} %write{162,162}
+temp	float	$tmp96	%read{165,167} %write{163,163}
+temp	int	$tmp97	%read{166,166} %write{165,165}
+temp	float	$tmp98	%read{178,178} %write{175,176}
+temp	float	$tmp99	%read{175,175} %write{170,170}
+temp	float	$tmp100	%read{173,175} %write{171,171}
+temp	int	$tmp101	%read{174,174} %write{173,173}
+temp	vector	$tmp102	%read{180,180} %write{179,179}
+temp	point	$tmp103	%read{181,181} %write{180,180}
+temp	int	$tmp104	%read{183,183} %write{182,182}
+temp	float	$tmp105	%read{200,200} %write{193,199}
+temp	float	$tmp106	%read{186,186} %write{184,184}
+temp	float	$tmp107	%read{186,186} %write{185,185}
+temp	int	$tmp108	%read{187,187} %write{186,186}
+temp	float	$tmp109	%read{192,192} %write{188,188}
+temp	float	$tmp110	%read{193,193} %write{189,189}
+temp	float	$tmp111	%read{192,192} %write{190,190}
+temp	float	$tmp112	%read{193,193} %write{192,192}
+temp	float	$tmp113	%read{198,198} %write{194,194}
+temp	float	$tmp114	%read{199,199} %write{195,195}
+temp	float	$tmp115	%read{198,198} %write{196,196}
+temp	float	$tmp116	%read{199,199} %write{198,198}
+temp	float	$tmp117	%read{217,217} %write{210,216}
+temp	float	$tmp118	%read{203,203} %write{201,201}
+temp	float	$tmp119	%read{203,203} %write{202,202}
+temp	int	$tmp120	%read{204,204} %write{203,203}
+temp	float	$tmp121	%read{209,209} %write{205,205}
+temp	float	$tmp122	%read{210,210} %write{206,206}
+temp	float	$tmp123	%read{209,209} %write{207,207}
+temp	float	$tmp124	%read{210,210} %write{209,209}
+temp	float	$tmp125	%read{215,215} %write{211,211}
+temp	float	$tmp126	%read{216,216} %write{212,212}
+temp	float	$tmp127	%read{215,215} %write{213,213}
+temp	float	$tmp128	%read{216,216} %write{215,215}
+temp	float	$tmp129	%read{234,234} %write{227,233}
+temp	float	$tmp130	%read{220,220} %write{218,218}
+temp	float	$tmp131	%read{220,220} %write{219,219}
+temp	int	$tmp132	%read{221,221} %write{220,220}
+temp	float	$tmp133	%read{226,226} %write{222,222}
+temp	float	$tmp134	%read{227,227} %write{223,223}
+temp	float	$tmp135	%read{226,226} %write{224,224}
+temp	float	$tmp136	%read{227,227} %write{226,226}
+temp	float	$tmp137	%read{232,232} %write{228,228}
+temp	float	$tmp138	%read{233,233} %write{229,229}
+temp	float	$tmp139	%read{232,232} %write{230,230}
+temp	float	$tmp140	%read{233,233} %write{232,232}
+code ___main___
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:27
+#   point factor = VectorIn;
+	assign		factor VectorIn 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl"} %line{27} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:28
+#   point from_min = From_Min_FLOAT3;
+	assign		from_min From_Min_FLOAT3 	%line{28} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:29
+#   point from_max = From_Max_FLOAT3;
+	assign		from_max From_Max_FLOAT3 	%line{29} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:30
+#   point to_min = To_Min_FLOAT3;
+	assign		to_min To_Min_FLOAT3 	%line{30} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:31
+#   point to_max = To_Max_FLOAT3;
+	assign		to_max To_Max_FLOAT3 	%line{31} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:32
+#   point steps = Steps_FLOAT3;
+	assign		steps Steps_FLOAT3 	%line{32} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:34
+#   if (range_type == "stepped") {
+	eq		$tmp1 range_type $const1 	%line{34} %argrw{"wrr"}
+	if		$tmp1 70 179 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:35
+#     factor = safe_divide((factor - from_min), (from_max - from_min));
+	sub		$tmp2 factor from_min 	%line{35} %argrw{"wrr"}
+	sub		$tmp3 from_max from_min 	%argrw{"wrr"}
+	functioncall	$const2 36 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:14
+#   return point(safe_divide(a.x, b.x), safe_divide(a.y, b.y), safe_divide(a.z, b.z));
+	compref		$tmp5 $tmp2 $const3 	%line{14} %argrw{"wrr"}
+	compref		$tmp6 $tmp3 $const3 	%argrw{"wrr"}
+	functioncall	$const2 19 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:9
+#   return (b != 0.0) ? a / b : 0.0;
+	neq		$tmp7 $tmp6 $const4 	%line{9} %argrw{"wrr"}
+	if		$tmp7 17 18 	%argrw{"r"}
+	div		$tmp4 $tmp5 $tmp6 	%argrw{"wrr"}
+	assign		$tmp4 $const4 	%argrw{"wr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:14
+#   return point(safe_divide(a.x, b.x), safe_divide(a.y, b.y), safe_divide(a.z, b.z));
+	compref		$tmp9 $tmp2 $const5 	%line{14} %argrw{"wrr"}
+	compref		$tmp10 $tmp3 $const5 	%argrw{"wrr"}
+	functioncall	$const2 27 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:9
+#   return (b != 0.0) ? a / b : 0.0;
+	neq		$tmp11 $tmp10 $const4 	%line{9} %argrw{"wrr"}
+	if		$tmp11 25 26 	%argrw{"r"}
+	div		$tmp8 $tmp9 $tmp10 	%argrw{"wrr"}
+	assign		$tmp8 $const4 	%argrw{"wr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:14
+#   return point(safe_divide(a.x, b.x), safe_divide(a.y, b.y), safe_divide(a.z, b.z));
+	compref		$tmp13 $tmp2 $const6 	%line{14} %argrw{"wrr"}
+	compref		$tmp14 $tmp3 $const6 	%argrw{"wrr"}
+	functioncall	$const2 35 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:9
+#   return (b != 0.0) ? a / b : 0.0;
+	neq		$tmp15 $tmp14 $const4 	%line{9} %argrw{"wrr"}
+	if		$tmp15 33 34 	%argrw{"r"}
+	div		$tmp12 $tmp13 $tmp14 	%argrw{"wrr"}
+	assign		$tmp12 $const4 	%argrw{"wr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:14
+#   return point(safe_divide(a.x, b.x), safe_divide(a.y, b.y), safe_divide(a.z, b.z));
+	point		factor $tmp4 $tmp8 $tmp12 	%line{14} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:36
+#     factor = point((steps.x > 0.0) ? floor(factor.x * (steps.x + 1.0)) / steps.x : 0.0,
+	compref		$tmp17 steps $const3 	%line{36} %argrw{"wrr"}
+	gt		$tmp18 $tmp17 $const4 	%argrw{"wrr"}
+	if		$tmp18 46 47 	%argrw{"r"}
+	compref		$tmp20 factor $const3 	%argrw{"wrr"}
+	compref		$tmp21 steps $const3 	%argrw{"wrr"}
+	add		$tmp22 $tmp21 $const7 	%argrw{"wrr"}
+	mul		$tmp23 $tmp20 $tmp22 	%argrw{"wrr"}
+	floor		$tmp19 $tmp23 	%argrw{"wr"}
+	compref		$tmp24 steps $const3 	%argrw{"wrr"}
+	div		$tmp16 $tmp19 $tmp24 	%argrw{"wrr"}
+	assign		$tmp16 $const4 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:37
+#                    (steps.y > 0.0) ? floor(factor.y * (steps.y + 1.0)) / steps.y : 0.0,
+	compref		$tmp26 steps $const5 	%line{37} %argrw{"wrr"}
+	gt		$tmp27 $tmp26 $const4 	%argrw{"wrr"}
+	if		$tmp27 57 58 	%argrw{"r"}
+	compref		$tmp29 factor $const5 	%argrw{"wrr"}
+	compref		$tmp30 steps $const5 	%argrw{"wrr"}
+	add		$tmp31 $tmp30 $const7 	%argrw{"wrr"}
+	mul		$tmp32 $tmp29 $tmp31 	%argrw{"wrr"}
+	floor		$tmp28 $tmp32 	%argrw{"wr"}
+	compref		$tmp33 steps $const5 	%argrw{"wrr"}
+	div		$tmp25 $tmp28 $tmp33 	%argrw{"wrr"}
+	assign		$tmp25 $const4 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:38
+#                    (steps.z > 0.0) ? floor(factor.z * (steps.z + 1.0)) / steps.z : 0.0);
+	compref		$tmp35 steps $const6 	%line{38} %argrw{"wrr"}
+	gt		$tmp36 $tmp35 $const4 	%argrw{"wrr"}
+	if		$tmp36 68 69 	%argrw{"r"}
+	compref		$tmp38 factor $const6 	%argrw{"wrr"}
+	compref		$tmp39 steps $const6 	%argrw{"wrr"}
+	add		$tmp40 $tmp39 $const7 	%argrw{"wrr"}
+	mul		$tmp41 $tmp38 $tmp40 	%argrw{"wrr"}
+	floor		$tmp37 $tmp41 	%argrw{"wr"}
+	compref		$tmp42 steps $const6 	%argrw{"wrr"}
+	div		$tmp34 $tmp37 $tmp42 	%argrw{"wrr"}
+	assign		$tmp34 $const4 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:36
+#     factor = point((steps.x > 0.0) ? floor(factor.x * (steps.x + 1.0)) / steps.x : 0.0,
+	point		factor $tmp16 $tmp25 $tmp34 	%line{36} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:40
+#   else if (range_type == "smoothstep") {
+	eq		$tmp43 range_type $const8 	%line{40} %argrw{"wrr"}
+	if		$tmp43 109 179 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:41
+#     factor = safe_divide((factor - from_min), (from_max - from_min));
+	sub		$tmp44 factor from_min 	%line{41} %argrw{"wrr"}
+	sub		$tmp45 from_max from_min 	%argrw{"wrr"}
+	functioncall	$const2 100 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:14
+#   return point(safe_divide(a.x, b.x), safe_divide(a.y, b.y), safe_divide(a.z, b.z));
+	compref		$tmp47 $tmp44 $const3 	%line{14} %argrw{"wrr"}
+	compref		$tmp48 $tmp45 $const3 	%argrw{"wrr"}
+	functioncall	$const2 83 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:9
+#   return (b != 0.0) ? a / b : 0.0;
+	neq		$tmp49 $tmp48 $const4 	%line{9} %argrw{"wrr"}
+	if		$tmp49 81 82 	%argrw{"r"}
+	div		$tmp46 $tmp47 $tmp48 	%argrw{"wrr"}
+	assign		$tmp46 $const4 	%argrw{"wr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:14
+#   return point(safe_divide(a.x, b.x), safe_divide(a.y, b.y), safe_divide(a.z, b.z));
+	compref		$tmp51 $tmp44 $const5 	%line{14} %argrw{"wrr"}
+	compref		$tmp52 $tmp45 $const5 	%argrw{"wrr"}
+	functioncall	$const2 91 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:9
+#   return (b != 0.0) ? a / b : 0.0;
+	neq		$tmp53 $tmp52 $const4 	%line{9} %argrw{"wrr"}
+	if		$tmp53 89 90 	%argrw{"r"}
+	div		$tmp50 $tmp51 $tmp52 	%argrw{"wrr"}
+	assign		$tmp50 $const4 	%argrw{"wr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:14
+#   return point(safe_divide(a.x, b.x), safe_divide(a.y, b.y), safe_divide(a.z, b.z));
+	compref		$tmp55 $tmp44 $const6 	%line{14} %argrw{"wrr"}
+	compref		$tmp56 $tmp45 $const6 	%argrw{"wrr"}
+	functioncall	$const2 99 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:9
+#   return (b != 0.0) ? a / b : 0.0;
+	neq		$tmp57 $tmp56 $const4 	%line{9} %argrw{"wrr"}
+	if		$tmp57 97 98 	%argrw{"r"}
+	div		$tmp54 $tmp55 $tmp56 	%argrw{"wrr"}
+	assign		$tmp54 $const4 	%argrw{"wr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:14
+#   return point(safe_divide(a.x, b.x), safe_divide(a.y, b.y), safe_divide(a.z, b.z));
+	point		factor $tmp46 $tmp50 $tmp54 	%line{14} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:42
+#     factor = clamp(factor, 0.0, 1.0);
+	assign		$tmp58 $const4 	%line{42} %argrw{"wr"}
+	assign		$tmp59 $const7 	%argrw{"wr"}
+	functioncall	$const9 105 	%argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:139
+# point  clamp (point x, point minval, point maxval) { return max(min(x,maxval),minval); }
+	min		$tmp60 factor $tmp59 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{139} %argrw{"wrr"}
+	max		factor $tmp60 $tmp58 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:43
+#     factor = (3.0 - 2.0 * factor) * (factor * factor);
+	mul		$tmp61 $const11 factor 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl"} %line{43} %argrw{"wrr"}
+	sub		$tmp62 $const10 $tmp61 	%argrw{"wrr"}
+	mul		$tmp63 factor factor 	%argrw{"wrr"}
+	mul		factor $tmp62 $tmp63 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:45
+#   else if (range_type == "smootherstep") {
+	eq		$tmp64 range_type $const12 	%line{45} %argrw{"wrr"}
+	if		$tmp64 151 179 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:46
+#     factor = safe_divide((factor - from_min), (from_max - from_min));
+	sub		$tmp65 factor from_min 	%line{46} %argrw{"wrr"}
+	sub		$tmp66 from_max from_min 	%argrw{"wrr"}
+	functioncall	$const2 139 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:14
+#   return point(safe_divide(a.x, b.x), safe_divide(a.y, b.y), safe_divide(a.z, b.z));
+	compref		$tmp68 $tmp65 $const3 	%line{14} %argrw{"wrr"}
+	compref		$tmp69 $tmp66 $const3 	%argrw{"wrr"}
+	functioncall	$const2 122 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:9
+#   return (b != 0.0) ? a / b : 0.0;
+	neq		$tmp70 $tmp69 $const4 	%line{9} %argrw{"wrr"}
+	if		$tmp70 120 121 	%argrw{"r"}
+	div		$tmp67 $tmp68 $tmp69 	%argrw{"wrr"}
+	assign		$tmp67 $const4 	%argrw{"wr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:14
+#   return point(safe_divide(a.x, b.x), safe_divide(a.y, b.y), safe_divide(a.z, b.z));
+	compref		$tmp72 $tmp65 $const5 	%line{14} %argrw{"wrr"}
+	compref		$tmp73 $tmp66 $const5 	%argrw{"wrr"}
+	functioncall	$const2 130 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:9
+#   return (b != 0.0) ? a / b : 0.0;
+	neq		$tmp74 $tmp73 $const4 	%line{9} %argrw{"wrr"}
+	if		$tmp74 128 129 	%argrw{"r"}
+	div		$tmp71 $tmp72 $tmp73 	%argrw{"wrr"}
+	assign		$tmp71 $const4 	%argrw{"wr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:14
+#   return point(safe_divide(a.x, b.x), safe_divide(a.y, b.y), safe_divide(a.z, b.z));
+	compref		$tmp76 $tmp65 $const6 	%line{14} %argrw{"wrr"}
+	compref		$tmp77 $tmp66 $const6 	%argrw{"wrr"}
+	functioncall	$const2 138 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:9
+#   return (b != 0.0) ? a / b : 0.0;
+	neq		$tmp78 $tmp77 $const4 	%line{9} %argrw{"wrr"}
+	if		$tmp78 136 137 	%argrw{"r"}
+	div		$tmp75 $tmp76 $tmp77 	%argrw{"wrr"}
+	assign		$tmp75 $const4 	%argrw{"wr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:14
+#   return point(safe_divide(a.x, b.x), safe_divide(a.y, b.y), safe_divide(a.z, b.z));
+	point		factor $tmp67 $tmp71 $tmp75 	%line{14} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:47
+#     factor = clamp(factor, 0.0, 1.0);
+	assign		$tmp79 $const4 	%line{47} %argrw{"wr"}
+	assign		$tmp80 $const7 	%argrw{"wr"}
+	functioncall	$const9 144 	%argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:139
+# point  clamp (point x, point minval, point maxval) { return max(min(x,maxval),minval); }
+	min		$tmp81 factor $tmp80 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{139} %argrw{"wrr"}
+	max		factor $tmp81 $tmp79 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:48
+#     factor = factor * factor * factor * (factor * (factor * 6.0 - 15.0) + 10.0);
+	mul		$tmp82 factor factor 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl"} %line{48} %argrw{"wrr"}
+	mul		$tmp83 $tmp82 factor 	%argrw{"wrr"}
+	mul		$tmp84 factor $const13 	%argrw{"wrr"}
+	sub		$tmp85 $tmp84 $const14 	%argrw{"wrr"}
+	mul		$tmp86 factor $tmp85 	%argrw{"wrr"}
+	add		$tmp87 $tmp86 $const15 	%argrw{"wrr"}
+	mul		factor $tmp83 $tmp87 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:51
+#     factor = safe_divide((factor - from_min), (from_max - from_min));
+	sub		$tmp88 factor from_min 	%line{51} %argrw{"wrr"}
+	sub		$tmp89 from_max from_min 	%argrw{"wrr"}
+	functioncall	$const2 179 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:14
+#   return point(safe_divide(a.x, b.x), safe_divide(a.y, b.y), safe_divide(a.z, b.z));
+	compref		$tmp91 $tmp88 $const3 	%line{14} %argrw{"wrr"}
+	compref		$tmp92 $tmp89 $const3 	%argrw{"wrr"}
+	functioncall	$const2 162 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:9
+#   return (b != 0.0) ? a / b : 0.0;
+	neq		$tmp93 $tmp92 $const4 	%line{9} %argrw{"wrr"}
+	if		$tmp93 160 161 	%argrw{"r"}
+	div		$tmp90 $tmp91 $tmp92 	%argrw{"wrr"}
+	assign		$tmp90 $const4 	%argrw{"wr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:14
+#   return point(safe_divide(a.x, b.x), safe_divide(a.y, b.y), safe_divide(a.z, b.z));
+	compref		$tmp95 $tmp88 $const5 	%line{14} %argrw{"wrr"}
+	compref		$tmp96 $tmp89 $const5 	%argrw{"wrr"}
+	functioncall	$const2 170 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:9
+#   return (b != 0.0) ? a / b : 0.0;
+	neq		$tmp97 $tmp96 $const4 	%line{9} %argrw{"wrr"}
+	if		$tmp97 168 169 	%argrw{"r"}
+	div		$tmp94 $tmp95 $tmp96 	%argrw{"wrr"}
+	assign		$tmp94 $const4 	%argrw{"wr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:14
+#   return point(safe_divide(a.x, b.x), safe_divide(a.y, b.y), safe_divide(a.z, b.z));
+	compref		$tmp99 $tmp88 $const6 	%line{14} %argrw{"wrr"}
+	compref		$tmp100 $tmp89 $const6 	%argrw{"wrr"}
+	functioncall	$const2 178 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:9
+#   return (b != 0.0) ? a / b : 0.0;
+	neq		$tmp101 $tmp100 $const4 	%line{9} %argrw{"wrr"}
+	if		$tmp101 176 177 	%argrw{"r"}
+	div		$tmp98 $tmp99 $tmp100 	%argrw{"wrr"}
+	assign		$tmp98 $const4 	%argrw{"wr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:14
+#   return point(safe_divide(a.x, b.x), safe_divide(a.y, b.y), safe_divide(a.z, b.z));
+	point		factor $tmp90 $tmp94 $tmp98 	%line{14} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:53
+#   VectorOut = to_min + factor * (to_max - to_min);
+	sub		$tmp102 to_max to_min 	%line{53} %argrw{"wrr"}
+	mul		$tmp103 factor $tmp102 	%argrw{"wrr"}
+	add		VectorOut to_min $tmp103 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:54
+#   if (use_clamp > 0) {
+	gt		$tmp104 use_clamp $const3 	%line{54} %argrw{"wrr"}
+	if		$tmp104 235 235 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:55
+#     VectorOut.x = (to_min.x > to_max.x) ? clamp(VectorOut.x, to_max.x, to_min.x) :
+	compref		$tmp106 to_min $const3 	%line{55} %argrw{"wrr"}
+	compref		$tmp107 to_max $const3 	%argrw{"wrr"}
+	gt		$tmp108 $tmp106 $tmp107 	%argrw{"wrr"}
+	if		$tmp108 194 200 	%argrw{"r"}
+	compref		$tmp109 VectorOut $const3 	%argrw{"wrr"}
+	compref		$tmp110 to_max $const3 	%argrw{"wrr"}
+	compref		$tmp111 to_min $const3 	%argrw{"wrr"}
+	functioncall	$const9 194 	%argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
+# float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
+	min		$tmp112 $tmp109 $tmp111 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
+	max		$tmp105 $tmp112 $tmp110 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:56
+#                                           clamp(VectorOut.x, to_min.x, to_max.x);
+	compref		$tmp113 VectorOut $const3 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl"} %line{56} %argrw{"wrr"}
+	compref		$tmp114 to_min $const3 	%argrw{"wrr"}
+	compref		$tmp115 to_max $const3 	%argrw{"wrr"}
+	functioncall	$const9 200 	%argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
+# float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
+	min		$tmp116 $tmp113 $tmp115 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
+	max		$tmp105 $tmp116 $tmp114 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:55
+#     VectorOut.x = (to_min.x > to_max.x) ? clamp(VectorOut.x, to_max.x, to_min.x) :
+	compassign	VectorOut $const3 $tmp105 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl"} %line{55} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:57
+#     VectorOut.y = (to_min.y > to_max.y) ? clamp(VectorOut.y, to_max.y, to_min.y) :
+	compref		$tmp118 to_min $const5 	%line{57} %argrw{"wrr"}
+	compref		$tmp119 to_max $const5 	%argrw{"wrr"}
+	gt		$tmp120 $tmp118 $tmp119 	%argrw{"wrr"}
+	if		$tmp120 211 217 	%argrw{"r"}
+	compref		$tmp121 VectorOut $const5 	%argrw{"wrr"}
+	compref		$tmp122 to_max $const5 	%argrw{"wrr"}
+	compref		$tmp123 to_min $const5 	%argrw{"wrr"}
+	functioncall	$const9 211 	%argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
+# float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
+	min		$tmp124 $tmp121 $tmp123 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
+	max		$tmp117 $tmp124 $tmp122 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:58
+#                                           clamp(VectorOut.y, to_min.y, to_max.y);
+	compref		$tmp125 VectorOut $const5 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl"} %line{58} %argrw{"wrr"}
+	compref		$tmp126 to_min $const5 	%argrw{"wrr"}
+	compref		$tmp127 to_max $const5 	%argrw{"wrr"}
+	functioncall	$const9 217 	%argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
+# float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
+	min		$tmp128 $tmp125 $tmp127 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
+	max		$tmp117 $tmp128 $tmp126 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:57
+#     VectorOut.y = (to_min.y > to_max.y) ? clamp(VectorOut.y, to_max.y, to_min.y) :
+	compassign	VectorOut $const5 $tmp117 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl"} %line{57} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:59
+#     VectorOut.z = (to_min.z > to_max.z) ? clamp(VectorOut.z, to_max.z, to_min.z) :
+	compref		$tmp130 to_min $const6 	%line{59} %argrw{"wrr"}
+	compref		$tmp131 to_max $const6 	%argrw{"wrr"}
+	gt		$tmp132 $tmp130 $tmp131 	%argrw{"wrr"}
+	if		$tmp132 228 234 	%argrw{"r"}
+	compref		$tmp133 VectorOut $const6 	%argrw{"wrr"}
+	compref		$tmp134 to_max $const6 	%argrw{"wrr"}
+	compref		$tmp135 to_min $const6 	%argrw{"wrr"}
+	functioncall	$const9 228 	%argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
+# float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
+	min		$tmp136 $tmp133 $tmp135 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
+	max		$tmp129 $tmp136 $tmp134 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:60
+#                                           clamp(VectorOut.z, to_min.z, to_max.z);
+	compref		$tmp137 VectorOut $const6 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl"} %line{60} %argrw{"wrr"}
+	compref		$tmp138 to_min $const6 	%argrw{"wrr"}
+	compref		$tmp139 to_max $const6 	%argrw{"wrr"}
+	functioncall	$const9 234 	%argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
+# float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
+	min		$tmp140 $tmp137 $tmp139 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
+	max		$tmp129 $tmp140 $tmp138 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl:59
+#     VectorOut.z = (to_min.z > to_max.z) ? clamp(VectorOut.z, to_max.z, to_min.z) :
+	compassign	VectorOut $const6 $tmp129 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_map_range.osl"} %line{59} %argrw{"wrr"}
+	end

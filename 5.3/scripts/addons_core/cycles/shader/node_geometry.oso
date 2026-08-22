@@ -1,0 +1,196 @@
+OpenShadingLanguage 1.00
+# Compiled by oslc 1.15.3.0
+# options: -q -O2 -IE:/Blender_Source/intern/cycles/kernel/osl/shaders -IE:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders -o E:/build_windows_Full_x64_vc17_Release/intern/cycles/kernel/osl/shaders/node_geometry.oso
+shader node_geometry
+param	string	bump_offset	"center"		%read{9,57} %write{2147483647,-1}
+param	float	bump_filter_width	0.100000001		%read{12,60} %write{2147483647,-1} %derivs
+oparam	point	Position	0 0 0		%read{11,21} %write{0,21} %derivs
+oparam	normal	Normal	0 0 0		%read{47,49} %write{1,1}
+oparam	normal	Tangent	0 0 0		%read{2147483647,-1} %write{49,50}
+oparam	normal	TrueNormal	0 0 0		%read{2147483647,-1} %write{2,2}
+oparam	vector	Incoming	0 0 0		%read{2147483647,-1} %write{3,3}
+oparam	point	Parametric	0 0 0		%read{14,24} %write{6,24} %derivs
+oparam	float	Backfacing	0		%read{2147483647,-1} %write{8,8}
+oparam	float	Pointiness	0		%read{54,61} %write{51,61} %derivs
+oparam	float	RandomPerIsland	0		%read{2147483647,-1} %write{62,62}
+global	point	P	%read{0,0} %write{2147483647,-1} %derivs
+global	vector	I	%read{3,3} %write{2147483647,-1}
+global	normal	N	%read{1,1} %write{2147483647,-1}
+global	normal	Ng	%read{2,2} %write{2147483647,-1}
+global	float	u	%read{4,6} %write{2147483647,-1} %derivs
+global	float	v	%read{5,5} %write{2147483647,-1} %derivs
+global	vector	dPdu	%read{50,50} %write{2147483647,-1}
+local	point	generated	%read{40,43} %write{36,36}
+local	float	IsCurve	%read{29,29} %write{25,27}
+local	float	IsPoint	%read{31,31} %write{26,28}
+local	normal	___372_data	%read{46,46} %write{45,45}
+local	vector	___372_T	%read{47,47} %write{46,46}
+const	float	$const1	1		%read{4,4} %write{2147483647,-1}
+temp	float	$tmp1	%read{5,5} %write{4,4} %derivs
+temp	float	$tmp2	%read{6,6} %write{5,5} %derivs
+const	float	$const2	0		%read{6,45} %write{2147483647,-1}
+temp	int	$tmp3	%read{8,8} %write{7,7}
+const	string	$const3	"dx"		%read{9,52} %write{2147483647,-1}
+temp	int	$tmp4	%read{10,10} %write{9,9}
+temp	vector	$tmp5	%read{12,12} %write{11,11} %derivs
+temp	vector	$tmp6	%read{13,13} %write{12,12} %derivs
+temp	vector	$tmp7	%read{15,15} %write{14,14} %derivs
+temp	vector	$tmp8	%read{16,16} %write{15,15} %derivs
+const	string	$const4	"dy"		%read{17,57} %write{2147483647,-1}
+temp	int	$tmp9	%read{18,18} %write{17,17}
+temp	vector	$tmp10	%read{20,20} %write{19,19} %derivs
+temp	vector	$tmp11	%read{21,21} %write{20,20} %derivs
+temp	vector	$tmp12	%read{23,23} %write{22,22} %derivs
+temp	vector	$tmp13	%read{24,24} %write{23,23} %derivs
+const	int	$const5	0		%read{25,43} %write{2147483647,-1}
+temp	int	$tmp14	%read{2147483647,-1} %write{27,27}
+const	string	$const6	"geom:is_curve"		%read{27,27} %write{2147483647,-1}
+temp	int	$tmp15	%read{2147483647,-1} %write{28,28}
+const	string	$const7	"geom:is_point"		%read{28,28} %write{2147483647,-1}
+temp	int	$tmp16	%read{30,33} %write{29,32}
+temp	int	$tmp17	%read{32,32} %write{31,31}
+temp	int	$tmp18	%read{34,34} %write{33,33}
+temp	int	$tmp19	%read{35,39} %write{34,38}
+temp	int	$tmp20	%read{37,37} %write{36,36}
+const	string	$const8	"geom:generated"		%read{36,36} %write{2147483647,-1}
+temp	int	$tmp21	%read{38,38} %write{37,37}
+const	int	$const9	1		%read{40,40} %write{2147483647,-1}
+temp	float	$tmp22	%read{41,41} %write{40,40}
+const	float	$const10	0.5		%read{41,44} %write{2147483647,-1}
+temp	float	$tmp23	%read{42,42} %write{41,41}
+temp	float	$tmp24	%read{45,45} %write{42,42}
+temp	float	$tmp25	%read{44,44} %write{43,43}
+temp	float	$tmp26	%read{45,45} %write{44,44}
+const	string	$const11	"object"		%read{46,46} %write{2147483647,-1}
+const	string	$const12	"world"		%read{46,46} %write{2147483647,-1}
+temp	vector	$tmp27	%read{49,49} %write{48,48}
+temp	vector	$tmp28	%read{48,48} %write{47,47}
+temp	int	$tmp29	%read{2147483647,-1} %write{51,51}
+const	string	$const13	"geom:pointiness"		%read{51,51} %write{2147483647,-1}
+temp	int	$tmp30	%read{53,53} %write{52,52}
+temp	float	$tmp31	%read{55,55} %write{54,54} %derivs
+temp	float	$tmp32	%read{56,56} %write{55,55} %derivs
+temp	int	$tmp33	%read{58,58} %write{57,57}
+temp	float	$tmp34	%read{60,60} %write{59,59} %derivs
+temp	float	$tmp35	%read{61,61} %write{60,60} %derivs
+temp	int	$tmp36	%read{2147483647,-1} %write{62,62}
+const	string	$const14	"geom:random_per_island"		%read{62,62} %write{2147483647,-1}
+code ___main___
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_geometry.osl:20
+#   Position = P;
+	assign		Position P 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_geometry.osl"} %line{20} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_geometry.osl:21
+#   Normal = N;
+	assign		Normal N 	%line{21} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_geometry.osl:22
+#   TrueNormal = Ng;
+	assign		TrueNormal Ng 	%line{22} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_geometry.osl:23
+#   Incoming = I;
+	assign		Incoming I 	%line{23} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_geometry.osl:24
+#   Parametric = point(1.0 - u - v, u, 0.0);
+	sub		$tmp1 $const1 u 	%line{24} %argrw{"wrr"}
+	sub		$tmp2 $tmp1 v 	%argrw{"wrr"}
+	point		Parametric $tmp2 u $const2 	%argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_geometry.osl:25
+#   Backfacing = backfacing();
+	backfacing	$tmp3 	%line{25} %argrw{"w"}
+	assign		Backfacing $tmp3 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_geometry.osl:27
+#   if (bump_offset == "dx") {
+	eq		$tmp4 bump_offset $const3 	%line{27} %argrw{"wrr"}
+	if		$tmp4 17 25 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_geometry.osl:28
+#     Position += Dx(Position) * bump_filter_width;
+	Dx		$tmp5 Position 	%line{28} %argrw{"wr"} %argderivs{1}
+	mul		$tmp6 $tmp5 bump_filter_width 	%argrw{"wrr"}
+	add		Position Position $tmp6 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_geometry.osl:29
+#     Parametric += Dx(Parametric) * bump_filter_width;
+	Dx		$tmp7 Parametric 	%line{29} %argrw{"wr"} %argderivs{1}
+	mul		$tmp8 $tmp7 bump_filter_width 	%argrw{"wrr"}
+	add		Parametric Parametric $tmp8 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_geometry.osl:31
+#   else if (bump_offset == "dy") {
+	eq		$tmp9 bump_offset $const4 	%line{31} %argrw{"wrr"}
+	if		$tmp9 25 25 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_geometry.osl:32
+#     Position += Dy(Position) * bump_filter_width;
+	Dy		$tmp10 Position 	%line{32} %argrw{"wr"} %argderivs{1}
+	mul		$tmp11 $tmp10 bump_filter_width 	%argrw{"wrr"}
+	add		Position Position $tmp11 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_geometry.osl:33
+#     Parametric += Dy(Parametric) * bump_filter_width;
+	Dy		$tmp12 Parametric 	%line{33} %argrw{"wr"} %argderivs{1}
+	mul		$tmp13 $tmp12 bump_filter_width 	%argrw{"wrr"}
+	add		Parametric Parametric $tmp13 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_geometry.osl:37
+#   float IsCurve = 0;
+	assign		IsCurve $const5 	%line{37} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_geometry.osl:38
+#   float IsPoint = 0;
+	assign		IsPoint $const5 	%line{38} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_geometry.osl:39
+#   getattribute("geom:is_curve", IsCurve);
+	getattribute	$tmp14 $const6 IsCurve 	%line{39} %argrw{"wrw"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_geometry.osl:40
+#   getattribute("geom:is_point", IsPoint);
+	getattribute	$tmp15 $const7 IsPoint 	%line{40} %argrw{"wrw"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_geometry.osl:44
+#   if (!(IsCurve || IsPoint) && getattribute("geom:generated", generated)) {
+	neq		$tmp16 IsCurve $const2 	%line{44} %argrw{"wrr"}
+	if		$tmp16 31 33 	%argrw{"r"}
+	neq		$tmp17 IsPoint $const2 	%argrw{"wrr"}
+	assign		$tmp16 $tmp17 	%argrw{"wr"}
+	eq		$tmp18 $tmp16 $const5 	%argrw{"wrr"}
+	neq		$tmp19 $tmp18 $const5 	%argrw{"wrr"}
+	if		$tmp19 39 39 	%argrw{"r"}
+	getattribute	$tmp20 $const8 generated 	%argrw{"wrw"}
+	neq		$tmp21 $tmp20 $const5 	%argrw{"wrr"}
+	assign		$tmp19 $tmp21 	%argrw{"wr"}
+	if		$tmp19 50 51 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_geometry.osl:45
+#     normal data = normal(-(generated[1] - 0.5), (generated[0] - 0.5), 0.0);
+	compref		$tmp22 generated $const9 	%line{45} %argrw{"wrr"}
+	sub		$tmp23 $tmp22 $const10 	%argrw{"wrr"}
+	neg		$tmp24 $tmp23 	%argrw{"wr"}
+	compref		$tmp25 generated $const5 	%argrw{"wrr"}
+	sub		$tmp26 $tmp25 $const10 	%argrw{"wrr"}
+	normal		___372_data $tmp24 $tmp26 $const2 	%argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_geometry.osl:46
+#     vector T = transform("object", "world", data);
+	transformn	___372_T $const11 $const12 ___372_data 	%line{46} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_geometry.osl:47
+#     Tangent = cross(Normal, normalize(cross(T, Normal)));
+	cross		$tmp28 ___372_T Normal 	%line{47} %argrw{"wrr"}
+	normalize	$tmp27 $tmp28 	%argrw{"wr"}
+	cross		Tangent Normal $tmp27 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_geometry.osl:51
+#     Tangent = normalize(dPdu);
+	normalize	Tangent dPdu 	%line{51} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_geometry.osl:54
+#   getattribute("geom:pointiness", Pointiness);
+	getattribute	$tmp29 $const13 Pointiness 	%line{54} %argrw{"wrw"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_geometry.osl:55
+#   if (bump_offset == "dx") {
+	eq		$tmp30 bump_offset $const3 	%line{55} %argrw{"wrr"}
+	if		$tmp30 57 62 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_geometry.osl:56
+#     Pointiness += Dx(Pointiness) * bump_filter_width;
+	Dx		$tmp31 Pointiness 	%line{56} %argrw{"wr"} %argderivs{1}
+	mul		$tmp32 $tmp31 bump_filter_width 	%argrw{"wrr"}
+	add		Pointiness Pointiness $tmp32 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_geometry.osl:58
+#   else if (bump_offset == "dy") {
+	eq		$tmp33 bump_offset $const4 	%line{58} %argrw{"wrr"}
+	if		$tmp33 62 62 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_geometry.osl:59
+#     Pointiness += Dy(Pointiness) * bump_filter_width;
+	Dy		$tmp34 Pointiness 	%line{59} %argrw{"wr"} %argderivs{1}
+	mul		$tmp35 $tmp34 bump_filter_width 	%argrw{"wrr"}
+	add		Pointiness Pointiness $tmp35 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_geometry.osl:62
+#   getattribute("geom:random_per_island", RandomPerIsland);
+	getattribute	$tmp36 $const14 RandomPerIsland 	%line{62} %argrw{"wrw"}
+	end

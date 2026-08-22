@@ -1,0 +1,44 @@
+OpenShadingLanguage 1.00
+# Compiled by oslc 1.15.3.0
+# options: -q -O2 -IE:/Blender_Source/intern/cycles/kernel/osl/shaders -IE:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders -o E:/build_windows_Full_x64_vc17_Release/intern/cycles/kernel/osl/shaders/node_combine_color.oso
+shader node_combine_color
+param	string	color_type	"rgb"		%read{0,12} %write{2147483647,-1}
+param	float	Red	0		%read{12,12} %write{2147483647,-1}
+param	float	Green	0		%read{12,12} %write{2147483647,-1}
+param	float	Blue	0		%read{12,12} %write{2147483647,-1}
+oparam	color	Color	0.800000012 0.800000012 0.800000012		%read{2147483647,-1} %write{12,12}
+const	string	$const1	"rgb"		%read{0,0} %write{2147483647,-1}
+temp	int	$tmp1	%read{1,1} %write{0,0}
+temp	int	$tmp2	%read{2,6} %write{1,5}
+const	int	$const2	0		%read{1,9} %write{2147483647,-1}
+const	string	$const3	"hsv"		%read{3,3} %write{2147483647,-1}
+temp	int	$tmp3	%read{4,4} %write{3,3}
+temp	int	$tmp4	%read{5,5} %write{4,4}
+temp	int	$tmp5	%read{7,11} %write{6,10}
+const	string	$const4	"hsl"		%read{8,8} %write{2147483647,-1}
+temp	int	$tmp6	%read{9,9} %write{8,8}
+temp	int	$tmp7	%read{10,10} %write{9,9}
+const	string	$const5	"%s"		%read{13,13} %write{2147483647,-1}
+const	string	$const6	"Unknown color space!"		%read{13,13} %write{2147483647,-1}
+code ___main___
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_combine_color.osl:13
+#   if (color_type == "rgb" || color_type == "hsv" || color_type == "hsl")
+	eq		$tmp1 color_type $const1 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_combine_color.osl"} %line{13} %argrw{"wrr"}
+	neq		$tmp2 $tmp1 $const2 	%argrw{"wrr"}
+	if		$tmp2 3 6 	%argrw{"r"}
+	eq		$tmp3 color_type $const3 	%argrw{"wrr"}
+	neq		$tmp4 $tmp3 $const2 	%argrw{"wrr"}
+	assign		$tmp2 $tmp4 	%argrw{"wr"}
+	neq		$tmp5 $tmp2 $const2 	%argrw{"wrr"}
+	if		$tmp5 8 11 	%argrw{"r"}
+	eq		$tmp6 color_type $const4 	%argrw{"wrr"}
+	neq		$tmp7 $tmp6 $const2 	%argrw{"wrr"}
+	assign		$tmp5 $tmp7 	%argrw{"wr"}
+	if		$tmp5 13 14 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_combine_color.osl:14
+#     Color = color(color_type, Red, Green, Blue);
+	color		Color color_type Red Green Blue 	%line{14} %argrw{"wrrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_combine_color.osl:16
+#     warning("%s", "Unknown color space!");
+	warning		$const5 $const6 	%line{16} %argrw{"rr"}
+	end

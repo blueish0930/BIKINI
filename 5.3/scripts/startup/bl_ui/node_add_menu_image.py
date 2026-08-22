@@ -1,0 +1,489 @@
+# SPDX-FileCopyrightText: 2026 Blender Authors
+#
+# SPDX-License-Identifier: GPL-2.0-or-later
+
+# ImageNodeTree Add/Swap menus: compositor Color/Filter/Texture/Transform/Utilities
+# plus Image input, Viewer, and Bake Image.
+
+from bpy.app.translations import (
+    contexts as i18n_contexts,
+)
+from bl_ui import node_add_menu
+
+
+class NODE_MT_image_node_input_base(node_add_menu.NodeMenu):
+    bl_label = "Input"
+
+    def draw(self, _context):
+        layout = self.layout
+        self.node_operator(layout, "CompositorNodeImage")
+        self.node_operator(layout, "ImageNodePaint")
+        self.node_operator(layout, "ImageNodeRasterizeGeometry")
+        self.node_operator(layout, "ImageNodeCameraView")
+        self.node_operator(layout, "ImageNodeImportPoints")
+        self.node_operator(layout, "CompositorNodeBokehImage")
+        self.node_operator(layout, "CompositorNodeRGB")
+        self.node_operator(layout, "CompositorNodeImageInfo")
+        self.node_operator(layout, "CompositorNodeImageCoordinates")
+        self.node_operator_with_outputs(
+            _context, layout, "ImageNodeSceneFrame", ["Frame", "Seconds"])
+        self.node_operator(layout, "NodeGroupInput")
+        self.node_operator(layout, "CompositorNodeNamedPortal")
+        self.draw_assets_for_catalog(layout, self.bl_label)
+
+
+class NODE_MT_image_node_output_base(node_add_menu.NodeMenu):
+    bl_label = "Output"
+
+    def draw(self, _context):
+        layout = self.layout
+        self.node_operator(layout, "ImageNodeViewer")
+        # Image Output writes a named Image datablock into bpy.data.images.
+        self.node_operator(layout, "ImageNodeFileOutput")
+        # Bake Image writes files to a directory (single or named bundle slots).
+        self.node_operator(layout, "ImageNodeBakeImage")
+        self.node_operator(layout, "NodeGroupOutput")
+        self.draw_assets_for_catalog(layout, self.bl_label)
+
+
+class NODE_MT_image_node_color_base(node_add_menu.NodeMenu):
+    bl_label = "Color"
+
+    def draw(self, context):
+        layout = self.layout
+        self.draw_menu(layout, path="Color/Adjust")
+        layout.separator()
+        self.node_operator(layout, "CompositorNodePremulKey")
+        self.node_operator(layout, "CompositorNodeAlphaOver")
+        self.node_operator(layout, "CompositorNodeSetAlpha")
+        layout.separator()
+        self.node_operator(layout, "CompositorNodeCombineColor")
+        self.node_operator(layout, "CompositorNodeSeparateColor")
+        layout.separator()
+        self.node_operator(layout, "CompositorNodeZcombine")
+        self.color_mix_node(context, layout)
+        layout.separator()
+        self.node_operator(layout, "ShaderNodeBlackbody")
+        self.node_operator(layout, "ShaderNodeValToRGB")
+        self.node_operator(layout, "CompositorNodeConvertColorSpace")
+        self.node_operator(layout, "CompositorNodeConvertToDisplay")
+        layout.separator()
+        self.node_operator(layout, "CompositorNodeInvert")
+        self.node_operator(layout, "CompositorNodeRGBToBW")
+        # Keep thin Image-only alias for compatibility.
+        self.node_operator(layout, "ImageNodeBrightContrast")
+        self.draw_assets_for_catalog(layout, self.bl_label)
+
+
+class NODE_MT_image_node_color_adjust_base(node_add_menu.NodeMenu):
+    bl_label = "Adjust"
+    menu_path = "Color/Adjust"
+
+    def draw(self, _context):
+        layout = self.layout
+        self.node_operator(layout, "ImageNodeHistogram")
+        layout.separator()
+        self.node_operator(layout, "CompositorNodeBrightContrast")
+        self.node_operator(layout, "CompositorNodeColorBalance")
+        self.node_operator(layout, "CompositorNodeColorCorrection")
+        self.node_operator(layout, "CompositorNodeExposure")
+        self.node_operator(layout, "ShaderNodeGamma")
+        self.node_operator(layout, "CompositorNodeHueCorrect")
+        self.node_operator(layout, "CompositorNodeHueSat")
+        self.node_operator(layout, "CompositorNodeCurveRGB")
+        self.node_operator(layout, "CompositorNodeTonemap")
+        self.draw_assets_for_catalog(layout, self.menu_path)
+
+
+class NODE_MT_image_node_filter_base(node_add_menu.NodeMenu):
+    bl_label = "Filter"
+
+    def draw(self, context):
+        layout = self.layout
+        self.draw_menu(layout, path="Filter/Blur")
+        layout.separator()
+        self.node_operator(layout, "CompositorNodeAntiAliasing")
+        self.node_operator(layout, "CompositorNodeConvolve")
+        self.node_operator(layout, "CompositorNodeDenoise")
+        self.node_operator(layout, "CompositorNodeDespeckle")
+        layout.separator()
+        self.node_operator(layout, "CompositorNodeDilateErode")
+        self.node_operator(layout, "CompositorNodeInpaint")
+        self.node_operator(layout, "ImageNodeIslandPadding")
+        self.node_operator(layout, "CompositorNodeMaskToSDF")
+        layout.separator()
+        self.node_operator_with_searchable_enum_socket(
+            context, layout, "CompositorNodeFilter", "Type", [
+                "Soften", "Box Sharpen", "Diamond Sharpen", "Laplace", "Sobel", "Prewitt", "Kirsch", "Shadow",
+            ],
+        )
+        self.node_operator_with_searchable_enum_socket(
+            context, layout, "CompositorNodeGlare", "Type", [
+                "Bloom", "Ghosts", "Streaks", "Fog Glow", "Simple Star", "Sun Beams", "Kernel",
+            ],
+        )
+        layout.separator()
+        self.node_operator(layout, "ImageNodeHeightToNormal")
+        self.node_operator(layout, "ImageNodeNormalToHeight")
+        self.node_operator(layout, "ImageNodeGradient")
+        self.node_operator(layout, "ImageNodeIslandUV")
+        self.node_operator(layout, "ImageNodeDivergence")
+        self.node_operator(layout, "ImageNodePointStamp")
+        self.draw_assets_for_catalog(layout, self.bl_label)
+
+
+class NODE_MT_image_node_filter_blur_base(node_add_menu.NodeMenu):
+    bl_label = "Blur"
+    menu_path = "Filter/Blur"
+
+    def draw(self, context):
+        layout = self.layout
+        self.node_operator(layout, "CompositorNodeBilateralblur")
+        # Expand Blur Type menu options in search (Flat/Tent/Gaussian/�?.
+        self.node_operator_with_searchable_enum_socket(
+            context, layout, "CompositorNodeBlur", "Type", [
+                "Flat", "Tent", "Quadratic", "Cubic", "Gaussian", "Fast Gaussian", "Catrom", "Mitch",
+            ],
+        )
+        self.node_operator(layout, "CompositorNodeBokehBlur")
+        self.node_operator(layout, "CompositorNodeDefocus")
+        self.node_operator(layout, "CompositorNodeDBlur")
+        self.node_operator(layout, "CompositorNodeVecBlur")
+        self.node_operator(layout, "ImageNodeBlur3D")
+        self.draw_assets_for_catalog(layout, self.menu_path)
+
+
+class NODE_MT_image_node_texture_base(node_add_menu.NodeMenu):
+    bl_label = "Texture"
+
+    def draw(self, _context):
+        layout = self.layout
+        self.node_operator(layout, "ShaderNodeTexBrick")
+        self.node_operator(layout, "ShaderNodeTexChecker")
+        self.node_operator(layout, "ShaderNodeTexGabor")
+        self.node_operator(layout, "ShaderNodeTexGradient")
+        self.node_operator(layout, "ShaderNodeTexMagic")
+        self.node_operator(layout, "ShaderNodeTexNoise")
+        self.node_operator(layout, "ShaderNodeTexVoronoi")
+        self.node_operator(layout, "ShaderNodeTexWave")
+        self.node_operator(layout, "ShaderNodeTexWhiteNoise")
+        layout.separator()
+        # Image Process only: ImageNode compositor path (not the Shader variants).
+        self.node_operator(layout, "ImageNodeSDFShape")
+        self.node_operator(layout, "ImageNodeFractalPrimitive")
+        self.draw_assets_for_catalog(layout, self.bl_label)
+
+
+class NODE_MT_image_node_transform_base(node_add_menu.NodeMenu):
+    bl_label = "Transform"
+
+    def draw(self, _context):
+        layout = self.layout
+        self.node_operator(layout, "CompositorNodeRotate")
+        self.node_operator(layout, "CompositorNodeScale")
+        self.node_operator(layout, "CompositorNodeTransform")
+        self.node_operator(layout, "CompositorNodeTranslate")
+        layout.separator()
+        self.node_operator(layout, "CompositorNodeCornerPin")
+        self.node_operator(layout, "CompositorNodeCrop")
+        layout.separator()
+        self.node_operator(layout, "CompositorNodeDisplace")
+        self.node_operator(layout, "CompositorNodeFlip")
+        self.node_operator(layout, "ImageNodeFlip")
+        self.node_operator(layout, "CompositorNodeMapUV")
+        self.node_operator(layout, "ImageNodeSampleAtPixel")
+        layout.separator()
+        self.node_operator(layout, "CompositorNodeLensdist")
+        self.node_operator(layout, "CompositorNodeMovieDistortion")
+        self.draw_assets_for_catalog(layout, self.bl_label)
+
+
+class NODE_MT_image_node_utilities_base(node_add_menu.NodeMenu):
+    bl_label = "Utilities"
+
+    def draw(self, context):
+        del context
+        layout = self.layout
+        self.draw_menu(layout, path="Utilities/Math")
+        self.draw_menu(layout, path="Utilities/Text")
+        self.draw_menu(layout, path="Utilities/Vector")
+        layout.separator()
+        self.draw_menu(layout, path="Utilities/Matrix")
+        self.draw_menu(layout, path="Utilities/Rotation")
+        layout.separator()
+        self.draw_menu(layout, path="Utilities/Bundle")
+        self.draw_menu(layout, path="Utilities/Closure")
+        layout.separator()
+        self.node_operator(layout, "ImageNodeWriteAtPixel")
+        layout.separator()
+        # Zones (color-only state items in Image Process).
+        self.simulation_zone(layout, label="Simulation")
+        self.repeat_zone(layout, label="Repeat")
+        # Black-box 2D Stable Fluids + Multigrid pressure.
+        props = layout.operator(self.zone_operator_id, text="Fluid Simulation")
+        props.input_node_type = "ImageNodeFluidSimInput"
+        props.output_node_type = "ImageNodeFluidSimOutput"
+        props.add_default_geometry_link = False
+        if hasattr(props, "use_transform"):
+            props.use_transform = self.use_transform
+        layout.separator()
+        self.node_operator(layout, "NodeImplicitConversion")
+        self.node_operator(layout, "CompositorNodeLevels")
+        self.node_operator(layout, "CompositorNodeNormalize")
+        layout.separator()
+        self.node_operator(layout, "GeometryNodeIndexSwitch")
+        self.node_operator(layout, "GeometryNodeMenuSwitch")
+        self.node_operator(layout, "GeometryNodeSwitch")
+        self.node_operator(layout, "CompositorNodeStoreNamedPortal")
+        layout.separator()
+        self.node_operator(layout, "CompositorNodeSplit")
+        self.node_operator(layout, "CompositorNodeSwitchView", label="Switch Stereo View")
+        layout.separator()
+        self.node_operator(layout, "CompositorNodeRelativeToPixel")
+        self.draw_assets_for_catalog(layout, self.bl_label)
+
+
+class NODE_MT_image_node_bundle_base(node_add_menu.NodeMenu):
+    bl_label = "Bundle"
+    menu_path = "Utilities/Bundle"
+
+    def draw(self, _context):
+        layout = self.layout
+        # Match Geometry Nodes Bundle menu (Combine / Join / Separate + Get / Store by path).
+        self.node_operator(layout, "NodeCombineBundle")
+        self.node_operator(layout, "NodeJoinBundle")
+        self.node_operator(layout, "NodeSeparateBundle")
+        layout.separator()
+        self.node_operator(layout, "NodeGetBundleItem")
+        self.node_operator(layout, "NodeStoreBundleItem")
+        self.draw_assets_for_catalog(layout, self.menu_path)
+
+
+class NODE_MT_image_node_closure_base(node_add_menu.NodeMenu):
+    bl_label = "Closure"
+    menu_path = "Utilities/Closure"
+
+    def draw(self, _context):
+        layout = self.layout
+        self.closure_zone(layout, label="Closure")
+        self.node_operator(layout, "NodeEvaluateClosure")
+        self.draw_assets_for_catalog(layout, self.menu_path)
+
+
+class NODE_MT_image_node_math_base(node_add_menu.NodeMenu):
+    bl_label = "Math"
+    menu_path = "Utilities/Math"
+
+    def draw(self, context):
+        layout = self.layout
+        self.node_operator_with_searchable_enum(context, layout, "FunctionNodeBitMath", "operation")
+        self.node_operator_with_searchable_enum(context, layout, "FunctionNodeBooleanMath", "operation")
+        self.node_operator(layout, "ShaderNodeClamp")
+        self.node_operator(layout, "FunctionNodeCompare")
+        self.node_operator_with_searchable_enum(context, layout, "FunctionNodeFloatToInt", "rounding_mode")
+        self.node_operator(layout, "ShaderNodeFloatCurve")
+        self.node_operator(layout, "ShaderNodeMapRange")
+        self.node_operator_with_searchable_enum(
+            context,
+            layout,
+            "ShaderNodeMath",
+            "operation",
+            defaults_callback=node_add_menu.set_math_node_default_props)
+        self.node_operator(layout, "ShaderNodeMix")
+        self.draw_assets_for_catalog(layout, self.menu_path)
+
+
+class NODE_MT_image_node_text_base(node_add_menu.NodeMenu):
+    bl_label = "Text"
+    menu_path = "Utilities/Text"
+
+    def draw(self, context):
+        layout = self.layout
+        self.node_operator(layout, "FunctionNodeFormatString")
+        self.node_operator(layout, "FunctionNodeMatchString")
+        self.node_operator(layout, "FunctionNodeReplaceString")
+        self.node_operator(layout, "FunctionNodeReverseString")
+        self.node_operator_with_searchable_enum_socket(
+            context, layout, "FunctionNodeSetStringCase", "Case", ["Uppercase", "Lowercase"],
+        )
+        self.node_operator(layout, "FunctionNodeSliceString")
+        self.node_operator(layout, "FunctionNodeTrimString")
+        layout.separator()
+        self.node_operator(layout, "FunctionNodeFindInString")
+        self.node_operator(layout, "FunctionNodeStringLength")
+        self.node_operator(layout, "FunctionNodeStringToValue")
+        self.node_operator(layout, "FunctionNodeValueToString")
+        layout.separator()
+        self.node_operator(layout, "FunctionNodeInputSpecialCharacters")
+        self.draw_assets_for_catalog(layout, self.menu_path)
+
+
+class NODE_MT_image_node_vector_base(node_add_menu.NodeMenu):
+    bl_label = "Vector"
+    menu_path = "Utilities/Vector"
+
+    def draw(self, context):
+        layout = self.layout
+        self.node_operator(layout, "ShaderNodeCombineXYZ")
+        props = self.node_operator(layout, "ShaderNodeMapRange")
+        ops = props.settings.add()
+        ops.name = "data_type"
+        ops.value = "'FLOAT_VECTOR'"
+        props = self.node_operator(layout, "ShaderNodeMix", label="Mix Vector")
+        ops = props.settings.add()
+        ops.name = "data_type"
+        ops.value = "'VECTOR'"
+        self.node_operator(layout, "ShaderNodeSeparateXYZ")
+        layout.separator()
+        self.node_operator(layout, "ShaderNodeRadialTiling")
+        self.node_operator(layout, "ShaderNodeVectorCurve")
+        self.node_operator_with_searchable_enum(
+            context,
+            layout,
+            "ShaderNodeVectorMath",
+            "operation",
+            defaults_callback=node_add_menu.set_vector_math_node_defaults)
+        self.node_operator(layout, "ShaderNodeVectorRotate")
+        self.draw_assets_for_catalog(layout, self.menu_path)
+
+
+class NODE_MT_image_utilities_matrix_base(node_add_menu.NodeMenu):
+    bl_label = "Matrix"
+    menu_path = "Utilities/Matrix"
+
+    def draw(self, _context):
+        layout = self.layout
+        self.node_operator(layout, "FunctionNodeCombineMatrix")
+        self.node_operator(layout, "FunctionNodeCombineTransform")
+        self.node_operator(layout, "FunctionNodeMatrixDeterminant", label="Determinant")
+        self.node_operator(layout, "FunctionNodeInvertMatrix")
+        self.node_operator(layout, "FunctionNodeMatrixMultiply")
+        self.node_operator(layout, "FunctionNodeMatrixSVD")
+        self.node_operator(layout, "FunctionNodeProjectPoint")
+        self.node_operator(layout, "FunctionNodeSeparateMatrix")
+        self.node_operator(layout, "FunctionNodeSeparateTransform")
+        self.node_operator(layout, "FunctionNodeTransformDirection")
+        self.node_operator(layout, "FunctionNodeTransformPoint")
+        self.node_operator(layout, "FunctionNodeTransposeMatrix")
+        self.draw_assets_for_catalog(layout, self.menu_path)
+
+
+class NODE_MT_image_node_rotation_base(node_add_menu.NodeMenu):
+    bl_label = "Rotation"
+    menu_path = "Utilities/Rotation"
+
+    def draw(self, _context):
+        layout = self.layout
+        self.node_operator(layout, "FunctionNodeAlignRotationToVector")
+        self.node_operator(layout, "FunctionNodeAxesToRotation")
+        self.node_operator(layout, "FunctionNodeAxisAngleToRotation")
+        self.node_operator(layout, "FunctionNodeEulerToRotation")
+        self.node_operator(layout, "FunctionNodeInvertRotation")
+        props = self.node_operator(layout, "ShaderNodeMix", label="Mix Rotation")
+        ops = props.settings.add()
+        ops.name = "data_type"
+        ops.value = "'ROTATION'"
+        self.node_operator(layout, "FunctionNodeRotateRotation")
+        self.node_operator(layout, "FunctionNodeRotateVector")
+        self.node_operator(layout, "FunctionNodeRotationToAxisAngle")
+        self.node_operator(layout, "FunctionNodeRotationToEuler")
+        self.node_operator(layout, "FunctionNodeRotationToQuaternion")
+        self.node_operator(layout, "FunctionNodeQuaternionToRotation")
+        self.draw_assets_for_catalog(layout, self.menu_path)
+
+
+class NODE_MT_image_node_layout_base(node_add_menu.NodeMenu):
+    bl_label = "Layout"
+
+    def draw(self, _context):
+        layout = self.layout
+        self.node_operator(layout, "NodeFrame")
+        self.node_operator(layout, "NodeReroute")
+        self.draw_assets_for_catalog(layout, self.bl_label)
+
+
+class NODE_MT_image_node_all_base(node_add_menu.NodeMenu):
+    bl_label = ""
+    menu_path = "Root"
+    bl_translation_context = i18n_contexts.operator_default
+
+    def draw(self, context):
+        del context
+        layout = self.layout
+        self.draw_menu(layout, "Input")
+        self.draw_menu(layout, "Output")
+        layout.separator()
+        self.draw_menu(layout, "Color")
+        self.draw_menu(layout, "Filter")
+        self.draw_menu(layout, "Texture")
+        self.draw_menu(layout, "Transform")
+        self.draw_menu(layout, "Utilities")
+        layout.separator()
+        self.draw_menu(layout, "Layout")
+        self.draw_root_assets(layout)
+
+
+add_menus = {
+    "NODE_MT_category_image_input": NODE_MT_image_node_input_base,
+    "NODE_MT_category_image_output": NODE_MT_image_node_output_base,
+    "NODE_MT_category_image_color": NODE_MT_image_node_color_base,
+    "NODE_MT_category_image_color_adjust": NODE_MT_image_node_color_adjust_base,
+    "NODE_MT_category_image_filter": NODE_MT_image_node_filter_base,
+    "NODE_MT_category_image_filter_blur": NODE_MT_image_node_filter_blur_base,
+    "NODE_MT_category_image_texture": NODE_MT_image_node_texture_base,
+    "NODE_MT_category_image_transform": NODE_MT_image_node_transform_base,
+    "NODE_MT_category_image_utilities": NODE_MT_image_node_utilities_base,
+    "NODE_MT_category_image_math": NODE_MT_image_node_math_base,
+    "NODE_MT_category_image_text": NODE_MT_image_node_text_base,
+    "NODE_MT_category_image_vector": NODE_MT_image_node_vector_base,
+    "NODE_MT_category_image_matrix": NODE_MT_image_utilities_matrix_base,
+    "NODE_MT_category_image_rotation": NODE_MT_image_node_rotation_base,
+    "NODE_MT_category_image_bundle": NODE_MT_image_node_bundle_base,
+    "NODE_MT_category_image_closure": NODE_MT_image_node_closure_base,
+    "NODE_MT_category_image_layout": NODE_MT_image_node_layout_base,
+    "NODE_MT_image_node_add_all": NODE_MT_image_node_all_base,
+}
+add_menus = node_add_menu.generate_menus(
+    add_menus,
+    template=node_add_menu.AddNodeMenu,
+    base_dict=node_add_menu.add_base_pathing_dict,
+)
+
+
+swap_menus = {
+    "NODE_MT_image_node_input_swap": NODE_MT_image_node_input_base,
+    "NODE_MT_image_node_output_swap": NODE_MT_image_node_output_base,
+    "NODE_MT_image_node_color_swap": NODE_MT_image_node_color_base,
+    "NODE_MT_image_node_color_adjust_swap": NODE_MT_image_node_color_adjust_base,
+    "NODE_MT_image_node_filter_swap": NODE_MT_image_node_filter_base,
+    "NODE_MT_image_node_filter_blur_swap": NODE_MT_image_node_filter_blur_base,
+    "NODE_MT_image_node_texture_swap": NODE_MT_image_node_texture_base,
+    "NODE_MT_image_node_transform_swap": NODE_MT_image_node_transform_base,
+    "NODE_MT_image_node_utilities_swap": NODE_MT_image_node_utilities_base,
+    "NODE_MT_image_node_math_swap": NODE_MT_image_node_math_base,
+    "NODE_MT_image_node_text_swap": NODE_MT_image_node_text_base,
+    "NODE_MT_image_node_vector_swap": NODE_MT_image_node_vector_base,
+    "NODE_MT_image_node_matrix_swap": NODE_MT_image_utilities_matrix_base,
+    "NODE_MT_image_node_rotation_swap": NODE_MT_image_node_rotation_base,
+    "NODE_MT_image_node_bundle_swap": NODE_MT_image_node_bundle_base,
+    "NODE_MT_image_node_closure_swap": NODE_MT_image_node_closure_base,
+    "NODE_MT_image_node_layout_swap": NODE_MT_image_node_layout_base,
+    "NODE_MT_image_node_swap_all": NODE_MT_image_node_all_base,
+}
+swap_menus = node_add_menu.generate_menus(
+    swap_menus,
+    template=node_add_menu.SwapNodeMenu,
+    base_dict=node_add_menu.swap_base_pathing_dict,
+)
+
+
+classes = (
+    *add_menus,
+    *swap_menus,
+)
+
+
+if __name__ == "__main__":  # only for live edit.
+    from bpy.utils import register_class
+    for cls in classes:
+        register_class(cls)

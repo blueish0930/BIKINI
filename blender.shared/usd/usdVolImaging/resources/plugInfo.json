@@ -1,0 +1,37 @@
+{
+    "Plugins": [
+        {
+            "Info": {
+                "Types": {
+                    "UsdImagingOpenVDBAssetAdapter": {
+                        "bases": [
+                            "UsdImagingFieldAdapter"
+                        ],
+                        "isInternal": true,
+                        "primTypeName": "OpenVDBAsset"
+                    },
+                    "UsdImagingField3DAssetAdapter": {
+                        "bases": [
+                            "UsdImagingFieldAdapter"
+                        ],
+                        "isInternal": true,
+                        "primTypeName": "Field3DAsset"
+                    },
+                    "UsdImagingParticleFieldAdapter": {
+                        "bases": [
+                            "UsdImagingGprimAdapter"
+                        ],
+                        "isInternal": true,
+                        "primTypeName": "ParticleField",
+                        "includeDerivedPrimTypes" : true
+                    }
+                }
+            },
+            "LibraryPath": "",
+            "Name": "usdVolImaging",
+            "ResourcePath": "resources",
+            "Root": "..",
+            "Type": "library"
+        }
+    ]
+}
