@@ -1341,6 +1341,10 @@ class NODE_MT_gn_lib_cgal_mesh_processing_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "GeometryNodeCgalConstrainedDelaunay2")
         self.node_operator(layout, "GeometryNodeCgalArrangement2")
         self.node_operator(layout, "GeometryNodeCgalVerticalDecomp2")
+        layout.separator()
+        self.node_operator(layout, "GeometryNodeCgalTetRemesh")
+        self.node_operator(layout, "GeometryNodeCgalConstrainedDt3")
+        self.node_operator(layout, "GeometryNodeCgalDualContour")
         self.draw_assets_for_catalog(layout, self.menu_path)
 
 
@@ -1352,6 +1356,7 @@ class NODE_MT_gn_lib_cgal_mesh_deform_base(node_add_menu.NodeMenu):
         layout = self.layout
         self.node_operator(layout, "GeometryNodeCgalArapDeform")
         self.node_operator(layout, "GeometryNodeCgalLaplaceDeform")
+        self.node_operator(layout, "GeometryNodeCgalCageDeform3")
         self.draw_assets_for_catalog(layout, self.menu_path)
 
 
@@ -1400,6 +1405,9 @@ class NODE_MT_gn_lib_cgal_mesh_analyze_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "GeometryNodeCgalContourStack")
         self.node_operator(layout, "GeometryNodeCgalGeodesicIsolines")
         self.node_operator(layout, "GeometryNodeCgalInscribedSphere3")
+        self.node_operator(layout, "GeometryNodeCgalGraphcutSegment")
+        self.node_operator(layout, "GeometryNodeCgalSphereIntersect")
+        self.node_operator(layout, "GeometryNodeCgalSphereArrangement")
         layout.separator()
         self.node_operator(layout, "GeometryNodeCgalVisibility2")
         self.node_operator(layout, "GeometryNodeCgalLargestInscribedCircle2")
@@ -1448,6 +1456,7 @@ class NODE_MT_gn_lib_cgal_points_reconstruction_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "GeometryNodeCgalUnionOfBalls")
         self.node_operator(layout, "GeometryNodeCgalCrust2")
         self.node_operator(layout, "GeometryNodeCgalAlphaComplex3")
+        self.node_operator(layout, "GeometryNodeCgalAlphaWrap2")
         self.draw_assets_for_catalog(layout, self.menu_path)
 
 
@@ -1473,6 +1482,9 @@ class NODE_MT_gn_lib_cgal_points_processing_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "GeometryNodeCgalNaturalNeighbor2")
         self.node_operator(layout, "GeometryNodeCgalNaturalNeighbor3")
         self.node_operator(layout, "GeometryNodeCgalKnnGraph3")
+        self.node_operator(layout, "GeometryNodeCgalPointFeatures")
+        self.node_operator(layout, "GeometryNodeCgalRegisterIcp")
+        self.node_operator(layout, "GeometryNodeCgalSuper4pcs")
         self.draw_assets_for_catalog(layout, self.menu_path)
 
 

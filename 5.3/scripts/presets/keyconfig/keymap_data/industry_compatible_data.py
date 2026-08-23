@@ -2287,6 +2287,8 @@ def km_spreadsheet_generic(_params):
          {"properties": [("data_path", "space_data.show_region_toolbar")]}),
         ("wm.context_toggle", {"type": 'RIGHT_BRACKET', "value": 'PRESS', "ctrl": True},
          {"properties": [("data_path", "space_data.show_region_ui")]}),
+        ("spreadsheet.select", {"type": 'LEFTMOUSE', "value": 'PRESS', "any": True}, None),
+        ("spreadsheet.select_all", {"type": 'A', "value": 'PRESS'}, None),
     ])
 
     return keymap

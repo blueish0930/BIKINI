@@ -3805,6 +3805,8 @@ def km_spreadsheet_generic(params):
         ),
         ("spreadsheet.resize_column", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
         ("spreadsheet.sort_column", {"type": 'LEFTMOUSE', "value": 'CLICK'}, None),
+        ("spreadsheet.select", {"type": 'LEFTMOUSE', "value": 'PRESS', "any": True}, None),
+        ("spreadsheet.select_all", {"type": 'A', "value": 'PRESS'}, None),
         ("spreadsheet.fit_column", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'}, None),
         ("spreadsheet.reorder_columns", {"type": 'LEFTMOUSE', "value": 'CLICK_DRAG'}, None),
     ])
