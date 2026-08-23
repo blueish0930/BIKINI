@@ -16,20 +16,24 @@ class SPREADSHEET_HT_header(bpy.types.Header):
         SPREADSHEET_MT_editor_menus.draw_collapsible(context, layout)
 
         row = layout.row(align=True)
-        row.ui_units_x = 16
-        row.prop(
+        row.label(text="Group Filter")
+        sub = row.row(align=True)
+        sub.ui_units_x = 12
+        sub.prop(
             space,
             "row_pattern",
-            text="Group Filter",
+            text="",
             placeholder="0-10  @select  @position.y>0  ^5",
         )
 
         row = layout.row(align=True)
-        row.ui_units_x = 16
-        row.prop(
+        row.label(text="Attribute Filter")
+        sub = row.row(align=True)
+        sub.ui_units_x = 12
+        sub.prop(
             space,
             "attribute_pattern",
-            text="Attribute Filter",
+            text="",
             placeholder="position  normal  ^uv*",
         )
 

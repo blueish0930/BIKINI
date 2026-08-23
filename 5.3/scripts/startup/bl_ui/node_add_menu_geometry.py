@@ -1324,6 +1324,7 @@ class NODE_MT_gn_lib_cgal_mesh_processing_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "GeometryNodeCgalRefineIsolevel")
         self.node_operator(layout, "GeometryNodeCgalSurfaceDelaunayRemesh")
         self.node_operator(layout, "GeometryNodeCgalConvexDecomposition3")
+        self.node_operator(layout, "GeometryNodeCgalApproxConvexDecomp")
         self.node_operator(layout, "GeometryNodeCgalFillPolyline")
         layout.separator()
         self.node_operator(layout, "GeometryNodeCgalStraightSkeleton2")

@@ -19,8 +19,11 @@ class NODE_MT_image_node_input_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "CompositorNodeImage")
         self.node_operator(layout, "ImageNodePaint")
         self.node_operator(layout, "ImageNodeRasterizeGeometry")
+        self.node_operator(layout, "ImageNodeGeoSDF")
         self.node_operator(layout, "ImageNodeCameraView")
+        self.node_operator(layout, "ImageNodeRenderMaterial")
         self.node_operator(layout, "ImageNodeImportPoints")
+        self.node_operator(layout, "ImageNodeImportGeo")
         self.node_operator(layout, "CompositorNodeBokehImage")
         self.node_operator(layout, "CompositorNodeRGB")
         self.node_operator(layout, "CompositorNodeImageInfo")
@@ -126,6 +129,7 @@ class NODE_MT_image_node_filter_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "ImageNodeHeightToNormal")
         self.node_operator(layout, "ImageNodeNormalToHeight")
         self.node_operator(layout, "ImageNodeGradient")
+        self.node_operator(layout, "ImageNodeFFT")
         self.node_operator(layout, "ImageNodeIslandUV")
         self.node_operator(layout, "ImageNodeDivergence")
         self.node_operator(layout, "ImageNodePointStamp")
@@ -170,6 +174,7 @@ class NODE_MT_image_node_texture_base(node_add_menu.NodeMenu):
         layout.separator()
         # Image Process only: ImageNode compositor path (not the Shader variants).
         self.node_operator(layout, "ImageNodeSDFShape")
+        self.node_operator(layout, "ImageNodeGeoSDF")
         self.node_operator(layout, "ImageNodeFractalPrimitive")
         self.draw_assets_for_catalog(layout, self.bl_label)
 
