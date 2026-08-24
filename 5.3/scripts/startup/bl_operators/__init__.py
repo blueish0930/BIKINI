@@ -37,6 +37,7 @@ _modules = [
     "rigidbody",
     "screen_play_rendered_anim",
     "sequencer",
+    "shadertoy",
     "spreadsheet",
     "userpref",
     "uvcalc_follow_active",
