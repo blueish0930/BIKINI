@@ -21,7 +21,6 @@ class NODE_MT_image_node_input_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "ImageNodeRasterizeGeometry")
         self.node_operator(layout, "ImageNodeGeoSDF")
         self.node_operator(layout, "ImageNodeCameraView")
-        self.node_operator(layout, "ImageNodeRenderMaterial")
         self.node_operator(layout, "ImageNodeImportPoints")
         self.node_operator(layout, "ImageNodeImportGeo")
         self.node_operator(layout, "CompositorNodeBokehImage")
