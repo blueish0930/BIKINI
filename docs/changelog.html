@@ -514,9 +514,9 @@ footer.page-footer{
             </div>
             <ul class="md-nav__list">
               <li class="md-nav__item">
-                <details class="nav-version" open>
+                <details class="nav-version">
                   <summary>
-                    BIKINI 5.3
+                    v1
                     <span class="tag">Alpha</span>
                   </summary>
                   <ul class="md-nav__list">
@@ -557,6 +557,45 @@ footer.page-footer{
                     <li class="md-nav__item">
                       <a class="md-nav__link" href="#known-issues" data-page="known-issues">
                         <span class="en">Known Issues</span><span class="zh">已知问题</span>
+                      </a>
+                    </li>
+                  </ul>
+                </details>
+              </li>
+              <li class="md-nav__item">
+                <details class="nav-version" open>
+                  <summary>
+                    v2
+                    <span class="tag">Alpha</span>
+                  </summary>
+                  <ul class="md-nav__list">
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#v2-overview" data-page="v2-overview">
+                        <span class="en">Overview</span><span class="zh">概览</span>
+                      </a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#v2-geometry-nodes" data-page="v2-geometry-nodes">Geometry Nodes</a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#v2-cgal" data-page="v2-cgal">CGAL</a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#v2-texture" data-page="v2-texture">Texture / GTE</a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#v2-shaders" data-page="v2-shaders">
+                        <span class="en">Shaders</span><span class="zh">着色器</span>
+                      </a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#v2-object-editor" data-page="v2-object-editor">
+                        <span class="en">Object Editor</span><span class="zh">物体编辑器</span>
+                      </a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#v2-user-interface" data-page="v2-user-interface">
+                        <span class="en">User Interface</span><span class="zh">用户界面</span>
                       </a>
                     </li>
                   </ul>
@@ -1194,6 +1233,99 @@ footer.page-footer{
               </ul>
             </article>
 
+
+            <article class="page" id="page-v2-overview" data-page="v2-overview">
+              <h1><span class="en">BIKINI v2 Release Notes</span><span class="zh">BIKINI v2 更新说明</span></h1>
+              <p class="meta">Blender 5.3.0 Alpha · Windows x64 · 2026-08-24 · this EXE</p>
+              <p class="zh">v2 对照 <code>E:\Achieve List.txt</code> 的 <strong>V2</strong> 段，节点 IO 以本编译版 <code>blender.exe</code> 为准。左侧 v1 是上一轮功能，v2 是本次。</p>
+              <p class="en">v2 follows the <strong>V2</strong> section of Achieve List. Node IO is dumped from this blender.exe. v1 is the previous drop; v2 is this one.</p>
+              <h2><span class="en">Modules</span><span class="zh">模块</span></h2>
+              <ul class="module-index">
+                <li><a href="#v2-geometry-nodes" data-page="v2-geometry-nodes">Geometry Nodes</a></li>
+                <li><a href="#v2-cgal" data-page="v2-cgal">CGAL</a></li>
+                <li><a href="#v2-texture" data-page="v2-texture">Texture / GTE</a></li>
+                <li><a href="#v2-shaders" data-page="v2-shaders"><span class="en">Shaders</span><span class="zh">着色器</span></a></li>
+                <li><a href="#v2-object-editor" data-page="v2-object-editor"><span class="en">Object Editor</span><span class="zh">物体编辑器</span></a></li>
+                <li><a href="#v2-user-interface" data-page="v2-user-interface"><span class="en">User Interface</span><span class="zh">用户界面</span></a></li>
+              </ul>
+            </article>
+
+            <article class="page" id="page-v2-geometry-nodes" data-page="v2-geometry-nodes">
+              <h1>v2: Geometry Nodes</h1>
+              <h2>Group / Guide / Transfer</h2>
+              <ul class="en"><li><strong>Set Group Input Default</strong> (<code>GeometryNodeSetGroupInputDefault</code>) — When the matching group input is not linked outside the group, every Group Input node in this tree returns Default for that socket</li><li><strong>Guide Geometry</strong> (<code>GeometryNodeGuideGeometry</code>) — Draw extra geometry in the 3D Viewport while the object is selected. Hidden when the modifier is disabled. Does not affect render or the modifier output, and is not shown in the Spreadsheet</li><li><strong>Attribute Transfer</strong> (<code>GeometryNodeAttributeTransfer</code>) — Sample a point-domain field by kernel-weighted sum of all neighbors inside Smooth Distance. Weighted kernels keep distance falloff (not averaged)</li></ul>
+              <ul class="zh"><li><strong>Set Group Input Default</strong>（<code>GeometryNodeSetGroupInputDefault</code>）— 当对应的组输入在组外未连接时，此节点树中每个组输入节点对该接口返回默认值</li><li><strong>Guide Geometry</strong>（<code>GeometryNodeGuideGeometry</code>）— 物体选中时在 3D 视图中绘制额外几何。修改器禁用时隐藏。不影响渲染或修改器输出，也不出现在电子表格中</li><li><strong>Attribute Transfer</strong>（<code>GeometryNodeAttributeTransfer</code>）— 用平滑距离内所有邻居的核加权和对点域场采样。带权核保留距离衰减（不取平均）</li></ul>
+              <h2>Box2D / Box3D</h2>
+              <p class="zh">Achieve List「Box2D/3D」：<strong>Box Engine</strong> 为 2D（Box2D），<strong>Jolt</strong> 为 3D 刚体。</p>
+              <p class="en">Box Engine is the 2D (Box2D) path; Jolt is the 3D rigid-body path.</p>
+              <h3>Box Engine</h3>
+              <ul class="en"><li><strong>Box Set Rigid Body</strong> — Body type + collision shape for Box Engine. Mesh-based modes need no Size. Collision output shows the actual collider (hull / island hulls / triangle mesh)</li><li><strong>Box Set Constraint</strong> — Add one Box Engine joint. Distance/Weld/Prismatic take two named bodies. Revolute hinges Body A to a world Anchor</li><li><strong>Box Solver</strong> — Step Box2D/Box3D rigid bodies. Static/Kinematic bodies on Geometry are obstacles. Substeps = collide slices this frame. Prefer Instances inside a Simulation Zone</li></ul>
+              <ul class="zh"><li><strong>Box Set Rigid Body</strong> — Box 引擎的刚体类型 + 碰撞形状。基于网格的模式不需要尺寸。碰撞输出显示实际碰撞体（凸包 / 岛凸包 / 三角网格）</li><li><strong>Box Set Constraint</strong> — 添加一个 Box 引擎关节。距离/焊接/滑动副需要两个已命名刚体。转动副把刚体 A 铰到世界锚点</li><li><strong>Box Solver</strong> — 步进 Box2D/Box3D 刚体。几何上的静态/运动学刚体是障碍。子步数 = 本帧碰撞切片数。建议在模拟区内使用实例</li></ul>
+              <h3>Jolt</h3>
+              <ul class="en"><li><strong>Jolt Set Rigid Body</strong> — Body type + collision shape. Static bodies are colliders in Jolt Solver. Capsule/Cylinder are Z-up. Triangle Mesh is static (Dynamic uses a hull)</li><li><strong>Jolt Set Constraint</strong> — Add one Jolt constraint (fixed, distance, point, hinge, cone, slider, swing-twist, six-DOF, path, gear, rack-and-pinion, pulley, vehicle). Plug into Jolt Solver</li><li><strong>Jolt Solver</strong> — Black-box Jolt step from input geometry. Writes velocity, angular_velocity, acceleration, angular_acceleration, mass and inertia (I, not angular accel)</li></ul>
+              <ul class="zh"><li><strong>Jolt Set Rigid Body</strong> — 刚体类型 + 碰撞形状。静态刚体在 Jolt 求解器中作为碰撞体。胶囊/圆柱为 Z 向上。三角网格为静态（动态改用凸包）</li><li><strong>Jolt Set Constraint</strong> — 添加一个 Jolt 约束（固定、距离、点、铰链、锥、滑轨、摆动-扭转、六自由度、路径、齿轮、齿条齿轮、滑轮、载具）。接到 Jolt 求解器</li><li><strong>Jolt Solver</strong> — 从输入几何做黑盒 Jolt 步进。写入 velocity、angular_velocity、acceleration、angular_acceleration、mass 和 inertia（I，不是角加速度）</li></ul>
+              <p class="zh">完整 Inputs / Outputs 见 <a href="manual.html#GeometryNodeSetGroupInputDefault">User Manual · v2</a>。</p>
+              <p class="en">Full socket pages: <a href="manual.html#GeometryNodeSetGroupInputDefault">User Manual · v2</a>.</p>
+            </article>
+
+            <article class="page" id="page-v2-cgal" data-page="v2-cgal">
+              <h1>v2: CGAL</h1>
+              <p class="zh">本编译版注册并可 <code>nodes.new</code> 的 CGAL 节点 <strong>142</strong> 个（清单写 153）。菜单：Add → Bikini → Lib → CGAL。</p>
+              <p class="en">This build instantiates <strong>142</strong> CGAL nodes (Achieve List: 153). Menu: Add → Bikini → Lib → CGAL.</p>
+              <ul class="en"><li><strong>Mesh / Processing</strong> (37): QEM Simplify, Collapse Short Edges, VSA Approximate, Smooth Shape, Fair, Fair Hole Fill, Repair, Orient Outward, Repair Self Intersections, Split Long Edges, Autorefine, Snap Borders, Remove Degenerate, Repair Degeneracies, Refine at Isolevel, Surface Delaunay Remesh, Convex Decomposition 3D, Approximate Convex Decomposition, Fill Polyline, Straight Skeleton 2D, Exterior Skeleton 2D, Polygon Offset 2D, Polygon Fill 2D, Polygon Repair 2D, Regularize Open Contour 2D, Extrude Skeleton, Convex Partition 2D, SSAB Partition 2D, Y-Monotone Partition 2D, Shape Simplify 2D, Refine Mesh 2D, Constrained Delaunay 2D, Find All Cells 2D, Vertical Decomposition 2D, Tet Remesh, Constraint Delaunay 3D, Implicit Surface.</li><li><strong>Mesh / Deform</strong> (3): ARAP Deform, Laplace Deform, Cage Deform 3D.</li><li><strong>Mesh / Boolean</strong> (8): Mesh Boolean, Corefine, Mesh Intersection, Convex Minkowski Sum 3D, Do Intersect 3D, Boolean Ops 2D, Do Intersect 2D, Minkowski Sum 2D.</li><li><strong>Mesh / Analyze</strong> (27): Does Self Intersect, Mark Self Intersect, Is Closed, Mesh Volume, Centroid, Side Of Mesh, Skeleton, Segment Mesh, Curvature, Principal Curvature, Shape Diameter, Region Growing, Surface Shortest Path, Exact Geodesic Distance, Geodesic Voronoi, Skeleton Spokes, Self Intersection Curves, Mesh Slicer, Contour Stack, Geodesic Isolines, Inscribed Sphere 3D, Graphcut Segment, Sphere Intersect, Sphere Arrangement, Visibility 2D, Largest Inscribed Circle 2D, Medial Axis 2D.</li><li><strong>Mesh / UV</strong> (3): LSCM UV, ARAP UV, UV Distortion.</li><li><strong>Points / Reconstruction</strong> (10): Alpha Shape, Alpha Wrap, Advancing Front, Poisson Reconstruct, Scale Space Reconstruct, Skin Surface, Union of Balls, Crust 2D, Alpha Complex 3D, Alpha Wrap 2D.</li><li><strong>Points / Processing</strong> (19): Jet Estimate Normals, VCM Estimate Normals, Jet Smooth, Bilateral Smooth, Remove Outliers, WLOP, Hierarchy Simplify, Edge Aware Upsample, PCA Estimate Normals, MST Orient Normals, Cluster Point Set, VCM Feature Edges, Point Shape Fitting, Natural Neighbor 2D, Natural Neighbor 3D, Neighbor Graph 3D, Point Features, Iterative Closest Point, 4-Point Congruent Sets.</li><li><strong>Points / Shape</strong> (34): Delaunay 3D, Min Sphere, Min Circle 2D, Min Rectangle 2D, Min Ellipse 2D, Min Parallelogram 2D, Min Annulus 2D, Max Area K-gon 2D, Max Perimeter K-gon 2D, Width 3D, Delaunay 2D, Alpha Shape 2D, Voronoi 2D, Voronoi 3D, Periodic Delaunay 2D, Periodic Delaunay 3D, Delaunay on Sphere, Voronoi on Sphere, Largest Empty Circle 2D, Largest Empty Sphere 3D, Min Width 2D, Min Sphere of Spheres, Optimal Bounding Box, Min Ellipsoid, Largest Empty Iso Rectangle 2D, Monge Jet Fit, Euclidean MST 3D, Convex Layers 2D, Convex Layers 3D, Periodic Voronoi 2D, Periodic Voronoi 3D, Min Cylinder 3D, Min Annulus 3D, Simple Polygon 2D.</li><li><strong>Curve</strong> (1): Simplify Polyline 3D.</li></ul>
+              <ul class="zh"><li><strong>网格 / 处理</strong>（37）：QEM Simplify, Collapse Short Edges, VSA Approximate, Smooth Shape, Fair, Fair Hole Fill, Repair, Orient Outward, Repair Self Intersections, Split Long Edges, Autorefine, Snap Borders, Remove Degenerate, Repair Degeneracies, Refine at Isolevel, Surface Delaunay Remesh, Convex Decomposition 3D, Approximate Convex Decomposition, Fill Polyline, Straight Skeleton 2D, Exterior Skeleton 2D, Polygon Offset 2D, Polygon Fill 2D, Polygon Repair 2D, Regularize Open Contour 2D, Extrude Skeleton, Convex Partition 2D, SSAB Partition 2D, Y-Monotone Partition 2D, Shape Simplify 2D, Refine Mesh 2D, Constrained Delaunay 2D, Find All Cells 2D, Vertical Decomposition 2D, Tet Remesh, Constraint Delaunay 3D, Implicit Surface。</li><li><strong>网格 / 变形</strong>（3）：ARAP Deform, Laplace Deform, Cage Deform 3D。</li><li><strong>网格 / 布尔</strong>（8）：Mesh Boolean, Corefine, Mesh Intersection, Convex Minkowski Sum 3D, Do Intersect 3D, Boolean Ops 2D, Do Intersect 2D, Minkowski Sum 2D。</li><li><strong>网格 / 分析</strong>（27）：Does Self Intersect, Mark Self Intersect, Is Closed, Mesh Volume, Centroid, Side Of Mesh, Skeleton, Segment Mesh, Curvature, Principal Curvature, Shape Diameter, Region Growing, Surface Shortest Path, Exact Geodesic Distance, Geodesic Voronoi, Skeleton Spokes, Self Intersection Curves, Mesh Slicer, Contour Stack, Geodesic Isolines, Inscribed Sphere 3D, Graphcut Segment, Sphere Intersect, Sphere Arrangement, Visibility 2D, Largest Inscribed Circle 2D, Medial Axis 2D。</li><li><strong>网格 / UV</strong>（3）：LSCM UV, ARAP UV, UV Distortion。</li><li><strong>点云 / 重建</strong>（10）：Alpha Shape, Alpha Wrap, Advancing Front, Poisson Reconstruct, Scale Space Reconstruct, Skin Surface, Union of Balls, Crust 2D, Alpha Complex 3D, Alpha Wrap 2D。</li><li><strong>点云 / 处理</strong>（19）：Jet Estimate Normals, VCM Estimate Normals, Jet Smooth, Bilateral Smooth, Remove Outliers, WLOP, Hierarchy Simplify, Edge Aware Upsample, PCA Estimate Normals, MST Orient Normals, Cluster Point Set, VCM Feature Edges, Point Shape Fitting, Natural Neighbor 2D, Natural Neighbor 3D, Neighbor Graph 3D, Point Features, Iterative Closest Point, 4-Point Congruent Sets。</li><li><strong>点云 / 形状</strong>（34）：Delaunay 3D, Min Sphere, Min Circle 2D, Min Rectangle 2D, Min Ellipse 2D, Min Parallelogram 2D, Min Annulus 2D, Max Area K-gon 2D, Max Perimeter K-gon 2D, Width 3D, Delaunay 2D, Alpha Shape 2D, Voronoi 2D, Voronoi 3D, Periodic Delaunay 2D, Periodic Delaunay 3D, Delaunay on Sphere, Voronoi on Sphere, Largest Empty Circle 2D, Largest Empty Sphere 3D, Min Width 2D, Min Sphere of Spheres, Optimal Bounding Box, Min Ellipsoid, Largest Empty Iso Rectangle 2D, Monge Jet Fit, Euclidean MST 3D, Convex Layers 2D, Convex Layers 3D, Periodic Voronoi 2D, Periodic Voronoi 3D, Min Cylinder 3D, Min Annulus 3D, Simple Polygon 2D。</li><li><strong>曲线</strong>（1）：Simplify Polyline 3D。</li></ul>
+              <p class="zh">逐节点 IO：<a href="manual.html#v2-cgal-index">手册 CGAL 索引</a>。</p>
+              <p class="en">Per-node IO: <a href="manual.html#v2-cgal-index">Manual CGAL index</a>.</p>
+            </article>
+
+            <article class="page" id="page-v2-texture" data-page="v2-texture">
+              <h1>v2: Texture / GPU Texture Editor</h1>
+              <ul class="en"><li><strong>Camera View</strong> (<code>ImageNodeCameraView</code>) — Viewport-style preview from a camera (Wireframe/Solid/Material/Rendered). Updates every frame when used; does not re-evaluate unrelated node branches</li><li><strong>Island UV</strong> (<code>ImageNodeIslandUV</code>) — Each same-color connected island gets its own UV from that island's OBB. Origin: OBB center (0 at center) or bottom-left (0 at min). Fit 0-1 normalizes the island; Real Size keeps its size in the texture 0-1 UV</li><li><strong>Island Padding</strong> (<code>ImageNodeIslandPadding</code>) — Expand island colors into empty pixels by sampling the nearest seed, clipped by Distance</li><li><strong>Named Portal</strong> (<code>CompositorNodeNamedPortal</code>) — Read a value from a Store Named Portal in the current node tree</li><li><strong>Store Named Portal</strong> (<code>CompositorNodeStoreNamedPortal</code>) — Publish a value under a unique name in the current node tree</li><li><strong>FFT</strong> (<code>ImageNodeFFT</code>) — 2D FFT of a complex field packed as R = real, G = imaginary (row then column 1D FFTs)</li><li><strong>Geo SDF</strong> (<code>ImageNodeGeoSDF</code>) — Compute a per-pixel SDF on the 0–1 XY texture grid. 3D solids are sliced at z=0; closed contours are filled (signed), open curves and points are unsigned</li></ul>
+              <ul class="zh"><li><strong>Camera View</strong>（<code>ImageNodeCameraView</code>）— Viewport-style preview from a camera (Wireframe/Solid/Material/Rendered). Updates every frame when used; does not re-evaluate unrelated node branches</li><li><strong>Island UV</strong>（<code>ImageNodeIslandUV</code>）— Each same-color connected island gets its own UV from that island's OBB. Origin: OBB center (0 at center) or bottom-left (0 at min). Fit 0-1 normalizes the island; Real Size keeps its size in the texture 0-1 UV</li><li><strong>Island Padding</strong>（<code>ImageNodeIslandPadding</code>）— Expand island colors into empty pixels by sampling the nearest seed, clipped by Distance</li><li><strong>Named Portal</strong>（<code>CompositorNodeNamedPortal</code>）— Read a value from a Store Named Portal in the current node tree</li><li><strong>Store Named Portal</strong>（<code>CompositorNodeStoreNamedPortal</code>）— Publish a value under a unique name in the current node tree</li><li><strong>FFT</strong>（<code>ImageNodeFFT</code>）— 2D FFT of a complex field packed as R = real, G = imaginary (row then column 1D FFTs)</li><li><strong>Geo SDF</strong>（<code>ImageNodeGeoSDF</code>）— Compute a per-pixel SDF on the 0–1 XY texture grid. 3D solids are sliced at z=0; closed contours are filled (signed), open curves and points are unsigned</li></ul>
+            </article>
+
+            <article class="page" id="page-v2-shaders" data-page="v2-shaders">
+              <h1><span class="en">v2: Shaders</span><span class="zh">v2：着色器</span></h1>
+              <ul class="en">
+                <li><strong>Named Portal / Store Named Portal</strong> — same named-portal pattern as Geometry Nodes, now in ShaderNodeTree.</li>
+                <li><strong>String nodes</strong> — Function string utilities in Add → Utilities → Text, plus String input in Input → Constant.</li>
+              </ul>
+              <ul class="zh">
+                <li><strong>Named Portal / Store Named Portal</strong> — 与几何节点相同的按名传值，现可用于着色器树。</li>
+                <li><strong>字符串节点</strong> — Add → Utilities → Text 下的 Function 字符串工具，以及 Input → Constant 的 String。</li>
+              </ul>
+              <ul class="en"><li><strong>Named Portal</strong> (<code>ShaderNodeNamedPortal</code>)</li><li><strong>Store Named Portal</strong> (<code>ShaderNodeStoreNamedPortal</code>)</li><li><strong>String</strong> (<code>FunctionNodeInputString</code>)</li><li><strong>Format String</strong> (<code>FunctionNodeFormatString</code>)</li><li><strong>Match String</strong> (<code>FunctionNodeMatchString</code>)</li><li><strong>Replace String</strong> (<code>FunctionNodeReplaceString</code>)</li><li><strong>Reverse String</strong> (<code>FunctionNodeReverseString</code>)</li><li><strong>Set String Case</strong> (<code>FunctionNodeSetStringCase</code>)</li><li><strong>Slice String</strong> (<code>FunctionNodeSliceString</code>)</li><li><strong>Trim String</strong> (<code>FunctionNodeTrimString</code>)</li><li><strong>Find in String</strong> (<code>FunctionNodeFindInString</code>)</li><li><strong>String Length</strong> (<code>FunctionNodeStringLength</code>)</li><li><strong>String to Value</strong> (<code>FunctionNodeStringToValue</code>)</li><li><strong>Value to String</strong> (<code>FunctionNodeValueToString</code>)</li><li><strong>Special Characters</strong> (<code>FunctionNodeInputSpecialCharacters</code>)</li></ul>
+              <ul class="zh"><li><strong>Named Portal</strong>（<code>ShaderNodeNamedPortal</code>）</li><li><strong>Store Named Portal</strong>（<code>ShaderNodeStoreNamedPortal</code>）</li><li><strong>String</strong>（<code>FunctionNodeInputString</code>）</li><li><strong>Format String</strong>（<code>FunctionNodeFormatString</code>）</li><li><strong>Match String</strong>（<code>FunctionNodeMatchString</code>）</li><li><strong>Replace String</strong>（<code>FunctionNodeReplaceString</code>）</li><li><strong>Reverse String</strong>（<code>FunctionNodeReverseString</code>）</li><li><strong>Set String Case</strong>（<code>FunctionNodeSetStringCase</code>）</li><li><strong>Slice String</strong>（<code>FunctionNodeSliceString</code>）</li><li><strong>Trim String</strong>（<code>FunctionNodeTrimString</code>）</li><li><strong>Find in String</strong>（<code>FunctionNodeFindInString</code>）</li><li><strong>String Length</strong>（<code>FunctionNodeStringLength</code>）</li><li><strong>String to Value</strong>（<code>FunctionNodeStringToValue</code>）</li><li><strong>Value to String</strong>（<code>FunctionNodeValueToString</code>）</li><li><strong>Special Characters</strong>（<code>FunctionNodeInputSpecialCharacters</code>）</li></ul>
+            </article>
+
+            <article class="page" id="page-v2-object-editor" data-page="v2-object-editor">
+              <h1><span class="en">v2: Object Editor</span><span class="zh">v2：物体编辑器</span></h1>
+              <p class="zh">新的 <code>ObjectNodeTree</code>：用节点图创建 / 引用物体、改变换与可见性、指定材质槽与修改器、设置父级或删除。默认图：Object → Set Transform → Object Output。</p>
+              <p class="en">New <code>ObjectNodeTree</code>: create or pick objects, set transform/visibility, material slots, modifiers, parent, or delete. Default graph: Object → Set Transform → Object Output.</p>
+              <ul class="en"><li><strong>Object</strong> (<code>ObjectNodeObject</code>) — Pick an existing object, or use the view-layer active object</li><li><strong>Create Object</strong> (<code>ObjectNodeCreate</code>) — Create a scene object (reused on recook). Connect to Object Output to instantiate</li><li><strong>Object Output</strong> (<code>ObjectNodeOutput</code>) — Apply every connected object graph to the scene, like Join Geometry. All used inputs stay live; nodes that do not reach an Object Output are not written</li><li><strong>Set Transform</strong> (<code>ObjectNodeSetTransform</code>) — Write location, rotation and scale of the incoming object</li><li><strong>Set Visibility</strong> (<code>ObjectNodeSetVisibility</code>) — Set viewport, select and render visibility, holdout and shadow catcher</li><li><strong>Viewport Display</strong> (<code>ObjectNodeViewportDisplay</code>) — Set object viewport display type, extras, bounds and object color</li><li><strong>Set Material Slots</strong> (<code>ObjectNodeSetMaterialSlots</code>) — Assign object material slots. Add and remove slots like the Properties editor</li><li><strong>Set Modifiers</strong> (<code>ObjectNodeSetModifiers</code>) — Edit the object's modifier stack. Expand a modifier to set Geometry Nodes groups, Subdivision levels, Apply, and the rest of its settings</li><li><strong>Set Parent</strong> (<code>ObjectNodeSetParent</code>) — Bind or clear object parenting. Bind: Object / Object without inverse, with optional Keep Transform. Clear: Clear Parent, keep transform, or reset the parent inverse</li><li><strong>Delete Object</strong> (<code>ObjectNodeDelete</code>) — Delete the incoming object from the scene when the graph is evaluated</li></ul>
+              <ul class="zh"><li><strong>Object</strong>（<code>ObjectNodeObject</code>）— Pick an existing object, or use the view-layer active object</li><li><strong>Create Object</strong>（<code>ObjectNodeCreate</code>）— Create a scene object (reused on recook). Connect to Object Output to instantiate</li><li><strong>Object Output</strong>（<code>ObjectNodeOutput</code>）— Apply every connected object graph to the scene, like Join Geometry. All used inputs stay live; nodes that do not reach an Object Output are not written</li><li><strong>Set Transform</strong>（<code>ObjectNodeSetTransform</code>）— Write location, rotation and scale of the incoming object</li><li><strong>Set Visibility</strong>（<code>ObjectNodeSetVisibility</code>）— Set viewport, select and render visibility, holdout and shadow catcher</li><li><strong>Viewport Display</strong>（<code>ObjectNodeViewportDisplay</code>）— Set object viewport display type, extras, bounds and object color</li><li><strong>Set Material Slots</strong>（<code>ObjectNodeSetMaterialSlots</code>）— Assign object material slots. Add and remove slots like the Properties editor</li><li><strong>Set Modifiers</strong>（<code>ObjectNodeSetModifiers</code>）— Edit the object's modifier stack. Expand a modifier to set Geometry Nodes groups, Subdivision levels, Apply, and the rest of its settings</li><li><strong>Set Parent</strong>（<code>ObjectNodeSetParent</code>）— Bind or clear object parenting. Bind: Object / Object without inverse, with optional Keep Transform. Clear: Clear Parent, keep transform, or reset the parent inverse</li><li><strong>Delete Object</strong>（<code>ObjectNodeDelete</code>）— Delete the incoming object from the scene when the graph is evaluated</li></ul>
+            </article>
+
+            <article class="page" id="page-v2-user-interface" data-page="v2-user-interface">
+              <h1><span class="en">v2: User Interface</span><span class="zh">v2：用户界面</span></h1>
+              <ul class="en">
+                <li><strong>G</strong> — move only; does not insert into noodles. Drag still can attach.</li>
+                <li><strong>Rename highlight</strong> — clearer hover on renamable group sockets.</li>
+                <li><strong>Shift+LMB</strong> on socket shape — change data type (was Ctrl+LMB in v1). Alt+LMB still changes structure.</li>
+                <li><strong>Cross-editor group paste</strong> — copy node groups between tree types; Group nodes are retargeted.</li>
+                <li><strong>Dirty evaluation</strong> — recook demand paths only. Ctrl-click / Viewer preview isolates the active terminal.</li>
+                <li><strong>Spreadsheet</strong> — Group Filter (<code>row_pattern</code>) and Attribute Filter (<code>attribute_pattern</code>), with <code>^</code>/<code>!</code> excludes.</li>
+              </ul>
+              <ul class="zh">
+                <li><strong>G</strong> — 只移动，不插入连线；拖动仍可插线。</li>
+                <li><strong>改名高亮</strong> — 可改名组接口悬停更清晰。</li>
+                <li><strong>Shift+LMB</strong> 点 socket 形状改数据类型（v1 为 Ctrl+LMB）。Alt+LMB 仍改形状。</li>
+                <li><strong>跨编辑器粘贴节点组</strong> — 不同树类型之间复制；Group 会 retarget。</li>
+                <li><strong>Dirty 评估</strong> — 只煮脏路径。Ctrl 点击 / Viewer 预览只刷新当前终端。</li>
+                <li><strong>电子表格</strong> — Group Filter 与 Attribute Filter，<code>^</code>/<code>!</code> 排除。</li>
+              </ul>
+            </article>
+
             <footer class="md-footer-meta">
               <span class="en">
                 Typography &amp; layout aligned with
@@ -1227,7 +1359,14 @@ footer.page-footer{
           editors: "Editors - BIKINI Developer Docs",
           eevee: "EEVEE & Viewport - BIKINI Developer Docs",
           zones: "Zones - BIKINI Developer Docs",
-          "known-issues": "Known Issues - BIKINI Developer Docs"
+          "known-issues": "Known Issues - BIKINI Developer Docs",
+          "v2-overview": "v2 Overview - BIKINI Developer Docs",
+          "v2-geometry-nodes": "v2 Geometry Nodes - BIKINI Developer Docs",
+          "v2-cgal": "v2 CGAL - BIKINI Developer Docs",
+          "v2-texture": "v2 Texture - BIKINI Developer Docs",
+          "v2-shaders": "v2 Shaders - BIKINI Developer Docs",
+          "v2-object-editor": "v2 Object Editor - BIKINI Developer Docs",
+          "v2-user-interface": "v2 User Interface - BIKINI Developer Docs"
         },
         zh: {
           overview: "BIKINI · 开发者文档",
@@ -1238,7 +1377,14 @@ footer.page-footer{
           editors: "编辑器 - BIKINI 开发者文档",
           eevee: "EEVEE & Viewport - BIKINI 开发者文档",
           zones: "Zones - BIKINI 开发者文档",
-          "known-issues": "已知问题 - BIKINI 开发者文档"
+          "known-issues": "已知问题 - BIKINI 开发者文档",
+          "v2-overview": "v2 概览 - BIKINI 开发者文档",
+          "v2-geometry-nodes": "v2 Geometry Nodes - BIKINI 开发者文档",
+          "v2-cgal": "v2 CGAL - BIKINI 开发者文档",
+          "v2-texture": "v2 Texture - BIKINI 开发者文档",
+          "v2-shaders": "v2 着色器 - BIKINI 开发者文档",
+          "v2-object-editor": "v2 物体编辑器 - BIKINI 开发者文档",
+          "v2-user-interface": "v2 用户界面 - BIKINI 开发者文档"
         }
       };
 

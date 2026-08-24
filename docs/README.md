@@ -26,12 +26,12 @@ docs/
 
 ### manual.html — User Manual
 - Placeholder ready for per-node parameter pages
-- Left nav sections: Geometry Nodes (incl. sparse matrix math), Image Process, UI, …
+- Left nav: **v1** (previous nodes) and **v2** (CGAL, Box2D/3D, Texture, Object Editor, …)
 - Fill in later like the [official Manual](https://docs.blender.org/manual/)
 
 ### changelog.html — Developer Docs
 - Styled after [developer.blender.org release notes](https://developer.blender.org/docs/release_notes/5.3/geometry_nodes/)
-- Left: BIKINI 5.3 → modules; main: feature lists per module
+- Left: **v1** / **v2** version folds → modules; main: feature lists per module
 
 Language preference is shared across all three pages (`localStorage`).
 
