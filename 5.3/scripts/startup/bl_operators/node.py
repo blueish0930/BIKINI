@@ -628,6 +628,20 @@ class NODE_OT_swap_node(NodeSwapOperator, Operator):
             except RuntimeError:
                 pass
 
+    @staticmethod
+    def swap_visible_output(tree, node, output_name):
+        target_output = node.outputs[output_name]
+        target_output.hide = False
+
+        for socket in node.outputs:
+            if socket.name != output_name:
+                for link in socket.links[:]:
+                    new_link = tree.links.new(target_output, link.to_socket)
+                    if not new_link.is_valid:
+                        tree.links.remove(new_link)
+
+                socket.hide = True
+
     def execute(self, context):
         tree = context.space_data.edit_tree
         nodes_to_delete = set()
@@ -638,6 +652,10 @@ class NODE_OT_swap_node(NodeSwapOperator, Operator):
 
             if (old_node.bl_idname == self.type) and (not hasattr(old_node, "node_tree")):
                 self.apply_node_settings(old_node)
+
+                if self.visible_output:
+                    self.swap_visible_output(tree, old_node, output_name=self.visible_output)
+
                 continue
 
             new_node = self.create_node(context, self.type)
@@ -865,6 +883,23 @@ class NodeAddZoneOperator(ZoneOperator, NodeAddOperator):
             from_socket = next(s for s in input_node.outputs if s.type == 'GEOMETRY')
             to_socket = next(s for s in output_node.inputs if s.type == 'GEOMETRY')
             tree.links.new(to_socket, from_socket)
+
+        # Fluid Simulation zone: connect every aligned state socket by default
+        # (Color, Velocity, Temperature, Divergence, Collision, …).
+        if self.input_node_type == "ImageNodeFluidSimInput":
+            for from_socket in input_node.outputs:
+                if from_socket.name in {"Delta Time"}:
+                    continue
+                if from_socket.is_unavailable:
+                    continue
+                to_socket = next(
+                    (s for s in output_node.inputs
+                     if (s.identifier == from_socket.identifier or s.name == from_socket.name)
+                     and not s.is_unavailable),
+                    None,
+                )
+                if to_socket is not None and not to_socket.is_linked:
+                    tree.links.new(to_socket, from_socket)
 
         return {'FINISHED'}
 
@@ -1566,11 +1601,21 @@ class NODE_FH_image_node(FileHandler):
 
     @classmethod
     def poll_drop(cls, context):
+        space = getattr(context, "space_data", None)
         return (
             (context.area is not None) and
             (context.area.type == 'NODE_EDITOR') and
             (context.region is not None) and
-            (context.region.type == 'WINDOW')
+            (context.region.type == 'WINDOW') and
+            (space is not None) and
+            (space.node_tree is not None) and
+            (space.tree_type in {
+                'ShaderNodeTree',
+                'CompositorNodeTree',
+                'TextureNodeTree',
+                'GeometryNodeTree',
+                'ImageNodeTree',  # GPU Texture Editor
+            })
         )
 
 

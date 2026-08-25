@@ -67,6 +67,11 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--flow-config", default="SIMPLE")
     p.add_argument("--satsuma-config", default="DEFAULT")
     p.add_argument("--fixed-chart-clusters", type=int, default=0)
+    p.add_argument(
+        "--hard-edges",
+        default="",
+        help="Optional file of extra sharp edges: first line count, then 'v0 v1' (0-based)",
+    )
     return p.parse_args(argv)
 
 
@@ -139,105 +144,45 @@ def _prep_bm(bm: bmesh.types.BMesh, args: argparse.Namespace) -> None:
             if is_sharp or edge.is_boundary or edge.seam or is_material_boundary or is_face_set_boundary:
                 edge.smooth = False
 
+    hard_path = getattr(args, "hard_edges", "") or ""
+    if hard_path and os.path.isfile(hard_path):
+        pairs: set[tuple[int, int]] = set()
+        with open(hard_path, "r", encoding="utf-8", errors="replace") as hf:
+            next(hf, None)
+            for line in hf:
+                parts = line.split()
+                if len(parts) >= 2:
+                    a, b = int(parts[0]), int(parts[1])
+                    pairs.add((min(a, b), max(a, b)))
+        bm.verts.ensure_lookup_table()
+        bm.edges.ensure_lookup_table()
+        bm.verts.index_update()
+        for edge in bm.edges:
+            a, b = edge.verts[0].index, edge.verts[1].index
+            if (min(a, b), max(a, b)) in pairs:
+                edge.smooth = False
+
     bmesh.ops.triangulate(bm, faces=bm.faces, quad_method="SHORT_EDGE", ngon_method="BEAUTY")
-
-
-def _write_prep_config(path: str, do_remesh: bool, sharp_angle: float) -> None:
-    with open(path, "w") as f:
-        f.write(f"do_remesh {1 if do_remesh else 0}\n")
-        f.write(f"sharp_feature_thr {sharp_angle:.6g}\n")
-        f.write("alpha 0.01\n")
-        f.write("scaleFact 1\n")
-
-
-def _run_quadwild_exe(mesh_path: str, do_remesh: bool, sharp_angle: float) -> None:
-    """Run quadwild.exe mode 2 (remesh+field+trace). Produces all sidecar files."""
-    quadwild_dir = os.path.dirname(os.path.abspath(__file__))
-    exe = os.path.join(quadwild_dir, "quadwild.exe")
-    if not os.path.isfile(exe):
-        raise QWException(f"quadwild.exe not found at {exe}")
-
-    config_dir = os.path.join(quadwild_dir, "config", "prep_config")
-    prep_config = os.path.join(os.path.dirname(mesh_path), "prep_setup.txt")
-    _write_prep_config(prep_config, do_remesh, sharp_angle)
-
-    import subprocess
-    work_dir = os.path.dirname(os.path.abspath(mesh_path))
-    result = subprocess.run(
-        [exe, mesh_path, "2", prep_config],
-        cwd=work_dir,
-        capture_output=True,
-        text=True,
-        timeout=600,
-    )
-    if result.returncode != 0:
-        raise QWException(
-            f"quadwild.exe failed (exit {result.returncode}):\n"
-            f"{result.stderr[-2000:]}\n{result.stdout[-2000:]}"
-        )
 
 
 def _run_pipeline(bm: bmesh.types.BMesh, args: argparse.Namespace, work_mesh_path: str) -> str:
     enable_sharp = bool(args.enable_sharp) and args.sharp_angle >= 0
-    sharp_angle = float(args.sharp_angle)
+    has_hard = bool(getattr(args, "hard_edges", "") and os.path.isfile(args.hard_edges))
+    use_sharp = enable_sharp or has_hard
+    sharp_angle = float(args.sharp_angle) if enable_sharp else 180.0
     stage = args.stage
 
     _prep_bm(bm, args)
 
-    # Use quadwild.exe for field/layout stages (newer, produces .rosy/.patch/.corners).
-    if stage in ("field", "layout"):
-        print(f"[QW_BRIDGE] ENTER exe path stage={stage} mesh={work_mesh_path}", file=sys.stderr)
-        exporter.export_mesh(bm, work_mesh_path)
-        if enable_sharp:
-            # quadwild.exe reads sharp from {mesh}_rem.sharp (same as qw.sharp_path)
-            sharp_path = os.path.splitext(work_mesh_path)[0] + "_rem.sharp"
-            exporter.export_sharp_features(bm, sharp_path, sharp_angle)
-
-        _run_quadwild_exe(work_mesh_path, bool(args.remesh), sharp_angle)
-
-        qw = Quadwild(work_mesh_path)  # for path names only
-
-        if stage == "field":
-            if not os.path.isfile(qw.remeshed_path):
-                raise QWException(f"Field stage: missing {qw.remeshed_path}")
-            shutil.copyfile(qw.remeshed_path, args.output)
-            out_base, _ = os.path.splitext(args.output)
-            if os.path.isfile(qw.field_path):
-                shutil.copyfile(qw.field_path, out_base + ".rosy")
-            return args.output
-
-        # layout
-        print(f"[QW_BRIDGE] layout: traced_path={qw.traced_path}", file=sys.stderr)
-        print(f"[QW_BRIDGE] layout: traced_exists={os.path.isfile(qw.traced_path)}", file=sys.stderr)
-        if not os.path.isfile(qw.traced_path):
-            raise QWException(f"Layout stage: missing {qw.traced_path}")
-        shutil.copyfile(qw.traced_path, args.output)
-        out_base, _ = os.path.splitext(args.output)
-        print(f"[QW_BRIDGE] layout: out_base={out_base}", file=sys.stderr)
-        for tag, src_path in [
-            (".rosy", qw.field_path),
-            (".feature", os.path.splitext(qw.traced_path)[0] + ".feature"),
-            (".corners", os.path.splitext(qw.traced_path)[0] + ".corners"),
-            (".patch", os.path.splitext(qw.traced_path)[0] + ".patch"),
-        ]:
-            exists = os.path.isfile(src_path)
-            size = os.path.getsize(src_path) if exists else 0
-            print(f"[QW_BRIDGE] layout: sidecar {tag} exists={exists} size={size} src={src_path}", file=sys.stderr)
-            if exists:
-                shutil.copyfile(src_path, out_base + tag)
-        print(f"[QW_BRIDGE] layout: DONE", file=sys.stderr)
-        return args.output
-
-    # --- remesh stage: use DLL path ---
     qw = Quadwild(work_mesh_path)
     try:
         exporter.export_mesh(bm, work_mesh_path)
-        if enable_sharp:
+        if use_sharp:
             exporter.export_sharp_features(bm, qw.sharp_path, sharp_angle)
 
         qw.remeshAndField(
             remesh=bool(args.remesh),
-            enableSharp=enable_sharp,
+            enableSharp=use_sharp,
             sharpAngle=sharp_angle,
         )
 
@@ -258,21 +203,10 @@ def _run_pipeline(bm: bmesh.types.BMesh, args: argparse.Namespace, work_mesh_pat
                 raise QWException(f"Layout stage: missing {qw.traced_path}")
             shutil.copyfile(qw.traced_path, args.output)
             out_base, _ = os.path.splitext(args.output)
-            # Sidecar .rosy next to output (same basename)
-            if os.path.isfile(qw.field_path):
-                shutil.copyfile(qw.field_path, out_base + ".rosy")
-            # Patch boundary edges for seam marking
+            # Feature edges for seam marking: mesh_rem_p0.feature
             feat = os.path.splitext(qw.traced_path)[0] + ".feature"
             if os.path.isfile(feat):
                 shutil.copyfile(feat, out_base + ".feature")
-            # Patch corner vertices (closed polygon per patch)
-            corners = os.path.splitext(qw.traced_path)[0] + ".corners"
-            if os.path.isfile(corners):
-                shutil.copyfile(corners, out_base + ".corners")
-            # Patch ID per face
-            patchf = os.path.splitext(qw.traced_path)[0] + ".patch"
-            if os.path.isfile(patchf):
-                shutil.copyfile(patchf, out_base + ".patch")
             return args.output
 
         # --- full remesh ---
