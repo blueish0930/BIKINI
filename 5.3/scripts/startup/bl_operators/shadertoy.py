@@ -4,14 +4,19 @@
 
 """Load ShaderToy shaders into ImageNodeShaderToy.
 
-shadertoy.com is behind Cloudflare and returns 403 to Blender. Fetch order:
+Fetch order:
 
 1. JSON/GLSL already in the URL field or clipboard
-2. GitHub / jsDelivr snapshot of Public+API shaders (no Cloudflare)
-3. Official API / unofficial POST (often 403)
+2. Official ShaderToy API — only if an API key is set (live, Public+API only)
+3. GitHub 2024 Public+API dump (jsDelivr) — offline fallback, not today's catalog
+4. Unofficial POST / reader proxies (usually Cloudflare 403)
 
-No browser plugin required: copy the Image tab in the website (Ctrl+A, Ctrl+C)
-and press Paste.
+An API key is necessary for live fetch, not sufficient:
+- Shader privacy must be Public + API (plain Public / Unlisted will 404)
+- shadertoy.com may still 403 Blender (Cloudflare)
+- Key needs a Silver/Gold ShaderToy account (shadertoy.com/howto)
+
+Paste still works without any of that: Image tab, Ctrl+A, Ctrl+C, Paste.
 """
 
 from __future__ import annotations
@@ -41,21 +46,12 @@ _CHROME_UA = (
     "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 )
 
-# Public+API dump (2024-10-05). jsDelivr first — GitHub raw is flaky in some regions.
+# Offline fallback only (GabeRundlett dump, 2024-10-05). Not today's catalog.
 _MIRRORS = (
     "https://cdn.jsdelivr.net/gh/GabeRundlett/shadertoy-api-shaders@master/shaders/{id}.json",
     "https://fastly.jsdelivr.net/gh/GabeRundlett/shadertoy-api-shaders@master/shaders/{id}.json",
-    "https://gcore.jsdelivr.net/gh/GabeRundlett/shadertoy-api-shaders@master/shaders/{id}.json",
     "https://raw.githubusercontent.com/GabeRundlett/shadertoy-api-shaders/master/shaders/{id}.json",
-    "https://cdn.jsdmirror.com/gh/GabeRundlett/shadertoy-api-shaders@master/shaders/{id}.json",
 )
-
-_LIST_URLS = (
-    "https://cdn.jsdelivr.net/gh/GabeRundlett/shadertoy-api-shaders@master/shader-list.json",
-    "https://raw.githubusercontent.com/GabeRundlett/shadertoy-api-shaders/master/shader-list.json",
-)
-
-_id_case_map: dict[str, str] | None = None
 
 
 def parse_shader_id(text: str) -> str:
@@ -75,8 +71,31 @@ def _opener():
     return urllib.request.build_opener(urllib.request.HTTPSHandler(context=ctx))
 
 
+def _http_error_text(ex: Exception) -> str:
+    if isinstance(ex, urllib.error.HTTPError):
+        code = int(ex.code)
+        if code == 403:
+            return "HTTP 403 Cloudflare/forbidden"
+        if code == 401:
+            return "HTTP 401 bad or expired API key"
+        if code == 404:
+            return "HTTP 404 not found"
+        if code == 429:
+            return "HTTP 429 rate limited"
+        return f"HTTP {code}"
+    if isinstance(ex, urllib.error.URLError):
+        return f"network: {ex.reason}"
+    return str(ex)
+
+
 def _get(url: str, timeout: float = 12):
-    req = urllib.request.Request(url, headers={"User-Agent": _CHROME_UA, "Accept": "*/*"})
+    req = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": _CHROME_UA,
+            "Accept": "application/json, text/plain, */*",
+        },
+    )
     return _opener().open(req, timeout=timeout)
 
 
@@ -106,93 +125,210 @@ def try_parse_json_text(text: str) -> dict | None:
 
 def try_parse_glsl(text: str) -> str | None:
     text = (text or "").strip()
-    if not text or text[0] in "{[":
+    if not text:
         return None
-    if "mainImage" not in text:
+    extracted = extract_mainimage(text)
+    return extracted
+
+
+def extract_mainimage(text: str) -> str | None:
+    """Pull Image-pass GLSL out of raw GLSL or markdown fences. Skip huge HTML."""
+    if not text or "mainImage" not in text:
         return None
-    return text
+    # Full-page copy from shadertoy.com is megabytes of HTML; stripping it stalls Fetch.
+    if len(text) > 400_000 or "<html" in text[:2000].lower() or "<!doctype" in text[:200].lower():
+        return None
+
+    fences = re.findall(r"```(?:glsl|c|cpp|hs?lsl)?\s*\n(.*?)```", text, re.DOTALL | re.IGNORECASE)
+    for block in fences:
+        if "mainImage" in block:
+            return block.strip() + "\n"
+
+    idx = text.find("void mainImage")
+    if idx < 0:
+        idx = text.find("mainImage")
+        if idx < 0:
+            return None
+        start = text.rfind("\n", 0, idx)
+        idx = 0 if start < 0 else start + 1
+
+    chunk = text[idx:]
+    if chunk.startswith("{") or chunk.startswith("["):
+        return None
+    if "<" in chunk[:500]:
+        chunk = re.sub(r"<[^>]+>", "", chunk[:80_000])
+        chunk = chunk.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+    chunk = chunk.strip()
+    if "mainImage" not in chunk:
+        return None
+    return chunk if chunk.endswith("\n") else chunk + "\n"
 
 
-def _shader_id_map() -> dict[str, str]:
-    """Lowercase ID -> actual filename ID in the GitHub dump."""
-    global _id_case_map
-    if _id_case_map is not None:
-        return _id_case_map
-    _id_case_map = {}
-    for url in _LIST_URLS:
-        try:
-            with _get(url, timeout=15) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-            ids = data.get("Results") if isinstance(data, dict) else data
-            if not isinstance(ids, list):
-                continue
-            for item in ids:
-                if isinstance(item, str) and item:
-                    _id_case_map.setdefault(item.lower(), item)
-            if _id_case_map:
-                return _id_case_map
-        except Exception:  # noqa: BLE001
-            continue
-    return _id_case_map
+def _unescape_json_string(value: str) -> str:
+    try:
+        return json.loads(f'"{value}"')
+    except json.JSONDecodeError:
+        return (
+            value.replace("\\n", "\n")
+            .replace("\\t", "\t")
+            .replace('\\"', '"')
+            .replace("\\\\", "\\")
+        )
 
 
-def _mirror_ids(shader_id: str) -> list[str]:
-    """IDs to try, matching dump filename case when possible."""
-    out: list[str] = []
-    mapped = _shader_id_map().get(shader_id.lower())
-    for cand in (mapped, shader_id, shader_id.swapcase()):
-        if cand and cand not in out:
-            out.append(cand)
-    return out
+def try_parse_embedded_shader(text: str) -> dict | None:
+    """Best-effort: find a ShaderToy JSON blob or a \"code\" field in a page."""
+    shader = try_parse_json_text(text)
+    if shader is not None:
+        return shader
+    # gShaderToy / export JSON buried in HTML.
+    for match in re.finditer(r"\{[^{}]{0,200}\"renderpass\"\s*:", text):
+        start = match.start()
+        snippet = text[start : start + 2_000_000]
+        shader = try_parse_json_text(snippet)
+        if shader is not None:
+            return shader
+    codes = re.findall(r'"code"\s*:\s*"((?:\\.|[^"\\])*)"', text)
+    image = None
+    for raw in codes:
+        code = _unescape_json_string(raw)
+        if "mainImage" in code:
+            image = code
+            break
+    if image:
+        return {
+            "info": {"id": "", "name": "", "username": ""},
+            "renderpass": [{"type": "image", "name": "Image", "code": image, "inputs": []}],
+        }
+    return None
 
 
 def _fetch_mirrors(shader_id: str) -> dict:
-    last = None
-    for sid in _mirror_ids(shader_id):
-        for tmpl in _MIRRORS:
-            url = tmpl.format(id=sid)
-            try:
-                with _get(url, timeout=10) as resp:
-                    data = json.loads(resp.read().decode("utf-8"))
-                return coerce_shader(data)
-            except Exception as ex:  # noqa: BLE001
-                last = ex
-                continue
-    raise RuntimeError(str(last) if last else "not in public API snapshot")
+    """One jsDelivr GET. 404 is instant; do not walk extra hosts/casings on a miss."""
+    url = _MIRRORS[0].format(id=shader_id)
+    try:
+        with _get(url, timeout=4) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        return coerce_shader(data)
+    except Exception as ex:  # noqa: BLE001
+        raise RuntimeError(
+            "not in 2024 Public+API dump" + f" ({_http_error_text(ex)})"
+        ) from ex
 
 
 def _fetch_official(shader_id: str, key: str) -> dict:
     url = (
-        f"https://www.shadertoy.com/api/v1/shaders/{shader_id}"
+        f"https://www.shadertoy.com/api/v1/shaders/{urllib.parse.quote(shader_id)}"
         f"?key={urllib.parse.quote(key)}"
     )
-    with _get(url, timeout=8) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
+    try:
+        with _get(url, timeout=6) as resp:
+            raw = resp.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as ex:
+        raise RuntimeError(_http_error_text(ex)) from ex
+    data = json.loads(raw)
     if isinstance(data, dict) and data.get("Error"):
-        raise RuntimeError(str(data["Error"]))
+        err = str(data["Error"])
+        low = err.lower()
+        if "not found" in low or "invalid" in low:
+            raise RuntimeError(
+                f"{err} — shader is not Public+API (or bad ID). "
+                "Webpage-visible Public/Unlisted shaders are not in the API"
+            )
+        raise RuntimeError(err)
     return coerce_shader(data)
+
+
+def _fetch_unofficial(shader_id: str) -> dict:
+    payload = urllib.parse.urlencode(
+        {"s": json.dumps({"shaders": [shader_id]})}
+    ).encode("utf-8")
+    req = urllib.request.Request(
+        "https://www.shadertoy.com/shadertoy",
+        data=payload,
+        method="POST",
+        headers={
+            "User-Agent": _CHROME_UA,
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Origin": "https://www.shadertoy.com",
+            "Referer": f"https://www.shadertoy.com/view/{shader_id}",
+            "X-Requested-With": "XMLHttpRequest",
+        },
+    )
+    with _opener().open(req, timeout=15) as resp:
+        raw = resp.read().decode("utf-8", "replace")
+    data = json.loads(raw)
+    return coerce_shader(data)
+
+
+def _fetch_proxies(shader_id: str) -> dict:
+    urls = (
+        f"https://r.jina.ai/https://www.shadertoy.com/view/{shader_id}",
+        f"https://r.jina.ai/http://www.shadertoy.com/view/{shader_id}",
+        f"https://api.allorigins.win/raw?url={urllib.parse.quote('https://www.shadertoy.com/view/' + shader_id, safe='')}",
+    )
+    last = None
+    for url in urls:
+        try:
+            with _get(url, timeout=20) as resp:
+                text = resp.read().decode("utf-8", "replace")
+            shader = try_parse_embedded_shader(text)
+            if shader is not None:
+                info = shader.setdefault("info", {})
+                info.setdefault("id", shader_id)
+                return shader
+            glsl = extract_mainimage(text)
+            if glsl:
+                return {
+                    "info": {"id": shader_id, "name": shader_id, "username": ""},
+                    "renderpass": [
+                        {"type": "image", "name": "Image", "code": glsl, "inputs": []}
+                    ],
+                }
+            last = RuntimeError("page had no mainImage")
+        except Exception as ex:  # noqa: BLE001
+            last = ex
+            continue
+    raise RuntimeError(str(last) if last else "proxies failed")
+
+
+def resolve_api_key(api_key: str = "") -> str:
+    return (
+        (api_key or "").strip()
+        or os.environ.get("SHADERTOY_KEY", "").strip()
+        or os.environ.get("SHADERTOY_API_KEY", "").strip()
+        or os.environ.get("SHADERTOY_APP_KEY", "").strip()
+    )
 
 
 def fetch_shader_json(shader_id: str, api_key: str = "") -> dict:
     errors: list[str] = []
-    key = (api_key or "").strip() or os.environ.get("SHADERTOY_KEY", "").strip()
+    key = resolve_api_key(api_key)
+
+    # Only two fast attempts. Unofficial POST / jina used to sit on Cloudflare for 15–20s each.
+    if key:
+        try:
+            return _fetch_official(shader_id, key)
+        except Exception as ex:  # noqa: BLE001
+            errors.append(f"API: {ex}")
+    else:
+        errors.append("API: no key (node API Key, or SHADERTOY_KEY env)")
 
     try:
         return _fetch_mirrors(shader_id)
     except Exception as ex:  # noqa: BLE001
         errors.append(f"archive: {ex}")
 
-    if key:
-        try:
-            return _fetch_official(shader_id, key)
-        except Exception as ex:  # noqa: BLE001
-            errors.append(f"API: {ex}")
-
-    raise RuntimeError(
-        " | ".join(errors)
-        + " — shadertoy.com is blocked (Cloudflare 403). "
-        "Open the page in a browser, click the Image tab, Ctrl+A / Ctrl+C, then Paste."
-    )
+    hint = "Image tab → Ctrl+A → Ctrl+C → Paste."
+    if not key:
+        hint = (
+            "No API key: only the 2024 dump (or Paste) can work. "
+            "Silver/Gold key at shadertoy.com/howto. "
+            + hint
+        )
+    raise RuntimeError(" | ".join(errors) + " — " + hint)
 
 
 def _buffer_letter(name: str) -> str:
@@ -305,7 +441,7 @@ def _active_shadertoy(context):
 
 def _apply_text(node, text: str) -> str | None:
     """Return a short status if text was applied, else None."""
-    shader = try_parse_json_text(text)
+    shader = try_parse_json_text(text) or try_parse_embedded_shader(text)
     if shader is not None:
         apply_shader_to_node(node, shader)
         return "json"
@@ -320,8 +456,8 @@ class NODE_OT_shadertoy_fetch(Operator):
     bl_idname = "node.shadertoy_fetch"
     bl_label = "Fetch ShaderToy"
     bl_description = (
-        "Load from GitHub Public+API archive, or from JSON/GLSL on the clipboard. "
-        "Does not need a browser plugin"
+        "Fetch via ShaderToy API key (Public+API, live), then the 2024 dump, "
+        "or load JSON/GLSL already on the clipboard"
     )
     bl_options = {"REGISTER", "UNDO"}
 
@@ -335,17 +471,17 @@ class NODE_OT_shadertoy_fetch(Operator):
             self.report({"ERROR"}, "Select a ShaderToy node")
             return {"CANCELLED"}
 
-        # URL box or clipboard may already hold JSON / GLSL.
-        for source, text in (
-            ("URL field", node.url),
-            ("clipboard", context.window_manager.clipboard or ""),
-        ):
-            kind = _apply_text(node, text)
+        # Only treat the URL box as JSON/GLSL if it actually looks like source.
+        # Do not scan the clipboard here — a copied shadertoy.com page is huge HTML
+        # and used to stall Fetch for many seconds. Use the Paste button for that.
+        url_text = node.url or ""
+        if url_text.lstrip()[:1] in "{[" or "mainImage" in url_text:
+            kind = _apply_text(node, url_text)
             if kind:
-                self.report({"INFO"}, f"Loaded {kind} from {source}: {node.status}")
+                self.report({"INFO"}, f"Loaded {kind} from URL field: {node.status}")
                 return {"FINISHED"}
 
-        shader_id = parse_shader_id(node.url) or parse_shader_id(node.shader_id)
+        shader_id = parse_shader_id(url_text) or parse_shader_id(node.shader_id)
         if not shader_id:
             self.report({"ERROR"}, "Paste a shadertoy.com/view/… URL or shader ID")
             return {"CANCELLED"}
@@ -358,20 +494,12 @@ class NODE_OT_shadertoy_fetch(Operator):
             node.url = f"https://www.shadertoy.com/view/{shader_id}"
             node.shader_id = shader_id
         except Exception as ex:  # noqa: BLE001
-            view = f"https://www.shadertoy.com/view/{shader_id}"
-            try:
-                bpy.ops.wm.url_open(url=view)
-            except Exception:  # noqa: BLE001
-                pass
+            msg = str(ex)
             node.status = "Fetch failed"
-            node.warning = (
-                f"{ex}  Browser opened. Image tab → Ctrl+A → Ctrl+C → Paste."
-            )
-            self.report(
-                {"ERROR"},
-                "Could not download (Cloudflare). Copied the page in your browser: "
-                "Image tab, Ctrl+A, Ctrl+C, then click Paste.",
-            )
+            node.warning = msg
+            # Don't auto-open the browser — that hid the real error.
+            short = msg if len(msg) < 240 else msg[:237] + "..."
+            self.report({"ERROR"}, short)
             return {"CANCELLED"}
         finally:
             wm.progress_end()
