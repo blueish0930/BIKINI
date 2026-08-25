@@ -369,9 +369,48 @@ def encode_inputs(inputs: list, shader: dict) -> str:
             parts.append(f"{ch}=texture:{inp.get('src') or ''}")
         elif ctype == "keyboard":
             parts.append(f"{ch}=keyboard:")
+        elif ctype == "cubemap":
+            parts.append(f"{ch}=cubemap:")
+        elif ctype == "volume":
+            parts.append(f"{ch}=volume:")
         elif ctype:
             parts.append(f"{ch}=skip:{ctype}")
     return ";".join(parts)
+
+
+def encode_channel_letters(inputs: list, shader: dict) -> str:
+    """Compact iChannel0–3 wiring for the node (A–D / T / K / U / V).
+
+    JSON `inputs` are not in channel-index order (mstfzS Image lists the cubemap
+    first as channel 3). The GPU runtime reads positional letters, so this must
+    fill slots 0–3 rather than appending in list order.
+    """
+    idmap = _buffer_id_map(shader)
+    slots = ["T", "T", "T", "T"]
+    for inp in inputs or []:
+        try:
+            ch = int(inp.get("channel", 0))
+        except (TypeError, ValueError):
+            continue
+        if ch < 0 or ch > 3:
+            continue
+        ctype = inp.get("ctype") or ""
+        if ctype == "buffer":
+            letter = idmap.get(inp.get("id"), "")
+            slots[ch] = letter if letter in "ABCD" else "T"
+        elif ctype == "texture":
+            slots[ch] = "T"
+        elif ctype == "keyboard":
+            slots[ch] = "K"
+        elif ctype == "cubemap":
+            slots[ch] = "U"
+        elif ctype == "volume":
+            slots[ch] = "V"
+        elif ctype:
+            slots[ch] = "K"
+    while slots and slots[-1] == "T":
+        slots.pop()
+    return ",".join(slots)
 
 
 def apply_shader_to_node(node, shader: dict) -> None:
@@ -382,6 +421,7 @@ def apply_shader_to_node(node, shader: dict) -> None:
 
     codes = {"common": "", "A": "", "B": "", "C": "", "D": "", "image": ""}
     pass_maps: list[str] = []
+    letters = {"image": "", "A": "", "B": "", "C": "", "D": ""}
     warnings: list[str] = []
     present: list[str] = []
 
@@ -398,6 +438,7 @@ def apply_shader_to_node(node, shader: dict) -> None:
             encoded = encode_inputs(rp.get("inputs") or [], shader)
             if encoded:
                 pass_maps.append("IMAGE:" + encoded)
+            letters["image"] = encode_channel_letters(rp.get("inputs") or [], shader)
         elif ptype == "buffer":
             letter = _buffer_letter(name)
             if letter in "ABCD":
@@ -406,6 +447,7 @@ def apply_shader_to_node(node, shader: dict) -> None:
                 encoded = encode_inputs(rp.get("inputs") or [], shader)
                 if encoded:
                     pass_maps.append(letter + ":" + encoded)
+                letters[letter] = encode_channel_letters(rp.get("inputs") or [], shader)
             else:
                 warnings.append(f"Skipped buffer '{name}'")
         elif ptype in {"sound", "cubemap"}:
@@ -420,6 +462,12 @@ def apply_shader_to_node(node, shader: dict) -> None:
     node.code_buffer_d = codes["D"]
     node.code_image = codes["image"]
     node.channel_map = "|".join(pass_maps)
+    # Runtime reads these, not channel_map. Clear leftovers from the previous shader.
+    node.channels_image = letters["image"]
+    node.channels_buffer_a = letters["A"]
+    node.channels_buffer_b = letters["B"]
+    node.channels_buffer_c = letters["C"]
+    node.channels_buffer_d = letters["D"]
     node.status = " + ".join(present) if present else "Loaded (no passes?)"
     node.warning = "; ".join(warnings)
     node.error_log = ""
@@ -437,6 +485,13 @@ def _active_shadertoy(context):
     if node is None or getattr(node, "bl_idname", "") != "ImageNodeShaderToy":
         return None
     return node
+
+
+def _try_compile():
+    try:
+        bpy.ops.node.shadertoy_compile()
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _apply_text(node, text: str) -> str | None:
@@ -504,6 +559,7 @@ class NODE_OT_shadertoy_fetch(Operator):
         finally:
             wm.progress_end()
 
+        _try_compile()
         self.report({"INFO"}, f"Fetched {node.shader_name or shader_id}: {node.status}")
         return {"FINISHED"}
 
@@ -533,6 +589,8 @@ class NODE_OT_shadertoy_paste_json(Operator):
                 "Clipboard is not JSON or GLSL. On shadertoy.com: Image tab, Ctrl+A, Ctrl+C",
             )
             return {"CANCELLED"}
+        if kind == "json":
+            _try_compile()
         self.report({"INFO"}, f"Pasted {kind}: {node.status}")
         return {"FINISHED"}
 
@@ -565,6 +623,8 @@ class NODE_OT_shadertoy_open_json(Operator, ImportHelper):
         if kind is None:
             self.report({"ERROR"}, "File is not ShaderToy JSON")
             return {"CANCELLED"}
+        if kind == "json":
+            _try_compile()
         self.report({"INFO"}, f"Loaded {os.path.basename(self.filepath)}: {node.status}")
         return {"FINISHED"}
 
