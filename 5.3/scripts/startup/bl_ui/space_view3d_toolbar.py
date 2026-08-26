@@ -67,23 +67,6 @@ class View3DPanel:
     bl_region_type = 'UI'
 
 
-# **************** standard tool clusters ******************
-
-# Used by vertex & weight paint
-def draw_vpaint_symmetry(layout, obj):
-    mesh = obj.data
-
-    col = layout.column()
-    row = col.row(heading="Mirror", align=True)
-    row.prop(obj, "use_mesh_mirror_x", text="X", toggle=True)
-    row.prop(obj, "use_mesh_mirror_y", text="Y", toggle=True)
-    row.prop(obj, "use_mesh_mirror_z", text="Z", toggle=True)
-
-    col = layout.column()
-    col.active = not mesh.use_mirror_vertex_groups
-    col.prop(mesh, "radial_symmetry", text="Radial")
-
-
 # ********** default tools for object mode ****************
 
 
@@ -883,36 +866,6 @@ class VIEW3D_PT_tools_brush_falloff(Panel, View3DPaintPanel, FalloffPanel):
     bl_options = {'DEFAULT_CLOSED'}
 
 
-class VIEW3D_PT_tools_brush_falloff_frontface(View3DPaintPanel, Panel):
-    bl_context = ".imagepaint"  # dot on purpose (access from topbar)
-    bl_label = "Front-Face Falloff"
-    bl_parent_id = "VIEW3D_PT_tools_brush_falloff"
-    bl_options = {'DEFAULT_CLOSED'}
-
-    @classmethod
-    def poll(cls, context):
-        return (context.weight_paint_object or context.vertex_paint_object)
-
-    def draw_header(self, context):
-        settings = self.paint_settings_from_active_tool(context)
-        brush = settings.brush
-
-        self.layout.prop(brush, "use_frontface_falloff", text=self.bl_label if self.is_popover else "")
-
-    def draw(self, context):
-        settings = self.paint_settings_from_active_tool(context)
-        brush = settings.brush
-
-        layout = self.layout
-
-        layout.use_property_split = True
-        layout.use_property_decorate = False
-
-        row = layout.row()
-        row.active = brush.use_frontface_falloff
-        row.prop(brush, "falloff_angle", text="Angle")
-
-
 class VIEW3D_PT_tools_brush_falloff_normal(View3DPaintPanel, Panel):
     bl_context = ".imagepaint"  # dot on purpose (access from topbar)
     bl_label = "Normal Falloff"
@@ -1193,7 +1146,15 @@ class VIEW3D_PT_tools_weightpaint_symmetry(Panel, View3DPaintPanel):
 
         layout.prop(mesh, "use_mirror_vertex_groups")
 
-        draw_vpaint_symmetry(layout, ob)
+        col = layout.column()
+        row = col.row(heading="Mirror", align=True)
+        row.prop(ob, "use_mesh_mirror_x", text="X", toggle=True)
+        row.prop(ob, "use_mesh_mirror_y", text="Y", toggle=True)
+        row.prop(ob, "use_mesh_mirror_z", text="Z", toggle=True)
+
+        col = layout.column()
+        col.active = not mesh.use_mirror_vertex_groups
+        col.prop(mesh, "radial_symmetry", text="Radial")
 
         row = layout.row()
         row.active = mesh.use_mirror_vertex_groups
@@ -1266,8 +1227,16 @@ class VIEW3D_PT_tools_vertexpaint_symmetry(Panel, View3DPaintPanel):
         layout.use_property_decorate = False
 
         ob = context.object
+        mesh = ob.data
 
-        draw_vpaint_symmetry(layout, ob)
+        col = layout.column()
+        row = col.row(heading="Mirror", align=True)
+        row.prop(ob, "use_mesh_mirror_x", text="X", toggle=True)
+        row.prop(ob, "use_mesh_mirror_y", text="Y", toggle=True)
+        row.prop(ob, "use_mesh_mirror_z", text="Z", toggle=True)
+
+        col = layout.column()
+        col.prop(mesh, "radial_symmetry", text="Radial")
 
 
 class VIEW3D_PT_tools_vertexpaint_symmetry_for_topbar(Panel):
@@ -1356,6 +1325,7 @@ class VIEW3D_PT_tools_imagepaint_options(View3DPaintPanel, Panel):
         tool_settings = context.tool_settings
         ipaint = tool_settings.image_paint
 
+        layout.prop(ipaint, "use_screen_space")
         layout.prop(ipaint, "seam_bleed")
         layout.prop(ipaint, "dither", slider=True)
 
@@ -2370,7 +2340,6 @@ classes = (
     VIEW3D_PT_tools_brush_stroke,
     VIEW3D_PT_tools_brush_stroke_smooth_stroke,
     VIEW3D_PT_tools_brush_falloff,
-    VIEW3D_PT_tools_brush_falloff_frontface,
     VIEW3D_PT_tools_brush_falloff_normal,
     VIEW3D_PT_tools_brush_display,
     VIEW3D_PT_tools_weight_gradient,
