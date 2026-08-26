@@ -436,7 +436,12 @@ def encode_channel_letters(inputs: list, shader: dict, extra_idmap: dict | None 
             slots[ch] = "V"
         elif ctype:
             slots[ch] = "K"
-    while slots and slots[-1] == "":
+    # Keep unused middle slots as Skip (`-`). `A,T,,K` used to collapse to
+    # `A,T,K` and put the keyboard on iChannel2 (Xst3Dj reset froze).
+    for i, val in enumerate(slots):
+        if val == "":
+            slots[i] = "-"
+    while slots and slots[-1] == "-":
         slots.pop()
     return ",".join(slots)
 
