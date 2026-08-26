@@ -386,10 +386,16 @@ def encode_inputs(inputs: list, shader: dict, extra_idmap: dict | None = None) -
         except (TypeError, ValueError):
             continue
         ctype = inp.get("ctype") or ""
+        samp = inp.get("sampler") or {}
+        filt = (samp.get("filter") or "").lower()
+        wrap = (samp.get("wrap") or "").lower()
+        suffix = ""
+        if filt == "nearest":
+            suffix += ":n"
+        if wrap == "repeat":
+            suffix += ":r"
         if ctype == "buffer":
             letter = idmap.get(inp.get("id"), "?")
-            filt = ((inp.get("sampler") or {}).get("filter") or "").lower()
-            suffix = ":n" if filt == "nearest" else ""
             parts.append(f"{ch}=buffer:{letter}{suffix}")
         elif ctype == "cubemap" and inp.get("id") in idmap:
             # Generated Cubemap A stored as Buffer A/B/C/D, not the dummy sky.
@@ -399,7 +405,11 @@ def encode_inputs(inputs: list, shader: dict, extra_idmap: dict | None = None) -
         elif ctype == "keyboard":
             parts.append(f"{ch}=keyboard:")
         elif ctype == "cubemap":
-            parts.append(f"{ch}=cubemap:")
+            src = inp.get("src") or ""
+            media = os.path.basename(src.replace("\\", "/"))
+            if media.lower().endswith(".png"):
+                media = media[:-4]
+            parts.append(f"{ch}=cubemap:{media}")
         elif ctype == "volume":
             parts.append(f"{ch}=volume:")
         elif ctype:
@@ -424,11 +434,18 @@ def encode_channel_letters(inputs: list, shader: dict, extra_idmap: dict | None 
         if ch < 0 or ch > 3:
             continue
         ctype = inp.get("ctype") or ""
+        samp = inp.get("sampler") or {}
+        filt = (samp.get("filter") or "").lower()
+        wrap = (samp.get("wrap") or "").lower()
+        flags = ""
+        if filt == "nearest":
+            flags += "n"
+        if wrap == "repeat":
+            flags += "r"
         if ctype == "buffer":
             letter = idmap.get(inp.get("id"), "")
             if letter in "ABCD":
-                filt = ((inp.get("sampler") or {}).get("filter") or "").lower()
-                slots[ch] = letter + ("n" if filt == "nearest" else "")
+                slots[ch] = letter + flags
             else:
                 slots[ch] = "T"
         elif ctype == "texture":
@@ -437,7 +454,8 @@ def encode_channel_letters(inputs: list, shader: dict, extra_idmap: dict | None 
             slots[ch] = "K"
         elif ctype == "cubemap":
             # Site HDRI cubemap vs this shader's Cubemap A pass.
-            slots[ch] = idmap.get(inp.get("id"), "U")
+            letter = idmap.get(inp.get("id"), "U")
+            slots[ch] = letter if letter in "ABCD" else "U"
         elif ctype == "volume":
             slots[ch] = "V"
         elif ctype:
