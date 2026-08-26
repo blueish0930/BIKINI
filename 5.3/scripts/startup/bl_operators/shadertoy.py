@@ -388,7 +388,9 @@ def encode_inputs(inputs: list, shader: dict, extra_idmap: dict | None = None) -
         ctype = inp.get("ctype") or ""
         if ctype == "buffer":
             letter = idmap.get(inp.get("id"), "?")
-            parts.append(f"{ch}=buffer:{letter}")
+            filt = ((inp.get("sampler") or {}).get("filter") or "").lower()
+            suffix = ":n" if filt == "nearest" else ""
+            parts.append(f"{ch}=buffer:{letter}{suffix}")
         elif ctype == "cubemap" and inp.get("id") in idmap:
             # Generated Cubemap A stored as Buffer A/B/C/D, not the dummy sky.
             parts.append(f"{ch}=buffer:{idmap[inp.get('id')]}")
@@ -424,7 +426,11 @@ def encode_channel_letters(inputs: list, shader: dict, extra_idmap: dict | None 
         ctype = inp.get("ctype") or ""
         if ctype == "buffer":
             letter = idmap.get(inp.get("id"), "")
-            slots[ch] = letter if letter in "ABCD" else "T"
+            if letter in "ABCD":
+                filt = ((inp.get("sampler") or {}).get("filter") or "").lower()
+                slots[ch] = letter + ("n" if filt == "nearest" else "")
+            else:
+                slots[ch] = "T"
         elif ctype == "texture":
             slots[ch] = "T"
         elif ctype == "keyboard":
