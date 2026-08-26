@@ -338,7 +338,7 @@ def _buffer_letter(name: str) -> str:
     return ""
 
 
-def _buffer_id_map(shader: dict) -> dict:
+def _buffer_id_map(shader: dict, cubemap_slots: dict | None = None) -> dict:
     mapping = {}
     for rp in shader.get("renderpass") or []:
         if rp.get("type") != "buffer":
@@ -350,11 +350,35 @@ def _buffer_id_map(shader: dict) -> dict:
             oid = out.get("id")
             if oid is not None:
                 mapping[oid] = letter
+    if cubemap_slots:
+        mapping.update(cubemap_slots)
     return mapping
 
 
-def encode_inputs(inputs: list, shader: dict) -> str:
-    idmap = _buffer_id_map(shader)
+def _assign_cubemap_into_buffers(shader: dict, codes: dict) -> tuple[dict, list[str]]:
+    """ShaderToy Cubemap A is not Buffer A–D. Store it in the first empty buffer slot."""
+    mapping = {}
+    notes = []
+    taken = {L for L in "ABCD" if codes.get(L)}
+    for rp in shader.get("renderpass") or []:
+        if (rp.get("type") or "") != "cubemap":
+            continue
+        slot = next((L for L in "ABCD" if L not in taken), None)
+        if slot is None:
+            notes.append("Skipped Cubemap A (Buffer A–D already full)")
+            continue
+        codes[slot] = rp.get("code") or ""
+        taken.add(slot)
+        for out in rp.get("outputs") or []:
+            oid = out.get("id")
+            if oid is not None:
+                mapping[oid] = slot
+        notes.append(f"Cubemap A → Buffer {slot} (mainCubemap)")
+    return mapping, notes
+
+
+def encode_inputs(inputs: list, shader: dict, extra_idmap: dict | None = None) -> str:
+    idmap = _buffer_id_map(shader, extra_idmap)
     parts = []
     for inp in inputs or []:
         try:
@@ -365,6 +389,9 @@ def encode_inputs(inputs: list, shader: dict) -> str:
         if ctype == "buffer":
             letter = idmap.get(inp.get("id"), "?")
             parts.append(f"{ch}=buffer:{letter}")
+        elif ctype == "cubemap" and inp.get("id") in idmap:
+            # Generated Cubemap A stored as Buffer A/B/C/D, not the dummy sky.
+            parts.append(f"{ch}=buffer:{idmap[inp.get('id')]}")
         elif ctype == "texture":
             parts.append(f"{ch}=texture:{inp.get('src') or ''}")
         elif ctype == "keyboard":
@@ -378,15 +405,15 @@ def encode_inputs(inputs: list, shader: dict) -> str:
     return ";".join(parts)
 
 
-def encode_channel_letters(inputs: list, shader: dict) -> str:
+def encode_channel_letters(inputs: list, shader: dict, extra_idmap: dict | None = None) -> str:
     """Compact iChannel0–3 wiring for the node (A–D / T / K / U / V).
 
     JSON `inputs` are not in channel-index order (mstfzS Image lists the cubemap
     first as channel 3). The GPU runtime reads positional letters, so this must
     fill slots 0–3 rather than appending in list order.
     """
-    idmap = _buffer_id_map(shader)
-    slots = ["T", "T", "T", "T"]
+    idmap = _buffer_id_map(shader, extra_idmap)
+    slots = ["", "", "", ""]
     for inp in inputs or []:
         try:
             ch = int(inp.get("channel", 0))
@@ -403,12 +430,13 @@ def encode_channel_letters(inputs: list, shader: dict) -> str:
         elif ctype == "keyboard":
             slots[ch] = "K"
         elif ctype == "cubemap":
-            slots[ch] = "U"
+            # Site HDRI cubemap vs this shader's Cubemap A pass.
+            slots[ch] = idmap.get(inp.get("id"), "U")
         elif ctype == "volume":
             slots[ch] = "V"
         elif ctype:
             slots[ch] = "K"
-    while slots and slots[-1] == "T":
+    while slots and slots[-1] == "":
         slots.pop()
     return ",".join(slots)
 
@@ -424,6 +452,7 @@ def apply_shader_to_node(node, shader: dict) -> None:
     letters = {"image": "", "A": "", "B": "", "C": "", "D": ""}
     warnings: list[str] = []
     present: list[str] = []
+    pending: list[dict] = []
 
     for rp in shader.get("renderpass") or []:
         ptype = rp.get("type") or ""
@@ -435,25 +464,53 @@ def apply_shader_to_node(node, shader: dict) -> None:
         elif ptype == "image":
             codes["image"] = code
             present.append("Image")
-            encoded = encode_inputs(rp.get("inputs") or [], shader)
-            if encoded:
-                pass_maps.append("IMAGE:" + encoded)
-            letters["image"] = encode_channel_letters(rp.get("inputs") or [], shader)
+            pending.append(rp)
         elif ptype == "buffer":
             letter = _buffer_letter(name)
             if letter in "ABCD":
                 codes[letter] = code
                 present.append(f"Buffer {letter}")
-                encoded = encode_inputs(rp.get("inputs") or [], shader)
-                if encoded:
-                    pass_maps.append(letter + ":" + encoded)
-                letters[letter] = encode_channel_letters(rp.get("inputs") or [], shader)
+                pending.append(rp)
             else:
                 warnings.append(f"Skipped buffer '{name}'")
-        elif ptype in {"sound", "cubemap"}:
-            warnings.append(f"Skipped {ptype}")
+        elif ptype == "cubemap":
+            pending.append(rp)
+        elif ptype == "sound":
+            warnings.append("Skipped sound")
         elif ptype:
             warnings.append(f"Skipped {ptype} {name}".strip())
+
+    cube_slots, cube_notes = _assign_cubemap_into_buffers(shader, codes)
+    warnings.extend(cube_notes)
+    if cube_slots:
+        present.append("Cubemap A")
+    idmap = _buffer_id_map(shader, cube_slots)
+
+    for rp in pending:
+        ptype = rp.get("type") or ""
+        if ptype == "image":
+            encoded = encode_inputs(rp.get("inputs") or [], shader, cube_slots)
+            if encoded:
+                pass_maps.append("IMAGE:" + encoded)
+            letters["image"] = encode_channel_letters(rp.get("inputs") or [], shader, cube_slots)
+        elif ptype == "buffer":
+            letter = _buffer_letter(rp.get("name") or "")
+            if letter in "ABCD":
+                encoded = encode_inputs(rp.get("inputs") or [], shader, cube_slots)
+                if encoded:
+                    pass_maps.append(letter + ":" + encoded)
+                letters[letter] = encode_channel_letters(rp.get("inputs") or [], shader, cube_slots)
+        elif ptype == "cubemap":
+            slot = None
+            for out in rp.get("outputs") or []:
+                slot = cube_slots.get(out.get("id"))
+                if slot:
+                    break
+            if slot:
+                encoded = encode_inputs(rp.get("inputs") or [], shader, cube_slots)
+                if encoded:
+                    pass_maps.append(slot + ":" + encoded)
+                letters[slot] = encode_channel_letters(rp.get("inputs") or [], shader, cube_slots)
 
     node.code_common = codes["common"]
     node.code_buffer_a = codes["A"]
