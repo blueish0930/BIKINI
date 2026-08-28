@@ -561,6 +561,20 @@ def apply_shader_to_node(node, shader: dict) -> None:
 
 def apply_glsl_image(node, code: str) -> None:
     node.code_image = code
+    # Image-only paste must not keep the previous shader's Buffer wiring.
+    # dtSfzR clouds/mountains sample iChannel0 as the site noise texture;
+    # leftover `A` from a Buffer shader binds the ping-pong instead.
+    node.code_buffer_a = ""
+    node.code_buffer_b = ""
+    node.code_buffer_c = ""
+    node.code_buffer_d = ""
+    node.code_common = ""
+    node.channels_image = "T"
+    node.channels_buffer_a = ""
+    node.channels_buffer_b = ""
+    node.channels_buffer_c = ""
+    node.channels_buffer_d = ""
+    node.channel_map = ""
     node.status = "Pasted Image GLSL"
     node.warning = ""
     node.error_log = ""

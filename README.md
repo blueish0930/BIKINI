@@ -1,100 +1,135 @@
 # BIKINI
 
-非官方 **Blender 5.3** 便携构建（Windows x64）。在主线之上做自己真正想用的节点、图像工具与编辑器体验。
+非官方 Blender **5.3** 便携包（Windows x64），每日版同步更。
 
-**文档：** [主页](https://blueish0930.github.io/BIKINI/) · [更新日志](https://blueish0930.github.io/BIKINI/changelog.html) · 本地 `docs/`
+- 文档：[主页](https://blueish0930.github.io/BIKINI/) · [手册](https://blueish0930.github.io/BIKINI/manual.html) · [更新日志](https://blueish0930.github.io/BIKINI/changelog.html) · 本地 `docs/index.html`
+- 源码：[projects.blender.org/blueish/BIKINI](https://projects.blender.org/blueish/BIKINI)
+- 站点：[github.com/blueish0930/BIKINI](https://github.com/blueish0930/BIKINI)
 
-**仓库：** [GitHub（站点 / 发布）](https://github.com/blueish0930/BIKINI) · [源码（projects.blender.org）](https://projects.blender.org/blueish/BIKINI)
----
+与 Blender Foundation 无关，未做官方签名。
 
-## 中文
+## 使用
 
-### 目标
+1. **整包解压**，不要只拷 `blender.exe`。
+2. 运行同目录的 `blender.exe`。
+3. `5.3/`、`blender.crt/`、`blender.shared/`、`license/`、`bf_intern_*.dll` 必须留在 exe 旁边。
 
-- 跟进 **Blender main / 5.3**，不当死分叉。
-- 以 **Geometry Nodes** 为中枢，补齐几何处理、稀疏求解、交互选择与重网格等能力。
-- 新增 **GPU Texture Editor（Image Process）**：面向贴图 / 栅格 / 流体的节点图（COP 向）。
-- 改进 **节点编辑器 UX** 与调试（Portal、对齐、组接口、属性预览等）。
-- 便携分发：解压即用，文档随包。
-
-### 已优化 / 主要方向
-
-| 方向 | 内容概要 |
-|------|----------|
-| 几何节点 | Portal、Clip、Loop 细分、近邻、Debug、Time Shift、Select/Edit、Heat Geodesic、染色、切向场、曲线求交、Expression、Write at Index、Delaunay… |
-| 稀疏数学 | Mesh Laplacian → Sparse Matrix Math → Linear Solver（稀疏求解 / 分解 / 特征） |
-| 重网格与破碎 | Instant Meshes、QuadWild、Triangle Remesh、Voronoi Fracture |
-| 图像节点 | Point Stamp、光栅化、法线/高度、Paint、Histogram、流体区、SDF/Fractal、Bake、Sample/Write at Pixel… |
-| 着色器 | SDF Shape、Fractal、HLSL、Image Socket |
-| 界面 | 抖动拆线、U 对齐、组 Separator/Message、Ctrl/Alt 改 socket、Menu 多选、Spreadsheet 排序… |
-| 编辑器 | Data-Block Graph；合成器内嵌 GTE 组节点 |
-
-### 使用
-
-1. 下载并**整包解压**（勿只拷 `blender.exe`）。
-2. 运行 `blender.exe`（同级需保留 `5.3/`、`blender.crt/`、`blender.shared/`、`license/` 等）。
-3. 详见 `BIKINI_BUILD_INFO.txt`。
-
-> 非官方构建，与 Blender Foundation 无隶属关系，未做官方签名。
+详见 `BIKINI_BUILD_INFO.txt`。节点参数见手册。
 
 ---
 
-## English
+## v1
 
-### Goals
+相对官方 5.3 第一批改动。
 
-- Track **Blender main / 5.3**; keep changes as maintainable increments, not a dead fork.
-- Center on **Geometry Nodes**: geometry ops, sparse solvers, interactive select/edit, remesh.
-- Add **GPU Texture Editor (Image Process)** for image/raster/fluid node graphs (COP-like).
-- Improve **node-editor UX** and debugging.
-- Ship a **portable** Windows build with docs.
+**几何节点**
 
-### Focus areas
+- String 属性、Portal、几何 Clip、设置默认闭包
+- Loop 细分、Nearest Neighbours、Debug、Time Shift
+- 模拟区 Cache Limit；Repeat Zone Break
+- Sparse Matrix Math、Linear Solver、Mesh Laplace
+- Object Info Seed
+- Select / Edit Element
+- Heat Geodesic、切向场、Gradient / Divergence
+- Instant Meshes、QuadWild、Triangle Remesh
+- Voronoi 破碎、Delaunay 3D、图染色
+- 曲线求交、Write at Index、RBF Interpolate
+- Expression（自动补全）
+- 组接口 enable 优化
 
-Geometry Nodes (portals, clip, remesh, fracture, sparse linear algebra, expression…), Image Process (stamp, fluid, SDF/fractal, bake, paint…), shaders (SDF/HLSL), UI gestures and group interface tools, extra editors (Data-Block Graph; compositor bridge to GTE).
+**界面**
 
-### Usage
+- 视口叠加层属性预览
+- 节点组 Separator / Message；参数换行；Ctrl+LMB 改名
+- 抖动拆线、一次插入多个节点
+- 按住 U 拖动对齐
+- 电子表格属性排序
+- 组 Menu 多选，输出 List
+- Ctrl+LMB 改接口数据类型，Alt+LMB 改接口形状（v2 改为 Shift+LMB 改类型）
 
-Download ZIP → extract whole tree → run `blender.exe`. Keep runtime folders next to the executable. See `BIKINI_BUILD_INFO.txt`.
+**着色器**
 
-> Unofficial custom build; not affiliated with or signed by the Blender Foundation.
+- Image Socket、SDF Shape、Fractal、Expression、HLSL
 
----
+**编辑器**
 
-## 引用资源与许可证 / Resources & licenses
+- Data-Block Graph
+- 合成器里的 GPU Texture Editor 组节点
 
-以下为构建中**关键上游与自带库**的协议摘要。完整第三方列表见包内 [`license/`](license/)（Blender 官方许可证树）。
+**GPU Texture Editor**
 
-| 资源 / Resource | 用途 / Role | 协议 / License | 可否随本项目开源分发？ |
-|-----------------|-------------|----------------|------------------------|
-| **Blender** | 主体程序与节点框架 | **GPL-2.0-or-later** | **可以**，但必须以 **GPL 兼容** 方式发布：附带/提供对应源码，不得改成闭源专有产品冒充官方。 |
-| **Eigen** | 稀疏线性代数（Linear Solver 等） | **MPL-2.0** | 可以；保留版权与 MPL 声明，修改文件需按 MPL 要求。 |
-| **Spectra** | 部分特征分解 | **MPL-2.0** | 同上。 |
-| **Voro++** | Voronoi 破碎单元 | **BSD-3-Clause** | 可以；保留版权与免责声明。 |
-| **Instant Meshes**（上游算法/实现） | Instant Meshes 重网格 | 遵循**上游仓库许可证**（常见为 **GPL-3** 系） | 可以，但须遵守其 GPL 条款（源码可得、许可兼容）。 |
-| **QRemeshify / QuadWild** | QuadWild 节点桥接 | **GPL-3**（见 `quadwild/README.txt`） | 可以，须按 GPL-3 提供源码与许可证。 |
-| **Inigo Quilez SDF / fractal 公式** | SDF Shape、Fractal 参考 | 通常允许学习与使用（以作者页面声明为准） | 可引用实现；建议保留出处说明。 |
-| 其它 Blender 捆绑库（Python、OpenEXR、OpenVDB、Bullet…） | 运行时 | **MIT / BSD / Apache-2.0 / LGPL / Zlib…** 见 `license/` | 可以，但须**完整保留** Blender 自带的 `license/` 与归属，不得拆掉只发 exe。 |
-
-### 你能不能「这样开源代码发出去」？
-
-**可以开源，但性质是「基于 Blender 的 GPL 衍生作品」，不是 MIT 单许可证小工具。**
-
-1. **Blender 本体是 GPL**：改节点、链进 `blender.exe` 的 C/C++ 代码一般需按 **GPL（或兼容许可证）** 提供源码；不能只发二进制、拒绝对应源码。  
-2. **BIKINI 自定义部分**建议明确写清：以 **GPL-2.0-or-later**（或与 Blender 相同）发布，避免和主程序冲突。  
-3. **第三方库**（Eigen、Spectra、Voro++、QuadWild…）按各自协议保留声明；**不要**把别人的代码改头换面声称「纯 MIT 自研」。  
-4. **允许**：GitHub 公开源码、发便携包、写文档与更新日志（本仓库做法）。  
-5. **不允许**：去掉 GPL/`license/`、声称官方 Blender、用闭源商业条款覆盖整棵 Blender 树。  
-6. **GPL-2-or-later + GPL-3 组件**（如部分 remesh 工具）：组合分发时通常按 **GPL-3** 兼容方式处理；保留各组件原许可证文本。
-
-更细的 SPDX 文本在 `license/spdx/`。若只 fork 文档站点、不重新分发 `blender.exe`，仍建议标注 Blender / 上游版权；**一旦分发修改后的 Blender 二进制，就必须满足 GPL 源码义务。**
+- Import Points、Point Stamp
+- Normal ↔ Height
+- Simulation / Repeat、流体输入输出
+- Rasterize Geometry
+- Sample / Write at Pixel、Paint、Histogram
+- SDF Shape、Fractal
+- Bake Image、Image Output
 
 ---
 
-**BIKINI** 仅标识此非官方构建。
+## v2
 
-| | |
-|--|--|
-| 站点 | https://blueish0930.github.io/BIKINI/ |
-| GitHub 仓库 | https://github.com/blueish0930/BIKINI |
-| 源码仓库 | https://projects.blender.org/blueish/BIKINI |
+**几何节点**
+
+- CGAL 计算几何（Add → Bikini → Lib → CGAL）
+- Box Engine（Box2D 二维、Box3D 三维）、Jolt 三维刚体
+- Set Group Input Default、Guide Geometry、Attribute Transfer
+- Get / Set Vector Component、Get / Set Matrix Component
+- Make It Stand、Optimal Transport
+
+**GPU Texture Editor**
+
+- Camera View、Island UV、Island Padding
+- Portal、FFT、Import Geo、Geo SDF
+- Render Material、ShaderToy
+
+**着色器**
+
+- Portal、字符串节点
+
+**物体编辑器**
+
+- 用节点创建 / 引用物体，改变换、可见性、材质槽、修改器、父级、删除
+
+**界面**
+
+- G 只移动，不插入连线
+- 改名高亮
+- Shift+LMB 改接口数据类型（替代 v1 的 Ctrl+LMB）
+- 不同编辑器之间复制粘贴节点组
+- Dirty 评估（不再整树重煮）；Ctrl 点击预览
+- 电子表格 Group / Attribute Filter
+- Drag Search 建组不再整树重评估
+- 3D 视口纹理绘制模式可画 8K（不是 GTE）
+
+---
+
+## 第三方库
+
+完整文本在 `license/`。
+
+| 库 | 版本 | 许可证 | 用在 | 出处 |
+|----|------|--------|------|------|
+| [CGAL](https://www.cgal.org) | 6.2 | GPL-3.0-or-later / LGPL | 几何节点 CGAL | [cgal.org](https://www.cgal.org) · [GitHub](https://github.com/CGAL/cgal) |
+| [Box2D](https://box2d.org) | 3 | MIT · Erin Catto | Box Engine 2D | [box2d.org](https://box2d.org) · [GitHub](https://github.com/erincatto/box2d) |
+| [Box3D](https://github.com/erincatto/box3d) | — | MIT · Erin Catto | Box Engine 3D | [GitHub](https://github.com/erincatto/box3d) |
+| [Jolt Physics](https://github.com/jrouwe/JoltPhysics) | 5.6.0 | MIT · Jorrit Rouwe | Jolt Solver | [GitHub](https://github.com/jrouwe/JoltPhysics) |
+| Eigen | — | MPL-2.0 | 稀疏线性代数 | |
+| Spectra | — | MPL-2.0 | 特征分解 | |
+| Voro++ | — | BSD-3-Clause | Voronoi 破碎 | |
+| Instant Meshes / QuadWild | — | GPL-3 | 重网格 | 见 `quadwild/README.txt` |
+
+引用：
+
+- CGAL — The CGAL Project. *CGAL User and Reference Manual*, 6.2. <https://www.cgal.org>
+- Box2D / Box3D — Erin Catto. <https://box2d.org> · <https://github.com/erincatto/box3d>
+- Jolt Physics — Jorrit Rouwe, 5.6.0. <https://github.com/jrouwe/JoltPhysics>
+
+源码目录：`extern/cgal`、`extern/box2d`、`extern/box3d`、`extern/jolt`。
+
+## 许可证
+
+这是 GPL 衍生作品，不是 MIT 小工具。
+
+Blender 本体是 GPL-2.0-or-later，改过的二进制必须能提供源码。CGAL、QuadWild 是 GPL-3，链进 exe 后整包按 GPL-3 分发。Box2D / Box3D / Jolt 是 MIT，声明留着即可。分发时保留 `license/`，不要声称官方 Blender。

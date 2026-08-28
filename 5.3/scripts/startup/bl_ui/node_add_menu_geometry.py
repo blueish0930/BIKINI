@@ -660,7 +660,7 @@ class NODE_MT_gn_point_base(node_add_menu.NodeMenu):
 
 class NODE_MT_gn_simulation_box_engine_base(node_add_menu.NodeMenu):
     bl_label = "Box Engine"
-    menu_path = "Simulation/Box Engine"
+    menu_path = "Bikini/Lib/Box Solver"
 
     def draw(self, context):
         layout = self.layout
@@ -678,8 +678,6 @@ class NODE_MT_gn_simulation_base(node_add_menu.NodeMenu):
     def draw(self, context):
         layout = self.layout
         self.simulation_zone(layout, label="Simulation")
-        layout.separator()
-        self.node_operator(layout, "GeometryNodeXPBDSolver")
 
         self.draw_assets_for_catalog(layout, self.bl_label)
 
@@ -1140,6 +1138,7 @@ class NODE_MT_gn_bikini_geometry_sample_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "GeometryNodeKNearest")
         self.node_operator(layout, "GeometryNodeRBFInterpolate")
         self.node_operator(layout, "GeometryNodeAttributeTransfer")
+        self.node_operator(layout, "GeometryNodeCgalOptimalTransport")
         self.draw_assets_for_catalog(layout, self.menu_path)
 
 
@@ -1230,6 +1229,9 @@ class NODE_MT_gn_bikini_simulation_base(node_add_menu.NodeMenu):
     def draw(self, _context):
         layout = self.layout
         self.node_operator(layout, "GeometryNodeTimeShift")
+        layout.separator()
+        self.node_operator(layout, "GeometryNodeXPBDSolver")
+        self.node_operator(layout, "GeometryNodeMakeItStand")
         self.draw_assets_for_catalog(layout, self.menu_path)
 
 

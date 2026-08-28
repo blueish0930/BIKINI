@@ -153,7 +153,6 @@ class NODE_MT_image_node_filter_blur_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "CompositorNodeDefocus")
         self.node_operator(layout, "CompositorNodeDBlur")
         self.node_operator(layout, "CompositorNodeVecBlur")
-        self.node_operator(layout, "ImageNodeBlur3D")
         self.draw_assets_for_catalog(layout, self.menu_path)
 
 
