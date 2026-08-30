@@ -9235,7 +9235,7 @@
       "tree_type": "GeometryNodeTree",
       "category": "Bikini/Lib/CGAL/Mesh/Analyze",
       "label": "Curvature",
-      "description": "Field node: evaluate mean and Gaussian curvature on the context mesh vertices.",
+      "description": "Field node: evaluate mean, Gaussian, and total curvature on the context mesh.",
       "inputs": [],
       "outputs": [
         {
@@ -9251,6 +9251,16 @@
         {
           "name": "Gaussian",
           "identifier": "Gaussian",
+          "bl_idname": "NodeSocketFloat",
+          "type": "Float",
+          "description": "",
+          "enabled": true,
+          "hide": false,
+          "is_multi_input": false
+        },
+        {
+          "name": "Total Curvature",
+          "identifier": "Total Curvature",
           "bl_idname": "NodeSocketFloat",
           "type": "Float",
           "description": "",

@@ -1,14 +1,14 @@
 ﻿BIKINI — unofficial Blender 5.3 portable build (Windows x64)
 ============================================================
 
-Packaged: 2026-08-27
-Source commit: b7a3ff4 (最终笔刷绘制修复)
-blender.exe: 2026-08-27 19:05, 100.8 MB
+Packaged: 2026-08-29
+Source commit: ada76f7ffd6f (Fix NodeWarning namespace in scene compositor effects UI.)
+blender.exe: 2026-08-29 15:46, 100.8 MB
 
 How to use
 ----------
 1. Extract the ZIP as a whole folder (do not copy blender.exe alone).
-2. Run blender.exe (or blender-launcher.exe) inside this folder.
+2. Run blender.exe inside this folder.
 3. Keep these next to blender.exe: 5.3\, blender.crt\, blender.shared\,
    license\, python3.dll, python313.dll, bf_intern_*.dll, quadwild\.
 

@@ -388,9 +388,7 @@ class NODE_MT_shader_node_texture_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "ShaderNodeTexGabor")
         self.node_operator(layout, "ShaderNodeTexGradient")
         self.node_operator(layout, "ShaderNodeTexIES")
-        # Image socket + group-passable Image (PR #151575); inlined to ShaderNodeTexImage at eval.
-        self.node_operator(layout, "GeometryNodeImageTexture", label="Image Texture")
-        self.node_operator(layout, "ShaderNodeTexImage", label="Image Texture (Legacy)")
+        self.node_operator(layout, "ShaderNodeTexImage")
         self.node_operator(layout, "ShaderNodeTexMagic")
         self.node_operator(layout, "ShaderNodeTexNoise")
         self.node_operator(layout, "ShaderNodeTexSky")

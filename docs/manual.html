@@ -7450,15 +7450,15 @@ Result = float4(lerp(Color.rgb, Color.rgb * Fac, saturate(Fac)), Color.a);
   <div class="node-badge"><code>GeometryNodeCgalCurvature</code> · <code>GeometryNodeTree</code> · Bikini/Lib/CGAL/Mesh/Analyze</div>
   <h1><span class="zh">曲率</span><span class="en">Curvature</span></h1>
   <h2><span class="zh">功能</span><span class="en">Function</span></h2>
-  <p class="zh">场节点：在上下文网格顶点上计算平均曲率与高斯曲率。</p>
-  <p class="en">Field node: evaluate mean and Gaussian curvature on the context mesh vertices.</p>
+  <p class="zh">场节点：在上下文网格上计算平均曲率、高斯曲率与总曲率。</p>
+  <p class="en">Field node: evaluate mean, Gaussian, and total curvature on the context mesh.</p>
   <h2><span class="zh">输入</span><span class="en">Inputs</span></h2>
   <table class="io-table"><thead><tr><th style="width:32%"><span class="zh">名称</span><span class="en">Name</span></th><th><span class="zh">用途 / 菜单 / 显示条件</span><span class="en">Purpose / menu / visibility</span></th></tr></thead><tbody>
 <tr><td colspan="2" class="muted">—</td></tr>
 </tbody></table>
   <h2><span class="zh">输出</span><span class="en">Outputs</span></h2>
   <table class="io-table"><thead><tr><th style="width:32%"><span class="zh">名称</span><span class="en">Name</span></th><th><span class="zh">用途 / 显示条件</span><span class="en">Purpose / visibility</span></th></tr></thead><tbody>
-<tr><th><span class="zh">平均值</span><span class="en">Mean</span><span class="type">Float</span></th><td><div class="desc"><span class="zh">各顶点平均曲率 H（符号与朝向有关）。</span><span class="en">Mean curvature H at each vertex (sign depends on orientation).</span></div></td></tr><tr><th><span class="zh">高斯</span><span class="en">Gaussian</span><span class="type">Float</span></th><td><div class="desc"><span class="zh">高斯曲率 K（主曲率之积）。</span><span class="en">Gaussian curvature K (product of principal curvatures).</span></div></td></tr>
+<tr><th><span class="zh">平均值</span><span class="en">Mean</span><span class="type">Float</span></th><td><div class="desc"><span class="zh">各顶点平均曲率 H（符号与朝向有关）。</span><span class="en">Mean curvature H at each vertex (sign depends on orientation).</span></div></td></tr><tr><th><span class="zh">高斯</span><span class="en">Gaussian</span><span class="type">Float</span></th><td><div class="desc"><span class="zh">高斯曲率 K（主曲率之积）。</span><span class="en">Gaussian curvature K (product of principal curvatures).</span></div></td></tr><tr><th><span class="zh">总曲率</span><span class="en">Total Curvature</span><span class="type">Float</span></th><td><div class="desc"><span class="zh">总曲率密度 k1^2 + k2^2，由 Gauss 映射的 Dirichlet 能量得到（Chen 2023）。点：1-环面积加权；面：逐三角形。乘以面面积即为三角形上的积分值。</span><span class="en">Total curvature density k1^2 + k2^2 from the Dirichlet energy of the Gauss map (Chen 2023). Point: 1-ring area-weighted; Face: per-triangle. Multiply by Face Area for the integrated per-triangle value.</span></div></td></tr>
 </tbody></table>
   
   <p class="src zh">数据：本编译版 blender.exe 导出 + 源码 description / zh_HANS.po。无单独「属性」章节。</p>
