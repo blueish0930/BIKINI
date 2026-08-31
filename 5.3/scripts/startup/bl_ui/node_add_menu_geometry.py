@@ -283,7 +283,7 @@ class NODE_MT_gn_geometry_operations_base(node_add_menu.NodeMenu):
     bl_label = "Operations"
     menu_path = "Geometry/Operations"
 
-    def draw(self, _context):
+    def draw(self, context):
         layout = self.layout
         self.node_operator(layout, "GeometryNodeBake")
         self.node_operator(layout, "GeometryNodeBoundBox")
@@ -307,7 +307,7 @@ class NODE_MT_gn_geometry_sample_base(node_add_menu.NodeMenu):
     bl_label = "Sample"
     menu_path = "Geometry/Sample"
 
-    def draw(self, _context):
+    def draw(self, context):
         layout = self.layout
         self.node_operator(layout, "GeometryNodeProximity")
         self.node_operator(layout, "GeometryNodeIndexOfNearest")
@@ -790,7 +790,7 @@ class NODE_MT_gn_utilities_field_base(node_add_menu.NodeMenu):
     bl_label = "Field"
     menu_path = "Utilities/Field"
 
-    def draw(self, _context):
+    def draw(self, context):
         layout = self.layout
         self.node_operator(layout, "GeometryNodeAccumulateField")
         self.node_operator(layout, "GeometryNodeClusterByDistance")
@@ -1263,6 +1263,19 @@ class NODE_MT_gn_bikini_utilities_matrix_base(node_add_menu.NodeMenu):
 
     def draw(self, _context):
         layout = self.layout
+        self.node_operator(layout, "FunctionNodeCombineMatrix")
+        self.node_operator(layout, "FunctionNodeCombineTransform")
+        self.node_operator(layout, "FunctionNodeMatrixDeterminant", label="Determinant")
+        self.node_operator(layout, "FunctionNodeInvertMatrix")
+        self.node_operator(layout, "FunctionNodeMatrixSVD")
+        self.node_operator(layout, "FunctionNodeMatrixMultiply")
+        self.node_operator(layout, "FunctionNodeProjectPoint")
+        self.node_operator(layout, "FunctionNodeSeparateMatrix")
+        self.node_operator(layout, "FunctionNodeSeparateTransform")
+        self.node_operator(layout, "FunctionNodeTransformDirection")
+        self.node_operator(layout, "FunctionNodeTransformPoint")
+        self.node_operator(layout, "FunctionNodeTransposeMatrix")
+        layout.separator()
         self.node_operator(layout, "FunctionNodeGetMatrixComponent")
         self.node_operator(layout, "FunctionNodeSetMatrixComponent")
         self.node_operator(layout, "GeometryNodeSparseMatrixMath")
@@ -1620,6 +1633,8 @@ class NODE_MT_gn_bikini_base(node_add_menu.NodeMenu):
 
     def draw(self, _context):
         layout = self.layout
+        self.node_operator(layout, "GeometryNodeWrangle", search_weight=1.0)
+        layout.separator()
         self.draw_menu(layout, path="Bikini/Input")
         self.draw_menu(layout, path="Bikini/Output")
         layout.separator()

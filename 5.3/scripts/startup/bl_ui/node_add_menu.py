@@ -121,6 +121,20 @@ class NodeMenu(Menu):
         return None
 
     @classmethod
+    def node_operator_search_alias(cls, context, layout, node_type, label, settings=None, search_weight=0.0):
+        """Extra Shift-A search name that inserts an existing node, optionally with RNA settings."""
+        if not getattr(context, "is_menu_search", False):
+            return None
+        props = cls.node_operator(
+            layout, node_type, label=label, translate=False, search_weight=search_weight)
+        if props is not None and settings:
+            for name, value in settings.items():
+                item = props.settings.add()
+                item.name = name
+                item.value = repr(value)
+        return props
+
+    @classmethod
     def node_operator_with_searchable_enum(
             cls,
             context,

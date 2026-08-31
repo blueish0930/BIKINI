@@ -45,3 +45,6 @@ __pycache__/
 Thumbs.db
 .vscode/
 .idea/
+# Lock file created while Blender is running.
+/blender.exe.running
+
