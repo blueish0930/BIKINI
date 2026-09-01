@@ -37,6 +37,9 @@ class SPREADSHEET_HT_header(bpy.types.Header):
             placeholder="position  normal  ^uv*",
         )
 
+        row = layout.row(align=True)
+        row.prop(space, "decimal_precision", text="Precision")
+
         layout.separator_spacer()
 
         row = layout.row(align=True)
