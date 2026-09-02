@@ -159,12 +159,26 @@ ccl_device_inline float3 svm_spom_init_uvw(const float3 P,
   return make_float3(u, v, w);
 }
 
-ccl_device_inline bool svm_spom_outside(const float3 uvw, const float eps)
+ccl_device_inline float3 svm_spom_clamp_uvw(const float3 uvw)
 {
-  const float u = uvw.x;
-  const float v = uvw.y;
-  const float w = uvw.z;
-  return (u < -eps) || (v < -eps) || ((u + v) > (1.0f + eps)) || (w < -eps) || (w > (1.0f + eps));
+  float u = uvw.x;
+  float v = uvw.y;
+  float w = uvw.z;
+  if (u < 0.0f) {
+    v += u * 0.5f;
+    u = 0.0f;
+  }
+  if (v < 0.0f) {
+    u += v * 0.5f;
+    v = 0.0f;
+  }
+  const float s = u + v;
+  if (s > 1.0f && s > 1e-8f) {
+    u /= s;
+    v /= s;
+  }
+  w = clamp(w, 0.0f, 1.0f);
+  return make_float3(max(u, 0.0f), max(v, 0.0f), w);
 }
 
 ccl_device_inline float3 svm_spom_invert_uvw(const float3 P,
@@ -187,15 +201,15 @@ ccl_device_inline float3 svm_spom_invert_uvw(const float3 P,
     const float det = dot(e1, c1);
     if (fabsf(det) > 1e-12f) {
       const float inv = 1.0f / det;
-      return make_float3(
-          dot(c1, p) * inv, dot(cross(e3, e1), p) * inv, dot(cross(e1, e2), p) * inv);
+      return svm_spom_clamp_uvw(make_float3(
+          dot(c1, p) * inv, dot(cross(e3, e1), p) * inv, dot(cross(e1, e2), p) * inv));
     }
   }
   float3 uvw = uvw0;
   if (dot(uvw, uvw) < 1e-20f) {
     uvw = svm_spom_init_uvw(P, A, B, C, Na, Nb, Nc, H);
   }
-  return svm_spom_newton_uvw(P, A, B, C, Na, Nb, Nc, H, uvw, iters);
+  return svm_spom_clamp_uvw(svm_spom_newton_uvw(P, A, B, C, Na, Nb, Nc, H, uvw, iters));
 }
 
 ccl_device_inline float2 svm_spom_uv_from_uvw(const float3 uvw,
@@ -250,35 +264,33 @@ ccl_device_noinline void svm_node_parallax_occlusion(
   }
 
   if (node.mode >= 4) {
-    const AttributeDescriptor dA = find_attribute(kg, sd, node.attr_a);
-    const AttributeDescriptor dB = find_attribute(kg, sd, node.attr_b);
-    const AttributeDescriptor dC = find_attribute(kg, sd, node.attr_c);
-    const AttributeDescriptor dNa = find_attribute(kg, sd, node.attr_na);
-    const AttributeDescriptor dNb = find_attribute(kg, sd, node.attr_nb);
-    const AttributeDescriptor dNc = find_attribute(kg, sd, node.attr_nc);
-    const AttributeDescriptor d0 = find_attribute(kg, sd, node.attr_uv0);
-    const AttributeDescriptor d1 = find_attribute(kg, sd, node.attr_uv1);
-    const AttributeDescriptor d2 = find_attribute(kg, sd, node.attr_uv2);
-    if (!(is_attribute_found(dA) && is_attribute_found(dB) && is_attribute_found(dC))) {
+    const AttributeDescriptor d0 = find_attribute(kg, sd, node.attr_a);
+    const AttributeDescriptor d1 = find_attribute(kg, sd, node.attr_b);
+    const AttributeDescriptor d2 = find_attribute(kg, sd, node.attr_c);
+    const AttributeDescriptor d3 = find_attribute(kg, sd, node.attr_na);
+    const AttributeDescriptor d4 = find_attribute(kg, sd, node.attr_nb);
+    const AttributeDescriptor d5 = find_attribute(kg, sd, node.attr_nc);
+    if (!(is_attribute_found(d0) && is_attribute_found(d1) && is_attribute_found(d2) &&
+          is_attribute_found(d3) && is_attribute_found(d4) && is_attribute_found(d5)))
+    {
       svm_parallax_store(stack, node, out_vector, out_height, out_shadow, 1.0f);
       return;
     }
-    const float3 A = primitive_surface_attribute<float3>(kg, sd, dA);
-    const float3 B = primitive_surface_attribute<float3>(kg, sd, dB);
-    const float3 C = primitive_surface_attribute<float3>(kg, sd, dC);
-    float3 Na = is_attribute_found(dNa) ? primitive_surface_attribute<float3>(kg, sd, dNa) :
-                                          make_float3(0.0f, 0.0f, 1.0f);
-    float3 Nb = is_attribute_found(dNb) ? primitive_surface_attribute<float3>(kg, sd, dNb) : Na;
-    float3 Nc = is_attribute_found(dNc) ? primitive_surface_attribute<float3>(kg, sd, dNc) : Na;
-    Na = safe_normalize(Na);
-    Nb = safe_normalize(Nb);
-    Nc = safe_normalize(Nc);
-    const float3 uv0 = is_attribute_found(d0) ? primitive_surface_attribute<float3>(kg, sd, d0) :
-                                                zero_float3();
-    const float3 uv1 = is_attribute_found(d1) ? primitive_surface_attribute<float3>(kg, sd, d1) :
-                                                make_float3(1.0f, 0.0f, 0.0f);
-    const float3 uv2 = is_attribute_found(d2) ? primitive_surface_attribute<float3>(kg, sd, d2) :
-                                                make_float3(0.0f, 1.0f, 0.0f);
+    const float4 p0 = primitive_surface_attribute<float4>(kg, sd, d0);
+    const float4 p1 = primitive_surface_attribute<float4>(kg, sd, d1);
+    const float4 p2 = primitive_surface_attribute<float4>(kg, sd, d2);
+    const float4 p3 = primitive_surface_attribute<float4>(kg, sd, d3);
+    const float4 p4 = primitive_surface_attribute<float4>(kg, sd, d4);
+    const float4 p5 = primitive_surface_attribute<float4>(kg, sd, d5);
+    const float3 A = make_float3(p0.x, p0.y, p0.z);
+    const float3 B = make_float3(p1.x, p1.y, p1.z);
+    const float3 C = make_float3(p2.x, p2.y, p2.z);
+    float3 Na = safe_normalize(make_float3(p3.x, p3.y, p3.z));
+    float3 Nb = safe_normalize(make_float3(p4.x, p4.y, p4.z));
+    float3 Nc = safe_normalize(make_float3(p5.x, p5.y, p5.z));
+    const float3 uv0 = make_float3(p0.w, p1.w, 0.0f);
+    const float3 uv1 = make_float3(p2.w, p3.w, 0.0f);
+    const float3 uv2 = make_float3(p4.w, p5.w, 0.0f);
     float3 P = sd->P;
     object_inverse_position_transform(kg, sd, &P);
     float3 V = stack_load(stack, node.incoming);
@@ -315,7 +327,7 @@ ccl_device_noinline void svm_node_parallax_occlusion(
         break;
       }
       uvw = svm_spom_invert_uvw(Pcur, A, B, C, Na, Nb, Nc, H, uvw, nnewton);
-      if (svm_spom_outside(uvw, 0.002f)) {
+      if (uvw.z < -0.02f) {
         break;
       }
       const float2 suv = svm_spom_uv_from_uvw(uvw, uv0, uv1, uv2);
@@ -345,7 +357,7 @@ ccl_device_noinline void svm_node_parallax_occlusion(
         }
         const float3 Pmid = 0.5f * (P_lo + P_hi);
         uvw = svm_spom_invert_uvw(Pmid, A, B, C, Na, Nb, Nc, H, uvw, nnewton);
-        if (svm_spom_outside(uvw, 0.002f)) {
+        if (uvw.z < -0.02f) {
           P_lo = Pmid;
           continue;
         }
