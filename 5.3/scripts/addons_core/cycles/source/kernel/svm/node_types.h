@@ -374,6 +374,16 @@ struct SVMNodeCombineVector {
 static_assert(alignof(SVMNodeCombineVector) <= alignof(uint));
 static_assert(sizeof(SVMNodeCombineVector) % sizeof(uint) == 0);
 
+/* NODE_GET_VECTOR_COMPONENT / NODE_GET_VECTOR_COMPONENT_DERIVATIVE */
+struct SVMNodeGetVectorComponent {
+  SVMInputFloat3 vector;
+  SVMInputInt index;
+  SVMStackOffset out_offset;
+  uint8_t _pad[3];
+};
+static_assert(alignof(SVMNodeGetVectorComponent) <= alignof(uint));
+static_assert(sizeof(SVMNodeGetVectorComponent) % sizeof(uint) == 0);
+
 /* NODE_SEPARATE_COLOR */
 struct SVMNodeSeparateColor {
   NodeCombSepColorType color_type;
@@ -1305,5 +1315,37 @@ struct SVMNodeSceneTime {
 };
 static_assert(alignof(SVMNodeSceneTime) <= alignof(uint));
 static_assert(sizeof(SVMNodeSceneTime) % sizeof(uint) == 0);
+
+/* NODE_PARALLAX_OCCLUSION */
+struct SVMNodeParallaxOcclusion {
+  int id;
+  uint8_t mode;
+  uint8_t channel;
+  uint8_t invert;
+  uint8_t clip;
+  SVMInputFloat3 vector;
+  SVMInputFloat scale;
+  SVMInputFloat midlevel;
+  SVMInputFloat samples;
+  SVMInputFloat refine;
+  SVMInputFloat3 normal;
+  SVMInputFloat3 incoming;
+  SVMInputFloat3 light;
+  int attr_a;
+  int attr_b;
+  int attr_c;
+  int attr_na;
+  int attr_nb;
+  int attr_nc;
+  int attr_uv0;
+  int attr_uv1;
+  int attr_uv2;
+  SVMStackOffset out_vector;
+  SVMStackOffset out_height;
+  SVMStackOffset out_shadow;
+  SVMStackOffset out_alpha;
+};
+static_assert(alignof(SVMNodeParallaxOcclusion) <= alignof(uint));
+static_assert(sizeof(SVMNodeParallaxOcclusion) % sizeof(uint) == 0);
 
 CCL_NAMESPACE_END

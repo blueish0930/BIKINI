@@ -61,6 +61,7 @@
 #include "kernel/svm/math.h"
 #include "kernel/svm/mix.h"
 #include "kernel/svm/noisetex.h"
+#include "kernel/svm/parallax.h"
 #include "kernel/svm/normal.h"
 #include "kernel/svm/radial_tiling.h"
 #include "kernel/svm/ramp.h"
@@ -537,6 +538,17 @@ ccl_device void svm_eval_nodes(KernelGlobals kg,
         svm_node_combine_vector<dual3>(stack, svm_node_get<SVMNodeCombineVector>(kg, &offset));
       }
       break;
+      SVM_CASE(NODE_GET_VECTOR_COMPONENT)
+      svm_node_get_vector_component<float3>(stack,
+                                            svm_node_get<SVMNodeGetVectorComponent>(kg, &offset));
+      break;
+      SVM_CASE(NODE_GET_VECTOR_COMPONENT_DERIVATIVE)
+      IF_NOT_KERNEL_NODES_FEATURE(VOLUME)
+      {
+        svm_node_get_vector_component<dual3>(stack,
+                                             svm_node_get<SVMNodeGetVectorComponent>(kg, &offset));
+      }
+      break;
       SVM_CASE(NODE_VECTOR_ROTATE)
       svm_node_vector_rotate(stack, svm_node_get<SVMNodeVectorRotate>(kg, &offset));
       break;
@@ -611,6 +623,10 @@ ccl_device void svm_eval_nodes(KernelGlobals kg,
       break;
       SVM_CASE(NODE_SCENE_TIME)
       svm_node_scene_time(kg, stack, svm_node_get<SVMNodeSceneTime>(kg, &offset));
+      break;
+      SVM_CASE(NODE_PARALLAX_OCCLUSION)
+      svm_node_parallax_occlusion(
+          kg, sd, stack, svm_node_get<SVMNodeParallaxOcclusion>(kg, &offset));
       break;
       default:
         kernel_assert(!"Unknown node type was passed to the SVM machine");

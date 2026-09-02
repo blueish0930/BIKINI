@@ -48,3 +48,7 @@ Thumbs.db
 # Lock file created while Blender is running.
 /blender.exe.running
 
+
+/blender_test.exe
+/blender_test.pdb
+/gtest_list.txt
