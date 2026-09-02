@@ -104,6 +104,9 @@ ccl_device_inline float3 svm_spom_newton_uvw(const float3 P,
     const float v = uvw.y;
     const float w = uvw.z;
     const float3 F = svm_spom_eval_P(u, v, w, A, B, C, Na, Nb, Nc, H) - P;
+    if (dot(F, F) < 1e-12f) {
+      break;
+    }
     const float3 du = (B - A) + (w * H) * (Nb - Na);
     const float3 dv = (C - A) + (w * H) * (Nc - Na);
     const float3 dw = H * ((1.0f - u - v) * Na + u * Nb + v * Nc);
@@ -156,25 +159,43 @@ ccl_device_inline float3 svm_spom_init_uvw(const float3 P,
   return make_float3(u, v, w);
 }
 
-ccl_device_inline float3 svm_spom_clamp_uvw(const float3 uvw)
+ccl_device_inline bool svm_spom_outside(const float3 uvw, const float eps)
 {
-  float u = uvw.x;
-  float v = uvw.y;
-  float w = uvw.z;
-  if (u < 0.0f) {
-    v += u * 0.5f;
-    u = 0.0f;
+  const float u = uvw.x;
+  const float v = uvw.y;
+  const float w = uvw.z;
+  return (u < -eps) || (v < -eps) || ((u + v) > (1.0f + eps)) || (w < -eps) || (w > (1.0f + eps));
+}
+
+ccl_device_inline float3 svm_spom_invert_uvw(const float3 P,
+                                             const float3 A,
+                                             const float3 B,
+                                             const float3 C,
+                                             const float3 Na,
+                                             const float3 Nb,
+                                             const float3 Nc,
+                                             const float H,
+                                             const float3 uvw0,
+                                             const int iters)
+{
+  if (dot(Na, Nb) > 0.995f && dot(Nb, Nc) > 0.995f && dot(Nc, Na) > 0.995f) {
+    const float3 e1 = B - A;
+    const float3 e2 = C - A;
+    const float3 e3 = Na * H;
+    const float3 p = P - A;
+    const float3 c1 = cross(e2, e3);
+    const float det = dot(e1, c1);
+    if (fabsf(det) > 1e-12f) {
+      const float inv = 1.0f / det;
+      return make_float3(
+          dot(c1, p) * inv, dot(cross(e3, e1), p) * inv, dot(cross(e1, e2), p) * inv);
+    }
   }
-  if (v < 0.0f) {
-    u += v * 0.5f;
-    v = 0.0f;
+  float3 uvw = uvw0;
+  if (dot(uvw, uvw) < 1e-20f) {
+    uvw = svm_spom_init_uvw(P, A, B, C, Na, Nb, Nc, H);
   }
-  const float s = u + v;
-  if (s > 1.0f && s > 1e-8f) {
-    u /= s;
-    v /= s;
-  }
-  return make_float3(max(u, 0.0f), max(v, 0.0f), clamp(w, 0.0f, 1.0f));
+  return svm_spom_newton_uvw(P, A, B, C, Na, Nb, Nc, H, uvw, iters);
 }
 
 ccl_device_inline float2 svm_spom_uv_from_uvw(const float3 uvw,
@@ -266,16 +287,15 @@ ccl_device_noinline void svm_node_parallax_occlusion(
     }
     object_inverse_dir_transform(kg, sd, &V);
     V = safe_normalize(V);
-    const float3 dir = -V;
+    const float3 dir0 = -V;
     const float H = max(scale, 1e-5f);
     const int nsteps = clamp(int(stack_load(stack, node.samples)), 4, 64);
     const int nrefine = clamp(int(stack_load(stack, node.refine)), 0, 16);
     const int nnewton = 6;
     const float3 Navg = safe_normalize(Na + Nb + Nc);
-    float3 march_dir = dir;
-    float3 uvw = svm_spom_init_uvw(P, A, B, C, Na, Nb, Nc, H);
-    uvw = svm_spom_newton_uvw(P, A, B, C, Na, Nb, Nc, H, uvw, nnewton);
-    const float3 uvw_probe = svm_spom_newton_uvw(
+    float3 march_dir = dir0;
+    float3 uvw = svm_spom_invert_uvw(P, A, B, C, Na, Nb, Nc, H, zero_float3(), nnewton);
+    const float3 uvw_probe = svm_spom_invert_uvw(
         P + march_dir * (1e-3f * H), A, B, C, Na, Nb, Nc, H, uvw, nnewton);
     if ((uvw_probe.z - uvw.z) > 0.0f) {
       march_dir = -march_dir;
@@ -283,8 +303,7 @@ ccl_device_noinline void svm_node_parallax_occlusion(
     const float ndot = max(fabsf(dot(march_dir, Navg)), 0.08f);
     const float step_len = (H / float(nsteps)) / ndot;
     float3 Pcur = P + march_dir * (1e-4f * H);
-    uvw = svm_spom_clamp_uvw(
-        svm_spom_newton_uvw(Pcur, A, B, C, Na, Nb, Nc, H, uvw, nnewton));
+    uvw = svm_spom_invert_uvw(Pcur, A, B, C, Na, Nb, Nc, H, uvw, nnewton);
     float3 P_lo = Pcur;
     float3 P_hi = Pcur;
     bool hit = false;
@@ -295,10 +314,8 @@ ccl_device_noinline void svm_node_parallax_occlusion(
       if (i >= nsteps) {
         break;
       }
-      uvw = svm_spom_clamp_uvw(
-          svm_spom_newton_uvw(Pcur, A, B, C, Na, Nb, Nc, H, uvw, nnewton));
-      const float w = uvw.z;
-      if (w < -0.02f) {
+      uvw = svm_spom_invert_uvw(Pcur, A, B, C, Na, Nb, Nc, H, uvw, nnewton);
+      if (svm_spom_outside(uvw, 0.002f)) {
         break;
       }
       const float2 suv = svm_spom_uv_from_uvw(uvw, uv0, uv1, uv2);
@@ -307,7 +324,7 @@ ccl_device_noinline void svm_node_parallax_occlusion(
         hsamp = 1.0f - hsamp;
       }
       hsamp = clamp(hsamp - midlevel, 0.0f, 1.0f);
-      if (w <= hsamp) {
+      if (uvw.z <= hsamp) {
         hit = true;
         hit_uv = suv;
         hit_h = hsamp;
@@ -327,8 +344,11 @@ ccl_device_noinline void svm_node_parallax_occlusion(
           break;
         }
         const float3 Pmid = 0.5f * (P_lo + P_hi);
-        uvw = svm_spom_clamp_uvw(
-            svm_spom_newton_uvw(Pmid, A, B, C, Na, Nb, Nc, H, uvw, nnewton));
+        uvw = svm_spom_invert_uvw(Pmid, A, B, C, Na, Nb, Nc, H, uvw, nnewton);
+        if (svm_spom_outside(uvw, 0.002f)) {
+          P_lo = Pmid;
+          continue;
+        }
         const float2 suv = svm_spom_uv_from_uvw(uvw, uv0, uv1, uv2);
         float hsamp = svm_parallax_sample(kg, sd, node.id, suv, uv_grad, node.channel);
         if (node.invert) {
