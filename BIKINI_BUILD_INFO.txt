@@ -1,9 +1,9 @@
 ﻿BIKINI — unofficial Blender 5.3 portable build (Windows x64)
 ============================================================
 
-Packaged: 2026-08-29
-Source commit: ada76f7ffd6f (Fix NodeWarning namespace in scene compositor effects UI.)
-blender.exe: 2026-08-29 15:46, 100.8 MB
+Packaged: 2026-09-03
+Source commit: 2b163d12fa2e (合并主干后修复)
+blender.exe: 2026-09-03 20:38, 109.7 MB
 
 How to use
 ----------
