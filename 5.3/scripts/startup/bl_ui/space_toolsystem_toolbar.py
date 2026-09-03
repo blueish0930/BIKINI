@@ -512,6 +512,7 @@ class _defs_view3d_add:
         'CUBE': ToolDefaults('EDGE', 'FREE', 'EDGE', 'FREE'),
         'CONE': ToolDefaults('CENTER', 'FIXED', 'EDGE', 'FREE'),
         'CYLINDER': ToolDefaults('CENTER', 'FIXED', 'EDGE', 'FREE'),
+        'SPHERE_QUAD': ToolDefaults('CENTER', 'FIXED', 'CENTER', 'FIXED'),
         'SPHERE_UV': ToolDefaults('CENTER', 'FIXED', 'CENTER', 'FIXED'),
         'SPHERE_ICO': ToolDefaults('CENTER', 'FIXED', 'CENTER', 'FIXED'),
     }
@@ -697,6 +698,34 @@ class _defs_view3d_add:
         return dict(
             idname="builtin.primitive_uv_sphere_add",
             label="Add UV Sphere",
+            icon="ops.mesh.primitive_sphere_add_gizmo",
+            description=lambda *args: _defs_view3d_add.description_interactive_add(
+                *args, prefix=tip_("Add sphere to mesh interactively"),
+            ),
+            widget="VIEW3D_GGT_placement",
+            keymap="3D View Tool: Object, Add Primitive",
+            draw_settings=draw_settings,
+        )
+
+    @ToolDef.from_fn
+    def quad_sphere_add():
+        def draw_settings(context, layout, tool, *, extra=False):
+            show_extra = _defs_view3d_add.draw_settings_interactive_add(layout, context.tool_settings, tool, extra)
+            if extra:
+                return
+
+            props = tool.operator_properties("mesh.primitive_quad_sphere_add")
+            layout.prop(props, "segments")
+            layout.prop(props, "method")
+
+            if show_extra:
+                layout.popover("TOPBAR_PT_tool_settings_extra", text="...")
+
+            _defs_view3d_add.draw_settings_defaults_init(context.mode, tool, 'SPHERE_QUAD')
+
+        return dict(
+            idname="builtin.primitive_quad_sphere_add",
+            label="Add Quad Sphere",
             icon="ops.mesh.primitive_sphere_add_gizmo",
             description=lambda *args: _defs_view3d_add.description_interactive_add(
                 *args, prefix=tip_("Add sphere to mesh interactively"),
@@ -2165,10 +2194,11 @@ class _defs_weight_paint:
     def sample_weight():
         def draw_settings(context, layout, _tool):
             ups = context.tool_settings.weight_paint.unified_paint_settings
-            if ups.use_unified_weight:
+            brush = context.tool_settings.weight_paint.brush
+            if brush.use_unified_weight:
                 weight = ups.weight
-            elif context.tool_settings.weight_paint.brush:
-                weight = context.tool_settings.weight_paint.brush.weight
+            elif brush:
+                weight = brush.weight
             else:
                 return
             layout.label(text=iface_("Weight: {:.3f}").format(weight), translate=False)
@@ -3601,6 +3631,125 @@ class IMAGE_PT_tools_active(ToolSelectPanelHelper, Panel):
     }
 
 
+class _defs_datablock_graph_select:
+
+    @ToolDef.from_fn
+    def select():
+        return dict(
+            idname="builtin.select",
+            label="Tweak",
+            icon="ops.generic.select",
+            widget=None,
+            keymap="Data-Block Graph Tool: Tweak",
+        )
+
+    @ToolDef.from_fn
+    def box():
+        def draw_settings(_context, layout, tool):
+            props = tool.operator_properties("datablock_graph.select_box")
+            row = layout.row()
+            row.use_property_split = False
+            row.prop(props, "mode", text="", expand=True, icon_only=True)
+        return dict(
+            idname="builtin.select_box",
+            label="Select Box",
+            icon="ops.generic.select_box",
+            widget=None,
+            keymap="Data-Block Graph Tool: Select Box",
+            draw_settings=draw_settings,
+        )
+
+    @ToolDef.from_fn
+    def lasso():
+        def draw_settings(_context, layout, tool):
+            props = tool.operator_properties("datablock_graph.select_lasso")
+            row = layout.row()
+            row.use_property_split = False
+            row.prop(props, "mode", text="", expand=True, icon_only=True)
+        return dict(
+            idname="builtin.select_lasso",
+            label="Select Lasso",
+            icon="ops.generic.select_lasso",
+            widget=None,
+            keymap="Data-Block Graph Tool: Select Lasso",
+            draw_settings=draw_settings,
+        )
+
+    @ToolDef.from_fn
+    def circle():
+        def draw_settings(_context, layout, tool):
+            props = tool.operator_properties("datablock_graph.select_circle")
+            row = layout.row()
+            row.use_property_split = False
+            row.prop(props, "mode", text="", expand=True, icon_only=True)
+            layout.prop(props, "radius")
+
+        def draw_cursor(_context, tool, xy):
+            from gpu_extras.presets import draw_circle_2d
+            props = tool.operator_properties("datablock_graph.select_circle")
+            radius = props.radius
+            draw_circle_2d(xy, (1.0,) * 4, radius, segments=32)
+
+        return dict(
+            idname="builtin.select_circle",
+            label="Select Circle",
+            icon="ops.generic.select_circle",
+            widget=None,
+            keymap="Data-Block Graph Tool: Select Circle",
+            draw_settings=draw_settings,
+            draw_cursor=draw_cursor,
+        )
+
+
+class DATABLOCK_GRAPH_PT_tools_active(ToolSelectPanelHelper, Panel):
+    bl_space_type = 'DATABLOCK_GRAPH'
+    bl_region_type = 'TOOLS'
+    bl_label = "Tools"  # not visible
+    bl_options = {'HIDE_HEADER'}
+
+    keymap_prefix = "Data-Block Graph Tool:"
+    tool_fallback_id = "builtin.select"
+
+    @classmethod
+    def tools_from_context(cls, context, mode=None):
+        del mode
+        for item in cls._tools[None]:
+            if not (type(item) is ToolDef) and callable(item):
+                yield from item(context)
+            else:
+                yield item
+
+    @classmethod
+    def tools_all(cls):
+        yield from cls._tools.items()
+
+    _tools_select = (
+        (
+            _defs_datablock_graph_select.select,
+            _defs_datablock_graph_select.box,
+            _defs_datablock_graph_select.circle,
+            _defs_datablock_graph_select.lasso,
+        ),
+    )
+
+    _tools_annotate = (
+        (
+            _defs_annotate.scribble,
+            _defs_annotate.line,
+            _defs_annotate.poly,
+            _defs_annotate.eraser,
+        ),
+    )
+
+    _tools = {
+        None: [
+            *_tools_select,
+            None,
+            *_tools_annotate,
+        ],
+    }
+
+
 class NODE_PT_tools_active(ToolSelectPanelHelper, Panel):
     bl_space_type = 'NODE_EDITOR'
     bl_region_type = 'TOOLS'
@@ -3766,6 +3915,7 @@ class VIEW3D_PT_tools_active(ToolSelectPanelHelper, Panel):
         _defs_view3d_add.cube_add,
         _defs_view3d_add.cone_add,
         _defs_view3d_add.cylinder_add,
+        _defs_view3d_add.quad_sphere_add,
         _defs_view3d_add.uv_sphere_add,
         _defs_view3d_add.ico_sphere_add,
     )
@@ -4209,6 +4359,7 @@ class SEQUENCER_PT_tools_active(ToolSelectPanelHelper, Panel):
 classes = (
     IMAGE_PT_tools_active,
     NODE_PT_tools_active,
+    DATABLOCK_GRAPH_PT_tools_active,
     VIEW3D_PT_tools_active,
     SEQUENCER_PT_tools_active,
 )

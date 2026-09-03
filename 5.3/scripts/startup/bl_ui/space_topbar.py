@@ -195,11 +195,12 @@ class TOPBAR_MT_file(Menu):
 
         layout.separator()
 
+        layout.menu("TOPBAR_MT_file_project", icon='PROJECT')
+
+        layout.separator()
+
         layout.menu("TOPBAR_MT_file_import", icon='IMPORT')
         layout.menu("TOPBAR_MT_file_export", icon='EXPORT')
-        row = layout.row()
-        row.operator("wm.collection_export_all")
-        row.enabled = context.view_layer.has_export_collections
 
         layout.separator()
 
@@ -334,6 +335,21 @@ class TOPBAR_MT_file_defaults(Menu):
             layout.operator("wm.read_factory_settings")
 
 
+class TOPBAR_MT_file_project(Menu):
+    bl_label = "Project"
+    bl_translation_context = i18n_contexts.editor_preferences
+
+    def draw(self, _context):
+        layout = self.layout
+
+        layout.operator("project.new_project", text="New Project...", icon='ADD')
+        layout.operator("project.open_blend_in_project", icon='FILE_FOLDER')
+
+        layout.separator()
+
+        layout.operator("screen.project_setup_show", text="Project Settings...", icon='PREFERENCES')
+
+
 # Include technical operators here which would otherwise have no way for users to access.
 class TOPBAR_MT_blender_system(Menu):
     bl_label = "System"
@@ -393,7 +409,13 @@ class TOPBAR_MT_file_export(Menu):
     bl_label = "Export"
     bl_owner_use_filter = False
 
-    def draw(self, _context):
+    def draw(self, context):
+        row = self.layout.row()
+        row.operator("wm.collection_export_all")
+        row.enabled = context.view_layer.has_export_collections
+
+        self.layout.separator()
+
         if bpy.app.build_options.alembic:
             self.layout.operator("wm.alembic_export", text="Alembic (.abc)")
         if bpy.app.build_options.usd:
@@ -550,7 +572,6 @@ class TOPBAR_MT_edit(Menu):
         layout.separator()
 
         layout.operator("screen.userpref_show", text="Preferences...", icon='PREFERENCES')
-        layout.operator("screen.project_setup_show", text="Project Setup...", icon='PROJECT')
 
 
 class TOPBAR_MT_window(Menu):
@@ -874,6 +895,7 @@ classes = (
     TOPBAR_MT_file_new,
     TOPBAR_MT_file_recover,
     TOPBAR_MT_file_defaults,
+    TOPBAR_MT_file_project,
     TOPBAR_MT_templates_more,
     TOPBAR_MT_file_import,
     TOPBAR_MT_file_export,
