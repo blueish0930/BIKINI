@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-lang="zh">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VEX Functions — BIKINI Docs</title>
+<meta name="description" content="VEX Wrangle built-in function reference — signatures, types, enums, examples">
+<style>
+:root{
+  --font-stack:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji";
+  --font-stack--monospace:"SFMono-Regular",Menlo,Consolas,Monaco,"Liberation Mono","Lucida Console",monospace;
+  --color-foreground-primary:#000;
+  --color-foreground-secondary:#5a5c63;
+  --color-foreground-muted:#6b6f76;
+  --color-background-primary:#fff;
+  --color-background-secondary:#f8f9fb;
+  --color-background-hover:#efeff4;
+  --color-background-border:#eeebee;
+  --color-brand-content:#2757dd;
+  --color-inline-code-background:var(--color-background-secondary);
+  --color-header-background:#fff;
+  --color-header-border:var(--color-background-border);
+  --color-sidebar-background:var(--color-background-secondary);
+  --color-sidebar-background-border:var(--color-background-border);
+  --color-sidebar-link-text:var(--color-foreground-secondary);
+  --color-sidebar-caption-text:var(--color-foreground-muted);
+  --color-link:var(--color-brand-content);
+  --color-table-header-background:var(--color-background-secondary);
+  --color-table-border:var(--color-background-border);
+  --sidebar-width:17.25rem;
+  --header-height:2.5rem;
+  --font-size--small:92%;
+  --font-size--small--2:87.5%;
+  --sidebar-left-inset:.4rem;
+  font-size:18px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;font-family:var(--font-stack);color:var(--color-foreground-primary);background:var(--color-background-primary);line-height:1.5;-webkit-font-smoothing:antialiased}
+@media(min-width:72.01rem){
+  body{background-image:linear-gradient(to right,var(--color-sidebar-background) 0,var(--color-sidebar-background) calc((100vw - 72rem)/2 + var(--sidebar-left-inset) + var(--sidebar-width)),var(--color-background-primary) calc((100vw - 72rem)/2 + var(--sidebar-left-inset) + var(--sidebar-width)));background-attachment:fixed}
+}
+html[data-lang="en"] .zh{display:none!important}
+html[data-lang="zh"] .en{display:none!important}
+.md-header{position:sticky;top:0;z-index:40;background:var(--color-header-background);border-bottom:1px solid var(--color-header-border)}
+.md-header__inner{max-width:72rem;margin:0 auto;padding:0 1.25rem 0 var(--sidebar-left-inset);height:var(--header-height);display:flex;align-items:center;gap:1rem}
+.md-header__title{font-weight:700;font-size:1.1rem}
+.md-header__title .sub{font-weight:400;color:var(--color-foreground-secondary);margin-left:.35rem;font-size:.95rem}
+.md-header a{color:var(--color-foreground-secondary);text-decoration:none;font-size:var(--font-size--small);font-weight:400}
+.md-header a:hover{color:var(--color-foreground-primary)}
+.md-header a.is-here{color:var(--color-foreground-primary);font-weight:600}
+.lang-switch{margin-left:auto;display:inline-flex;border:1px solid var(--color-background-border);border-radius:.2rem;overflow:hidden;background:var(--color-background-secondary)}
+.lang-switch button{appearance:none;border:0;background:transparent;font:inherit;font-size:var(--font-size--small--2);color:var(--color-foreground-secondary);padding:.3rem .65rem;cursor:pointer}
+.lang-switch button[aria-pressed="true"]{color:var(--color-foreground-primary);background:var(--color-background-primary);font-weight:600}
+.nav-toggle{display:none;appearance:none;border:0;background:transparent;font-size:1.15rem;cursor:pointer}
+.layout{display:flex;min-height:calc(100vh - var(--header-height));max-width:72rem;margin:0 auto;padding:0 1.25rem 0 0;background:linear-gradient(to right,var(--color-sidebar-background) 0,var(--color-sidebar-background) calc(var(--sidebar-left-inset) + var(--sidebar-width)),var(--color-background-primary) calc(var(--sidebar-left-inset) + var(--sidebar-width)))}
+.sidebar{width:var(--sidebar-width);min-width:var(--sidebar-width);background:var(--color-sidebar-background);border-right:1px solid var(--color-sidebar-background-border);position:sticky;top:var(--header-height);align-self:flex-start;height:calc(100vh - var(--header-height));overflow:auto;padding:0 0 2.5rem 0}
+.sidebar-sticky{position:sticky;top:0;z-index:3;background:var(--color-sidebar-background);padding:.75rem .55rem .55rem var(--sidebar-left-inset);border-bottom:1px solid var(--color-background-border)}
+.lang-link{display:block;font-size:var(--font-size--small--2);color:var(--color-link);text-decoration:none;margin:0 0 .45rem .15rem;font-weight:500}
+.lang-link:hover{text-decoration:underline}
+.search-box{position:relative}
+.search-box input{
+  width:100%;appearance:none;border:1px solid var(--color-background-border);border-radius:.35rem;
+  background:#fff;font:inherit;font-size:.8rem;padding:.4rem .7rem .4rem 1.85rem;color:var(--color-foreground-primary);
+  outline:none
+}
+.search-box input:focus{border-color:#9bb4f0;box-shadow:0 0 0 3px hsla(221,85%,51%,.12)}
+.search-box .ico{position:absolute;left:.55rem;top:50%;transform:translateY(-50%);width:.9rem;height:.9rem;color:var(--color-foreground-muted);pointer-events:none}
+.search-clear{position:absolute;right:.35rem;top:50%;transform:translateY(-50%);appearance:none;border:0;background:transparent;color:var(--color-foreground-muted);cursor:pointer;font-size:.9rem;display:none;padding:.1rem .25rem;line-height:1}
+.search-box.has-q .search-clear{display:inline}
+.search-hint{margin:.35rem .15rem 0;font-size:.72rem;color:var(--color-foreground-muted)}
+.nav-title{padding:.7rem 1rem .2rem;font-size:var(--font-size--small--2);font-weight:700;color:var(--color-sidebar-caption-text);text-transform:uppercase;letter-spacing:.04em;display:flex;align-items:baseline;justify-content:space-between;gap:.5rem}
+.nav-title .all-count{font-weight:500;text-transform:none;letter-spacing:0;font-variant-numeric:tabular-nums}
+.cat{border-bottom:1px solid transparent}
+.cat > summary{
+  list-style:none;cursor:pointer;display:flex;align-items:center;gap:.4rem;
+  padding:.38rem .7rem .38rem .7rem;font-size:.82rem;font-weight:600;color:var(--color-foreground-primary);
+  user-select:none
+}
+.cat > summary::-webkit-details-marker{display:none}
+.cat > summary::before{
+  content:"";width:.32em;height:.32em;border-right:1.5px solid var(--color-foreground-muted);
+  border-bottom:1.5px solid var(--color-foreground-muted);transform:rotate(-45deg);margin:0 .25rem 0 .1rem;flex-shrink:0;opacity:.7
+}
+.cat[open] > summary::before{transform:rotate(45deg);margin-top:-.12em}
+.cat > summary:hover{background:var(--color-background-hover)}
+.cat-name{flex:1;min-width:0}
+.cat-count{margin-left:auto;font-size:.72rem;font-weight:500;color:var(--color-foreground-muted);font-variant-numeric:tabular-nums;background:#eceef3;border-radius:999px;padding:.05rem .45rem;line-height:1.4}
+.fn-list{list-style:none;margin:0;padding:0 0 .25rem}
+.fn-link{
+  display:block;padding:.18rem .7rem .18rem 1.55rem;color:var(--color-sidebar-link-text);text-decoration:none;
+  font-family:var(--font-stack--monospace);font-size:.78rem;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+}
+.fn-link:hover{color:var(--color-foreground-primary);background:var(--color-background-hover)}
+.fn-link.is-active{color:var(--color-brand-content);font-weight:600;background:hsla(221,85%,51%,.08);box-shadow:inset 3px 0 0 var(--color-brand-content)}
+.fn-link mark{background:#fff3a3;color:inherit;padding:0;border-radius:1px}
+.cat.is-empty{display:none}
+.content{flex:1;min-width:0}
+.content-inner{max-width:50rem;padding:1.35rem 1.75rem 3.5rem 1.6rem;font-size:1.02rem}
+h1{margin:0 0 .35rem;font-size:2em;font-weight:700;line-height:1.2}
+h2{margin:1.6rem 0 .7rem;font-size:1.22em;font-weight:700;border-bottom:1px solid var(--color-background-border);padding-bottom:.3em}
+h3{margin:1.15rem 0 .55rem;font-size:1.05em;font-weight:700}
+p{margin:0 0 1em}
+.lead{color:var(--color-foreground-secondary)}
+a{color:var(--color-link);text-decoration:none}
+a:hover{text-decoration:underline}
+code{font-family:var(--font-stack--monospace);font-size:var(--font-size--small--2);background:var(--color-inline-code-background);padding:.1em .3em;border-radius:.2rem}
+pre{background:#f4f5f8;border:1px solid var(--color-background-border);border-radius:.35rem;padding:.85rem 1rem;overflow:auto;font-family:var(--font-stack--monospace);font-size:.84rem;line-height:1.45;margin:0 0 1.15em}
+pre code{background:none;padding:0}
+.crumb{font-size:.82rem;color:var(--color-foreground-muted);margin:0 0 .85rem}
+.crumb a{color:var(--color-link)}
+.fn-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:.55rem .85rem;margin:0 0 .35rem}
+.fn-head h1{margin:0;font-family:var(--font-stack--monospace);font-size:1.85rem}
+.badge{display:inline-flex;align-items:center;font-size:.72rem;font-weight:600;padding:.12rem .5rem;border-radius:999px;background:hsla(221,85%,51%,.1);color:var(--color-brand-content);text-decoration:none}
+.badge:hover{background:hsla(221,85%,51%,.18);text-decoration:none}
+.ret-pill{background:#eef2f6;color:var(--color-foreground-secondary);font-family:var(--font-stack--monospace);font-weight:500}
+.io-table{width:100%;border-collapse:collapse;margin:0 0 1.25em;font-size:.95rem}
+.io-table th,.io-table td{text-align:left;vertical-align:top;padding:.48rem .6rem;border-bottom:1px solid var(--color-table-border)}
+.io-table thead th{background:var(--color-table-header-background);font-weight:700;font-size:.88rem}
+.io-table td.mono{font-family:var(--font-stack--monospace);font-size:.86rem;white-space:nowrap}
+.dir{display:inline-block;font-size:.7rem;font-weight:700;letter-spacing:.03em;padding:.08rem .4rem;border-radius:.25rem;text-transform:uppercase}
+.dir-in{background:#e8f0fe;color:#1a56db}
+.dir-out{background:#fff4e5;color:#b45309}
+.dir-inout{background:#f3e8ff;color:#6d28d9}
+.note{background:var(--color-background-secondary);border-left:3px solid var(--color-brand-content);padding:.7rem 1rem;margin:0 0 1.2em;font-size:.95rem;color:var(--color-foreground-secondary)}
+.cta{display:flex;gap:.75rem;flex-wrap:wrap;margin:1.25rem 0 1.5rem}
+.btn{display:inline-flex;align-items:center;padding:.48rem 1.05rem;border-radius:.45rem;font-weight:600;font-size:.92rem;text-decoration:none!important}
+.btn-primary{background:hsla(221,85%,51%,.12);color:var(--color-brand-content)}
+.btn-primary:hover{background:hsla(221,85%,51%,.2)}
+.btn-ghost{border:1px solid var(--color-background-border);color:var(--color-foreground-secondary)}
+.cat-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.65rem;margin:1rem 0 1.75rem}
+.cat-card{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.7rem .9rem;border:1px solid var(--color-background-border);border-radius:.45rem;text-decoration:none!important;background:#fff}
+.cat-card:hover{border-color:#c9d4f0;background:#f7f9ff}
+.cat-card .n{font-weight:600;color:var(--color-foreground-primary)}
+.cat-card .c{font-variant-numeric:tabular-nums;color:var(--color-foreground-muted);font-size:.85rem}
+.sig-list{margin:0 0 1.1em}
+.sig-list code{display:block;background:#f4f5f8;border:1px solid var(--color-background-border);border-radius:.3rem;padding:.45rem .7rem;margin:0 0 .4rem;font-size:.86rem;white-space:pre-wrap}
+.ex-wrap{position:relative}
+.ex-copy{position:absolute;top:.4rem;right:.4rem;appearance:none;border:1px solid var(--color-background-border);background:#fff;border-radius:.25rem;font:inherit;font-size:.72rem;padding:.15rem .45rem;cursor:pointer;color:var(--color-foreground-secondary)}
+.ex-copy:hover{color:var(--color-foreground-primary)}
+.also{display:flex;flex-wrap:wrap;gap:.35rem .5rem;margin:.3rem 0 1.2rem}
+.also a{font-family:var(--font-stack--monospace);font-size:.82rem}
+.empty{color:var(--color-foreground-muted);padding:.8rem 1rem;font-size:.88rem}
+.enum-name{font-family:var(--font-stack--monospace);font-size:.9rem}
+@media(max-width:960px){
+  .layout{flex-direction:column;padding:0 1rem;max-width:none;background:var(--color-background-primary)}
+  .sidebar{position:fixed;left:0;top:var(--header-height);z-index:35;width:min(18.5rem,92vw);transform:translateX(-105%);transition:transform .18s;box-shadow:none}
+  .nav-open .sidebar{transform:none;box-shadow:2px 0 12px rgba(0,0,0,.08)}
+  .nav-toggle{display:inline-flex}
+  .cat-grid{grid-template-columns:1fr}
+  .content-inner{padding:1.15rem .2rem 3rem}
+}
+</style>
+</head>
+<body>
+<header class="md-header"><div class="md-header__inner">
+<button type="button" class="nav-toggle" id="nav-toggle" aria-label="Menu">☰</button>
+<div class="md-header__title">BIKINI <span class="sub">VEX</span></div>
+<a href="index.html"><span class="en">Docs</span><span class="zh">文档</span></a>
+<a href="manual.html"><span class="en">Manual</span><span class="zh">手册</span></a>
+<a href="changelog.html"><span class="en">Developer</span><span class="zh">开发者</span></a>
+<a class="is-here" href="vex.html">VEX</a>
+<a href="https://github.com/blueish0930/BIKINI" target="_blank" rel="noopener">GitHub</a>
+<div class="lang-switch">
+<button type="button" id="lang-zh" aria-pressed="true">中文</button>
+<button type="button" id="lang-en" aria-pressed="false">EN</button>
+</div></div></header>
+<div class="layout">
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-sticky">
+    <a class="lang-link" href="vex.html">
+      <span class="zh">← 语言介绍</span>
+      <span class="en">← Language intro</span>
+    </a>
+    <div class="search-box" id="search-box">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <circle cx="11" cy="11" r="7"/><path d="M20 20l-3.2-3.2"/>
+      </svg>
+      <input id="fn-search" type="search" autocomplete="off" spellcheck="false"
+             placeholder="搜索函数…" aria-label="Search functions">
+      <button type="button" class="search-clear" id="search-clear" aria-label="Clear">×</button>
+    </div>
+    <div class="search-hint" id="search-hint"></div>
+  </div>
+  <div class="nav-title">
+    <span class="zh">函数</span><span class="en">Functions</span>
+    <span class="all-count" id="all-count"></span>
+  </div>
+  <div id="fn-nav"></div>
+</aside>
+<main class="content"><div class="content-inner" id="fn-page"></div></main>
+</div>
+<script src="vex-functions.js"></script>
+<script>
+(function () {
+  var KEYS = ["bikini-docs-lang", "bikini-changelog-lang"];
+  var CATS = window.VEX_CATS || [];
+  var FUNCS = window.VEX_FUNCS || [];
+  var byId = {};
+  var byCat = {};
+  CATS.forEach(function (c) { byCat[c.id] = []; });
+  FUNCS.forEach(function (f) {
+    byId[f.id] = f;
+    if (!byCat[f.cat]) byCat[f.cat] = [];
+    byCat[f.cat].push(f);
+  });
+  if (!FUNCS.length) {
+    document.getElementById("fn-page").innerHTML =
+      "<h1>VEX</h1><p>Failed to load <code>vex-functions.js</code>.</p>";
+    return;
+  }
+
+  function lang() {
+    return document.documentElement.getAttribute("data-lang") === "en" ? "en" : "zh";
+  }
+  function t(zh, en) { return lang() === "en" ? (en || zh || "") : (zh || en || ""); }
+  function esc(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  function catLabel(id) {
+    for (var i = 0; i < CATS.length; i++) {
+      if (CATS[i].id === id) return t(CATS[i].zh, CATS[i].en);
+    }
+    return id;
+  }
+  function hashId() {
+    var h = (location.hash || "").replace(/^#/, "");
+    try { h = decodeURIComponent(h); } catch (e) {}
+    return h;
+  }
+
+  var searchEl = document.getElementById("fn-search");
+  var boxEl = document.getElementById("search-box");
+  var hintEl = document.getElementById("search-hint");
+  var navEl = document.getElementById("fn-nav");
+  var pageEl = document.getElementById("fn-page");
+  var countEl = document.getElementById("all-count");
+  var q = "";
+  var navKey = null;
+
+  function matches(f, query) {
+    if (!query) return true;
+    var blob = (f.name + " " + f.id + " " + (f.zh || "") + " " + (f.en || "") + " " +
+      (f.sigs || []).join(" ") + " " + (f.ret || "")).toLowerCase();
+    return blob.indexOf(query) !== -1;
+  }
+  function hl(name, query) {
+    var e = esc(name);
+    if (!query) return e;
+    var i = name.toLowerCase().indexOf(query);
+    if (i < 0) return e;
+    return esc(name.slice(0, i)) + "<mark>" + esc(name.slice(i, i + query.length)) + "</mark>" + esc(name.slice(i + query.length));
+  }
+
+  function activeCatOf(id) {
+    if (!id) return "";
+    if (id.indexOf("cat-") === 0) return id.slice(4);
+    return (byId[id] && byId[id].cat) || "";
+  }
+
+  function markActive() {
+    var id = hashId();
+    var cat = activeCatOf(id);
+    navEl.querySelectorAll(".fn-link").forEach(function (a) {
+      a.classList.toggle("is-active", a.getAttribute("data-id") === id);
+    });
+    if (cat) {
+      var d = navEl.querySelector('.cat[data-cat="' + cat + '"]');
+      if (d) d.open = true;
+    }
+    var active = navEl.querySelector(".fn-link.is-active");
+    var sb = document.getElementById("sidebar");
+    if (active && sb) {
+      var ar = active.getBoundingClientRect();
+      var sr = sb.getBoundingClientRect();
+      if (ar.top < sr.top + 96 || ar.bottom > sr.bottom - 16) {
+        sb.scrollTop += (ar.top + ar.bottom) / 2 - (sr.top + sr.bottom) / 2;
+      }
+    }
+  }
+
+  function renderNav(force) {
+    var query = q.trim().toLowerCase();
+    var key = query + "|" + lang();
+    if (!force && key === navKey) {
+      markActive();
+      return;
+    }
+    navKey = key;
+    var html = "";
+    var shown = 0;
+    CATS.forEach(function (c) {
+      var list = (byCat[c.id] || []).filter(function (f) { return matches(f, query); });
+      if (query && list.length === 0) return;
+      var opened = true;
+      html += '<details class="cat" data-cat="' + esc(c.id) + '"' + (opened ? " open" : "") + ">";
+      html += "<summary><span class=\"cat-name\">" + esc(t(c.zh, c.en)) +
+        "</span><span class=\"cat-count\">" + list.length + "</span></summary>";
+      html += '<ul class="fn-list">';
+      list.forEach(function (f) {
+        shown++;
+        html += '<li><a class="fn-link" href="#' + encodeURIComponent(f.id) + '" data-id="' + esc(f.id) +
+          '" title="' + esc(f.name) + '">' + hl(f.name, query) + "</a></li>";
+      });
+      html += "</ul></details>";
+    });
+    navEl.innerHTML = html || '<div class="empty">' + t("没有匹配的函数", "No matching functions") + "</div>";
+    var total = FUNCS.length;
+    if (query) {
+      countEl.textContent = shown + " / " + total;
+      hintEl.textContent = shown
+        ? t("找到 " + shown + " 个函数", shown + " function" + (shown === 1 ? "" : "s"))
+        : t("没有匹配的函数", "No matching functions");
+    } else {
+      countEl.textContent = String(total);
+      hintEl.textContent = t("共 " + total + " 个内置函数", total + " built-in functions");
+    }
+    boxEl.classList.toggle("has-q", !!q);
+    searchEl.placeholder = t("搜索函数…", "Search functions…");
+    markActive();
+  }
+
+  function dirBadge(d) {
+    var k = (d || "in").toLowerCase();
+    var cls = k.indexOf("out") >= 0 && k.indexOf("in") >= 0 ? "dir-inout" : (k.indexOf("out") >= 0 ? "dir-out" : "dir-in");
+    return '<span class="dir ' + cls + '">' + esc(d || "in") + "</span>";
+  }
+
+  function renderLanding() {
+    var cards = CATS.map(function (c) {
+      var n = (byCat[c.id] || []).length;
+      return '<a class="cat-card" href="#cat-' + encodeURIComponent(c.id) + '"><span class="n">' +
+        esc(t(c.zh, c.en)) + '</span><span class="c">' + n + "</span></a>";
+    }).join("");
+    pageEl.innerHTML =
+      '<p class="crumb"><a href="vex.html">' + t("语言介绍", "Language") + "</a> / " +
+        t("函数清单", "Functions") + "</p>" +
+      "<h1>" + t("VEX 函数清单", "VEX function list") + "</h1>" +
+      '<p class="lead">' + t(
+        "内置函数名与源码 builtin_from_name 一致。左侧按分类列出；点一个函数看签名、输入/输出、类型、枚举和示例。只有 mix/lerp 与 vector/vec3 是别名。",
+        "Names match builtin_from_name. Pick a function on the left for signatures, in/out, types, enums, and examples. The only aliases are mix/lerp and vector/vec3."
+      ) + "</p>" +
+      '<div class="cta">' +
+        '<a class="btn btn-primary" href="vex.html">' + t("先读语言介绍", "Read the language intro") + "</a>" +
+        '<a class="btn btn-ghost" href="#sin">sin</a>' +
+        '<a class="btn btn-ghost" href="#nearestpoints">nearestpoints</a>' +
+        '<a class="btn btn-ghost" href="#setattribute">setattribute</a>' +
+        '<a class="btn btn-ghost" href="#raycast">raycast</a>' +
+      "</div>" +
+      "<h2>" + t("分类", "Categories") + " <span style=\"font-weight:500;color:var(--color-foreground-muted);font-size:.85rem\">" +
+        FUNCS.length + "</span></h2>" +
+      '<div class="cat-grid">' + cards + "</div>" +
+      '<div class="note">' + t(
+        "点分类卡片会展开左侧该组。编译执行用 Ctrl+Enter；geo 在 addpoint / setattribute / delete_geometry 里一律当 0。",
+        "Category cards expand that group in the sidebar. Compile with Ctrl+Enter. geo on addpoint / setattribute / delete_geometry is always 0."
+      ) + "</div>";
+  }
+
+  function renderCategory(cid) {
+    var c = null;
+    for (var i = 0; i < CATS.length; i++) if (CATS[i].id === cid) c = CATS[i];
+    if (!c) { renderLanding(); return; }
+    var list = byCat[cid] || [];
+    var rows = list.map(function (f) {
+      return "<tr><td class=\"mono\"><a href=\"#" + encodeURIComponent(f.id) + "\">" + esc(f.name) +
+        "</a></td><td><code>" + esc((f.sigs && f.sigs[0]) || "") + "</code></td><td>" +
+        (lang() === "en" ? (f.en || f.zh || "") : (f.zh || f.en || "")) + "</td></tr>";
+    }).join("");
+    pageEl.innerHTML =
+      '<p class="crumb"><a href="vex.html">' + t("语言介绍", "Language") + '</a> / <a href="#">' +
+        t("函数清单", "Functions") + "</a> / " + esc(t(c.zh, c.en)) + "</p>" +
+      "<h1>" + esc(t(c.zh, c.en)) + "</h1>" +
+      '<p class="lead">' + list.length + " " + t("个函数", "functions") + "</p>" +
+      '<table class="io-table"><thead><tr><th>' + t("函数", "Function") + "</th><th>" +
+        t("签名", "Signature") + "</th><th>" + t("说明", "Summary") + "</th></tr></thead><tbody>" +
+      rows + "</tbody></table>";
+  }
+
+  function renderFn(f) {
+    var params = f.params || [];
+    var paramRows = params.length ? params.map(function (p) {
+      var note = lang() === "en" ? (p.en || p.zh || "") : (p.zh || p.en || "");
+      return "<tr><td class=\"mono\">" + esc(p.name) + "</td><td>" + dirBadge(p.dir) +
+        "</td><td class=\"mono\">" + esc(p.type || "") + "</td><td>" + note + "</td></tr>";
+    }).join("") : "<tr><td colspan=\"4\" class=\"empty\">" + t("无参数", "No parameters") + "</td></tr>";
+
+    var enumHtml = "";
+    if (f.enums && f.enums.length) {
+      enumHtml += "<h2>" + t("枚举", "Enums") + "</h2>";
+      f.enums.forEach(function (en) {
+        enumHtml += "<h3 class=\"enum-name\">" + esc(en.name) + "</h3>";
+        enumHtml += '<table class="io-table"><thead><tr><th>' + t("取值", "Value") + "</th><th>" +
+          t("含义", "Meaning") + "</th></tr></thead><tbody>";
+        (en.values || []).forEach(function (v) {
+          enumHtml += "<tr><td class=\"mono\">" + esc(v.v) + "</td><td>" +
+            (lang() === "en" ? (v.en || v.zh || "") : (v.zh || v.en || "")) + "</td></tr>";
+        });
+        enumHtml += "</tbody></table>";
+      });
+    }
+
+    var sigs = (f.sigs || []).map(function (s) { return "<code>" + esc(s) + "</code>"; }).join("");
+    var also = (byCat[f.cat] || []).filter(function (x) { return x.id !== f.id; }).slice(0, 10)
+      .map(function (x) { return '<a href="#' + encodeURIComponent(x.id) + '">' + esc(x.name) + "</a>"; })
+      .join(" ");
+    var ex = f.ex ? String(f.ex) : "";
+    var desc = lang() === "en" ? (f.en || f.zh || "") : (f.zh || f.en || "");
+
+    pageEl.innerHTML =
+      '<p class="crumb"><a href="vex.html">' + t("语言介绍", "Language") + '</a> / <a href="#">' +
+        t("函数清单", "Functions") + '</a> / <a href="#cat-' + encodeURIComponent(f.cat) + '">' +
+        esc(catLabel(f.cat)) + "</a></p>" +
+      '<div class="fn-head"><h1>' + esc(f.name) + "</h1>" +
+        '<a class="badge" href="#cat-' + encodeURIComponent(f.cat) + '">' + esc(catLabel(f.cat)) + "</a>" +
+        (f.ret ? '<span class="badge ret-pill">→ ' + esc(f.ret) + "</span>" : "") +
+      "</div>" +
+      "<p>" + desc + "</p>" +
+      "<h2>" + t("签名", "Signatures") + "</h2>" +
+      '<div class="sig-list">' + (sigs || "<p class=\"empty\">—</p>") + "</div>" +
+      "<h2>" + t("参数", "Parameters") + "</h2>" +
+      '<table class="io-table"><thead><tr>' +
+        "<th>" + t("参数", "Name") + "</th>" +
+        "<th>" + t("方向", "Dir") + "</th>" +
+        "<th>" + t("类型", "Type") + "</th>" +
+        "<th>" + t("说明", "Notes") + "</th>" +
+      "</tr></thead><tbody>" + paramRows + "</tbody></table>" +
+      "<h2>" + t("返回值", "Return") + "</h2>" +
+      "<p><code>" + esc(f.ret || "void") + "</code></p>" +
+      enumHtml +
+      "<h2>" + t("示例", "Example") + "</h2>" +
+      (ex
+        ? '<div class="ex-wrap"><button type="button" class="ex-copy" id="ex-copy">' + t("复制", "Copy") +
+          "</button><pre><code id=\"ex-code\">" + esc(ex) + "</code></pre></div>"
+        : "<p class=\"empty\">" + t("暂无示例。", "No example yet.") + "</p>") +
+      (also ? "<h2>" + t("同类函数", "In this category") + "</h2><div class=\"also\">" + also + "</div>" : "");
+
+    var copyBtn = document.getElementById("ex-copy");
+    if (copyBtn) {
+      copyBtn.addEventListener("click", function () {
+        var text = ex;
+        var done = function () {
+          copyBtn.textContent = t("已复制", "Copied");
+          setTimeout(function () { copyBtn.textContent = t("复制", "Copy"); }, 1200);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(done).catch(function () { done(); });
+        } else {
+          done();
+        }
+      });
+    }
+  }
+
+  function render() {
+    var id = hashId();
+    if (!id) {
+      renderLanding();
+    } else if (id.indexOf("cat-") === 0) {
+      renderCategory(id.slice(4));
+    } else if (byId[id]) {
+      renderFn(byId[id]);
+    } else {
+      pageEl.innerHTML = "<h1>" + t("未找到函数", "Function not found") + "</h1><p><code>" +
+        esc(id) + "</code></p><p><a href=\"#\">" + t("返回清单", "Back to the list") + "</a></p>";
+    }
+    renderNav();
+    window.scrollTo(0, 0);
+  }
+
+  function setLang(l) {
+    if (l !== "en" && l !== "zh") l = "zh";
+    document.documentElement.setAttribute("data-lang", l);
+    document.documentElement.lang = l === "zh" ? "zh-CN" : "en";
+    document.title = l === "zh" ? "VEX 函数 — BIKINI 文档" : "VEX Functions — BIKINI Docs";
+    try { KEYS.forEach(function (k) { localStorage.setItem(k, l); }); } catch (e) {}
+    document.getElementById("lang-zh").setAttribute("aria-pressed", l === "zh" ? "true" : "false");
+    document.getElementById("lang-en").setAttribute("aria-pressed", l === "en" ? "true" : "false");
+    navKey = null;
+    render();
+  }
+
+  document.getElementById("lang-zh").addEventListener("click", function () { setLang("zh"); });
+  document.getElementById("lang-en").addEventListener("click", function () { setLang("en"); });
+  document.getElementById("nav-toggle").addEventListener("click", function () {
+    document.body.classList.toggle("nav-open");
+  });
+  navEl.addEventListener("click", function () {
+    document.body.classList.remove("nav-open");
+  });
+
+  searchEl.addEventListener("input", function () {
+    q = searchEl.value || "";
+    renderNav();
+  });
+  document.getElementById("search-clear").addEventListener("click", function () {
+    q = "";
+    searchEl.value = "";
+    renderNav();
+    searchEl.focus();
+  });
+  searchEl.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") {
+      var first = navEl.querySelector(".fn-link");
+      if (first) {
+        location.hash = first.getAttribute("href");
+        document.body.classList.remove("nav-open");
+      }
+    } else if (e.key === "Escape") {
+      q = "";
+      searchEl.value = "";
+      renderNav();
+    }
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "/" && document.activeElement !== searchEl && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      var tag = (document.activeElement && document.activeElement.tagName) || "";
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      e.preventDefault();
+      searchEl.focus();
+      searchEl.select();
+    }
+  });
+
+  window.addEventListener("hashchange", render);
+
+  try {
+    var s = localStorage.getItem(KEYS[0]) || localStorage.getItem(KEYS[1]);
+    if (s === "en" || s === "zh") setLang(s);
+    else setLang(/^zh\b/i.test(navigator.language || "") ? "zh" : "en");
+  } catch (e) { setLang("zh"); }
+})();
+</script>
+</body>
+</html>

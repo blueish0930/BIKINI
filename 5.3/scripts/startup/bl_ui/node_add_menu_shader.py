@@ -496,9 +496,9 @@ class NODE_MT_shader_node_displacement_base(node_add_menu.NodeMenu):
 
         self.node_operator(layout, "ShaderNodeBump")
         self.node_operator(layout, "ShaderNodeDisplacement")
+        self.node_operator(layout, "ShaderNodeBillboardDisplacement")
         self.node_operator(layout, "ShaderNodeNormalMap")
         self.node_operator(layout, "ShaderNodeParallaxOcclusion")
-        self.node_operator(layout, "ShaderNodeSPOM")
         self.node_operator(layout, "ShaderNodeVectorDisplacement")
 
         self.draw_assets_for_catalog(layout, self.bl_label)

@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-lang="zh">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VEX Wrangle — BIKINI Docs</title>
+<style>
+:root{
+  --font-stack:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji";
+  --font-stack--monospace:"SFMono-Regular",Menlo,Consolas,Monaco,"Liberation Mono","Lucida Console",monospace;
+  --color-foreground-primary:#000;
+  --color-foreground-secondary:#5a5c63;
+  --color-foreground-muted:#6b6f76;
+  --color-background-primary:#fff;
+  --color-background-secondary:#f8f9fb;
+  --color-background-hover:#efeff4;
+  --color-background-border:#eeebee;
+  --color-brand-content:#2757dd;
+  --color-inline-code-background:var(--color-background-secondary);
+  --color-header-background:#fff;
+  --color-header-border:var(--color-background-border);
+  --color-sidebar-background:var(--color-background-secondary);
+  --color-sidebar-background-border:var(--color-background-border);
+  --color-sidebar-link-text:var(--color-foreground-secondary);
+  --color-sidebar-caption-text:var(--color-foreground-muted);
+  --color-sidebar-section-text:var(--color-foreground-primary);
+  --color-link:var(--color-brand-content);
+  --color-table-header-background:var(--color-background-secondary);
+  --color-table-border:var(--color-background-border);
+  --sidebar-width:15.5rem;
+  --header-height:2.5rem;
+  --font-size--small:92%;
+  --font-size--small--2:87.5%;
+  --sidebar-item-font-size:var(--font-size--small);
+  --sidebar-item-line-height:1.35rem;
+  --sidebar-item-spacing-vertical:.45rem;
+  --sidebar-item-spacing-horizontal:1rem;
+  --sidebar-left-inset:.4rem;
+  font-size:18px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;font-family:var(--font-stack);color:var(--color-foreground-primary);background:var(--color-background-primary);line-height:1.5;-webkit-font-smoothing:antialiased}
+@media(min-width:72.01rem){
+  body{background-image:linear-gradient(to right,var(--color-sidebar-background) 0,var(--color-sidebar-background) calc((100vw - 72rem)/2 + var(--sidebar-left-inset) + var(--sidebar-width)),var(--color-background-primary) calc((100vw - 72rem)/2 + var(--sidebar-left-inset) + var(--sidebar-width)));background-attachment:fixed}
+}
+html[data-lang="en"] .zh{display:none!important}
+html[data-lang="zh"] .en{display:none!important}
+.md-header{position:sticky;top:0;z-index:40;background:var(--color-header-background);border-bottom:1px solid var(--color-header-border)}
+.md-header__inner{max-width:72rem;margin:0 auto;padding:0 1.25rem 0 var(--sidebar-left-inset);height:var(--header-height);display:flex;align-items:center;gap:1rem}
+.md-header__title{font-weight:700;font-size:1.1rem}
+.md-header__title .sub{font-weight:400;color:var(--color-foreground-secondary);margin-left:.35rem;font-size:.95rem}
+.md-header a{color:var(--color-foreground-secondary);text-decoration:none;font-size:var(--font-size--small);font-weight:400}
+.md-header a:hover{color:var(--color-foreground-primary)}
+.md-header a.is-here{color:var(--color-foreground-primary);font-weight:600}
+.lang-switch{margin-left:auto;display:inline-flex;border:1px solid var(--color-background-border);border-radius:.2rem;overflow:hidden;background:var(--color-background-secondary)}
+.lang-switch button{appearance:none;border:0;background:transparent;font:inherit;font-size:var(--font-size--small--2);color:var(--color-foreground-secondary);padding:.3rem .65rem;cursor:pointer}
+.lang-switch button[aria-pressed="true"]{color:var(--color-foreground-primary);background:var(--color-background-primary);font-weight:600}
+.nav-toggle{display:none;appearance:none;border:0;background:transparent;font-size:1.15rem;cursor:pointer}
+.layout{display:flex;min-height:calc(100vh - var(--header-height));max-width:72rem;margin:0 auto;padding:0 1.25rem 0 0;background:linear-gradient(to right,var(--color-sidebar-background) 0,var(--color-sidebar-background) calc(var(--sidebar-left-inset) + var(--sidebar-width)),var(--color-background-primary) calc(var(--sidebar-left-inset) + var(--sidebar-width)))}
+.sidebar{width:var(--sidebar-width);min-width:var(--sidebar-width);background:var(--color-sidebar-background);border-right:1px solid var(--color-sidebar-background-border);position:sticky;top:var(--header-height);align-self:flex-start;height:calc(100vh - var(--header-height));overflow:auto;padding:1rem .4rem 2.5rem var(--sidebar-left-inset)}
+.nav-title{padding:.25rem var(--sidebar-item-spacing-horizontal) .5rem;font-size:var(--font-size--small--2);font-weight:700;color:var(--color-sidebar-caption-text);text-transform:uppercase;letter-spacing:.04em}
+.nav-list{list-style:none;margin:0;padding:0}
+.nav-link{display:block;padding:var(--sidebar-item-spacing-vertical) var(--sidebar-item-spacing-horizontal);color:var(--color-sidebar-link-text);text-decoration:none;font-size:var(--sidebar-item-font-size);font-weight:500;line-height:var(--sidebar-item-line-height)}
+.nav-link:hover{color:var(--color-foreground-primary);background:var(--color-background-hover)}
+.nav-link.is-active{color:var(--color-foreground-primary);font-weight:600}
+.content{flex:1;min-width:0}
+.content-inner{max-width:48rem;padding:1.5rem 2rem 3rem 1.75rem;font-size:1.05rem}
+h1{margin:0 0 .75rem;font-size:2.05em;font-weight:700;line-height:1.25}
+h2{margin:1.75rem 0 1rem;font-size:1.45em;font-weight:700;border-bottom:1px solid var(--color-background-border);padding-bottom:.35em}
+h3{margin:1.25rem 0 .75rem;font-size:1.2em;font-weight:700}
+p{margin:0 0 1em}
+.lead{color:var(--color-foreground-secondary)}
+ul,ol{margin:0 0 1em;padding-left:1.4em}
+li{margin:.25em 0}
+a{color:var(--color-link);text-decoration:none}
+a:hover{text-decoration:underline}
+code{font-family:var(--font-stack--monospace);font-size:var(--font-size--small--2);background:var(--color-inline-code-background);padding:.1em .3em;border-radius:.2rem}
+pre{background:#f4f5f8;border:1px solid var(--color-background-border);border-radius:.35rem;padding:.85rem 1rem;overflow:auto;font-family:var(--font-stack--monospace);font-size:.86rem;line-height:1.45;margin:0 0 1.15em}
+pre code{background:none;padding:0}
+.io-table{width:100%;border-collapse:collapse;margin:0 0 1.25em;font-size:1rem}
+.io-table th,.io-table td{text-align:left;vertical-align:top;padding:.5rem .65rem;border-bottom:1px solid var(--color-table-border)}
+.io-table thead th{background:var(--color-table-header-background);font-weight:700}
+.note{background:var(--color-background-secondary);border-left:3px solid var(--color-brand-content);padding:.7rem 1rem;margin:0 0 1.2em;font-size:.95rem;color:var(--color-foreground-secondary)}
+.cta{display:flex;gap:.75rem;flex-wrap:wrap;margin:1.5rem 0 2rem}
+.btn{display:inline-flex;align-items:center;padding:.5rem 1.1rem;border-radius:.45rem;font-weight:600;font-size:.95rem;text-decoration:none!important}
+.btn-primary{background:hsla(221,85%,51%,.12);color:var(--color-brand-content)}
+.btn-primary:hover{background:hsla(221,85%,51%,.2)}
+.btn-ghost{border:1px solid var(--color-background-border);color:var(--color-foreground-secondary)}
+@media(max-width:960px){
+  .layout{flex-direction:column;padding:0 1rem;max-width:none;background:var(--color-background-primary)}
+  .sidebar{position:fixed;left:0;top:var(--header-height);z-index:35;width:min(16rem,90vw);transform:translateX(-105%);transition:transform .18s}
+  .nav-open .sidebar{transform:none;box-shadow:2px 0 12px rgba(0,0,0,.08)}
+  .nav-toggle{display:inline-flex}
+}
+</style>
+</head>
+<body>
+<header class="md-header"><div class="md-header__inner">
+<button type="button" class="nav-toggle" id="nav-toggle">☰</button>
+<div class="md-header__title">BIKINI <span class="sub">VEX</span></div>
+<a href="index.html"><span class="en">Docs</span><span class="zh">文档</span></a>
+<a href="manual.html"><span class="en">Manual</span><span class="zh">手册</span></a>
+<a href="changelog.html"><span class="en">Developer</span><span class="zh">开发者</span></a>
+<a class="is-here" href="vex.html">VEX</a>
+<a href="https://github.com/blueish0930/BIKINI" target="_blank" rel="noopener">GitHub</a>
+<div class="lang-switch">
+<button type="button" id="lang-zh" aria-pressed="true">中文</button>
+<button type="button" id="lang-en" aria-pressed="false">EN</button>
+</div></div></header>
+<div class="layout">
+<aside class="sidebar">
+<div class="nav-title">VEX</div>
+<ul class="nav-list">
+<li><a class="nav-link is-active" href="#overview"><span class="zh">概述</span><span class="en">Overview</span></a></li>
+<li><a class="nav-link" href="#types"><span class="zh">数据类型</span><span class="en">Data types</span></a></li>
+<li><a class="nav-link" href="#attributes"><span class="zh">属性</span><span class="en">Attributes</span></a></li>
+<li><a class="nav-link" href="#operators"><span class="zh">运算符</span><span class="en">Operators</span></a></li>
+<li><a class="nav-link" href="#control"><span class="zh">控制流</span><span class="en">Control flow</span></a></li>
+<li><a class="nav-link" href="#functions"><span class="zh">自定义函数</span><span class="en">User functions</span></a></li>
+<li><a class="nav-link" href="#run"><span class="zh">编译与求值</span><span class="en">Compile &amp; eval</span></a></li>
+<li><a class="nav-link" href="vex-functions.html"><span class="zh">函数清单 →</span><span class="en">Function list →</span></a></li>
+</ul>
+</aside>
+<main class="content"><div class="content-inner">
+
+<h1>VEX Wrangle</h1>
+<p class="lead zh">Wrangle 节点里的 VEX 风格脚本：按元素跑一遍，读写几何属性。语法接近 Houdini VEX，但类型、前缀和内置函数以本构建为准。</p>
+<p class="lead en">A VEX-style language inside the Wrangle node. The script runs once per element and reads/writes geometry attributes. Syntax is close to Houdini VEX; types, prefixes, and builtins follow this build.</p>
+
+<div class="cta">
+  <a class="btn btn-primary" href="vex-functions.html">
+    <span class="zh">打开函数清单</span><span class="en">Open function list</span>
+  </a>
+  <a class="btn btn-ghost" href="#types">
+    <span class="zh">先看数据类型</span><span class="en">Start with types</span>
+  </a>
+</div>
+
+<h2 id="overview"><span class="zh">概述</span><span class="en">Overview</span></h2>
+<p class="zh">把 Wrangle 加到 Geometry Nodes。面板里选 <strong>Run Over</strong> 域（点 / 边 / 面 / 角 / 曲线 / 实例），写代码后按 <code>Ctrl+Enter</code> 才编译执行。改代码不会自动重算。</p>
+<p class="en">Add a Wrangle node in Geometry Nodes. Pick a <strong>Run Over</strong> domain (point / edge / face / corner / curve / instance). Press <code>Ctrl+Enter</code> to compile. Editing the text does not auto-evaluate.</p>
+<pre><code>v@P += v@N * 0.1;
+f@pscale = length(v@P);</code></pre>
+<div class="note zh">报错格式是 <code>L行号: 短中文</code>，下面跟代码片段和 <code>^</code>。编辑器里错误有波浪线；光标在 <code>{}()[]</code> 上会高亮配对括号。</div>
+<div class="note en">Errors look like <code>L12: …</code> with a snippet and caret. The editor draws squiggles and highlights matching <code>{}()[]</code>.</div>
+
+<h2 id="types"><span class="zh">数据类型</span><span class="en">Data types</span></h2>
+<table class="io-table">
+<thead><tr><th><span class="zh">类型</span><span class="en">Type</span></th><th><span class="zh">含义</span><span class="en">Meaning</span></th><th><span class="zh">字面量</span><span class="en">Literal</span></th></tr></thead>
+<tbody>
+<tr><td><code>bool</code></td><td><span class="zh">真 / 假（也可用 <code>boolean</code>）</span><span class="en">true / false (<code>boolean</code> works too)</span></td><td><code>true</code> <code>false</code></td></tr>
+<tr><td><code>int</code></td><td><span class="zh">整数</span><span class="en">Integer</span></td><td><code>0</code> <code>-3</code></td></tr>
+<tr><td><code>float</code></td><td><span class="zh">标量</span><span class="en">Scalar</span></td><td><code>0.5</code></td></tr>
+<tr><td><code>vector2</code></td><td><span class="zh">二维 (x, y)</span><span class="en">2D (x, y)</span></td><td><code>{1, 0}</code></td></tr>
+<tr><td><code>vector</code></td><td><span class="zh">三维 (x, y, z)</span><span class="en">3D (x, y, z)</span></td><td><code>{0, 1, 0}</code></td></tr>
+<tr><td><code>vector4</code></td><td><span class="zh">四维 (x, y, z, w) — 不是四元数</span><span class="en">4D (x, y, z, w) — not a quaternion</span></td><td><code>{0, 0, 0, 1}</code></td></tr>
+<tr><td><code>color</code></td><td>rgba</td><td><code>{1, 0, 0, 1}</code></td></tr>
+<tr><td><code>rotation</code></td><td><span class="zh">四元数，存储 xyzw。关键字也可用 <code>quaternion</code> / <code>quat</code></span><span class="en">Quaternion stored xyzw. Keywords <code>quaternion</code> / <code>quat</code> also work</span></td><td><code>{0, 0, 0, 1}</code></td></tr>
+<tr><td><code>matrix2</code></td><td><span class="zh">2×2 列主序，wrangle only</span><span class="en">2×2 column-major, wrangle-only</span></td><td><code>matrix2()</code></td></tr>
+<tr><td><code>matrix3</code></td><td><span class="zh">3×3 列主序，wrangle only</span><span class="en">3×3 column-major, wrangle-only</span></td><td><code>matrix3()</code></td></tr>
+<tr><td><code>matrix</code></td><td><span class="zh">4×4 列主序</span><span class="en">4×4 column-major</span></td><td><code>ident()</code></td></tr>
+<tr><td><code>string</code></td><td><span class="zh">字符串</span><span class="en">String</span></td><td><code>"hello"</code></td></tr>
+<tr><td><code>ray</code></td><td><span class="zh">射线命中结果，由 <code>raycast</code> 返回。用 <code>rayishit</code> / <code>rayhitpos</code> / <code>rayhitnormal</code> / <code>rayhitdist</code> 读取</span><span class="en">Ray-hit record from <code>raycast</code>. Read with <code>rayishit</code> / <code>rayhitpos</code> / <code>rayhitnormal</code> / <code>rayhitdist</code></span></td><td><code>raycast(…)</code></td></tr>
+<tr><td><code>int[]</code> …</td><td><span class="zh">数组：<code>int[]</code> <code>float[]</code> <code>vector[]</code> <code>string[]</code> <code>matrix[]</code></span><span class="en">Arrays: <code>int[]</code> <code>float[]</code> <code>vector[]</code> <code>string[]</code> <code>matrix[]</code></span></td><td><code>array(1, 2, 3)</code></td></tr>
+</tbody>
+</table>
+<p class="zh"><code>vector4</code> 和 <code>rotation</code> 不是同一种东西：属性分别存成 Float4 和 Quaternion。</p>
+<p class="en"><code>vector4</code> and <code>rotation</code> are different types: attributes store Float4 vs Quaternion.</p>
+<pre><code>int n = 0;
+float s = 1.5;
+vector p = {0, 1, 0};
+rotation q = {0, 0, 0, 1};
+int[] xs = array(1, 2, 3);
+float ys[] = array(0.1, 0.2);</code></pre>
+
+<h2 id="attributes"><span class="zh">属性</span><span class="en">Attributes</span></h2>
+<p class="zh">用前缀 <code>@</code> 读写当前元素的属性。没写前缀的裸名字（如 <code>P</code>）也会当属性。</p>
+<p class="en">Prefix <code>@</code> reads/writes the current element’s attribute. A bare name such as <code>P</code> is also an attribute.</p>
+<table class="io-table">
+<thead><tr><th><span class="zh">前缀</span><span class="en">Prefix</span></th><th><span class="zh">类型</span><span class="en">Type</span></th><th></th></tr></thead>
+<tbody>
+<tr><td><code>f@</code></td><td>float</td><td></td></tr>
+<tr><td><code>i@</code></td><td>int</td><td></td></tr>
+<tr><td><code>b@</code></td><td>bool</td><td></td></tr>
+<tr><td><code>u@</code></td><td>vector2</td><td></td></tr>
+<tr><td><code>v@</code></td><td>vector</td><td></td></tr>
+<tr><td><code>q@</code></td><td>vector4</td><td></td></tr>
+<tr><td><code>c@</code></td><td>color</td><td></td></tr>
+<tr><td><code>r@</code></td><td>rotation</td><td></td></tr>
+<tr><td><code>s@</code></td><td>string</td><td></td></tr>
+<tr><td><code>2@</code> / <code>3@</code></td><td>matrix2 / matrix3</td><td>wrangle only</td></tr>
+<tr><td><code>4@</code> / <code>m@</code></td><td>matrix 4×4</td><td></td></tr>
+<tr><td><code>i[]@</code> <code>f[]@</code> <code>v[]@</code></td><td>arrays</td><td>wrangle only</td></tr>
+</tbody>
+</table>
+<p class="zh">内置：<code>v@P</code> 位置，<code>v@N</code> 法向，<code>i@index</code> 当前下标（只读），<code>i@id</code>，<code>i@numpt</code>。</p>
+<p class="en">Built-ins: <code>v@P</code> position, <code>v@N</code> normal, <code>i@index</code> current index (read-only), <code>i@id</code>, <code>i@numpt</code>.</p>
+<p class="zh">面板参数用 <code>chf("amp")</code>、<code>chi</code>、<code>chv</code>、<code>chr</code> 等；Compile 会按名字生成通道插座。</p>
+<p class="en">Panel parameters use <code>chf("amp")</code>, <code>chi</code>, <code>chv</code>, <code>chr</code>, … Compile creates sockets from those names.</p>
+
+<h2 id="operators"><span class="zh">运算符</span><span class="en">Operators</span></h2>
+<p><code>+ - * / %</code> &nbsp; <code>**</code> <span class="zh">幂</span><span class="en">power</span> &nbsp; <code>== != &lt; &gt; &lt;= &gt;=</code> &nbsp; <code>&amp;&amp; || !</code></p>
+<p><code>= += -= *= /=</code> &nbsp; <code>++</code> <code>--</code> <span class="zh">（int）</span><span class="en">(int)</span> &nbsp; <code>?:</code></p>
+<p class="zh">成员：<code>.x .y .z .w</code> 或 <code>.r .g .b .a</code>。下标列主序：<code>v[0]</code> 等于 <code>v.x</code>；<code>m[i]</code> 是第 i 列；<code>m[i][j]</code> 可读可写。</p>
+<p class="en">Members: <code>.x .y .z .w</code> or <code>.r .g .b .a</code>. Indexing is column-major: <code>v[0]</code> is <code>v.x</code>; <code>m[i]</code> is column i; <code>m[i][j]</code> is readable and writable.</p>
+<h3><code>*</code></h3>
+<ul>
+<li><code>rotation * rotation</code> → <span class="zh">四元数合成</span><span class="en">quaternion product</span></li>
+<li><code>rotation * vector</code> → <span class="zh">用 q 旋转 v（请左乘）</span><span class="en">rotate v by q (left-multiply)</span></li>
+<li><code>matrix * matrix</code> → <span class="zh">同阶矩阵积</span><span class="en">same-order product</span></li>
+<li><code>matrix * vector</code> → <span class="zh">完整线性乘法，不是 affine <code>transform_point</code></span><span class="en">full linear mul, not affine <code>transform_point</code></span></li>
+<li><code>float * matrix</code> → <span class="zh">对角缩放（4×4 的 m44 保持 1）</span><span class="en">diagonal scale (4×4 m44 stays 1)</span></li>
+<li><code>vector * matrix</code> → <span class="zh">只警告，按行向量计算。请写成 <code>M * v</code></span><span class="en">warning only; computed as a row vector. Write <code>M * v</code></span></li>
+</ul>
+<pre><code>v@P = ident() * vector4(v@P.x, v@P.y, v@P.z, 1); // 维度必须对齐
+v@P = transform_point(v@P, M);                   // 含平移的点变换
+v@P = q * v@P;                                   // 四元数旋转</code></pre>
+
+<h2 id="control"><span class="zh">控制流</span><span class="en">Control flow</span></h2>
+<h3>if / else / else if</h3>
+<p class="zh">C 风格。没有单独的 <code>elif</code> 关键字：<code>else</code> 后面再跟一条 <code>if</code>。</p>
+<p class="en">C-style. There is no <code>elif</code> keyword: write <code>else if</code>.</p>
+<pre><code>if (f@pscale &gt; 1) {
+    v@Cd = {1, 0, 0, 1};
+} else if (f@pscale &gt; 0.5) {
+    v@Cd = {1, 1, 0, 1};
+} else {
+    v@Cd = {0, 0, 1, 1};
+}</code></pre>
+<h3>for</h3>
+<pre><code>int s = 0;
+for (int i = 0; i &lt; npoints(); i++) {
+    s += 1;
+    if (i == 10) { break; }
+    if (i == 5) { continue; }
+}</code></pre>
+<h3>foreach</h3>
+<p class="zh">遍历数组。两种写法：只要元素，或同时要下标。</p>
+<p class="en">Iterate an array. Element only, or index plus element.</p>
+<pre><code>int[] pts = nearestpoints(0, 8, "k");
+vector sum = {0, 0, 0};
+foreach (int pt; pts) {
+    sum += point(0, "P", pt);
+}
+foreach (int i; int pt; pts) {
+    // i = 0 .. len(pts)-1
+}</code></pre>
+<h3>while</h3>
+<pre><code>int i = 0;
+while (i &lt; 7) {
+    i++;
+}</code></pre>
+<p class="zh">三元：<code>float a = (x &gt; 0) ? x : 0;</code>　注释：<code>//</code> 与 <code>/* */</code>。</p>
+<p class="en">Ternary: <code>float a = (x &gt; 0) ? x : 0;</code> Comments: <code>//</code> and <code>/* */</code>.</p>
+
+<h2 id="functions"><span class="zh">自定义函数</span><span class="en">User functions</span></h2>
+<p class="zh">可以在 wrangle 顶层定义函数，支持递归。返回类型写在名字前面；无返回值用 <code>void</code>。可选关键字 <code>function</code>。</p>
+<p class="en">Define functions at the top of the wrangle. Recursion is allowed. Return type comes before the name; use <code>void</code> for no return. The <code>function</code> keyword is optional.</p>
+<pre><code>int fib(int n) {
+    if (n &lt;= 1) {
+        return n;
+    }
+    return fib(n - 1) + fib(n - 2);
+}
+
+void bump(float s) {
+    v@P += v@N * s;
+}
+
+i@id = fib(8);
+bump(0.05);</code></pre>
+
+<h2 id="run"><span class="zh">编译与求值</span><span class="en">Compile &amp; eval</span></h2>
+<ul>
+<li class="zh"><code>Ctrl+Enter</code> 才编译。编辑过程中不会自动跑。</li>
+<li class="en"><code>Ctrl+Enter</code> compiles. The script does not run while you type.</li>
+<li class="zh"><code>addpoint</code> / <code>setattribute</code> / <code>delete_geometry</code> 的 <code>geo</code> 永远当 0；写非 0 会提示并改成 0。</li>
+<li class="en"><code>geo</code> on <code>addpoint</code> / <code>setattribute</code> / <code>delete_geometry</code> is always 0; a non-zero value is forced to 0 with a notice.</li>
+<li class="zh"><code>2@</code> / <code>3@</code> 和数组属性是 wrangle only，不写回 Blender 原生层。</li>
+<li class="en"><code>2@</code> / <code>3@</code> and array attributes are wrangle-only; they are not native Blender attributes.</li>
+</ul>
+
+<div class="cta">
+  <a class="btn btn-primary" href="vex-functions.html">
+    <span class="zh">VEX 函数清单 — 分类、搜索、签名与示例</span>
+    <span class="en">VEX function list — categories, search, signatures, examples</span>
+  </a>
+</div>
+
+</div></main>
+</div>
+<script>
+(function () {
+  var KEYS = ["bikini-docs-lang", "bikini-changelog-lang"];
+  function setLang(l) {
+    if (l !== "en" && l !== "zh") l = "zh";
+    document.documentElement.setAttribute("data-lang", l);
+    document.documentElement.lang = l === "zh" ? "zh-CN" : "en";
+    document.title = l === "zh" ? "VEX Wrangle — BIKINI 文档" : "VEX Wrangle — BIKINI Docs";
+    try { KEYS.forEach(function (k) { localStorage.setItem(k, l); }); } catch (e) {}
+    document.getElementById("lang-zh").setAttribute("aria-pressed", l === "zh" ? "true" : "false");
+    document.getElementById("lang-en").setAttribute("aria-pressed", l === "en" ? "true" : "false");
+  }
+  document.getElementById("lang-zh").addEventListener("click", function () { setLang("zh"); });
+  document.getElementById("lang-en").addEventListener("click", function () { setLang("en"); });
+  try {
+    var s = localStorage.getItem(KEYS[0]) || localStorage.getItem(KEYS[1]);
+    if (s === "en" || s === "zh") setLang(s);
+    else setLang(/^zh\b/i.test(navigator.language || "") ? "zh" : "en");
+  } catch (e) { setLang("zh"); }
+  document.getElementById("nav-toggle").addEventListener("click", function () {
+    document.body.classList.toggle("nav-open");
+  });
+  var links = document.querySelectorAll(".sidebar .nav-link[href^='#']");
+  function sync() {
+    var id = (location.hash || "#overview").slice(1);
+    links.forEach(function (a) {
+      a.classList.toggle("is-active", a.getAttribute("href") === "#" + id);
+    });
+  }
+  window.addEventListener("hashchange", sync);
+  sync();
+})();
+</script>
+</body>
+</html>
