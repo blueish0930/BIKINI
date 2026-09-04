@@ -25,8 +25,8 @@ local	float	___483_sx	%read{23,88} %write{11,57}
 local	float	___483_sy	%read{21,86} %write{13,59}
 local	float	___483_sz	%read{19,87} %write{15,61}
 local	matrix	___483_mat	%read{47,93} %write{16,92}
-local	matrix	___510_rmat	%read{95,95} %write{48,93}
-local	float	___511_a	%read{106,272} %write{98,99}
+local	matrix	___511_rmat	%read{95,95} %write{48,93}
+local	float	___512_a	%read{106,272} %write{98,99}
 const	string	$const1	"euler_xyz"		%read{0,0} %write{2147483647,-1}
 temp	int	$tmp1	%read{1,1} %write{0,0}
 temp	matrix	$tmp2	%read{48,48} %write{47,47}
@@ -370,7 +370,7 @@ code ___main___
 	assign		$tmp2 ___483_mat 	%line{187} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_rotate.osl:18
 #     matrix rmat = (invert) ? transpose(euler_to_mat(Rotation)) : euler_to_mat(Rotation);
-	transpose	___510_rmat $tmp2 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_rotate.osl"} %line{18} %argrw{"wr"}
+	transpose	___511_rmat $tmp2 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_rotate.osl"} %line{18} %argrw{"wr"}
 	functioncall	$const2 94 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_math.h:171
 #   float cx = cos(euler[0]);
@@ -449,17 +449,17 @@ code ___main___
 	mxcompassign	___483_mat $const5 $const5 $tmp56 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_math.h:187
 #   return mat;
-	assign		___510_rmat ___483_mat 	%line{187} %argrw{"wr"}
+	assign		___511_rmat ___483_mat 	%line{187} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_rotate.osl:19
 #     VectorOut = transform(rmat, VectorIn - Center) + Center;
 	sub		$tmp58 VectorIn Center 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_rotate.osl"} %line{19} %argrw{"wrr"}
-	transform	$tmp57 ___510_rmat $tmp58 	%argrw{"wrr"}
+	transform	$tmp57 ___511_rmat $tmp58 	%argrw{"wrr"}
 	add		VectorOut $tmp57 Center 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_rotate.osl:22
 #     float a = (invert) ? -Angle : Angle;
 	if		invert 99 100 	%line{22} %argrw{"r"}
-	neg		___511_a Angle 	%argrw{"wr"}
-	assign		___511_a Angle 	%argrw{"wr"}
+	neg		___512_a Angle 	%argrw{"wr"}
+	assign		___512_a Angle 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_rotate.osl:23
 #     if (rotate_type == "x_axis") {
 	eq		$tmp59 rotate_type $const7 	%line{23} %argrw{"wrr"}
@@ -474,7 +474,7 @@ code ___main___
 	normalize	___257_axis $tmp64 	%argrw{"wr"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:272
 #     sincos (angle, sinang, cosang);
-	sincos		___511_a ___257_sinang ___257_cosang 	%line{272} %argrw{"rww"}
+	sincos		___512_a ___257_sinang ___257_cosang 	%line{272} %argrw{"rww"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:273
 #     float cosang1 = 1.0 - cosang;
 	sub		___257_cosang1 $const6 ___257_cosang 	%line{273} %argrw{"wrr"}
@@ -565,7 +565,7 @@ code ___main___
 	normalize	___257_axis $tmp111 	%argrw{"wr"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:272
 #     sincos (angle, sinang, cosang);
-	sincos		___511_a ___257_sinang ___257_cosang 	%line{272} %argrw{"rww"}
+	sincos		___512_a ___257_sinang ___257_cosang 	%line{272} %argrw{"rww"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:273
 #     float cosang1 = 1.0 - cosang;
 	sub		___257_cosang1 $const6 ___257_cosang 	%line{273} %argrw{"wrr"}
@@ -656,7 +656,7 @@ code ___main___
 	normalize	___257_axis $tmp158 	%argrw{"wr"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:272
 #     sincos (angle, sinang, cosang);
-	sincos		___511_a ___257_sinang ___257_cosang 	%line{272} %argrw{"rww"}
+	sincos		___512_a ___257_sinang ___257_cosang 	%line{272} %argrw{"rww"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:273
 #     float cosang1 = 1.0 - cosang;
 	sub		___257_cosang1 $const6 ___257_cosang 	%line{273} %argrw{"wrr"}
@@ -746,7 +746,7 @@ code ___main___
 	normalize	___257_axis $tmp205 	%argrw{"wr"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:272
 #     sincos (angle, sinang, cosang);
-	sincos		___511_a ___257_sinang ___257_cosang 	%line{272} %argrw{"rww"}
+	sincos		___512_a ___257_sinang ___257_cosang 	%line{272} %argrw{"rww"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:273
 #     float cosang1 = 1.0 - cosang;
 	sub		___257_cosang1 $const6 ___257_cosang 	%line{273} %argrw{"wrr"}

@@ -1,0 +1,602 @@
+OpenShadingLanguage 1.00
+# Compiled by oslc 1.15.3.0
+# options: -q -O2 -IE:/Blender_Source/intern/cycles/kernel/osl/shaders -IE:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders -o E:/build_windows_Full_x64_vc17_Release/intern/cycles/kernel/osl/shaders/node_billboard_displacement.oso
+shader node_billboard_displacement
+param	int	mode	0		%read{68,85} %write{2147483647,-1}
+param	int	axis	2		%read{118,123} %write{2147483647,-1}
+param	int	use_object_pivot	1		%read{5,5} %write{2147483647,-1}
+param	point	Position	0 0 0		%read{131,149} %write{0,0} %initexpr
+param	point	Pivot	0 0 0		%read{4,4} %write{2147483647,-1}
+param	vector	Up	0 0 1		%read{74,81} %write{2147483647,-1}
+param	float	Factor	1		%read{148,221} %write{2147483647,-1}
+param	normal	NormalIn	0 0 0		%read{150,168} %write{1,1} %initexpr
+oparam	vector	Displacement	0 0 0		%read{149,149} %write{148,148}
+oparam	point	PositionOut	0 0 0		%read{2147483647,-1} %write{2,149} %initexpr
+oparam	vector	Rotation	0 0 0		%read{221,221} %write{212,221}
+oparam	normal	NormalOut	0 0 0		%read{2147483647,-1} %write{3,169} %initexpr
+global	point	P	%read{0,2} %write{2147483647,-1}
+global	normal	N	%read{1,3} %write{2147483647,-1}
+local	float	___371_len2	%read{11,114} %write{10,109}
+local	point	pivot_p	%read{83,139} %write{4,7}
+local	vector	ox	%read{133,186} %write{13,17}
+local	vector	oy	%read{134,188} %write{23,27}
+local	vector	oz	%read{135,191} %write{33,37}
+local	vector	cam_x	%read{70,112} %write{43,47}
+local	vector	cam_y	%read{71,103} %write{53,57}
+local	vector	cam_z	%read{72,94} %write{63,67}
+local	vector	bx	%read{117,128} %write{70,116}
+local	vector	by	%read{121,129} %write{71,117}
+local	vector	bz	%read{99,130} %write{72,98}
+local	vector	___375_upn	%read{87,99} %write{77,81}
+local	point	___375_cam_pos	%read{83,83} %write{82,82}
+local	vector	___375_zdir	%read{87,98} %write{84,89}
+local	vector	___375_xdir	%read{100,116} %write{99,107}
+local	vector	ax	%read{122,187} %write{120,128}
+local	vector	ay	%read{141,189} %write{122,129}
+local	vector	az	%read{122,192} %write{121,130}
+local	vector	rel	%read{133,135} %write{132,132}
+local	vector	local	%read{137,143} %write{136,136}
+local	point	aligned	%read{146,146} %write{145,145}
+local	vector	n_local	%read{154,159} %write{153,153}
+local	vector	n_aligned	%read{167,168} %write{161,161}
+local	vector	c0	%read{194,217} %write{177,177}
+local	vector	c1	%read{203,215} %write{185,185}
+local	vector	c2	%read{204,213} %write{193,193}
+local	float	cy	%read{201,219} %write{200,200}
+const	int	$const1	0		%read{5,210} %write{2147483647,-1}
+temp	int	$tmp1	%read{6,6} %write{5,5}
+temp	int	$tmp2	%read{2147483647,-1} %write{7,7}
+const	string	$const2	"object:location"		%read{7,7} %write{2147483647,-1}
+temp	vector	$tmp3	%read{10,17} %write{8,8}
+const	string	$const3	"object"		%read{8,28} %write{2147483647,-1}
+const	string	$const4	"world"		%read{8,82} %write{2147483647,-1}
+const	vector	$const5	1 0 0		%read{8,43} %write{2147483647,-1}
+const	string	$const6	"billboard_safe_axis"		%read{9,108} %write{2147483647,-1}
+const	float	$const7	1.00000002e-16		%read{11,110} %write{2147483647,-1}
+temp	int	$tmp6	%read{12,12} %write{11,11}
+const	float	$const8	1		%read{16,165} %write{2147483647,-1}
+temp	float	$tmp7	%read{16,16} %write{15,15}
+temp	float	$tmp8	%read{17,17} %write{16,16}
+temp	vector	$tmp9	%read{20,27} %write{18,18}
+const	vector	$const9	0 1 0		%read{18,53} %write{2147483647,-1}
+temp	int	$tmp12	%read{22,22} %write{21,21}
+temp	float	$tmp13	%read{26,26} %write{25,25}
+temp	float	$tmp14	%read{27,27} %write{26,26}
+temp	vector	$tmp15	%read{30,37} %write{28,28}
+const	vector	$const10	0 0 1		%read{28,77} %write{2147483647,-1}
+temp	int	$tmp18	%read{32,32} %write{31,31}
+temp	float	$tmp19	%read{36,36} %write{35,35}
+temp	float	$tmp20	%read{37,37} %write{36,36}
+temp	vector	$tmp21	%read{40,47} %write{38,38}
+const	string	$const11	"camera"		%read{38,82} %write{2147483647,-1}
+temp	int	$tmp24	%read{42,42} %write{41,41}
+temp	float	$tmp25	%read{46,46} %write{45,45}
+temp	float	$tmp26	%read{47,47} %write{46,46}
+temp	vector	$tmp27	%read{50,57} %write{48,48}
+temp	int	$tmp30	%read{52,52} %write{51,51}
+temp	float	$tmp31	%read{56,56} %write{55,55}
+temp	float	$tmp32	%read{57,57} %write{56,56}
+temp	vector	$tmp33	%read{60,67} %write{58,58}
+temp	int	$tmp36	%read{62,62} %write{61,61}
+temp	float	$tmp37	%read{66,66} %write{65,65}
+temp	float	$tmp38	%read{67,67} %write{66,66}
+temp	int	$tmp39	%read{69,69} %write{68,68}
+temp	int	$tmp41	%read{76,76} %write{75,75}
+temp	float	$tmp42	%read{80,80} %write{79,79}
+temp	float	$tmp43	%read{81,81} %write{80,80}
+const	point	$const12	0 0 0		%read{82,82} %write{2147483647,-1}
+temp	vector	$tmp45	%read{84,84} %write{83,83}
+const	int	$const13	2		%read{85,217} %write{2147483647,-1}
+temp	int	$tmp46	%read{86,86} %write{85,85}
+temp	float	$tmp47	%read{88,88} %write{87,87}
+temp	vector	$tmp48	%read{89,89} %write{88,88}
+temp	int	$tmp49	%read{93,93} %write{92,92}
+temp	float	$tmp50	%read{97,97} %write{96,96}
+temp	float	$tmp51	%read{98,98} %write{97,97}
+temp	float	$tmp52	%read{101,101} %write{100,100}
+temp	int	$tmp53	%read{102,102} %write{101,101}
+temp	float	$tmp54	%read{105,105} %write{104,104}
+temp	int	$tmp55	%read{106,106} %write{105,105}
+temp	int	$tmp56	%read{111,111} %write{110,110}
+temp	float	$tmp57	%read{115,115} %write{114,114}
+temp	float	$tmp58	%read{116,116} %write{115,115}
+temp	int	$tmp59	%read{119,119} %write{118,118}
+const	int	$const14	1		%read{123,215} %write{2147483647,-1}
+temp	int	$tmp60	%read{124,124} %write{123,123}
+temp	vector	$tmp61	%read{132,132} %write{131,131}
+temp	float	$tmp62	%read{136,136} %write{133,133}
+temp	float	$tmp63	%read{136,136} %write{134,134}
+temp	float	$tmp64	%read{136,136} %write{135,135}
+temp	float	$tmp65	%read{138,138} %write{137,137}
+temp	vector	$tmp66	%read{139,139} %write{138,138}
+temp	point	$tmp67	%read{142,142} %write{139,139}
+temp	float	$tmp68	%read{141,141} %write{140,140}
+temp	vector	$tmp69	%read{142,142} %write{141,141}
+temp	point	$tmp70	%read{145,145} %write{142,142}
+temp	float	$tmp71	%read{144,144} %write{143,143}
+temp	vector	$tmp72	%read{145,145} %write{144,144}
+temp	vector	$tmp73	%read{148,148} %write{147,147}
+temp	vector	$tmp74	%read{147,147} %write{146,146}
+temp	float	$tmp75	%read{153,153} %write{150,150}
+temp	float	$tmp76	%read{153,153} %write{151,151}
+temp	float	$tmp77	%read{153,153} %write{152,152}
+temp	float	$tmp78	%read{155,155} %write{154,154}
+temp	vector	$tmp79	%read{158,158} %write{155,155}
+temp	float	$tmp80	%read{157,157} %write{156,156}
+temp	vector	$tmp81	%read{158,158} %write{157,157}
+temp	vector	$tmp82	%read{161,161} %write{158,158}
+temp	float	$tmp83	%read{160,160} %write{159,159}
+temp	vector	$tmp84	%read{161,161} %write{160,160}
+const	float	$const15	0		%read{162,220} %write{2147483647,-1}
+temp	int	$tmp85	%read{163,163} %write{162,162}
+temp	int	$tmp86	%read{166,166} %write{165,165}
+temp	normal	$tmp87	%read{169,169} %write{168,168}
+temp	float	$tmp88	%read{171,171} %write{170,170}
+temp	vector	$tmp89	%read{174,174} %write{171,171}
+temp	float	$tmp90	%read{173,173} %write{172,172}
+temp	vector	$tmp91	%read{174,174} %write{173,173}
+temp	vector	$tmp92	%read{177,177} %write{174,174}
+temp	float	$tmp93	%read{176,176} %write{175,175}
+temp	vector	$tmp94	%read{177,177} %write{176,176}
+temp	float	$tmp95	%read{179,179} %write{178,178}
+temp	vector	$tmp96	%read{182,182} %write{179,179}
+temp	float	$tmp97	%read{181,181} %write{180,180}
+temp	vector	$tmp98	%read{182,182} %write{181,181}
+temp	vector	$tmp99	%read{185,185} %write{182,182}
+temp	float	$tmp100	%read{184,184} %write{183,183}
+temp	vector	$tmp101	%read{185,185} %write{184,184}
+temp	float	$tmp102	%read{187,187} %write{186,186}
+temp	vector	$tmp103	%read{190,190} %write{187,187}
+temp	float	$tmp104	%read{189,189} %write{188,188}
+temp	vector	$tmp105	%read{190,190} %write{189,189}
+temp	vector	$tmp106	%read{193,193} %write{190,190}
+temp	float	$tmp107	%read{192,192} %write{191,191}
+temp	vector	$tmp108	%read{193,193} %write{192,192}
+temp	float	$tmp109	%read{197,197} %write{194,194}
+temp	float	$tmp110	%read{198,198} %write{195,195}
+const	string	$const16	"hypot"		%read{196,196} %write{2147483647,-1}
+temp	float	$tmp111	%read{199,199} %write{197,197}
+temp	float	$tmp112	%read{199,199} %write{198,198}
+temp	float	$tmp113	%read{200,200} %write{199,199}
+const	float	$const17	9.99999997e-07		%read{201,201} %write{2147483647,-1}
+temp	int	$tmp114	%read{202,202} %write{201,201}
+temp	float	$tmp115	%read{212,212} %write{205,205}
+temp	float	$tmp116	%read{205,205} %write{203,203}
+temp	float	$tmp117	%read{205,205} %write{204,204}
+temp	float	$tmp118	%read{212,212} %write{208,208}
+temp	float	$tmp119	%read{207,207} %write{206,206}
+temp	float	$tmp120	%read{208,208} %write{207,207}
+temp	float	$tmp121	%read{212,212} %write{211,211}
+temp	float	$tmp122	%read{211,211} %write{209,209}
+temp	float	$tmp123	%read{211,211} %write{210,210}
+temp	float	$tmp124	%read{220,220} %write{216,216}
+temp	float	$tmp125	%read{214,214} %write{213,213}
+temp	float	$tmp126	%read{216,216} %write{214,214}
+temp	float	$tmp127	%read{216,216} %write{215,215}
+temp	float	$tmp128	%read{220,220} %write{219,219}
+temp	float	$tmp129	%read{218,218} %write{217,217}
+temp	float	$tmp130	%read{219,219} %write{218,218}
+code Position
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:19
+#                                    point Position = P,
+	assign		Position P 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl"} %line{19} %argrw{"wr"}
+code NormalIn
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:23
+#                                    normal NormalIn = N,
+	assign		NormalIn N 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl"} %line{23} %argrw{"wr"}
+code PositionOut
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:25
+#                                    output point PositionOut = P,
+	assign		PositionOut P 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl"} %line{25} %argrw{"wr"}
+code NormalOut
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:27
+#                                    output normal NormalOut = N)
+	assign		NormalOut N 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl"} %line{27} %argrw{"wr"}
+code ___main___
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:29
+#   point pivot_p = Pivot;
+	assign		pivot_p Pivot 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl"} %line{29} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:30
+#   if (use_object_pivot != 0) {
+	neq		$tmp1 use_object_pivot $const1 	%line{30} %argrw{"wrr"}
+	if		$tmp1 8 8 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:31
+#     getattribute("object:location", pivot_p);
+	getattribute	$tmp2 $const2 pivot_p 	%line{31} %argrw{"wrw"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:34
+#   vector ox = billboard_safe_axis(transform("object", "world", vector(1.0, 0.0, 0.0)),
+	transformv	$tmp3 $const3 $const4 $const5 	%line{34} %argrw{"wrrr"}
+	functioncall	$const6 18 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:9
+#   float len2 = dot(v, v);
+	dot		___371_len2 $tmp3 $tmp3 	%line{9} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:10
+#   if (len2 < 1.0e-16) {
+	lt		$tmp6 ___371_len2 $const7 	%line{10} %argrw{"wrr"}
+	if		$tmp6 15 15 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:11
+#     return fallback;
+	assign		ox $const5 	%line{11} %argrw{"wr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:13
+#   return v * (1.0 / sqrt(len2));
+	sqrt		$tmp7 ___371_len2 	%line{13} %argrw{"wr"}
+	div		$tmp8 $const8 $tmp7 	%argrw{"wrr"}
+	mul		ox $tmp3 $tmp8 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:36
+#   vector oy = billboard_safe_axis(transform("object", "world", vector(0.0, 1.0, 0.0)),
+	transformv	$tmp9 $const3 $const4 $const9 	%line{36} %argrw{"wrrr"}
+	functioncall	$const6 28 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:9
+#   float len2 = dot(v, v);
+	dot		___371_len2 $tmp9 $tmp9 	%line{9} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:10
+#   if (len2 < 1.0e-16) {
+	lt		$tmp12 ___371_len2 $const7 	%line{10} %argrw{"wrr"}
+	if		$tmp12 25 25 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:11
+#     return fallback;
+	assign		oy $const9 	%line{11} %argrw{"wr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:13
+#   return v * (1.0 / sqrt(len2));
+	sqrt		$tmp13 ___371_len2 	%line{13} %argrw{"wr"}
+	div		$tmp14 $const8 $tmp13 	%argrw{"wrr"}
+	mul		oy $tmp9 $tmp14 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:38
+#   vector oz = billboard_safe_axis(transform("object", "world", vector(0.0, 0.0, 1.0)),
+	transformv	$tmp15 $const3 $const4 $const10 	%line{38} %argrw{"wrrr"}
+	functioncall	$const6 38 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:9
+#   float len2 = dot(v, v);
+	dot		___371_len2 $tmp15 $tmp15 	%line{9} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:10
+#   if (len2 < 1.0e-16) {
+	lt		$tmp18 ___371_len2 $const7 	%line{10} %argrw{"wrr"}
+	if		$tmp18 35 35 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:11
+#     return fallback;
+	assign		oz $const10 	%line{11} %argrw{"wr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:13
+#   return v * (1.0 / sqrt(len2));
+	sqrt		$tmp19 ___371_len2 	%line{13} %argrw{"wr"}
+	div		$tmp20 $const8 $tmp19 	%argrw{"wrr"}
+	mul		oz $tmp15 $tmp20 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:41
+#   vector cam_x = billboard_safe_axis(transform("camera", "world", vector(1.0, 0.0, 0.0)),
+	transformv	$tmp21 $const11 $const4 $const5 	%line{41} %argrw{"wrrr"}
+	functioncall	$const6 48 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:9
+#   float len2 = dot(v, v);
+	dot		___371_len2 $tmp21 $tmp21 	%line{9} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:10
+#   if (len2 < 1.0e-16) {
+	lt		$tmp24 ___371_len2 $const7 	%line{10} %argrw{"wrr"}
+	if		$tmp24 45 45 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:11
+#     return fallback;
+	assign		cam_x $const5 	%line{11} %argrw{"wr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:13
+#   return v * (1.0 / sqrt(len2));
+	sqrt		$tmp25 ___371_len2 	%line{13} %argrw{"wr"}
+	div		$tmp26 $const8 $tmp25 	%argrw{"wrr"}
+	mul		cam_x $tmp21 $tmp26 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:43
+#   vector cam_y = billboard_safe_axis(transform("camera", "world", vector(0.0, 1.0, 0.0)),
+	transformv	$tmp27 $const11 $const4 $const9 	%line{43} %argrw{"wrrr"}
+	functioncall	$const6 58 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:9
+#   float len2 = dot(v, v);
+	dot		___371_len2 $tmp27 $tmp27 	%line{9} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:10
+#   if (len2 < 1.0e-16) {
+	lt		$tmp30 ___371_len2 $const7 	%line{10} %argrw{"wrr"}
+	if		$tmp30 55 55 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:11
+#     return fallback;
+	assign		cam_y $const9 	%line{11} %argrw{"wr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:13
+#   return v * (1.0 / sqrt(len2));
+	sqrt		$tmp31 ___371_len2 	%line{13} %argrw{"wr"}
+	div		$tmp32 $const8 $tmp31 	%argrw{"wrr"}
+	mul		cam_y $tmp27 $tmp32 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:45
+#   vector cam_z = billboard_safe_axis(transform("camera", "world", vector(0.0, 0.0, 1.0)),
+	transformv	$tmp33 $const11 $const4 $const10 	%line{45} %argrw{"wrrr"}
+	functioncall	$const6 68 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:9
+#   float len2 = dot(v, v);
+	dot		___371_len2 $tmp33 $tmp33 	%line{9} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:10
+#   if (len2 < 1.0e-16) {
+	lt		$tmp36 ___371_len2 $const7 	%line{10} %argrw{"wrr"}
+	if		$tmp36 65 65 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:11
+#     return fallback;
+	assign		cam_z $const10 	%line{11} %argrw{"wr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:13
+#   return v * (1.0 / sqrt(len2));
+	sqrt		$tmp37 ___371_len2 	%line{13} %argrw{"wr"}
+	div		$tmp38 $const8 $tmp37 	%argrw{"wrr"}
+	mul		cam_z $tmp33 $tmp38 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:49
+#   if (mode == 0) {
+	eq		$tmp39 mode $const1 	%line{49} %argrw{"wrr"}
+	if		$tmp39 73 118 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:50
+#     bx = cam_x;
+	assign		bx cam_x 	%line{50} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:51
+#     by = cam_y;
+	assign		by cam_y 	%line{51} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:52
+#     bz = cam_z;
+	assign		bz cam_z 	%line{52} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:55
+#     vector upn = billboard_safe_axis(Up, vector(0.0, 0.0, 1.0));
+	functioncall	$const6 82 	%line{55} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:9
+#   float len2 = dot(v, v);
+	dot		___371_len2 Up Up 	%line{9} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:10
+#   if (len2 < 1.0e-16) {
+	lt		$tmp41 ___371_len2 $const7 	%line{10} %argrw{"wrr"}
+	if		$tmp41 79 79 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:11
+#     return fallback;
+	assign		___375_upn $const10 	%line{11} %argrw{"wr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:13
+#   return v * (1.0 / sqrt(len2));
+	sqrt		$tmp42 ___371_len2 	%line{13} %argrw{"wr"}
+	div		$tmp43 $const8 $tmp42 	%argrw{"wrr"}
+	mul		___375_upn Up $tmp43 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:56
+#     point cam_pos = transform("camera", "world", point(0.0, 0.0, 0.0));
+	transform	___375_cam_pos $const11 $const4 $const12 	%line{56} %argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:57
+#     vector zdir = vector(cam_pos - pivot_p);
+	sub		$tmp45 ___375_cam_pos pivot_p 	%line{57} %argrw{"wrr"}
+	assign		___375_zdir $tmp45 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:58
+#     if (mode == 2) {
+	eq		$tmp46 mode $const13 	%line{58} %argrw{"wrr"}
+	if		$tmp46 90 90 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:59
+#       zdir = zdir - upn * dot(zdir, upn);
+	dot		$tmp47 ___375_zdir ___375_upn 	%line{59} %argrw{"wrr"}
+	mul		$tmp48 ___375_upn $tmp47 	%argrw{"wrr"}
+	sub		___375_zdir ___375_zdir $tmp48 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:61
+#     bz = billboard_safe_axis(zdir, cam_z);
+	functioncall	$const6 99 	%line{61} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:9
+#   float len2 = dot(v, v);
+	dot		___371_len2 ___375_zdir ___375_zdir 	%line{9} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:10
+#   if (len2 < 1.0e-16) {
+	lt		$tmp49 ___371_len2 $const7 	%line{10} %argrw{"wrr"}
+	if		$tmp49 96 96 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:11
+#     return fallback;
+	assign		bz cam_z 	%line{11} %argrw{"wr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:13
+#   return v * (1.0 / sqrt(len2));
+	sqrt		$tmp50 ___371_len2 	%line{13} %argrw{"wr"}
+	div		$tmp51 $const8 $tmp50 	%argrw{"wrr"}
+	mul		bz ___375_zdir $tmp51 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:62
+#     vector xdir = cross(upn, bz);
+	cross		___375_xdir ___375_upn bz 	%line{62} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:63
+#     if (dot(xdir, xdir) < 1.0e-16) {
+	dot		$tmp52 ___375_xdir ___375_xdir 	%line{63} %argrw{"wrr"}
+	lt		$tmp53 $tmp52 $const7 	%argrw{"wrr"}
+	if		$tmp53 108 108 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:64
+#       xdir = cross(cam_y, bz);
+	cross		___375_xdir cam_y bz 	%line{64} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:65
+#       if (dot(xdir, xdir) < 1.0e-16) {
+	dot		$tmp54 ___375_xdir ___375_xdir 	%line{65} %argrw{"wrr"}
+	lt		$tmp55 $tmp54 $const7 	%argrw{"wrr"}
+	if		$tmp55 108 108 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:66
+#         xdir = cam_x;
+	assign		___375_xdir cam_x 	%line{66} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:69
+#     bx = billboard_safe_axis(xdir, cam_x);
+	functioncall	$const6 117 	%line{69} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:9
+#   float len2 = dot(v, v);
+	dot		___371_len2 ___375_xdir ___375_xdir 	%line{9} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:10
+#   if (len2 < 1.0e-16) {
+	lt		$tmp56 ___371_len2 $const7 	%line{10} %argrw{"wrr"}
+	if		$tmp56 114 114 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:11
+#     return fallback;
+	assign		bx cam_x 	%line{11} %argrw{"wr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:13
+#   return v * (1.0 / sqrt(len2));
+	sqrt		$tmp57 ___371_len2 	%line{13} %argrw{"wr"}
+	div		$tmp58 $const8 $tmp57 	%argrw{"wrr"}
+	mul		bx ___375_xdir $tmp58 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:70
+#     by = cross(bz, bx);
+	cross		by bz bx 	%line{70} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:74
+#   if (axis == 0) {
+	eq		$tmp59 axis $const1 	%line{74} %argrw{"wrr"}
+	if		$tmp59 123 131 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:75
+#     ax = bz;
+	assign		ax bz 	%line{75} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:76
+#     az = by;
+	assign		az by 	%line{76} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:77
+#     ay = cross(az, ax);
+	cross		ay az ax 	%line{77} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:79
+#   else if (axis == 1) {
+	eq		$tmp60 axis $const14 	%line{79} %argrw{"wrr"}
+	if		$tmp60 128 131 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:80
+#     ax = bx;
+	assign		ax bx 	%line{80} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:81
+#     az = by;
+	assign		az by 	%line{81} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:82
+#     ay = cross(az, ax);
+	cross		ay az ax 	%line{82} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:85
+#     ax = bx;
+	assign		ax bx 	%line{85} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:86
+#     ay = by;
+	assign		ay by 	%line{86} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:87
+#     az = bz;
+	assign		az bz 	%line{87} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:90
+#   vector rel = vector(Position - pivot_p);
+	sub		$tmp61 Position pivot_p 	%line{90} %argrw{"wrr"}
+	assign		rel $tmp61 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:91
+#   vector local = vector(dot(rel, ox), dot(rel, oy), dot(rel, oz));
+	dot		$tmp62 rel ox 	%line{91} %argrw{"wrr"}
+	dot		$tmp63 rel oy 	%argrw{"wrr"}
+	dot		$tmp64 rel oz 	%argrw{"wrr"}
+	vector		local $tmp62 $tmp63 $tmp64 	%argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:92
+#   point aligned = pivot_p + ax * local[0] + ay * local[1] + az * local[2];
+	compref		$tmp65 local $const1 	%line{92} %argrw{"wrr"}
+	mul		$tmp66 ax $tmp65 	%argrw{"wrr"}
+	add		$tmp67 pivot_p $tmp66 	%argrw{"wrr"}
+	compref		$tmp68 local $const14 	%argrw{"wrr"}
+	mul		$tmp69 ay $tmp68 	%argrw{"wrr"}
+	add		$tmp70 $tmp67 $tmp69 	%argrw{"wrr"}
+	compref		$tmp71 local $const13 	%argrw{"wrr"}
+	mul		$tmp72 az $tmp71 	%argrw{"wrr"}
+	add		aligned $tmp70 $tmp72 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:93
+#   Displacement = vector(aligned - Position) * Factor;
+	sub		$tmp74 aligned Position 	%line{93} %argrw{"wrr"}
+	assign		$tmp73 $tmp74 	%argrw{"wr"}
+	mul		Displacement $tmp73 Factor 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:94
+#   PositionOut = Position + Displacement;
+	add		PositionOut Position Displacement 	%line{94} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:96
+#   vector n_local = vector(dot(NormalIn, ox), dot(NormalIn, oy), dot(NormalIn, oz));
+	dot		$tmp75 NormalIn ox 	%line{96} %argrw{"wrr"}
+	dot		$tmp76 NormalIn oy 	%argrw{"wrr"}
+	dot		$tmp77 NormalIn oz 	%argrw{"wrr"}
+	vector		n_local $tmp75 $tmp76 $tmp77 	%argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:97
+#   vector n_aligned = ax * n_local[0] + ay * n_local[1] + az * n_local[2];
+	compref		$tmp78 n_local $const1 	%line{97} %argrw{"wrr"}
+	mul		$tmp79 ax $tmp78 	%argrw{"wrr"}
+	compref		$tmp80 n_local $const14 	%argrw{"wrr"}
+	mul		$tmp81 ay $tmp80 	%argrw{"wrr"}
+	add		$tmp82 $tmp79 $tmp81 	%argrw{"wrr"}
+	compref		$tmp83 n_local $const13 	%argrw{"wrr"}
+	mul		$tmp84 az $tmp83 	%argrw{"wrr"}
+	add		n_aligned $tmp82 $tmp84 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:98
+#   if (Factor <= 0.0) {
+	le		$tmp85 Factor $const15 	%line{98} %argrw{"wrr"}
+	if		$tmp85 165 170 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:99
+#     NormalOut = NormalIn;
+	assign		NormalOut NormalIn 	%line{99} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:101
+#   else if (Factor >= 1.0) {
+	ge		$tmp86 Factor $const8 	%line{101} %argrw{"wrr"}
+	if		$tmp86 168 170 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:102
+#     NormalOut = n_aligned;
+	assign		NormalOut n_aligned 	%line{102} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:105
+#     NormalOut = normalize(mix(NormalIn, n_aligned, Factor));
+	mix		$tmp87 NormalIn n_aligned Factor 	%line{105} %argrw{"wrrr"}
+	normalize	NormalOut $tmp87 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:109
+#   vector c0 = ax * ox[0] + ay * oy[0] + az * oz[0];
+	compref		$tmp88 ox $const1 	%line{109} %argrw{"wrr"}
+	mul		$tmp89 ax $tmp88 	%argrw{"wrr"}
+	compref		$tmp90 oy $const1 	%argrw{"wrr"}
+	mul		$tmp91 ay $tmp90 	%argrw{"wrr"}
+	add		$tmp92 $tmp89 $tmp91 	%argrw{"wrr"}
+	compref		$tmp93 oz $const1 	%argrw{"wrr"}
+	mul		$tmp94 az $tmp93 	%argrw{"wrr"}
+	add		c0 $tmp92 $tmp94 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:110
+#   vector c1 = ax * ox[1] + ay * oy[1] + az * oz[1];
+	compref		$tmp95 ox $const14 	%line{110} %argrw{"wrr"}
+	mul		$tmp96 ax $tmp95 	%argrw{"wrr"}
+	compref		$tmp97 oy $const14 	%argrw{"wrr"}
+	mul		$tmp98 ay $tmp97 	%argrw{"wrr"}
+	add		$tmp99 $tmp96 $tmp98 	%argrw{"wrr"}
+	compref		$tmp100 oz $const14 	%argrw{"wrr"}
+	mul		$tmp101 az $tmp100 	%argrw{"wrr"}
+	add		c1 $tmp99 $tmp101 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:111
+#   vector c2 = ax * ox[2] + ay * oy[2] + az * oz[2];
+	compref		$tmp102 ox $const13 	%line{111} %argrw{"wrr"}
+	mul		$tmp103 ax $tmp102 	%argrw{"wrr"}
+	compref		$tmp104 oy $const13 	%argrw{"wrr"}
+	mul		$tmp105 ay $tmp104 	%argrw{"wrr"}
+	add		$tmp106 $tmp103 $tmp105 	%argrw{"wrr"}
+	compref		$tmp107 oz $const13 	%argrw{"wrr"}
+	mul		$tmp108 az $tmp107 	%argrw{"wrr"}
+	add		c2 $tmp106 $tmp108 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:112
+#   float cy = hypot(c0[0], c0[1]);
+	compref		$tmp109 c0 $const1 	%line{112} %argrw{"wrr"}
+	compref		$tmp110 c0 $const14 	%argrw{"wrr"}
+	functioncall	$const16 201 	%argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:101
+# float hypot (float a, float b) { return sqrt (a*a + b*b); }
+	mul		$tmp111 $tmp109 $tmp109 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{101} %argrw{"wrr"}
+	mul		$tmp112 $tmp110 $tmp110 	%argrw{"wrr"}
+	add		$tmp113 $tmp111 $tmp112 	%argrw{"wrr"}
+	sqrt		cy $tmp113 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:113
+#   if (cy > 1.0e-6) {
+	gt		$tmp114 cy $const17 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl"} %line{113} %argrw{"wrr"}
+	if		$tmp114 213 221 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:114
+#     Rotation = vector(atan2(c1[2], c2[2]), atan2(-c0[2], cy), atan2(c0[1], c0[0]));
+	compref		$tmp116 c1 $const13 	%line{114} %argrw{"wrr"}
+	compref		$tmp117 c2 $const13 	%argrw{"wrr"}
+	atan2		$tmp115 $tmp116 $tmp117 	%argrw{"wrr"}
+	compref		$tmp119 c0 $const13 	%argrw{"wrr"}
+	neg		$tmp120 $tmp119 	%argrw{"wr"}
+	atan2		$tmp118 $tmp120 cy 	%argrw{"wrr"}
+	compref		$tmp122 c0 $const14 	%argrw{"wrr"}
+	compref		$tmp123 c0 $const1 	%argrw{"wrr"}
+	atan2		$tmp121 $tmp122 $tmp123 	%argrw{"wrr"}
+	vector		Rotation $tmp115 $tmp118 $tmp121 	%argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:117
+#     Rotation = vector(atan2(-c2[1], c1[1]), atan2(-c0[2], cy), 0.0);
+	compref		$tmp125 c2 $const14 	%line{117} %argrw{"wrr"}
+	neg		$tmp126 $tmp125 	%argrw{"wr"}
+	compref		$tmp127 c1 $const14 	%argrw{"wrr"}
+	atan2		$tmp124 $tmp126 $tmp127 	%argrw{"wrr"}
+	compref		$tmp129 c0 $const13 	%argrw{"wrr"}
+	neg		$tmp130 $tmp129 	%argrw{"wr"}
+	atan2		$tmp128 $tmp130 cy 	%argrw{"wrr"}
+	vector		Rotation $tmp124 $tmp128 $const15 	%argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_billboard_displacement.osl:119
+#   Rotation = Rotation * Factor;
+	mul		Rotation Rotation Factor 	%line{119} %argrw{"wrr"}
+	end

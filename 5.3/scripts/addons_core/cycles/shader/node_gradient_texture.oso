@@ -9,14 +9,14 @@ param	point	Vector	0 0 0		%read{1,1} %write{0,0} %initexpr
 oparam	float	Fac	0		%read{51,51} %write{50,50}
 oparam	color	Color	0 0 0		%read{2147483647,-1} %write{51,51}
 global	point	P	%read{0,0} %write{2147483647,-1}
-local	float	___370_x	%read{11,34} %write{5,5}
-local	float	___370_y	%read{27,35} %write{6,6}
-local	float	___370_z	%read{37,37} %write{7,7}
-local	float	___370_result	%read{49,49} %write{8,47}
-local	float	___372_r	%read{15,15} %write{14,14}
-local	float	___373_r	%read{20,23} %write{19,19}
-local	float	___373_t	%read{21,22} %write{20,20}
-local	float	___376_r	%read{44,47} %write{41,41}
+local	float	___371_x	%read{11,34} %write{5,5}
+local	float	___371_y	%read{27,35} %write{6,6}
+local	float	___371_z	%read{37,37} %write{7,7}
+local	float	___371_result	%read{49,49} %write{8,47}
+local	float	___373_r	%read{15,15} %write{14,14}
+local	float	___374_r	%read{20,23} %write{19,19}
+local	float	___374_t	%read{21,22} %write{20,20}
+local	float	___377_r	%read{44,47} %write{41,41}
 local	point	p	%read{3,7} %write{1,3}
 const	string	$const1	"gradient"		%read{4,4} %write{2147483647,-1}
 const	int	$const2	0		%read{5,5} %write{2147483647,-1}
@@ -77,97 +77,97 @@ code ___main___
 	functioncall	$const1 51 	%line{63} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gradient_texture.osl:13
 #   x = p[0];
-	compref		___370_x p $const2 	%line{13} %argrw{"wrr"}
+	compref		___371_x p $const2 	%line{13} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gradient_texture.osl:14
 #   y = p[1];
-	compref		___370_y p $const3 	%line{14} %argrw{"wrr"}
+	compref		___371_y p $const3 	%line{14} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gradient_texture.osl:15
 #   z = p[2];
-	compref		___370_z p $const4 	%line{15} %argrw{"wrr"}
+	compref		___371_z p $const4 	%line{15} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gradient_texture.osl:17
 #   float result = 0.0;
-	assign		___370_result $const5 	%line{17} %argrw{"wr"}
+	assign		___371_result $const5 	%line{17} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gradient_texture.osl:19
 #   if (type == "linear") {
 	eq		$tmp1 gradient_type $const6 	%line{19} %argrw{"wrr"}
 	if		$tmp1 12 48 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gradient_texture.osl:20
 #     result = x;
-	assign		___370_result ___370_x 	%line{20} %argrw{"wr"}
+	assign		___371_result ___371_x 	%line{20} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gradient_texture.osl:22
 #   else if (type == "quadratic") {
 	eq		$tmp2 gradient_type $const7 	%line{22} %argrw{"wrr"}
 	if		$tmp2 16 48 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gradient_texture.osl:23
 #     float r = max(x, 0.0);
-	max		___372_r ___370_x $const5 	%line{23} %argrw{"wrr"}
+	max		___373_r ___371_x $const5 	%line{23} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gradient_texture.osl:24
 #     result = r * r;
-	mul		___370_result ___372_r ___372_r 	%line{24} %argrw{"wrr"}
+	mul		___371_result ___373_r ___373_r 	%line{24} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gradient_texture.osl:26
 #   else if (type == "easing") {
 	eq		$tmp3 gradient_type $const8 	%line{26} %argrw{"wrr"}
 	if		$tmp3 25 48 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gradient_texture.osl:27
 #     float r = min(max(x, 0.0), 1.0);
-	max		$tmp4 ___370_x $const5 	%line{27} %argrw{"wrr"}
-	min		___373_r $tmp4 $const9 	%argrw{"wrr"}
+	max		$tmp4 ___371_x $const5 	%line{27} %argrw{"wrr"}
+	min		___374_r $tmp4 $const9 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gradient_texture.osl:28
 #     float t = r * r;
-	mul		___373_t ___373_r ___373_r 	%line{28} %argrw{"wrr"}
+	mul		___374_t ___374_r ___374_r 	%line{28} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gradient_texture.osl:30
 #     result = (3.0 * t - 2.0 * t * r);
-	mul		$tmp5 $const10 ___373_t 	%line{30} %argrw{"wrr"}
-	mul		$tmp6 $const11 ___373_t 	%argrw{"wrr"}
-	mul		$tmp7 $tmp6 ___373_r 	%argrw{"wrr"}
-	sub		___370_result $tmp5 $tmp7 	%argrw{"wrr"}
+	mul		$tmp5 $const10 ___374_t 	%line{30} %argrw{"wrr"}
+	mul		$tmp6 $const11 ___374_t 	%argrw{"wrr"}
+	mul		$tmp7 $tmp6 ___374_r 	%argrw{"wrr"}
+	sub		___371_result $tmp5 $tmp7 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gradient_texture.osl:32
 #   else if (type == "diagonal") {
 	eq		$tmp8 gradient_type $const12 	%line{32} %argrw{"wrr"}
 	if		$tmp8 29 48 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gradient_texture.osl:33
 #     result = (x + y) * 0.5;
-	add		$tmp9 ___370_x ___370_y 	%line{33} %argrw{"wrr"}
-	mul		___370_result $tmp9 $const13 	%argrw{"wrr"}
+	add		$tmp9 ___371_x ___371_y 	%line{33} %argrw{"wrr"}
+	mul		___371_result $tmp9 $const13 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gradient_texture.osl:35
 #   else if (type == "radial") {
 	eq		$tmp10 gradient_type $const14 	%line{35} %argrw{"wrr"}
 	if		$tmp10 34 48 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gradient_texture.osl:36
 #     result = atan2(y, x) / M_2PI + 0.5;
-	atan2		$tmp11 ___370_y ___370_x 	%line{36} %argrw{"wrr"}
+	atan2		$tmp11 ___371_y ___371_x 	%line{36} %argrw{"wrr"}
 	div		$tmp12 $tmp11 $const15 	%argrw{"wrr"}
-	add		___370_result $tmp12 $const13 	%argrw{"wrr"}
+	add		___371_result $tmp12 $const13 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gradient_texture.osl:39
 #     float r = max(1.0 - sqrt(x * x + y * y + z * z), 0.0);
-	mul		$tmp14 ___370_x ___370_x 	%line{39} %argrw{"wrr"}
-	mul		$tmp15 ___370_y ___370_y 	%argrw{"wrr"}
+	mul		$tmp14 ___371_x ___371_x 	%line{39} %argrw{"wrr"}
+	mul		$tmp15 ___371_y ___371_y 	%argrw{"wrr"}
 	add		$tmp16 $tmp14 $tmp15 	%argrw{"wrr"}
-	mul		$tmp17 ___370_z ___370_z 	%argrw{"wrr"}
+	mul		$tmp17 ___371_z ___371_z 	%argrw{"wrr"}
 	add		$tmp18 $tmp16 $tmp17 	%argrw{"wrr"}
 	sqrt		$tmp13 $tmp18 	%argrw{"wr"}
 	sub		$tmp19 $const9 $tmp13 	%argrw{"wrr"}
-	max		___376_r $tmp19 $const5 	%argrw{"wrr"}
+	max		___377_r $tmp19 $const5 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gradient_texture.osl:41
 #     if (type == "quadratic_sphere")
 	eq		$tmp20 gradient_type $const16 	%line{41} %argrw{"wrr"}
 	if		$tmp20 45 48 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gradient_texture.osl:42
 #       result = r * r;
-	mul		___370_result ___376_r ___376_r 	%line{42} %argrw{"wrr"}
+	mul		___371_result ___377_r ___377_r 	%line{42} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gradient_texture.osl:43
 #     else if (type == "spherical")
 	eq		$tmp21 gradient_type $const17 	%line{43} %argrw{"wrr"}
 	if		$tmp21 48 48 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gradient_texture.osl:44
 #       result = r;
-	assign		___370_result ___376_r 	%line{44} %argrw{"wr"}
+	assign		___371_result ___377_r 	%line{44} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gradient_texture.osl:47
 #   return clamp(result, 0.0, 1.0);
 	functioncall	$const18 51 	%line{47} %argrw{"r"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
 # float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
-	min		$tmp22 ___370_result $const9 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
+	min		$tmp22 ___371_result $const9 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
 	max		Fac $tmp22 $const5 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_gradient_texture.osl:64
 #   Color = color(Fac, Fac, Fac);

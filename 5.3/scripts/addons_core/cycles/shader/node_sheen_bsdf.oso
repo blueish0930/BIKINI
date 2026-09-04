@@ -6,9 +6,9 @@ param	color	Color	0.800000012 0.800000012 0.800000012		%read{1,1} %write{2147483
 param	string	distribution	"microfiber"		%read{5,9} %write{2147483647,-1}
 param	float	Roughness	0		%read{3,3} %write{2147483647,-1}
 param	normal	Normal	0 0 0		%read{7,11} %write{0,0} %initexpr
-oparam	closure color	BSDF			%read{2147483647,-1} %write{8,12}
+oparam	closure color	BSDF			%read{2147483647,-1} %write{8,11}
 global	normal	N	%read{0,0} %write{2147483647,-1}
-local	color	base_color	%read{8,12} %write{1,1}
+local	color	base_color	%read{8,11} %write{1,1}
 local	float	roughness	%read{7,11} %write{4,4}
 const	color	$const1	0 0 0		%read{1,1} %write{2147483647,-1}
 const	float	$const2	0		%read{4,4} %write{2147483647,-1}
@@ -21,8 +21,7 @@ temp	closure color	$tmp4	%read{8,8} %write{7,7}
 const	string	$const6	"ashikhmin_velvet"		%read{7,7} %write{2147483647,-1}
 const	string	$const7	"microfiber"		%read{9,9} %write{2147483647,-1}
 temp	int	$tmp5	%read{10,10} %write{9,9}
-temp	closure color	$tmp6	%read{12,12} %write{11,11}
-const	string	$const8	"sheen"		%read{11,11} %write{2147483647,-1}
+const	string	$const8	"sheen_bsdf"		%read{11,11} %write{2147483647,-1}
 code Normal
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sheen_bsdf.osl:11
 #                        normal Normal = N,
@@ -39,19 +38,18 @@ code ___main___
 	min		$tmp2 Roughness $const3 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
 	max		roughness $tmp2 $const2 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sheen_bsdf.osl:17
-#   if (distribution == "ashikhmin")
+#   if (distribution == "ashikhmin") {
 	eq		$tmp3 distribution $const5 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sheen_bsdf.osl"} %line{17} %argrw{"wrr"}
-	if		$tmp3 9 13 	%argrw{"r"}
+	if		$tmp3 9 12 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sheen_bsdf.osl:18
 #     BSDF = base_color * ashikhmin_velvet(Normal, roughness);
 	closure		$tmp4 $const6 Normal roughness 	%line{18} %argrw{"wrrr"}
 	mul		BSDF $tmp4 base_color 	%argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sheen_bsdf.osl:19
-#   else if (distribution == "microfiber")
-	eq		$tmp5 distribution $const7 	%line{19} %argrw{"wrr"}
-	if		$tmp5 13 13 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sheen_bsdf.osl:20
-#     BSDF = base_color * sheen(Normal, roughness);
-	closure		$tmp6 $const8 Normal roughness 	%line{20} %argrw{"wrrr"}
-	mul		BSDF $tmp6 base_color 	%argrw{"wrr"}
+#   else if (distribution == "microfiber") {
+	eq		$tmp5 distribution $const7 	%line{20} %argrw{"wrr"}
+	if		$tmp5 12 12 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sheen_bsdf.osl:21
+#     BSDF = sheen_bsdf(Normal, base_color, roughness);
+	closure		BSDF $const8 Normal base_color roughness 	%line{21} %argrw{"wrrrr"}
 	end

@@ -62,6 +62,7 @@
 #include "kernel/svm/mix.h"
 #include "kernel/svm/noisetex.h"
 #include "kernel/svm/parallax.h"
+#include "kernel/svm/billboard.h"
 #include "kernel/svm/normal.h"
 #include "kernel/svm/radial_tiling.h"
 #include "kernel/svm/ramp.h"
@@ -99,7 +100,7 @@ CCL_NAMESPACE_BEGIN
 #endif
 
 /* Main Interpreter Loop */
-template<uint node_feature_mask, ShaderType type, typename ConstIntegratorGenericState>
+template<uint64_t node_feature_mask, ShaderType type, typename ConstIntegratorGenericState>
 ccl_device void svm_eval_nodes(KernelGlobals kg,
                                ConstIntegratorGenericState state,
                                ccl_private ShaderData *sd,
@@ -627,6 +628,10 @@ ccl_device void svm_eval_nodes(KernelGlobals kg,
       SVM_CASE(NODE_PARALLAX_OCCLUSION)
       svm_node_parallax_occlusion(
           kg, sd, stack, svm_node_get<SVMNodeParallaxOcclusion>(kg, &offset));
+      break;
+      SVM_CASE(NODE_BILLBOARD_DISPLACEMENT)
+      svm_node_billboard_displacement(
+          kg, sd, stack, svm_node_get<SVMNodeBillboardDisplacement>(kg, &offset));
       break;
       default:
         kernel_assert(!"Unknown node type was passed to the SVM machine");

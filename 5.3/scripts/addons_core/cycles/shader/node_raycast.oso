@@ -21,13 +21,13 @@ oparam	vector[32]	vector_attributes	0 0 0		%read{50,50} %write{46,74}
 global	point	P	%read{0,8} %write{2147483647,-1} %derivs
 global	normal	N	%read{1,1} %write{2147483647,-1} %derivs
 local	float	mindist	%read{16,16} %write{3,12}
-local	int	___372_i	%read{25,32} %write{24,32}
-local	int	___374_i	%read{35,43} %write{34,43}
-local	float[4]	___375_data	%read{35,43} %write{35,43}
-local	int	___376_i	%read{46,53} %write{45,53}
-local	int	___379_i	%read{56,60} %write{55,60}
-local	int	___381_i	%read{63,67} %write{62,67}
-local	int	___383_i	%read{70,74} %write{69,74}
+local	int	___373_i	%read{25,32} %write{24,32}
+local	int	___375_i	%read{35,43} %write{34,43}
+local	float[4]	___376_data	%read{35,43} %write{35,43}
+local	int	___377_i	%read{46,53} %write{45,53}
+local	int	___380_i	%read{56,60} %write{55,60}
+local	int	___382_i	%read{63,67} %write{62,67}
+local	int	___384_i	%read{70,74} %write{69,74}
 const	float	$const1	0		%read{3,66} %write{2147483647,-1}
 temp	int	$tmp1	%read{5,5} %write{4,4}
 temp	float	$tmp2	%read{11,11} %write{10,10}
@@ -142,93 +142,93 @@ code ___main___
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_raycast.osl:47
 #     for (int i = 0; i < arraylength(float_attribute_names); ++i) {
 	for		$tmp16 25 28 32 33 	%line{47} %argrw{"r"}
-	assign		___372_i $const14 	%argrw{"wr"}
+	assign		___373_i $const14 	%argrw{"wr"}
 	arraylength	$tmp14 float_attribute_names 	%argrw{"wr"}
-	lt		$tmp15 ___372_i $tmp14 	%argrw{"wrr"}
+	lt		$tmp15 ___373_i $tmp14 	%argrw{"wrr"}
 	neq		$tmp16 $tmp15 $const14 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_raycast.osl:48
 #       getmessage("trace", float_attribute_names[i], float_attributes[i]);
-	aref		$tmp18 float_attribute_names ___372_i 	%line{48} %argrw{"wrr"}
-	aref		$tmp19 float_attributes ___372_i 	%argrw{"wrr"}
+	aref		$tmp18 float_attribute_names ___373_i 	%line{48} %argrw{"wrr"}
+	aref		$tmp19 float_attributes ___373_i 	%argrw{"wrr"}
 	getmessage	$tmp17 $const9 $tmp18 $tmp19 	%argrw{"wrrw"}
-	aassign		float_attributes ___372_i $tmp19 	%argrw{"wrr"}
+	aassign		float_attributes ___373_i $tmp19 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_raycast.osl:47
 #     for (int i = 0; i < arraylength(float_attribute_names); ++i) {
-	add		___372_i ___372_i $const15 	%line{47} %argrw{"wrr"}
+	add		___373_i ___373_i $const15 	%line{47} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_raycast.osl:50
 #     for (int i = 0; i < arraylength(alpha_attribute_names); ++i) {
 	for		$tmp22 35 38 43 44 	%line{50} %argrw{"r"}
-	assign		___374_i $const14 	%argrw{"wr"}
+	assign		___375_i $const14 	%argrw{"wr"}
 	arraylength	$tmp20 alpha_attribute_names 	%argrw{"wr"}
-	lt		$tmp21 ___374_i $tmp20 	%argrw{"wrr"}
+	lt		$tmp21 ___375_i $tmp20 	%argrw{"wrr"}
 	neq		$tmp22 $tmp21 $const14 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_raycast.osl:51
 #       float data[4] = {0.0, 0.0, 0.0, 0.0};
-	assign		___375_data $const16 	%line{51} %argrw{"wr"}
+	assign		___376_data $const16 	%line{51} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_raycast.osl:52
 #       getmessage("trace", alpha_attribute_names[i], data);
-	aref		$tmp24 alpha_attribute_names ___374_i 	%line{52} %argrw{"wrr"}
-	getmessage	$tmp23 $const9 $tmp24 ___375_data 	%argrw{"wrrw"}
+	aref		$tmp24 alpha_attribute_names ___375_i 	%line{52} %argrw{"wrr"}
+	getmessage	$tmp23 $const9 $tmp24 ___376_data 	%argrw{"wrrw"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_raycast.osl:53
 #       alpha_attributes[i] = data[3];
-	aref		$tmp25 ___375_data $const17 	%line{53} %argrw{"wrr"}
-	aassign		alpha_attributes ___374_i $tmp25 	%argrw{"wrr"}
+	aref		$tmp25 ___376_data $const17 	%line{53} %argrw{"wrr"}
+	aassign		alpha_attributes ___375_i $tmp25 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_raycast.osl:50
 #     for (int i = 0; i < arraylength(alpha_attribute_names); ++i) {
-	add		___374_i ___374_i $const15 	%line{50} %argrw{"wrr"}
+	add		___375_i ___375_i $const15 	%line{50} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_raycast.osl:55
 #     for (int i = 0; i < arraylength(vector_attribute_names); ++i) {
 	for		$tmp28 46 49 53 54 	%line{55} %argrw{"r"}
-	assign		___376_i $const14 	%argrw{"wr"}
+	assign		___377_i $const14 	%argrw{"wr"}
 	arraylength	$tmp26 vector_attribute_names 	%argrw{"wr"}
-	lt		$tmp27 ___376_i $tmp26 	%argrw{"wrr"}
+	lt		$tmp27 ___377_i $tmp26 	%argrw{"wrr"}
 	neq		$tmp28 $tmp27 $const14 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_raycast.osl:56
 #       getmessage("trace", vector_attribute_names[i], vector_attributes[i]);
-	aref		$tmp30 vector_attribute_names ___376_i 	%line{56} %argrw{"wrr"}
-	aref		$tmp31 vector_attributes ___376_i 	%argrw{"wrr"}
+	aref		$tmp30 vector_attribute_names ___377_i 	%line{56} %argrw{"wrr"}
+	aref		$tmp31 vector_attributes ___377_i 	%argrw{"wrr"}
 	getmessage	$tmp29 $const9 $tmp30 $tmp31 	%argrw{"wrrw"}
-	aassign		vector_attributes ___376_i $tmp31 	%argrw{"wrr"}
+	aassign		vector_attributes ___377_i $tmp31 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_raycast.osl:55
 #     for (int i = 0; i < arraylength(vector_attribute_names); ++i) {
-	add		___376_i ___376_i $const15 	%line{55} %argrw{"wrr"}
+	add		___377_i ___377_i $const15 	%line{55} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_raycast.osl:60
 #     for (int i = 0; i < arraylength(float_attribute_names); ++i) {
 	for		$tmp34 56 59 60 61 	%line{60} %argrw{"r"}
-	assign		___379_i $const14 	%argrw{"wr"}
+	assign		___380_i $const14 	%argrw{"wr"}
 	arraylength	$tmp32 float_attribute_names 	%argrw{"wr"}
-	lt		$tmp33 ___379_i $tmp32 	%argrw{"wrr"}
+	lt		$tmp33 ___380_i $tmp32 	%argrw{"wrr"}
 	neq		$tmp34 $tmp33 $const14 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_raycast.osl:61
 #       float_attributes[i] = 0.0;
-	aassign		float_attributes ___379_i $const1 	%line{61} %argrw{"wrr"}
+	aassign		float_attributes ___380_i $const1 	%line{61} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_raycast.osl:60
 #     for (int i = 0; i < arraylength(float_attribute_names); ++i) {
-	add		___379_i ___379_i $const15 	%line{60} %argrw{"wrr"}
+	add		___380_i ___380_i $const15 	%line{60} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_raycast.osl:63
 #     for (int i = 0; i < arraylength(alpha_attribute_names); ++i) {
 	for		$tmp37 63 66 67 68 	%line{63} %argrw{"r"}
-	assign		___381_i $const14 	%argrw{"wr"}
+	assign		___382_i $const14 	%argrw{"wr"}
 	arraylength	$tmp35 alpha_attribute_names 	%argrw{"wr"}
-	lt		$tmp36 ___381_i $tmp35 	%argrw{"wrr"}
+	lt		$tmp36 ___382_i $tmp35 	%argrw{"wrr"}
 	neq		$tmp37 $tmp36 $const14 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_raycast.osl:64
 #       alpha_attributes[i] = 0.0;
-	aassign		alpha_attributes ___381_i $const1 	%line{64} %argrw{"wrr"}
+	aassign		alpha_attributes ___382_i $const1 	%line{64} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_raycast.osl:63
 #     for (int i = 0; i < arraylength(alpha_attribute_names); ++i) {
-	add		___381_i ___381_i $const15 	%line{63} %argrw{"wrr"}
+	add		___382_i ___382_i $const15 	%line{63} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_raycast.osl:66
 #     for (int i = 0; i < arraylength(vector_attribute_names); ++i) {
 	for		$tmp40 70 73 74 75 	%line{66} %argrw{"r"}
-	assign		___383_i $const14 	%argrw{"wr"}
+	assign		___384_i $const14 	%argrw{"wr"}
 	arraylength	$tmp38 vector_attribute_names 	%argrw{"wr"}
-	lt		$tmp39 ___383_i $tmp38 	%argrw{"wrr"}
+	lt		$tmp39 ___384_i $tmp38 	%argrw{"wrr"}
 	neq		$tmp40 $tmp39 $const14 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_raycast.osl:67
 #       vector_attributes[i] = point(0.0, 0.0, 0.0);
-	aassign		vector_attributes ___383_i $const18 	%line{67} %argrw{"wrr"}
+	aassign		vector_attributes ___384_i $const18 	%line{67} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_raycast.osl:66
 #     for (int i = 0; i < arraylength(vector_attribute_names); ++i) {
-	add		___383_i ___383_i $const15 	%line{66} %argrw{"wrr"}
+	add		___384_i ___384_i $const15 	%line{66} %argrw{"wrr"}
 	end

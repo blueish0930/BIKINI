@@ -23,8 +23,8 @@ global	vector	dPdu	%read{50,50} %write{2147483647,-1}
 local	point	generated	%read{40,43} %write{36,36}
 local	float	IsCurve	%read{29,29} %write{25,27}
 local	float	IsPoint	%read{31,31} %write{26,28}
-local	normal	___372_data	%read{46,46} %write{45,45}
-local	vector	___372_T	%read{47,47} %write{46,46}
+local	normal	___373_data	%read{46,46} %write{45,45}
+local	vector	___373_T	%read{47,47} %write{46,46}
 const	float	$const1	1		%read{4,4} %write{2147483647,-1}
 temp	float	$tmp1	%read{5,5} %write{4,4} %derivs
 temp	float	$tmp2	%read{6,6} %write{5,5} %derivs
@@ -157,13 +157,13 @@ code ___main___
 	neg		$tmp24 $tmp23 	%argrw{"wr"}
 	compref		$tmp25 generated $const5 	%argrw{"wrr"}
 	sub		$tmp26 $tmp25 $const10 	%argrw{"wrr"}
-	normal		___372_data $tmp24 $tmp26 $const2 	%argrw{"wrrr"}
+	normal		___373_data $tmp24 $tmp26 $const2 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_geometry.osl:46
 #     vector T = transform("object", "world", data);
-	transformn	___372_T $const11 $const12 ___372_data 	%line{46} %argrw{"wrrr"}
+	transformn	___373_T $const11 $const12 ___373_data 	%line{46} %argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_geometry.osl:47
 #     Tangent = cross(Normal, normalize(cross(T, Normal)));
-	cross		$tmp28 ___372_T Normal 	%line{47} %argrw{"wrr"}
+	cross		$tmp28 ___373_T Normal 	%line{47} %argrw{"wrr"}
 	normalize	$tmp27 $tmp28 	%argrw{"wr"}
 	cross		Tangent Normal $tmp27 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_geometry.osl:51

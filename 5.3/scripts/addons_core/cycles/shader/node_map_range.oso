@@ -10,8 +10,8 @@ param	float	ToMin	0		%read{68,70} %write{2147483647,-1}
 param	float	ToMax	1		%read{68,68} %write{2147483647,-1}
 param	float	Steps	4		%read{8,13} %write{2147483647,-1}
 oparam	float	Result	0		%read{2147483647,-1} %write{70,70}
-local	float	___371_t	%read{38,62} %write{37,57}
-local	float	___372_Factor	%read{11,69} %write{2,67}
+local	float	___372_t	%read{38,62} %write{37,57}
+local	float	___373_Factor	%read{11,69} %write{2,67}
 temp	int	$tmp1	%read{1,1} %write{0,0}
 const	string	$const1	"stepped"		%read{3,3} %write{2147483647,-1}
 temp	int	$tmp2	%read{4,4} %write{3,3}
@@ -70,7 +70,7 @@ code ___main___
 	if		$tmp1 71 71 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_map_range.osl:28
 #     float Factor = Value;
-	assign		___372_Factor Value 	%line{28} %argrw{"wr"}
+	assign		___373_Factor Value 	%line{28} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_map_range.osl:29
 #     if (range_type == "stepped") {
 	eq		$tmp2 range_type $const1 	%line{29} %argrw{"wrr"}
@@ -79,16 +79,16 @@ code ___main___
 #       Factor = (Value - FromMin) / (FromMax - FromMin);
 	sub		$tmp3 Value FromMin 	%line{30} %argrw{"wrr"}
 	sub		$tmp4 FromMax FromMin 	%argrw{"wrr"}
-	div		___372_Factor $tmp3 $tmp4 	%argrw{"wrr"}
+	div		___373_Factor $tmp3 $tmp4 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_map_range.osl:31
 #       Factor = (Steps > 0) ? floor(Factor * (Steps + 1.0)) / Steps : 0.0;
 	gt		$tmp5 Steps $const2 	%line{31} %argrw{"wrr"}
 	if		$tmp5 14 15 	%argrw{"r"}
 	add		$tmp7 Steps $const3 	%argrw{"wrr"}
-	mul		$tmp8 ___372_Factor $tmp7 	%argrw{"wrr"}
+	mul		$tmp8 ___373_Factor $tmp7 	%argrw{"wrr"}
 	floor		$tmp6 $tmp8 	%argrw{"wr"}
-	div		___372_Factor $tmp6 Steps 	%argrw{"wrr"}
-	assign		___372_Factor $const4 	%argrw{"wr"}
+	div		___373_Factor $tmp6 Steps 	%argrw{"wrr"}
+	assign		___373_Factor $const4 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_map_range.osl:33
 #     else if (range_type == "smoothstep") {
 	eq		$tmp9 range_type $const5 	%line{33} %argrw{"wrr"}
@@ -98,10 +98,10 @@ code ___main___
 	gt		$tmp10 FromMin FromMax 	%line{34} %argrw{"wrr"}
 	if		$tmp10 21 22 	%argrw{"r"}
 	smoothstep	$tmp11 FromMax FromMin Value 	%argrw{"wrrr"}
-	sub		___372_Factor $const3 $tmp11 	%argrw{"wrr"}
+	sub		___373_Factor $const3 $tmp11 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_map_range.osl:35
 #                                      smoothstep(FromMin, FromMax, Value);
-	smoothstep	___372_Factor FromMin FromMax Value 	%line{35} %argrw{"wrrr"}
+	smoothstep	___373_Factor FromMin FromMax Value 	%line{35} %argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_map_range.osl:37
 #     else if (range_type == "smootherstep") {
 	eq		$tmp12 range_type $const6 	%line{37} %argrw{"wrr"}
@@ -129,19 +129,19 @@ code ___main___
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
 # float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
 	min		$tmp19 $tmp15 $const3 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
-	max		___371_t $tmp19 $const4 	%argrw{"wrr"}
+	max		___372_t $tmp19 $const4 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_map_range.osl:15
 #   return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
-	mul		$tmp20 ___371_t ___371_t 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_map_range.osl"} %line{15} %argrw{"wrr"}
-	mul		$tmp21 $tmp20 ___371_t 	%argrw{"wrr"}
-	mul		$tmp22 ___371_t $const9 	%argrw{"wrr"}
+	mul		$tmp20 ___372_t ___372_t 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_map_range.osl"} %line{15} %argrw{"wrr"}
+	mul		$tmp21 $tmp20 ___372_t 	%argrw{"wrr"}
+	mul		$tmp22 ___372_t $const9 	%argrw{"wrr"}
 	sub		$tmp23 $tmp22 $const10 	%argrw{"wrr"}
-	mul		$tmp24 ___371_t $tmp23 	%argrw{"wrr"}
+	mul		$tmp24 ___372_t $tmp23 	%argrw{"wrr"}
 	add		$tmp25 $tmp24 $const11 	%argrw{"wrr"}
 	mul		$tmp14 $tmp21 $tmp25 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_map_range.osl:38
 #       Factor = (FromMin > FromMax) ? 1.0 - smootherstep(FromMax, FromMin, Value) :
-	sub		___372_Factor $const3 $tmp14 	%line{38} %argrw{"wrr"}
+	sub		___373_Factor $const3 $tmp14 	%line{38} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_map_range.osl:39
 #                                      smootherstep(FromMin, FromMax, Value);
 	functioncall	$const6 65 	%line{39} %argrw{"r"}
@@ -163,24 +163,24 @@ code ___main___
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
 # float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
 	min		$tmp30 $tmp26 $const3 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
-	max		___371_t $tmp30 $const4 	%argrw{"wrr"}
+	max		___372_t $tmp30 $const4 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_map_range.osl:15
 #   return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
-	mul		$tmp31 ___371_t ___371_t 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_map_range.osl"} %line{15} %argrw{"wrr"}
-	mul		$tmp32 $tmp31 ___371_t 	%argrw{"wrr"}
-	mul		$tmp33 ___371_t $const9 	%argrw{"wrr"}
+	mul		$tmp31 ___372_t ___372_t 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_map_range.osl"} %line{15} %argrw{"wrr"}
+	mul		$tmp32 $tmp31 ___372_t 	%argrw{"wrr"}
+	mul		$tmp33 ___372_t $const9 	%argrw{"wrr"}
 	sub		$tmp34 $tmp33 $const10 	%argrw{"wrr"}
-	mul		$tmp35 ___371_t $tmp34 	%argrw{"wrr"}
+	mul		$tmp35 ___372_t $tmp34 	%argrw{"wrr"}
 	add		$tmp36 $tmp35 $const11 	%argrw{"wrr"}
-	mul		___372_Factor $tmp32 $tmp36 	%argrw{"wrr"}
+	mul		___373_Factor $tmp32 $tmp36 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_map_range.osl:42
 #       Factor = (Value - FromMin) / (FromMax - FromMin);
 	sub		$tmp37 Value FromMin 	%line{42} %argrw{"wrr"}
 	sub		$tmp38 FromMax FromMin 	%argrw{"wrr"}
-	div		___372_Factor $tmp37 $tmp38 	%argrw{"wrr"}
+	div		___373_Factor $tmp37 $tmp38 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_map_range.osl:44
 #     Result = ToMin + Factor * (ToMax - ToMin);
 	sub		$tmp39 ToMax ToMin 	%line{44} %argrw{"wrr"}
-	mul		$tmp40 ___372_Factor $tmp39 	%argrw{"wrr"}
+	mul		$tmp40 ___373_Factor $tmp39 	%argrw{"wrr"}
 	add		Result ToMin $tmp40 	%argrw{"wrr"}
 	end

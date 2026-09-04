@@ -9,7 +9,7 @@ oparam	float	Linear	0		%read{2147483647,-1} %write{6,15}
 oparam	float	Constant	0		%read{2147483647,-1} %write{7,17}
 local	float	ray_length	%read{3,17} %write{0,2}
 local	float	strength	%read{5,16} %write{1,13}
-local	float	___372_squared	%read{11,12} %write{10,10}
+local	float	___373_squared	%read{11,12} %write{10,10}
 const	float	$const1	0		%read{0,8} %write{2147483647,-1}
 temp	int	$tmp1	%read{2147483647,-1} %write{2,2}
 const	string	$const2	"path:ray_length"		%read{2,2} %write{2147483647,-1}
@@ -48,11 +48,11 @@ code ___main___
 	if		$tmp3 14 14 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_light_falloff.osl:26
 #       float squared = ray_length * ray_length;
-	mul		___372_squared ray_length ray_length 	%line{26} %argrw{"wrr"}
+	mul		___373_squared ray_length ray_length 	%line{26} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_light_falloff.osl:27
 #       strength *= squared / (Smooth + squared);
-	add		$tmp4 Smooth ___372_squared 	%line{27} %argrw{"wrr"}
-	div		$tmp5 ___372_squared $tmp4 	%argrw{"wrr"}
+	add		$tmp4 Smooth ___373_squared 	%line{27} %argrw{"wrr"}
+	div		$tmp5 ___373_squared $tmp4 	%argrw{"wrr"}
 	mul		strength strength $tmp5 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_light_falloff.osl:30
 #     Quadratic = strength;

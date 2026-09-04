@@ -18,54 +18,54 @@ oparam	color	Color	0 0 0		%read{2147483647,-1} %write{181,463}
 global	point	P	%read{0,0} %write{2147483647,-1} %derivs
 local	float	___355_X	%read{299,299} %write{285,286}
 local	float	___355_Z	%read{299,299} %write{297,298}
-local	float	___412_cospsi	%read{27,213} %write{26,204}
-local	float	___414_ctheta	%read{221,265} %write{217,261}
-local	float	___414_cgamma	%read{232,277} %write{218,262}
-local	vector	___415_spherical	%read{192,193} %write{191,191}
-local	float	___415_theta	%read{195,261} %write{192,214}
-local	float	___415_phi	%read{198,198} %write{193,193}
-local	float	___415_gamma	%read{218,271} %write{207,213}
-local	float	___415_x	%read{284,294} %write{236,236}
-local	float	___415_y	%read{282,296} %write{258,258}
-local	float	___415_Y	%read{285,299} %write{280,280}
-local	color	___415_xyz	%read{300,302} %write{299,299}
-local	float	___416_ctheta	%read{55,142} %write{38,122}
-local	float	___416_cgamma	%read{43,135} %write{39,123}
-local	float	___416_expM	%read{65,149} %write{42,126}
-local	float	___416_rayM	%read{44,152} %write{43,127}
-local	float	___416_mieM	%read{71,155} %write{54,138}
-local	float	___416_zenith	%read{74,158} %write{55,139}
-local	vector	___417_spherical	%read{14,15} %write{13,13}
-local	float	___417_theta	%read{17,122} %write{14,36}
-local	float	___417_phi	%read{20,20} %write{15,15}
-local	float	___417_gamma	%read{39,125} %write{29,35}
-local	float	___417_x	%read{164,174} %write{78,78}
-local	float	___417_y	%read{165,175} %write{120,120}
-local	float	___417_z	%read{167,177} %write{162,162}
-local	color	___424_pixel_bottom	%read{385,385} %write{324,324}
-local	color	___424_pixel_top	%read{385,385} %write{328,328}
-local	float	___424_sun_elevation	%read{337,382} %write{329,329}
-local	float	___424_sun_rotation	%read{335,416} %write{330,330} %derivs
-local	float	___424_angular_diameter	%read{334,383} %write{331,331}
-local	float	___424_sun_intensity	%read{462,462} %write{332,332}
-local	float	___424_earth_intersection_angle	%read{378,378} %write{333,333}
-local	int	___424_sun_disc	%read{367,367} %write{334,334}
-local	vector	___424_sun_dir	%read{346,348} %write{344,344}
-local	float	___424_sun_dir_angle	%read{364,386} %write{351,351}
-local	float	___424_half_angular	%read{364,386} %write{352,352}
-local	float	___424_alpha	%read{2147483647,-1} %write{353,441}
-local	color	___424_rgb_sun	%read{462,462} %write{354,413}
-local	vector	___424_direction	%read{362,414} %write{361,361} %derivs
-local	float	___424_dir_elevation	%read{378,432} %write{363,363} %derivs
-local	float	___425_y	%read{385,385} %write{384,384}
-local	color	___425_xyz	%read{393,395} %write{385,385}
-local	float	___425_angle_fraction	%read{387,387} %write{386,386}
-local	float	___425_limb_darkening	%read{413,413} %write{392,392}
-local	float	___424_x	%read{418,441} %write{417,420} %derivs
-local	float	___424_dir_elevation_abs	%read{425,425} %write{423,424} %derivs
-local	float	___424_y	%read{441,441} %write{440,440} %derivs
-local	color	___424_xyz	%read{442,444} %write{441,441}
-local	color	___424_rgb_sky	%read{463,463} %write{461,461}
+local	float	___413_cospsi	%read{27,213} %write{26,204}
+local	float	___415_ctheta	%read{221,265} %write{217,261}
+local	float	___415_cgamma	%read{232,277} %write{218,262}
+local	vector	___416_spherical	%read{192,193} %write{191,191}
+local	float	___416_theta	%read{195,261} %write{192,214}
+local	float	___416_phi	%read{198,198} %write{193,193}
+local	float	___416_gamma	%read{218,271} %write{207,213}
+local	float	___416_x	%read{284,294} %write{236,236}
+local	float	___416_y	%read{282,296} %write{258,258}
+local	float	___416_Y	%read{285,299} %write{280,280}
+local	color	___416_xyz	%read{300,302} %write{299,299}
+local	float	___417_ctheta	%read{55,142} %write{38,122}
+local	float	___417_cgamma	%read{43,135} %write{39,123}
+local	float	___417_expM	%read{65,149} %write{42,126}
+local	float	___417_rayM	%read{44,152} %write{43,127}
+local	float	___417_mieM	%read{71,155} %write{54,138}
+local	float	___417_zenith	%read{74,158} %write{55,139}
+local	vector	___418_spherical	%read{14,15} %write{13,13}
+local	float	___418_theta	%read{17,122} %write{14,36}
+local	float	___418_phi	%read{20,20} %write{15,15}
+local	float	___418_gamma	%read{39,125} %write{29,35}
+local	float	___418_x	%read{164,174} %write{78,78}
+local	float	___418_y	%read{165,175} %write{120,120}
+local	float	___418_z	%read{167,177} %write{162,162}
+local	color	___425_pixel_bottom	%read{385,385} %write{324,324}
+local	color	___425_pixel_top	%read{385,385} %write{328,328}
+local	float	___425_sun_elevation	%read{337,382} %write{329,329}
+local	float	___425_sun_rotation	%read{335,416} %write{330,330} %derivs
+local	float	___425_angular_diameter	%read{334,383} %write{331,331}
+local	float	___425_sun_intensity	%read{462,462} %write{332,332}
+local	float	___425_earth_intersection_angle	%read{378,378} %write{333,333}
+local	int	___425_sun_disc	%read{367,367} %write{334,334}
+local	vector	___425_sun_dir	%read{346,348} %write{344,344}
+local	float	___425_sun_dir_angle	%read{364,386} %write{351,351}
+local	float	___425_half_angular	%read{364,386} %write{352,352}
+local	float	___425_alpha	%read{2147483647,-1} %write{353,441}
+local	color	___425_rgb_sun	%read{462,462} %write{354,413}
+local	vector	___425_direction	%read{362,414} %write{361,361} %derivs
+local	float	___425_dir_elevation	%read{378,432} %write{363,363} %derivs
+local	float	___426_y	%read{385,385} %write{384,384}
+local	color	___426_xyz	%read{393,395} %write{385,385}
+local	float	___426_angle_fraction	%read{387,387} %write{386,386}
+local	float	___426_limb_darkening	%read{413,413} %write{392,392}
+local	float	___425_x	%read{418,441} %write{417,420} %derivs
+local	float	___425_dir_elevation_abs	%read{425,425} %write{423,424} %derivs
+local	float	___425_y	%read{441,441} %write{440,440} %derivs
+local	color	___425_xyz	%read{442,444} %write{441,441}
+local	color	___425_rgb_sky	%read{463,463} %write{461,461}
 local	vector	p	%read{3,359} %write{1,3} %derivs
 const	string	$const1	"hosek_wilkie"		%read{4,4} %write{2147483647,-1}
 temp	int	$tmp1	%read{5,5} %write{4,4}
@@ -479,88 +479,88 @@ code ___main___
 	compref		$tmp5 p $const5 	%argrw{"wrr"}
 	compref		$tmp6 p $const6 	%argrw{"wrr"}
 	atan2		$tmp4 $tmp5 $tmp6 	%argrw{"wrr"}
-	vector		___417_spherical $tmp2 $tmp4 $const7 	%argrw{"wrrr"}
+	vector		___418_spherical $tmp2 $tmp4 $const7 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:89
 #   float theta = spherical[0];
-	compref		___417_theta ___417_spherical $const5 	%line{89} %argrw{"wrr"}
+	compref		___418_theta ___418_spherical $const5 	%line{89} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:90
 #   float phi = spherical[1];
-	compref		___417_phi ___417_spherical $const6 	%line{90} %argrw{"wrr"}
+	compref		___418_phi ___418_spherical $const6 	%line{90} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:93
 #   float gamma = sky_angle_between(theta, phi, suntheta, sunphi);
 	functioncall	$const8 36 	%line{93} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:10
 #   float cospsi = sin(thetav) * sin(theta) * cos(phi - phiv) + cos(thetav) * cos(theta);
-	sin		$tmp7 ___417_theta 	%line{10} %argrw{"wr"}
+	sin		$tmp7 ___418_theta 	%line{10} %argrw{"wr"}
 	sin		$tmp8 theta 	%argrw{"wr"}
 	mul		$tmp9 $tmp7 $tmp8 	%argrw{"wrr"}
-	sub		$tmp11 phi ___417_phi 	%argrw{"wrr"}
+	sub		$tmp11 phi ___418_phi 	%argrw{"wrr"}
 	cos		$tmp10 $tmp11 	%argrw{"wr"}
 	mul		$tmp12 $tmp9 $tmp10 	%argrw{"wrr"}
-	cos		$tmp13 ___417_theta 	%argrw{"wr"}
+	cos		$tmp13 ___418_theta 	%argrw{"wr"}
 	cos		$tmp14 theta 	%argrw{"wr"}
 	mul		$tmp15 $tmp13 $tmp14 	%argrw{"wrr"}
-	add		___412_cospsi $tmp12 $tmp15 	%argrw{"wrr"}
+	add		___413_cospsi $tmp12 $tmp15 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:12
 #   if (cospsi > 1.0)
-	gt		$tmp16 ___412_cospsi $const9 	%line{12} %argrw{"wrr"}
+	gt		$tmp16 ___413_cospsi $const9 	%line{12} %argrw{"wrr"}
 	if		$tmp16 31 31 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:13
 #     return 0.0;
-	assign		___417_gamma $const7 	%line{13} %argrw{"wr"}
+	assign		___418_gamma $const7 	%line{13} %argrw{"wr"}
 	return
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:14
 #   if (cospsi < -1.0)
-	lt		$tmp17 ___412_cospsi $const10 	%line{14} %argrw{"wrr"}
+	lt		$tmp17 ___413_cospsi $const10 	%line{14} %argrw{"wrr"}
 	if		$tmp17 35 35 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:15
 #     return M_PI;
-	assign		___417_gamma $const11 	%line{15} %argrw{"wr"}
+	assign		___418_gamma $const11 	%line{15} %argrw{"wr"}
 	return
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:17
 #   return acos(cospsi);
-	acos		___417_gamma ___412_cospsi 	%line{17} %argrw{"wr"}
+	acos		___418_gamma ___413_cospsi 	%line{17} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:96
 #   theta = min(theta, M_PI_2 - 0.001);
-	min		___417_theta ___417_theta $const12 	%line{96} %argrw{"wrr"}
+	min		___418_theta ___418_theta $const12 	%line{96} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:99
 #   float x = sky_radiance_internal(config_x, theta, gamma) * radiance[0];
 	functioncall	$const13 77 	%line{99} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:67
 #   float ctheta = cos(theta);
-	cos		___416_ctheta ___417_theta 	%line{67} %argrw{"wr"}
+	cos		___417_ctheta ___418_theta 	%line{67} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:68
 #   float cgamma = cos(gamma);
-	cos		___416_cgamma ___417_gamma 	%line{68} %argrw{"wr"}
+	cos		___417_cgamma ___418_gamma 	%line{68} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:70
 #   float expM = exp(config[4] * gamma);
 	aref		$tmp19 config_x $const14 	%line{70} %argrw{"wrr"}
-	mul		$tmp20 $tmp19 ___417_gamma 	%argrw{"wrr"}
-	exp		___416_expM $tmp20 	%argrw{"wr"}
+	mul		$tmp20 $tmp19 ___418_gamma 	%argrw{"wrr"}
+	exp		___417_expM $tmp20 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:71
 #   float rayM = cgamma * cgamma;
-	mul		___416_rayM ___416_cgamma ___416_cgamma 	%line{71} %argrw{"wrr"}
+	mul		___417_rayM ___417_cgamma ___417_cgamma 	%line{71} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:72
 #   float mieM = (1.0 + rayM) / pow((1.0 + config[8] * config[8] - 2.0 * config[8] * cgamma), 1.5);
-	add		$tmp21 $const9 ___416_rayM 	%line{72} %argrw{"wrr"}
+	add		$tmp21 $const9 ___417_rayM 	%line{72} %argrw{"wrr"}
 	aref		$tmp23 config_x $const15 	%argrw{"wrr"}
 	aref		$tmp24 config_x $const15 	%argrw{"wrr"}
 	mul		$tmp25 $tmp23 $tmp24 	%argrw{"wrr"}
 	add		$tmp26 $const9 $tmp25 	%argrw{"wrr"}
 	aref		$tmp27 config_x $const15 	%argrw{"wrr"}
 	mul		$tmp28 $const16 $tmp27 	%argrw{"wrr"}
-	mul		$tmp29 $tmp28 ___416_cgamma 	%argrw{"wrr"}
+	mul		$tmp29 $tmp28 ___417_cgamma 	%argrw{"wrr"}
 	sub		$tmp30 $tmp26 $tmp29 	%argrw{"wrr"}
 	pow		$tmp22 $tmp30 $const17 	%argrw{"wrr"}
-	div		___416_mieM $tmp21 $tmp22 	%argrw{"wrr"}
+	div		___417_mieM $tmp21 $tmp22 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:73
 #   float zenith = sqrt(ctheta);
-	sqrt		___416_zenith ___416_ctheta 	%line{73} %argrw{"wr"}
+	sqrt		___417_zenith ___417_ctheta 	%line{73} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:75
 #   return (1.0 + config[0] * exp(config[1] / (ctheta + 0.01))) *
 	aref		$tmp31 config_x $const5 	%line{75} %argrw{"wrr"}
 	aref		$tmp33 config_x $const6 	%argrw{"wrr"}
-	add		$tmp34 ___416_ctheta $const18 	%argrw{"wrr"}
+	add		$tmp34 ___417_ctheta $const18 	%argrw{"wrr"}
 	div		$tmp35 $tmp33 $tmp34 	%argrw{"wrr"}
 	exp		$tmp32 $tmp35 	%argrw{"wr"}
 	mul		$tmp36 $tmp31 $tmp32 	%argrw{"wrr"}
@@ -569,16 +569,16 @@ code ___main___
 #          (config[2] + config[3] * expM + config[5] * rayM + config[6] * mieM + config[7] * zenith);
 	aref		$tmp38 config_x $const4 	%line{76} %argrw{"wrr"}
 	aref		$tmp39 config_x $const19 	%argrw{"wrr"}
-	mul		$tmp40 $tmp39 ___416_expM 	%argrw{"wrr"}
+	mul		$tmp40 $tmp39 ___417_expM 	%argrw{"wrr"}
 	add		$tmp41 $tmp38 $tmp40 	%argrw{"wrr"}
 	aref		$tmp42 config_x $const20 	%argrw{"wrr"}
-	mul		$tmp43 $tmp42 ___416_rayM 	%argrw{"wrr"}
+	mul		$tmp43 $tmp42 ___417_rayM 	%argrw{"wrr"}
 	add		$tmp44 $tmp41 $tmp43 	%argrw{"wrr"}
 	aref		$tmp45 config_x $const21 	%argrw{"wrr"}
-	mul		$tmp46 $tmp45 ___416_mieM 	%argrw{"wrr"}
+	mul		$tmp46 $tmp45 ___417_mieM 	%argrw{"wrr"}
 	add		$tmp47 $tmp44 $tmp46 	%argrw{"wrr"}
 	aref		$tmp48 config_x $const22 	%argrw{"wrr"}
-	mul		$tmp49 $tmp48 ___416_zenith 	%argrw{"wrr"}
+	mul		$tmp49 $tmp48 ___417_zenith 	%argrw{"wrr"}
 	add		$tmp50 $tmp47 $tmp49 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:75
 #   return (1.0 + config[0] * exp(config[1] / (ctheta + 0.01))) *
@@ -586,45 +586,45 @@ code ___main___
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:99
 #   float x = sky_radiance_internal(config_x, theta, gamma) * radiance[0];
 	compref		$tmp51 radiance $const5 	%line{99} %argrw{"wrr"}
-	mul		___417_x $tmp18 $tmp51 	%argrw{"wrr"}
+	mul		___418_x $tmp18 $tmp51 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:100
 #   float y = sky_radiance_internal(config_y, theta, gamma) * radiance[1];
 	functioncall	$const13 119 	%line{100} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:67
 #   float ctheta = cos(theta);
-	cos		___416_ctheta ___417_theta 	%line{67} %argrw{"wr"}
+	cos		___417_ctheta ___418_theta 	%line{67} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:68
 #   float cgamma = cos(gamma);
-	cos		___416_cgamma ___417_gamma 	%line{68} %argrw{"wr"}
+	cos		___417_cgamma ___418_gamma 	%line{68} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:70
 #   float expM = exp(config[4] * gamma);
 	aref		$tmp53 config_y $const14 	%line{70} %argrw{"wrr"}
-	mul		$tmp54 $tmp53 ___417_gamma 	%argrw{"wrr"}
-	exp		___416_expM $tmp54 	%argrw{"wr"}
+	mul		$tmp54 $tmp53 ___418_gamma 	%argrw{"wrr"}
+	exp		___417_expM $tmp54 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:71
 #   float rayM = cgamma * cgamma;
-	mul		___416_rayM ___416_cgamma ___416_cgamma 	%line{71} %argrw{"wrr"}
+	mul		___417_rayM ___417_cgamma ___417_cgamma 	%line{71} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:72
 #   float mieM = (1.0 + rayM) / pow((1.0 + config[8] * config[8] - 2.0 * config[8] * cgamma), 1.5);
-	add		$tmp55 $const9 ___416_rayM 	%line{72} %argrw{"wrr"}
+	add		$tmp55 $const9 ___417_rayM 	%line{72} %argrw{"wrr"}
 	aref		$tmp57 config_y $const15 	%argrw{"wrr"}
 	aref		$tmp58 config_y $const15 	%argrw{"wrr"}
 	mul		$tmp59 $tmp57 $tmp58 	%argrw{"wrr"}
 	add		$tmp60 $const9 $tmp59 	%argrw{"wrr"}
 	aref		$tmp61 config_y $const15 	%argrw{"wrr"}
 	mul		$tmp62 $const16 $tmp61 	%argrw{"wrr"}
-	mul		$tmp63 $tmp62 ___416_cgamma 	%argrw{"wrr"}
+	mul		$tmp63 $tmp62 ___417_cgamma 	%argrw{"wrr"}
 	sub		$tmp64 $tmp60 $tmp63 	%argrw{"wrr"}
 	pow		$tmp56 $tmp64 $const17 	%argrw{"wrr"}
-	div		___416_mieM $tmp55 $tmp56 	%argrw{"wrr"}
+	div		___417_mieM $tmp55 $tmp56 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:73
 #   float zenith = sqrt(ctheta);
-	sqrt		___416_zenith ___416_ctheta 	%line{73} %argrw{"wr"}
+	sqrt		___417_zenith ___417_ctheta 	%line{73} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:75
 #   return (1.0 + config[0] * exp(config[1] / (ctheta + 0.01))) *
 	aref		$tmp65 config_y $const5 	%line{75} %argrw{"wrr"}
 	aref		$tmp67 config_y $const6 	%argrw{"wrr"}
-	add		$tmp68 ___416_ctheta $const18 	%argrw{"wrr"}
+	add		$tmp68 ___417_ctheta $const18 	%argrw{"wrr"}
 	div		$tmp69 $tmp67 $tmp68 	%argrw{"wrr"}
 	exp		$tmp66 $tmp69 	%argrw{"wr"}
 	mul		$tmp70 $tmp65 $tmp66 	%argrw{"wrr"}
@@ -633,16 +633,16 @@ code ___main___
 #          (config[2] + config[3] * expM + config[5] * rayM + config[6] * mieM + config[7] * zenith);
 	aref		$tmp72 config_y $const4 	%line{76} %argrw{"wrr"}
 	aref		$tmp73 config_y $const19 	%argrw{"wrr"}
-	mul		$tmp74 $tmp73 ___416_expM 	%argrw{"wrr"}
+	mul		$tmp74 $tmp73 ___417_expM 	%argrw{"wrr"}
 	add		$tmp75 $tmp72 $tmp74 	%argrw{"wrr"}
 	aref		$tmp76 config_y $const20 	%argrw{"wrr"}
-	mul		$tmp77 $tmp76 ___416_rayM 	%argrw{"wrr"}
+	mul		$tmp77 $tmp76 ___417_rayM 	%argrw{"wrr"}
 	add		$tmp78 $tmp75 $tmp77 	%argrw{"wrr"}
 	aref		$tmp79 config_y $const21 	%argrw{"wrr"}
-	mul		$tmp80 $tmp79 ___416_mieM 	%argrw{"wrr"}
+	mul		$tmp80 $tmp79 ___417_mieM 	%argrw{"wrr"}
 	add		$tmp81 $tmp78 $tmp80 	%argrw{"wrr"}
 	aref		$tmp82 config_y $const22 	%argrw{"wrr"}
-	mul		$tmp83 $tmp82 ___416_zenith 	%argrw{"wrr"}
+	mul		$tmp83 $tmp82 ___417_zenith 	%argrw{"wrr"}
 	add		$tmp84 $tmp81 $tmp83 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:75
 #   return (1.0 + config[0] * exp(config[1] / (ctheta + 0.01))) *
@@ -650,45 +650,45 @@ code ___main___
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:100
 #   float y = sky_radiance_internal(config_y, theta, gamma) * radiance[1];
 	compref		$tmp85 radiance $const6 	%line{100} %argrw{"wrr"}
-	mul		___417_y $tmp52 $tmp85 	%argrw{"wrr"}
+	mul		___418_y $tmp52 $tmp85 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:101
 #   float z = sky_radiance_internal(config_z, theta, gamma) * radiance[2];
 	functioncall	$const13 161 	%line{101} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:67
 #   float ctheta = cos(theta);
-	cos		___416_ctheta ___417_theta 	%line{67} %argrw{"wr"}
+	cos		___417_ctheta ___418_theta 	%line{67} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:68
 #   float cgamma = cos(gamma);
-	cos		___416_cgamma ___417_gamma 	%line{68} %argrw{"wr"}
+	cos		___417_cgamma ___418_gamma 	%line{68} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:70
 #   float expM = exp(config[4] * gamma);
 	aref		$tmp87 config_z $const14 	%line{70} %argrw{"wrr"}
-	mul		$tmp88 $tmp87 ___417_gamma 	%argrw{"wrr"}
-	exp		___416_expM $tmp88 	%argrw{"wr"}
+	mul		$tmp88 $tmp87 ___418_gamma 	%argrw{"wrr"}
+	exp		___417_expM $tmp88 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:71
 #   float rayM = cgamma * cgamma;
-	mul		___416_rayM ___416_cgamma ___416_cgamma 	%line{71} %argrw{"wrr"}
+	mul		___417_rayM ___417_cgamma ___417_cgamma 	%line{71} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:72
 #   float mieM = (1.0 + rayM) / pow((1.0 + config[8] * config[8] - 2.0 * config[8] * cgamma), 1.5);
-	add		$tmp89 $const9 ___416_rayM 	%line{72} %argrw{"wrr"}
+	add		$tmp89 $const9 ___417_rayM 	%line{72} %argrw{"wrr"}
 	aref		$tmp91 config_z $const15 	%argrw{"wrr"}
 	aref		$tmp92 config_z $const15 	%argrw{"wrr"}
 	mul		$tmp93 $tmp91 $tmp92 	%argrw{"wrr"}
 	add		$tmp94 $const9 $tmp93 	%argrw{"wrr"}
 	aref		$tmp95 config_z $const15 	%argrw{"wrr"}
 	mul		$tmp96 $const16 $tmp95 	%argrw{"wrr"}
-	mul		$tmp97 $tmp96 ___416_cgamma 	%argrw{"wrr"}
+	mul		$tmp97 $tmp96 ___417_cgamma 	%argrw{"wrr"}
 	sub		$tmp98 $tmp94 $tmp97 	%argrw{"wrr"}
 	pow		$tmp90 $tmp98 $const17 	%argrw{"wrr"}
-	div		___416_mieM $tmp89 $tmp90 	%argrw{"wrr"}
+	div		___417_mieM $tmp89 $tmp90 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:73
 #   float zenith = sqrt(ctheta);
-	sqrt		___416_zenith ___416_ctheta 	%line{73} %argrw{"wr"}
+	sqrt		___417_zenith ___417_ctheta 	%line{73} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:75
 #   return (1.0 + config[0] * exp(config[1] / (ctheta + 0.01))) *
 	aref		$tmp99 config_z $const5 	%line{75} %argrw{"wrr"}
 	aref		$tmp101 config_z $const6 	%argrw{"wrr"}
-	add		$tmp102 ___416_ctheta $const18 	%argrw{"wrr"}
+	add		$tmp102 ___417_ctheta $const18 	%argrw{"wrr"}
 	div		$tmp103 $tmp101 $tmp102 	%argrw{"wrr"}
 	exp		$tmp100 $tmp103 	%argrw{"wr"}
 	mul		$tmp104 $tmp99 $tmp100 	%argrw{"wrr"}
@@ -697,16 +697,16 @@ code ___main___
 #          (config[2] + config[3] * expM + config[5] * rayM + config[6] * mieM + config[7] * zenith);
 	aref		$tmp106 config_z $const4 	%line{76} %argrw{"wrr"}
 	aref		$tmp107 config_z $const19 	%argrw{"wrr"}
-	mul		$tmp108 $tmp107 ___416_expM 	%argrw{"wrr"}
+	mul		$tmp108 $tmp107 ___417_expM 	%argrw{"wrr"}
 	add		$tmp109 $tmp106 $tmp108 	%argrw{"wrr"}
 	aref		$tmp110 config_z $const20 	%argrw{"wrr"}
-	mul		$tmp111 $tmp110 ___416_rayM 	%argrw{"wrr"}
+	mul		$tmp111 $tmp110 ___417_rayM 	%argrw{"wrr"}
 	add		$tmp112 $tmp109 $tmp111 	%argrw{"wrr"}
 	aref		$tmp113 config_z $const21 	%argrw{"wrr"}
-	mul		$tmp114 $tmp113 ___416_mieM 	%argrw{"wrr"}
+	mul		$tmp114 $tmp113 ___417_mieM 	%argrw{"wrr"}
 	add		$tmp115 $tmp112 $tmp114 	%argrw{"wrr"}
 	aref		$tmp116 config_z $const22 	%argrw{"wrr"}
-	mul		$tmp117 $tmp116 ___416_zenith 	%argrw{"wrr"}
+	mul		$tmp117 $tmp116 ___417_zenith 	%argrw{"wrr"}
 	add		$tmp118 $tmp115 $tmp117 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:75
 #   return (1.0 + config[0] * exp(config[1] / (ctheta + 0.01))) *
@@ -714,30 +714,30 @@ code ___main___
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:101
 #   float z = sky_radiance_internal(config_z, theta, gamma) * radiance[2];
 	compref		$tmp119 radiance $const4 	%line{101} %argrw{"wrr"}
-	mul		___417_z $tmp86 $tmp119 	%argrw{"wrr"}
+	mul		___418_z $tmp86 $tmp119 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:104
 #   return xyz_to_rgb(x, y, z) * (M_2PI / 683);
 	functioncall	$const23 180 	%line{104} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:75
 #   return color(3.240479 * x + -1.537150 * y + -0.498535 * z,
-	mul		$tmp121 $const24 ___417_x 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h"} %line{75} %argrw{"wrr"}
-	mul		$tmp122 $const25 ___417_y 	%argrw{"wrr"}
+	mul		$tmp121 $const24 ___418_x 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h"} %line{75} %argrw{"wrr"}
+	mul		$tmp122 $const25 ___418_y 	%argrw{"wrr"}
 	add		$tmp123 $tmp121 $tmp122 	%argrw{"wrr"}
-	mul		$tmp124 $const26 ___417_z 	%argrw{"wrr"}
+	mul		$tmp124 $const26 ___418_z 	%argrw{"wrr"}
 	add		$tmp125 $tmp123 $tmp124 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:76
 #                -0.969256 * x + 1.875991 * y + 0.041556 * z,
-	mul		$tmp126 $const27 ___417_x 	%line{76} %argrw{"wrr"}
-	mul		$tmp127 $const28 ___417_y 	%argrw{"wrr"}
+	mul		$tmp126 $const27 ___418_x 	%line{76} %argrw{"wrr"}
+	mul		$tmp127 $const28 ___418_y 	%argrw{"wrr"}
 	add		$tmp128 $tmp126 $tmp127 	%argrw{"wrr"}
-	mul		$tmp129 $const29 ___417_z 	%argrw{"wrr"}
+	mul		$tmp129 $const29 ___418_z 	%argrw{"wrr"}
 	add		$tmp130 $tmp128 $tmp129 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:77
 #                0.055648 * x + -0.204043 * y + 1.057311 * z);
-	mul		$tmp131 $const30 ___417_x 	%line{77} %argrw{"wrr"}
-	mul		$tmp132 $const31 ___417_y 	%argrw{"wrr"}
+	mul		$tmp131 $const30 ___418_x 	%line{77} %argrw{"wrr"}
+	mul		$tmp132 $const31 ___418_y 	%argrw{"wrr"}
 	add		$tmp133 $tmp131 $tmp132 	%argrw{"wrr"}
-	mul		$tmp134 $const32 ___417_z 	%argrw{"wrr"}
+	mul		$tmp134 $const32 ___418_z 	%argrw{"wrr"}
 	add		$tmp135 $tmp133 $tmp134 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:75
 #   return color(3.240479 * x + -1.537150 * y + -0.498535 * z,
@@ -763,65 +763,65 @@ code ___main___
 	compref		$tmp141 p $const5 	%argrw{"wrr"}
 	compref		$tmp142 p $const6 	%argrw{"wrr"}
 	atan2		$tmp140 $tmp141 $tmp142 	%argrw{"wrr"}
-	vector		___415_spherical $tmp138 $tmp140 $const7 	%argrw{"wrrr"}
+	vector		___416_spherical $tmp138 $tmp140 $const7 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:45
 #   float theta = spherical[0];
-	compref		___415_theta ___415_spherical $const5 	%line{45} %argrw{"wrr"}
+	compref		___416_theta ___416_spherical $const5 	%line{45} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:46
 #   float phi = spherical[1];
-	compref		___415_phi ___415_spherical $const6 	%line{46} %argrw{"wrr"}
+	compref		___416_phi ___416_spherical $const6 	%line{46} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:49
 #   float gamma = sky_angle_between(theta, phi, suntheta, sunphi);
 	functioncall	$const8 214 	%line{49} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:10
 #   float cospsi = sin(thetav) * sin(theta) * cos(phi - phiv) + cos(thetav) * cos(theta);
-	sin		$tmp143 ___415_theta 	%line{10} %argrw{"wr"}
+	sin		$tmp143 ___416_theta 	%line{10} %argrw{"wr"}
 	sin		$tmp144 theta 	%argrw{"wr"}
 	mul		$tmp145 $tmp143 $tmp144 	%argrw{"wrr"}
-	sub		$tmp147 phi ___415_phi 	%argrw{"wrr"}
+	sub		$tmp147 phi ___416_phi 	%argrw{"wrr"}
 	cos		$tmp146 $tmp147 	%argrw{"wr"}
 	mul		$tmp148 $tmp145 $tmp146 	%argrw{"wrr"}
-	cos		$tmp149 ___415_theta 	%argrw{"wr"}
+	cos		$tmp149 ___416_theta 	%argrw{"wr"}
 	cos		$tmp150 theta 	%argrw{"wr"}
 	mul		$tmp151 $tmp149 $tmp150 	%argrw{"wrr"}
-	add		___412_cospsi $tmp148 $tmp151 	%argrw{"wrr"}
+	add		___413_cospsi $tmp148 $tmp151 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:12
 #   if (cospsi > 1.0)
-	gt		$tmp152 ___412_cospsi $const9 	%line{12} %argrw{"wrr"}
+	gt		$tmp152 ___413_cospsi $const9 	%line{12} %argrw{"wrr"}
 	if		$tmp152 209 209 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:13
 #     return 0.0;
-	assign		___415_gamma $const7 	%line{13} %argrw{"wr"}
+	assign		___416_gamma $const7 	%line{13} %argrw{"wr"}
 	return
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:14
 #   if (cospsi < -1.0)
-	lt		$tmp153 ___412_cospsi $const10 	%line{14} %argrw{"wrr"}
+	lt		$tmp153 ___413_cospsi $const10 	%line{14} %argrw{"wrr"}
 	if		$tmp153 213 213 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:15
 #     return M_PI;
-	assign		___415_gamma $const11 	%line{15} %argrw{"wr"}
+	assign		___416_gamma $const11 	%line{15} %argrw{"wr"}
 	return
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:17
 #   return acos(cospsi);
-	acos		___415_gamma ___412_cospsi 	%line{17} %argrw{"wr"}
+	acos		___416_gamma ___413_cospsi 	%line{17} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:52
 #   theta = min(theta, M_PI_2 - 0.001);
-	min		___415_theta ___415_theta $const12 	%line{52} %argrw{"wrr"}
+	min		___416_theta ___416_theta $const12 	%line{52} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:55
 #   float x = radiance[1] * sky_perez_function(config_y, theta, gamma);
 	compref		$tmp154 radiance $const6 	%line{55} %argrw{"wrr"}
 	functioncall	$const38 236 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:28
 #   float ctheta = cos(theta);
-	cos		___414_ctheta ___415_theta 	%line{28} %argrw{"wr"}
+	cos		___415_ctheta ___416_theta 	%line{28} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:29
 #   float cgamma = cos(gamma);
-	cos		___414_cgamma ___415_gamma 	%line{29} %argrw{"wr"}
+	cos		___415_cgamma ___416_gamma 	%line{29} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:31
 #   return (1.0 + lam[0] * exp(lam[1] / ctheta)) *
 	aref		$tmp156 config_y $const5 	%line{31} %argrw{"wrr"}
 	aref		$tmp158 config_y $const6 	%argrw{"wrr"}
-	div		$tmp159 $tmp158 ___414_ctheta 	%argrw{"wrr"}
+	div		$tmp159 $tmp158 ___415_ctheta 	%argrw{"wrr"}
 	exp		$tmp157 $tmp159 	%argrw{"wr"}
 	mul		$tmp160 $tmp156 $tmp157 	%argrw{"wrr"}
 	add		$tmp161 $const9 $tmp160 	%argrw{"wrr"}
@@ -829,35 +829,35 @@ code ___main___
 #          (1.0 + lam[2] * exp(lam[3] * gamma) + lam[4] * cgamma * cgamma);
 	aref		$tmp162 config_y $const4 	%line{32} %argrw{"wrr"}
 	aref		$tmp164 config_y $const19 	%argrw{"wrr"}
-	mul		$tmp165 $tmp164 ___415_gamma 	%argrw{"wrr"}
+	mul		$tmp165 $tmp164 ___416_gamma 	%argrw{"wrr"}
 	exp		$tmp163 $tmp165 	%argrw{"wr"}
 	mul		$tmp166 $tmp162 $tmp163 	%argrw{"wrr"}
 	add		$tmp167 $const9 $tmp166 	%argrw{"wrr"}
 	aref		$tmp168 config_y $const14 	%argrw{"wrr"}
-	mul		$tmp169 $tmp168 ___414_cgamma 	%argrw{"wrr"}
-	mul		$tmp170 $tmp169 ___414_cgamma 	%argrw{"wrr"}
+	mul		$tmp169 $tmp168 ___415_cgamma 	%argrw{"wrr"}
+	mul		$tmp170 $tmp169 ___415_cgamma 	%argrw{"wrr"}
 	add		$tmp171 $tmp167 $tmp170 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:31
 #   return (1.0 + lam[0] * exp(lam[1] / ctheta)) *
 	mul		$tmp155 $tmp161 $tmp171 	%line{31} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:55
 #   float x = radiance[1] * sky_perez_function(config_y, theta, gamma);
-	mul		___415_x $tmp154 $tmp155 	%line{55} %argrw{"wrr"}
+	mul		___416_x $tmp154 $tmp155 	%line{55} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:56
 #   float y = radiance[2] * sky_perez_function(config_z, theta, gamma);
 	compref		$tmp172 radiance $const4 	%line{56} %argrw{"wrr"}
 	functioncall	$const38 258 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:28
 #   float ctheta = cos(theta);
-	cos		___414_ctheta ___415_theta 	%line{28} %argrw{"wr"}
+	cos		___415_ctheta ___416_theta 	%line{28} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:29
 #   float cgamma = cos(gamma);
-	cos		___414_cgamma ___415_gamma 	%line{29} %argrw{"wr"}
+	cos		___415_cgamma ___416_gamma 	%line{29} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:31
 #   return (1.0 + lam[0] * exp(lam[1] / ctheta)) *
 	aref		$tmp174 config_z $const5 	%line{31} %argrw{"wrr"}
 	aref		$tmp176 config_z $const6 	%argrw{"wrr"}
-	div		$tmp177 $tmp176 ___414_ctheta 	%argrw{"wrr"}
+	div		$tmp177 $tmp176 ___415_ctheta 	%argrw{"wrr"}
 	exp		$tmp175 $tmp177 	%argrw{"wr"}
 	mul		$tmp178 $tmp174 $tmp175 	%argrw{"wrr"}
 	add		$tmp179 $const9 $tmp178 	%argrw{"wrr"}
@@ -865,35 +865,35 @@ code ___main___
 #          (1.0 + lam[2] * exp(lam[3] * gamma) + lam[4] * cgamma * cgamma);
 	aref		$tmp180 config_z $const4 	%line{32} %argrw{"wrr"}
 	aref		$tmp182 config_z $const19 	%argrw{"wrr"}
-	mul		$tmp183 $tmp182 ___415_gamma 	%argrw{"wrr"}
+	mul		$tmp183 $tmp182 ___416_gamma 	%argrw{"wrr"}
 	exp		$tmp181 $tmp183 	%argrw{"wr"}
 	mul		$tmp184 $tmp180 $tmp181 	%argrw{"wrr"}
 	add		$tmp185 $const9 $tmp184 	%argrw{"wrr"}
 	aref		$tmp186 config_z $const14 	%argrw{"wrr"}
-	mul		$tmp187 $tmp186 ___414_cgamma 	%argrw{"wrr"}
-	mul		$tmp188 $tmp187 ___414_cgamma 	%argrw{"wrr"}
+	mul		$tmp187 $tmp186 ___415_cgamma 	%argrw{"wrr"}
+	mul		$tmp188 $tmp187 ___415_cgamma 	%argrw{"wrr"}
 	add		$tmp189 $tmp185 $tmp188 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:31
 #   return (1.0 + lam[0] * exp(lam[1] / ctheta)) *
 	mul		$tmp173 $tmp179 $tmp189 	%line{31} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:56
 #   float y = radiance[2] * sky_perez_function(config_z, theta, gamma);
-	mul		___415_y $tmp172 $tmp173 	%line{56} %argrw{"wrr"}
+	mul		___416_y $tmp172 $tmp173 	%line{56} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:57
 #   float Y = radiance[0] * sky_perez_function(config_x, theta, gamma);
 	compref		$tmp190 radiance $const5 	%line{57} %argrw{"wrr"}
 	functioncall	$const38 280 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:28
 #   float ctheta = cos(theta);
-	cos		___414_ctheta ___415_theta 	%line{28} %argrw{"wr"}
+	cos		___415_ctheta ___416_theta 	%line{28} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:29
 #   float cgamma = cos(gamma);
-	cos		___414_cgamma ___415_gamma 	%line{29} %argrw{"wr"}
+	cos		___415_cgamma ___416_gamma 	%line{29} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:31
 #   return (1.0 + lam[0] * exp(lam[1] / ctheta)) *
 	aref		$tmp192 config_x $const5 	%line{31} %argrw{"wrr"}
 	aref		$tmp194 config_x $const6 	%argrw{"wrr"}
-	div		$tmp195 $tmp194 ___414_ctheta 	%argrw{"wrr"}
+	div		$tmp195 $tmp194 ___415_ctheta 	%argrw{"wrr"}
 	exp		$tmp193 $tmp195 	%argrw{"wr"}
 	mul		$tmp196 $tmp192 $tmp193 	%argrw{"wrr"}
 	add		$tmp197 $const9 $tmp196 	%argrw{"wrr"}
@@ -901,60 +901,60 @@ code ___main___
 #          (1.0 + lam[2] * exp(lam[3] * gamma) + lam[4] * cgamma * cgamma);
 	aref		$tmp198 config_x $const4 	%line{32} %argrw{"wrr"}
 	aref		$tmp200 config_x $const19 	%argrw{"wrr"}
-	mul		$tmp201 $tmp200 ___415_gamma 	%argrw{"wrr"}
+	mul		$tmp201 $tmp200 ___416_gamma 	%argrw{"wrr"}
 	exp		$tmp199 $tmp201 	%argrw{"wr"}
 	mul		$tmp202 $tmp198 $tmp199 	%argrw{"wrr"}
 	add		$tmp203 $const9 $tmp202 	%argrw{"wrr"}
 	aref		$tmp204 config_x $const14 	%argrw{"wrr"}
-	mul		$tmp205 $tmp204 ___414_cgamma 	%argrw{"wrr"}
-	mul		$tmp206 $tmp205 ___414_cgamma 	%argrw{"wrr"}
+	mul		$tmp205 $tmp204 ___415_cgamma 	%argrw{"wrr"}
+	mul		$tmp206 $tmp205 ___415_cgamma 	%argrw{"wrr"}
 	add		$tmp207 $tmp203 $tmp206 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:31
 #   return (1.0 + lam[0] * exp(lam[1] / ctheta)) *
 	mul		$tmp191 $tmp197 $tmp207 	%line{31} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:57
 #   float Y = radiance[0] * sky_perez_function(config_x, theta, gamma);
-	mul		___415_Y $tmp190 $tmp191 	%line{57} %argrw{"wrr"}
+	mul		___416_Y $tmp190 $tmp191 	%line{57} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:60
 #   color xyz = xyY_to_xyz(x, y, Y);
 	functioncall	$const39 300 	%line{60} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:56
 #   if (y != 0.0) {
-	neq		$tmp208 ___415_y $const7 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h"} %line{56} %argrw{"wrr"}
+	neq		$tmp208 ___416_y $const7 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h"} %line{56} %argrw{"wrr"}
 	if		$tmp208 286 287 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:57
 #     X = (x / y) * Y;
-	div		$tmp209 ___415_x ___415_y 	%line{57} %argrw{"wrr"}
-	mul		___355_X $tmp209 ___415_Y 	%argrw{"wrr"}
+	div		$tmp209 ___416_x ___416_y 	%line{57} %argrw{"wrr"}
+	mul		___355_X $tmp209 ___416_Y 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:60
 #     X = 0.0;
 	assign		___355_X $const7 	%line{60} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:63
 #   if (y != 0.0 && Y != 0.0) {
-	neq		$tmp210 ___415_y $const7 	%line{63} %argrw{"wrr"}
+	neq		$tmp210 ___416_y $const7 	%line{63} %argrw{"wrr"}
 	neq		$tmp211 $tmp210 $const5 	%argrw{"wrr"}
 	if		$tmp211 293 293 	%argrw{"r"}
-	neq		$tmp212 ___415_Y $const7 	%argrw{"wrr"}
+	neq		$tmp212 ___416_Y $const7 	%argrw{"wrr"}
 	neq		$tmp213 $tmp212 $const5 	%argrw{"wrr"}
 	assign		$tmp211 $tmp213 	%argrw{"wr"}
 	if		$tmp211 298 299 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:64
 #     Z = ((1.0 - x - y) / y) * Y;
-	sub		$tmp214 $const9 ___415_x 	%line{64} %argrw{"wrr"}
-	sub		$tmp215 $tmp214 ___415_y 	%argrw{"wrr"}
-	div		$tmp216 $tmp215 ___415_y 	%argrw{"wrr"}
-	mul		___355_Z $tmp216 ___415_Y 	%argrw{"wrr"}
+	sub		$tmp214 $const9 ___416_x 	%line{64} %argrw{"wrr"}
+	sub		$tmp215 $tmp214 ___416_y 	%argrw{"wrr"}
+	div		$tmp216 $tmp215 ___416_y 	%argrw{"wrr"}
+	mul		___355_Z $tmp216 ___416_Y 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:67
 #     Z = 0.0;
 	assign		___355_Z $const7 	%line{67} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:70
 #   return color(X, Y, Z);
-	color		___415_xyz ___355_X ___415_Y ___355_Z 	%line{70} %argrw{"wrrr"}
+	color		___416_xyz ___355_X ___416_Y ___355_Z 	%line{70} %argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:61
 #   return xyz_to_rgb(xyz[0], xyz[1], xyz[2]);
-	compref		$tmp217 ___415_xyz $const5 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl"} %line{61} %argrw{"wrr"}
-	compref		$tmp218 ___415_xyz $const6 	%argrw{"wrr"}
-	compref		$tmp219 ___415_xyz $const4 	%argrw{"wrr"}
+	compref		$tmp217 ___416_xyz $const5 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl"} %line{61} %argrw{"wrr"}
+	compref		$tmp218 ___416_xyz $const6 	%argrw{"wrr"}
+	compref		$tmp219 ___416_xyz $const4 	%argrw{"wrr"}
 	functioncall	$const23 320 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:75
 #   return color(3.240479 * x + -1.537150 * y + -0.498535 * z,
@@ -988,65 +988,65 @@ code ___main___
 	aref		$tmp235 nishita_data $const5 	%line{134} %argrw{"wrr"}
 	aref		$tmp236 nishita_data $const6 	%argrw{"wrr"}
 	aref		$tmp237 nishita_data $const4 	%argrw{"wrr"}
-	color		___424_pixel_bottom $tmp235 $tmp236 $tmp237 	%argrw{"wrrr"}
+	color		___425_pixel_bottom $tmp235 $tmp236 $tmp237 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:135
 #   color pixel_top = color(sky_data[3], sky_data[4], sky_data[5]);
 	aref		$tmp238 nishita_data $const19 	%line{135} %argrw{"wrr"}
 	aref		$tmp239 nishita_data $const14 	%argrw{"wrr"}
 	aref		$tmp240 nishita_data $const20 	%argrw{"wrr"}
-	color		___424_pixel_top $tmp238 $tmp239 $tmp240 	%argrw{"wrrr"}
+	color		___425_pixel_top $tmp238 $tmp239 $tmp240 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:136
 #   float sun_elevation = sky_data[6];
-	aref		___424_sun_elevation nishita_data $const21 	%line{136} %argrw{"wrr"}
+	aref		___425_sun_elevation nishita_data $const21 	%line{136} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:137
 #   float sun_rotation = sky_data[7];
-	aref		___424_sun_rotation nishita_data $const22 	%line{137} %argrw{"wrr"}
+	aref		___425_sun_rotation nishita_data $const22 	%line{137} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:138
 #   float angular_diameter = sky_data[8];
-	aref		___424_angular_diameter nishita_data $const15 	%line{138} %argrw{"wrr"}
+	aref		___425_angular_diameter nishita_data $const15 	%line{138} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:139
 #   float sun_intensity = sky_data[9];
-	aref		___424_sun_intensity nishita_data $const41 	%line{139} %argrw{"wrr"}
+	aref		___425_sun_intensity nishita_data $const41 	%line{139} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:140
 #   float earth_intersection_angle = sky_data[10];
-	aref		___424_earth_intersection_angle nishita_data $const42 	%line{140} %argrw{"wrr"}
+	aref		___425_earth_intersection_angle nishita_data $const42 	%line{140} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:141
 #   int sun_disc = angular_diameter > 0;
-	gt		___424_sun_disc ___424_angular_diameter $const5 	%line{141} %argrw{"wrr"}
+	gt		___425_sun_disc ___425_angular_diameter $const5 	%line{141} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:142
 #   vector sun_dir = spherical_to_direction(sun_elevation, sun_rotation + M_PI_2);
-	add		$tmp241 ___424_sun_rotation $const43 	%line{142} %argrw{"wrr"}
+	add		$tmp241 ___425_sun_rotation $const43 	%line{142} %argrw{"wrr"}
 	functioncall	$const44 345 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:110
 #   return vector(cos(lat) * cos(lon), cos(lat) * sin(lon), sin(lat));
-	cos		$tmp242 ___424_sun_elevation 	%line{110} %argrw{"wr"}
+	cos		$tmp242 ___425_sun_elevation 	%line{110} %argrw{"wr"}
 	cos		$tmp243 $tmp241 	%argrw{"wr"}
 	mul		$tmp244 $tmp242 $tmp243 	%argrw{"wrr"}
-	cos		$tmp245 ___424_sun_elevation 	%argrw{"wr"}
+	cos		$tmp245 ___425_sun_elevation 	%argrw{"wr"}
 	sin		$tmp246 $tmp241 	%argrw{"wr"}
 	mul		$tmp247 $tmp245 $tmp246 	%argrw{"wrr"}
-	sin		$tmp248 ___424_sun_elevation 	%argrw{"wr"}
-	vector		___424_sun_dir $tmp244 $tmp247 $tmp248 	%argrw{"wrrr"}
+	sin		$tmp248 ___425_sun_elevation 	%argrw{"wr"}
+	vector		___425_sun_dir $tmp244 $tmp247 $tmp248 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:143
 #   float sun_dir_angle = precise_angle(dir, sun_dir);
 	functioncall	$const45 352 	%line{143} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:115
 #   return 2.0 * atan2(length(a - b), length(a + b));
-	sub		$tmp251 p ___424_sun_dir 	%line{115} %argrw{"wrr"}
+	sub		$tmp251 p ___425_sun_dir 	%line{115} %argrw{"wrr"}
 	length		$tmp250 $tmp251 	%argrw{"wr"}
-	add		$tmp253 p ___424_sun_dir 	%argrw{"wrr"}
+	add		$tmp253 p ___425_sun_dir 	%argrw{"wrr"}
 	length		$tmp252 $tmp253 	%argrw{"wr"}
 	atan2		$tmp249 $tmp250 $tmp252 	%argrw{"wrr"}
-	mul		___424_sun_dir_angle $const16 $tmp249 	%argrw{"wrr"}
+	mul		___425_sun_dir_angle $const16 $tmp249 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:144
 #   float half_angular = angular_diameter * 0.5;
-	mul		___424_half_angular ___424_angular_diameter $const46 	%line{144} %argrw{"wrr"}
+	mul		___425_half_angular ___425_angular_diameter $const46 	%line{144} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:145
 #   float alpha = 1.0;
-	assign		___424_alpha $const9 	%line{145} %argrw{"wr"}
+	assign		___425_alpha $const9 	%line{145} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:146
 #   color rgb_sun = color(0.0, 0.0, 0.0);
-	assign		___424_rgb_sun $const47 	%line{146} %argrw{"wr"}
+	assign		___425_rgb_sun $const47 	%line{146} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:147
 #   vector direction = sky_spherical_coordinates(dir);
 	functioncall	$const3 362 	%line{147} %argrw{"r"}
@@ -1057,17 +1057,17 @@ code ___main___
 	compref		$tmp257 p $const5 	%argrw{"wrr"}
 	compref		$tmp258 p $const6 	%argrw{"wrr"}
 	atan2		$tmp256 $tmp257 $tmp258 	%argrw{"wrr"}
-	vector		___424_direction $tmp254 $tmp256 $const7 	%argrw{"wrrr"}
+	vector		___425_direction $tmp254 $tmp256 $const7 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:148
 #   float dir_elevation = M_PI_2 - direction[0];
-	compref		$tmp259 ___424_direction $const5 	%line{148} %argrw{"wrr"}
-	sub		___424_dir_elevation $const43 $tmp259 	%argrw{"wrr"}
+	compref		$tmp259 ___425_direction $const5 	%line{148} %argrw{"wrr"}
+	sub		___425_dir_elevation $const43 $tmp259 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:152
 #   if (sun_dir_angle < half_angular && sun_disc == 1 && raytype("importance_bake") != 1 &&
-	lt		$tmp260 ___424_sun_dir_angle ___424_half_angular 	%line{152} %argrw{"wrr"}
+	lt		$tmp260 ___425_sun_dir_angle ___425_half_angular 	%line{152} %argrw{"wrr"}
 	neq		$tmp261 $tmp260 $const5 	%argrw{"wrr"}
 	if		$tmp261 370 370 	%argrw{"r"}
-	eq		$tmp262 ___424_sun_disc $const6 	%argrw{"wrr"}
+	eq		$tmp262 ___425_sun_disc $const6 	%argrw{"wrr"}
 	neq		$tmp263 $tmp262 $const5 	%argrw{"wrr"}
 	assign		$tmp261 $tmp263 	%argrw{"wr"}
 	neq		$tmp264 $tmp261 $const5 	%argrw{"wrr"}
@@ -1080,7 +1080,7 @@ code ___main___
 	if		$tmp268 381 381 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:153
 #       dir_elevation > earth_intersection_angle)
-	gt		$tmp269 ___424_dir_elevation ___424_earth_intersection_angle 	%line{153} %argrw{"wrr"}
+	gt		$tmp269 ___425_dir_elevation ___425_earth_intersection_angle 	%line{153} %argrw{"wrr"}
 	neq		$tmp270 $tmp269 $const5 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:152
 #   if (sun_dir_angle < half_angular && sun_disc == 1 && raytype("importance_bake") != 1 &&
@@ -1088,28 +1088,28 @@ code ___main___
 	if		$tmp268 414 414 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:155
 #     float y = ((dir_elevation - sun_elevation) / angular_diameter) + 0.5;
-	sub		$tmp271 ___424_dir_elevation ___424_sun_elevation 	%line{155} %argrw{"wrr"}
-	div		$tmp272 $tmp271 ___424_angular_diameter 	%argrw{"wrr"}
-	add		___425_y $tmp272 $const46 	%argrw{"wrr"}
+	sub		$tmp271 ___425_dir_elevation ___425_sun_elevation 	%line{155} %argrw{"wrr"}
+	div		$tmp272 $tmp271 ___425_angular_diameter 	%argrw{"wrr"}
+	add		___426_y $tmp272 $const46 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:156
 #     color xyz = mix(pixel_bottom, pixel_top, y);
-	mix		___425_xyz ___424_pixel_bottom ___424_pixel_top ___425_y 	%line{156} %argrw{"wrrr"}
+	mix		___426_xyz ___425_pixel_bottom ___425_pixel_top ___426_y 	%line{156} %argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:158
 #     float angle_fraction = sun_dir_angle / half_angular;
-	div		___425_angle_fraction ___424_sun_dir_angle ___424_half_angular 	%line{158} %argrw{"wrr"}
+	div		___426_angle_fraction ___425_sun_dir_angle ___425_half_angular 	%line{158} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:159
 #     float limb_darkening = (1.0 - 0.6 * (1.0 - sqrt(1.0 - angle_fraction * angle_fraction)));
-	mul		$tmp274 ___425_angle_fraction ___425_angle_fraction 	%line{159} %argrw{"wrr"}
+	mul		$tmp274 ___426_angle_fraction ___426_angle_fraction 	%line{159} %argrw{"wrr"}
 	sub		$tmp275 $const9 $tmp274 	%argrw{"wrr"}
 	sqrt		$tmp273 $tmp275 	%argrw{"wr"}
 	sub		$tmp276 $const9 $tmp273 	%argrw{"wrr"}
 	mul		$tmp277 $const49 $tmp276 	%argrw{"wrr"}
-	sub		___425_limb_darkening $const9 $tmp277 	%argrw{"wrr"}
+	sub		___426_limb_darkening $const9 $tmp277 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:160
 #     rgb_sun = xyz_to_rgb(xyz[0], xyz[1], xyz[2]) * limb_darkening;
-	compref		$tmp279 ___425_xyz $const5 	%line{160} %argrw{"wrr"}
-	compref		$tmp280 ___425_xyz $const6 	%argrw{"wrr"}
-	compref		$tmp281 ___425_xyz $const4 	%argrw{"wrr"}
+	compref		$tmp279 ___426_xyz $const5 	%line{160} %argrw{"wrr"}
+	compref		$tmp280 ___426_xyz $const6 	%argrw{"wrr"}
+	compref		$tmp281 ___426_xyz $const4 	%argrw{"wrr"}
 	functioncall	$const23 413 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:75
 #   return color(3.240479 * x + -1.537150 * y + -0.498535 * z,
@@ -1137,34 +1137,34 @@ code ___main___
 	color		$tmp278 $tmp286 $tmp291 $tmp296 	%line{75} %argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:160
 #     rgb_sun = xyz_to_rgb(xyz[0], xyz[1], xyz[2]) * limb_darkening;
-	mul		___424_rgb_sun $tmp278 ___425_limb_darkening 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl"} %line{160} %argrw{"wrr"}
+	mul		___425_rgb_sun $tmp278 ___426_limb_darkening 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl"} %line{160} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:162
 #   float x = (direction[1] + M_PI + sun_rotation) / M_2PI;
-	compref		$tmp297 ___424_direction $const6 	%line{162} %argrw{"wrr"}
+	compref		$tmp297 ___425_direction $const6 	%line{162} %argrw{"wrr"}
 	add		$tmp298 $tmp297 $const11 	%argrw{"wrr"}
-	add		$tmp299 $tmp298 ___424_sun_rotation 	%argrw{"wrr"}
-	div		___424_x $tmp299 $const33 	%argrw{"wrr"}
+	add		$tmp299 $tmp298 ___425_sun_rotation 	%argrw{"wrr"}
+	div		___425_x $tmp299 $const33 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:163
 #   if (x > 1.0) {
-	gt		$tmp300 ___424_x $const9 	%line{163} %argrw{"wrr"}
+	gt		$tmp300 ___425_x $const9 	%line{163} %argrw{"wrr"}
 	if		$tmp300 421 421 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:164
 #     x = x - 1.0;
-	sub		___424_x ___424_x $const9 	%line{164} %argrw{"wrr"}
+	sub		___425_x ___425_x $const9 	%line{164} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:167
 #   float dir_elevation_abs = (dir_elevation < 0.0) ? -dir_elevation : dir_elevation;
-	lt		$tmp301 ___424_dir_elevation $const7 	%line{167} %argrw{"wrr"}
+	lt		$tmp301 ___425_dir_elevation $const7 	%line{167} %argrw{"wrr"}
 	if		$tmp301 424 425 	%argrw{"r"}
-	neg		___424_dir_elevation_abs ___424_dir_elevation 	%argrw{"wr"}
-	assign		___424_dir_elevation_abs ___424_dir_elevation 	%argrw{"wr"}
+	neg		___425_dir_elevation_abs ___425_dir_elevation 	%argrw{"wr"}
+	assign		___425_dir_elevation_abs ___425_dir_elevation 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:168
 #   float y = sqrt(dir_elevation_abs / M_PI_2) * signx(dir_elevation) * 0.5 + 0.5;
-	div		$tmp303 ___424_dir_elevation_abs $const43 	%line{168} %argrw{"wrr"}
+	div		$tmp303 ___425_dir_elevation_abs $const43 	%line{168} %argrw{"wrr"}
 	sqrt		$tmp302 $tmp303 	%argrw{"wr"}
 	functioncall	$const50 438 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:120
 #   if (x < 0.0) {
-	lt		$tmp305 ___424_dir_elevation $const7 	%line{120} %argrw{"wrr"}
+	lt		$tmp305 ___425_dir_elevation $const7 	%line{120} %argrw{"wrr"}
 	if		$tmp305 432 438 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:121
 #     return -1.0;
@@ -1172,7 +1172,7 @@ code ___main___
 	return
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:123
 #   else if (x > 0.0) {
-	gt		$tmp306 ___424_dir_elevation $const7 	%line{123} %argrw{"wrr"}
+	gt		$tmp306 ___425_dir_elevation $const7 	%line{123} %argrw{"wrr"}
 	if		$tmp306 436 438 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:124
 #     return 1.0;
@@ -1186,15 +1186,15 @@ code ___main___
 #   float y = sqrt(dir_elevation_abs / M_PI_2) * signx(dir_elevation) * 0.5 + 0.5;
 	mul		$tmp307 $tmp302 $tmp304 	%line{168} %argrw{"wrr"}
 	mul		$tmp308 $tmp307 $const46 	%argrw{"wrr"}
-	add		___424_y $tmp308 $const46 	%argrw{"wrr"}
+	add		___425_y $tmp308 $const46 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:169
 #   color xyz = (color)texture(filename, x, y, "wrap", "clamp", "interp", "linear", "alpha", alpha);
-	texture		___424_xyz filename ___424_x ___424_y $const51 $const52 $const53 $const54 $const55 ___424_alpha 	%line{169} %argrw{"wrrrrrrrrw"} %argderivs{2,3}
+	texture		___425_xyz filename ___425_x ___425_y $const51 $const52 $const53 $const54 $const55 ___425_alpha 	%line{169} %argrw{"wrrrrrrrrw"} %argderivs{2,3}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:170
 #   color rgb_sky = xyz_to_rgb(xyz[0], xyz[1], xyz[2]);
-	compref		$tmp309 ___424_xyz $const5 	%line{170} %argrw{"wrr"}
-	compref		$tmp310 ___424_xyz $const6 	%argrw{"wrr"}
-	compref		$tmp311 ___424_xyz $const4 	%argrw{"wrr"}
+	compref		$tmp309 ___425_xyz $const5 	%line{170} %argrw{"wrr"}
+	compref		$tmp310 ___425_xyz $const6 	%argrw{"wrr"}
+	compref		$tmp311 ___425_xyz $const4 	%argrw{"wrr"}
 	functioncall	$const23 462 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:75
 #   return color(3.240479 * x + -1.537150 * y + -0.498535 * z,
@@ -1219,10 +1219,10 @@ code ___main___
 	add		$tmp326 $tmp324 $tmp325 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:75
 #   return color(3.240479 * x + -1.537150 * y + -0.498535 * z,
-	color		___424_rgb_sky $tmp316 $tmp321 $tmp326 	%line{75} %argrw{"wrrr"}
+	color		___425_rgb_sky $tmp316 $tmp321 $tmp326 	%line{75} %argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl:172
 #   return rgb_sun * sun_intensity + rgb_sky;
-	mul		$tmp327 ___424_rgb_sun ___424_sun_intensity 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl"} %line{172} %argrw{"wrr"}
-	add		Color $tmp327 ___424_rgb_sky 	%argrw{"wrr"}
+	mul		$tmp327 ___425_rgb_sun ___425_sun_intensity 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_sky_texture.osl"} %line{172} %argrw{"wrr"}
+	add		Color $tmp327 ___425_rgb_sky 	%argrw{"wrr"}
 	return
 	end

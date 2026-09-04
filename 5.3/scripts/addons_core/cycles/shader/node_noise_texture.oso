@@ -198,18 +198,18 @@ local	float	___550_signal	%read{4687,6302} %write{4686,6302}
 local	float	___550_value	%read{4692,6303} %write{4688,6302}
 local	float	___550_weight	%read{4692,6302} %write{4689,6302}
 local	int	___551_i	%read{4692,6302} %write{4691,6302}
-local	float	___610_p	%read{19,619} %write{12,30}
-local	float	___610_value	%read{908,909} %write{76,317}
-local	float	___613_p.x	%read{927,2023} %write{915,992} %mystruct{___613_p} %mystructfield{0}
-local	float	___613_p.y	%read{928,2024} %write{916,993} %mystruct{___613_p} %mystructfield{1}
-local	float	___613_value	%read{2529,2530} %write{1077,1496}
-local	point	___616_p	%read{2548,3507} %write{2534,2640}
-local	float	___616_value	%read{3928,3929} %write{2710,3059}
-local	float	___619_p.x	%read{3957,5737} %write{3937,4196} %mystruct{___619_p} %mystructfield{0}
-local	float	___619_p.y	%read{3958,5738} %write{3938,4197} %mystruct{___619_p} %mystructfield{1}
-local	float	___619_p.z	%read{3959,5739} %write{3939,4198} %mystruct{___619_p} %mystructfield{2}
-local	float	___619_p.w	%read{3960,5740} %write{3940,4199} %mystruct{___619_p} %mystructfield{3}
-local	float	___619_value	%read{6492,6493} %write{4327,4949}
+local	float	___611_p	%read{19,619} %write{12,30}
+local	float	___611_value	%read{908,909} %write{76,317}
+local	float	___614_p.x	%read{927,2023} %write{915,992} %mystruct{___614_p} %mystructfield{0}
+local	float	___614_p.y	%read{928,2024} %write{916,993} %mystruct{___614_p} %mystructfield{1}
+local	float	___614_value	%read{2529,2530} %write{1077,1496}
+local	point	___617_p	%read{2548,3507} %write{2534,2640}
+local	float	___617_value	%read{3928,3929} %write{2710,3059}
+local	float	___620_p.x	%read{3957,5737} %write{3937,4196} %mystruct{___620_p} %mystructfield{0}
+local	float	___620_p.y	%read{3958,5738} %write{3938,4197} %mystruct{___620_p} %mystructfield{1}
+local	float	___620_p.z	%read{3959,5739} %write{3939,4198} %mystruct{___620_p} %mystructfield{2}
+local	float	___620_p.w	%read{3960,5740} %write{3940,4199} %mystruct{___620_p} %mystructfield{3}
+local	float	___620_value	%read{6492,6493} %write{4327,4949}
 local	point	p	%read{2,3934} %write{0,7}
 local	float	detail	%read{40,6435} %write{5,5}
 local	float	roughness	%read{40,6433} %write{6,6}
@@ -4043,7 +4043,7 @@ code ___main___
 	functioncall	$const5 910 	%line{274} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:95
 #   float p = co;
-	assign		___610_p w 	%line{95} %argrw{"wr"}
+	assign		___611_p w 	%line{95} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:96
 #   if (distortion != 0.0) {
 	neq		$tmp3 Distortion $const1 	%line{96} %argrw{"wrr"}
@@ -4058,7 +4058,7 @@ code ___main___
 	add		$tmp5 $const7 $tmp7 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:97
 #     p += safe_snoise(p + random_float_offset(0.0)) * distortion;
-	add		$tmp8 ___610_p $tmp5 	%line{97} %argrw{"wrr"}
+	add		$tmp8 ___611_p $tmp5 	%line{97} %argrw{"wrr"}
 	functioncall	$const9 29 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h:61
 #   float precision_correction = 0.5 * float(fabs(co) >= 1000000.0);
@@ -4077,7 +4077,7 @@ code ___main___
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:97
 #     p += safe_snoise(p + random_float_offset(0.0)) * distortion;
 	mul		$tmp14 $tmp4 Distortion 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl"} %line{97} %argrw{"wrr"}
-	add		___610_p ___610_p $tmp14 	%argrw{"wrr"}
+	add		___611_p ___611_p $tmp14 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:100
 #   float value = noise_select(p, detail, roughness, lacunarity, offset, gain, type, use_normalize);
 	functioncall	$const14 319 	%line{100} %argrw{"r"}
@@ -4088,7 +4088,7 @@ code ___main___
 	functioncall	$const16 77 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h:251
 # NOISE_MULTI_FRACTAL(float)
-	assign		___485_p ___610_p 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{251} %argrw{"wr"}
+	assign		___485_p ___611_p 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{251} %argrw{"wr"}
 	assign		___485_value $const17 	%argrw{"wr"}
 	assign		___485_pwr $const17 	%argrw{"wr"}
 	for		$tmp18 40 43 57 59 	%argrw{"r"}
@@ -4145,7 +4145,7 @@ code ___main___
 	mul		$tmp37 $tmp30 $tmp31 	%line{251} %argrw{"wrr"}
 	add		$tmp38 $tmp37 $const17 	%argrw{"wrr"}
 	mul		___485_value ___485_value $tmp38 	%argrw{"wrr"}
-	assign		___610_value ___485_value 	%argrw{"wr"}
+	assign		___611_value ___485_value 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:79
 # NOISE_SELECT(float)
 	return	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl"} %line{79}
@@ -4154,7 +4154,7 @@ code ___main___
 	functioncall	$const21 141 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h:244
 # NOISE_FBM(float)
-	assign		___465_p ___610_p 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{244} %argrw{"wr"}
+	assign		___465_p ___611_p 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{244} %argrw{"wr"}
 	assign		___465_fscale $const17 	%argrw{"wr"}
 	assign		___465_amp $const17 	%argrw{"wr"}
 	assign		___465_maxamp $const1 	%argrw{"wr"}
@@ -4221,14 +4221,14 @@ code ___main___
 	add		$tmp64 ___465_maxamp ___465_amp 	%argrw{"wrr"}
 	div		$tmp65 $tmp63 $tmp64 	%argrw{"wrr"}
 	add		$tmp66 $tmp65 $const10 	%argrw{"wrr"}
-	mix		___610_value $tmp62 $tmp66 ___465_rmd 	%argrw{"wrrr"}
-	mix		___610_value ___465_sum ___468_sum2 ___465_rmd 	%argrw{"wrrr"}
+	mix		___611_value $tmp62 $tmp66 ___465_rmd 	%argrw{"wrrr"}
+	mix		___611_value ___465_sum ___468_sum2 ___465_rmd 	%argrw{"wrrr"}
 	return
 	if		use_normalize 139 140 	%argrw{"r"}
 	mul		$tmp67 $const10 ___465_sum 	%argrw{"wrr"}
 	div		$tmp68 $tmp67 ___465_maxamp 	%argrw{"wrr"}
-	add		___610_value $tmp68 $const10 	%argrw{"wrr"}
-	assign		___610_value ___465_sum 	%argrw{"wr"}
+	add		___611_value $tmp68 $const10 	%argrw{"wrr"}
+	assign		___611_value ___465_sum 	%argrw{"wr"}
 	return
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:79
 # NOISE_SELECT(float)
@@ -4238,7 +4238,7 @@ code ___main___
 	functioncall	$const23 208 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h:265
 # NOISE_HYBRID_MULTI_FRACTAL(float)
-	assign		___517_p ___610_p 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{265} %argrw{"wr"}
+	assign		___517_p ___611_p 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{265} %argrw{"wr"}
 	assign		___517_pwr $const17 	%argrw{"wr"}
 	assign		___517_value $const1 	%argrw{"wr"}
 	assign		___517_weight $const17 	%argrw{"wr"}
@@ -4316,7 +4316,7 @@ code ___main___
 	mul		$tmp100 ___517_rmd ___517_weight 	%argrw{"wrr"}
 	mul		$tmp101 $tmp100 ___521_signal 	%argrw{"wrr"}
 	add		___517_value ___517_value $tmp101 	%argrw{"wrr"}
-	assign		___610_value ___517_value 	%argrw{"wr"}
+	assign		___611_value ___517_value 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:79
 # NOISE_SELECT(float)
 	return	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl"} %line{79}
@@ -4325,7 +4325,7 @@ code ___main___
 	functioncall	$const26 257 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h:272
 # NOISE_RIDGED_MULTI_FRACTAL(float)
-	assign		___541_p ___610_p 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{272} %argrw{"wr"}
+	assign		___541_p ___611_p 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{272} %argrw{"wr"}
 	assign		___541_pwr roughness 	%argrw{"wr"}
 	functioncall	$const9 223 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h:61
@@ -4389,7 +4389,7 @@ code ___main___
 	mul		___541_pwr ___541_pwr roughness 	%argrw{"wrr"}
 	assign		$tmp123 ___542_i 	%argrw{"wr"}
 	add		___542_i ___542_i $const19 	%argrw{"wrr"}
-	assign		___610_value ___541_value 	%argrw{"wr"}
+	assign		___611_value ___541_value 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:79
 # NOISE_SELECT(float)
 	return	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl"} %line{79}
@@ -4398,7 +4398,7 @@ code ___main___
 	functioncall	$const28 315 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h:258
 # NOISE_HETERO_TERRAIN(float)
-	assign		___501_p ___610_p 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{258} %argrw{"wr"}
+	assign		___501_p ___611_p 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{258} %argrw{"wr"}
 	assign		___501_pwr roughness 	%argrw{"wr"}
 	functioncall	$const9 272 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h:61
@@ -4475,12 +4475,12 @@ code ___main___
 	mul		___504_increment $tmp152 ___501_value 	%argrw{"wrr"}
 	mul		$tmp153 ___501_rmd ___504_increment 	%argrw{"wrr"}
 	add		___501_value ___501_value $tmp153 	%argrw{"wrr"}
-	assign		___610_value ___501_value 	%argrw{"wr"}
+	assign		___611_value ___501_value 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:79
 # NOISE_SELECT(float)
 	return	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl"} %line{79}
 	error		$const29 	%argrw{"r"}
-	assign		___610_value $const1 	%argrw{"wr"}
+	assign		___611_value $const1 	%argrw{"wr"}
 	return
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:101
 #   if (isconnected(Color) != 0) {
@@ -4497,7 +4497,7 @@ code ___main___
 	add		$tmp157 $const7 $tmp159 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:103
 #                   noise_select(p + random_float_offset(1.0),
-	add		$tmp160 ___610_p $tmp157 	%line{103} %argrw{"wrr"}
+	add		$tmp160 ___611_p $tmp157 	%line{103} %argrw{"wrr"}
 	functioncall	$const14 615 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:79
 # NOISE_SELECT(float)
@@ -4910,7 +4910,7 @@ code ___main___
 	add		$tmp301 $const7 $tmp303 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:111
 #                   noise_select(p + random_float_offset(2.0),
-	add		$tmp304 ___610_p $tmp301 	%line{111} %argrw{"wrr"}
+	add		$tmp304 ___611_p $tmp301 	%line{111} %argrw{"wrr"}
 	functioncall	$const14 908 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:79
 # NOISE_SELECT(float)
@@ -5315,10 +5315,10 @@ code ___main___
 	return
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:102
 #     Color = color(value,
-	color		Color ___610_value $tmp156 $tmp300 	%line{102} %argrw{"wrrr"}
+	color		Color ___611_value $tmp156 $tmp300 	%line{102} %argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:120
 #   return value;
-	assign		Fac ___610_value 	%line{120} %argrw{"wr"}
+	assign		Fac ___611_value 	%line{120} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:277
 #   else if (dimensions == "2D") {
 	eq		$tmp444 dimensions $const31 	%line{277} %argrw{"wrr"}
@@ -5330,8 +5330,8 @@ code ___main___
 	functioncall	$const5 2531 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:134
 #   vector2 p = co;
-	assign		___613_p.x $tmp445.x 	%line{134} %argrw{"wr"}
-	assign		___613_p.y $tmp445.y 	%argrw{"wr"}
+	assign		___614_p.x $tmp445.x 	%line{134} %argrw{"wr"}
+	assign		___614_p.y $tmp445.y 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:135
 #   if (distortion != 0.0) {
 	neq		$tmp446 Distortion $const1 	%line{135} %argrw{"wrr"}
@@ -5354,8 +5354,8 @@ code ___main___
 	functioncall	$const33 929 	%line{309} %argrw{"r"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h:28
 #     return vector2(a.x + b.x, a.y + b.y);
-	add		$tmp449.x ___613_p.x $tmp450.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{28} %argrw{"wrr"}
-	add		$tmp449.y ___613_p.y $tmp450.y 	%argrw{"wrr"}
+	add		$tmp449.x ___614_p.x $tmp450.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{28} %argrw{"wrr"}
+	add		$tmp449.y ___614_p.y $tmp450.y 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:136
 #     p += vector2(safe_snoise(p + random_vector2_offset(0.0)) * distortion,
 	functioncall	$const9 954 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl"} %line{136} %argrw{"r"}
@@ -5430,8 +5430,8 @@ code ___main___
 	functioncall	$const33 965 	%line{309} %argrw{"r"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h:28
 #     return vector2(a.x + b.x, a.y + b.y);
-	add		$tmp466.x ___613_p.x $tmp467.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{28} %argrw{"wrr"}
-	add		$tmp466.y ___613_p.y $tmp467.y 	%argrw{"wrr"}
+	add		$tmp466.x ___614_p.x $tmp467.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{28} %argrw{"wrr"}
+	add		$tmp466.y ___614_p.y $tmp467.y 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:137
 #                  safe_snoise(p + random_vector2_offset(1.0)) * distortion);
 	functioncall	$const9 990 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl"} %line{137} %argrw{"r"}
@@ -5493,8 +5493,8 @@ code ___main___
 	functioncall	$const33 994 	%line{309} %argrw{"r"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h:28
 #     return vector2(a.x + b.x, a.y + b.y);
-	add		___613_p.x ___613_p.x $tmp447.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{28} %argrw{"wrr"}
-	add		___613_p.y ___613_p.y $tmp447.y 	%argrw{"wrr"}
+	add		___614_p.x ___614_p.x $tmp447.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{28} %argrw{"wrr"}
+	add		___614_p.y ___614_p.y $tmp447.y 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:140
 #   float value = noise_select(p, detail, roughness, lacunarity, offset, gain, type, use_normalize);
 	functioncall	$const14 1498 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl"} %line{140} %argrw{"r"}
@@ -5505,8 +5505,8 @@ code ___main___
 	functioncall	$const16 1078 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h:252
 # NOISE_MULTI_FRACTAL(vector2)
-	assign		___489_p.x ___613_p.x 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{252} %argrw{"wr"}
-	assign		___489_p.y ___613_p.y 	%argrw{"wr"}
+	assign		___489_p.x ___614_p.x 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{252} %argrw{"wr"}
+	assign		___489_p.y ___614_p.y 	%argrw{"wr"}
 	assign		___489_value $const17 	%argrw{"wr"}
 	assign		___489_pwr $const17 	%argrw{"wr"}
 	for		$tmp485 1004 1007 1042 1044 	%argrw{"r"}
@@ -5650,7 +5650,7 @@ code ___main___
 	mul		$tmp515 $tmp503 $tmp504 	%line{252} %argrw{"wrr"}
 	add		$tmp516 $tmp515 $const17 	%argrw{"wrr"}
 	mul		___489_value ___489_value $tmp516 	%argrw{"wrr"}
-	assign		___613_value ___489_value 	%argrw{"wr"}
+	assign		___614_value ___489_value 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:80
 # NOISE_SELECT(vector2)
 	return	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl"} %line{80}
@@ -5659,8 +5659,8 @@ code ___main___
 	functioncall	$const21 1185 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h:245
 # NOISE_FBM(vector2)
-	assign		___470_p.x ___613_p.x 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{245} %argrw{"wr"}
-	assign		___470_p.y ___613_p.y 	%argrw{"wr"}
+	assign		___470_p.x ___614_p.x 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{245} %argrw{"wr"}
+	assign		___470_p.y ___614_p.y 	%argrw{"wr"}
 	assign		___470_fscale $const17 	%argrw{"wr"}
 	assign		___470_amp $const17 	%argrw{"wr"}
 	assign		___470_maxamp $const1 	%argrw{"wr"}
@@ -5829,14 +5829,14 @@ code ___main___
 	add		$tmp554 ___470_maxamp ___470_amp 	%argrw{"wrr"}
 	div		$tmp555 $tmp553 $tmp554 	%argrw{"wrr"}
 	add		$tmp556 $tmp555 $const10 	%argrw{"wrr"}
-	mix		___613_value $tmp552 $tmp556 ___470_rmd 	%argrw{"wrrr"}
-	mix		___613_value ___470_sum ___473_sum2 ___470_rmd 	%argrw{"wrrr"}
+	mix		___614_value $tmp552 $tmp556 ___470_rmd 	%argrw{"wrrr"}
+	mix		___614_value ___470_sum ___473_sum2 ___470_rmd 	%argrw{"wrrr"}
 	return
 	if		use_normalize 1183 1184 	%argrw{"r"}
 	mul		$tmp557 $const10 ___470_sum 	%argrw{"wrr"}
 	div		$tmp558 $tmp557 ___470_maxamp 	%argrw{"wrr"}
-	add		___613_value $tmp558 $const10 	%argrw{"wrr"}
-	assign		___613_value ___470_sum 	%argrw{"wr"}
+	add		___614_value $tmp558 $const10 	%argrw{"wrr"}
+	assign		___614_value ___470_sum 	%argrw{"wr"}
 	return
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:80
 # NOISE_SELECT(vector2)
@@ -5846,8 +5846,8 @@ code ___main___
 	functioncall	$const23 1290 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h:266
 # NOISE_HYBRID_MULTI_FRACTAL(vector2)
-	assign		___523_p.x ___613_p.x 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{266} %argrw{"wr"}
-	assign		___523_p.y ___613_p.y 	%argrw{"wr"}
+	assign		___523_p.x ___614_p.x 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{266} %argrw{"wr"}
+	assign		___523_p.y ___614_p.y 	%argrw{"wr"}
 	assign		___523_pwr $const17 	%argrw{"wr"}
 	assign		___523_value $const1 	%argrw{"wr"}
 	assign		___523_weight $const17 	%argrw{"wr"}
@@ -6012,7 +6012,7 @@ code ___main___
 	mul		$tmp601 ___523_rmd ___523_weight 	%argrw{"wrr"}
 	mul		$tmp602 $tmp601 ___527_signal 	%argrw{"wrr"}
 	add		___523_value ___523_value $tmp602 	%argrw{"wrr"}
-	assign		___613_value ___523_value 	%argrw{"wr"}
+	assign		___614_value ___523_value 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:80
 # NOISE_SELECT(vector2)
 	return	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl"} %line{80}
@@ -6021,8 +6021,8 @@ code ___main___
 	functioncall	$const26 1377 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h:273
 # NOISE_RIDGED_MULTI_FRACTAL(vector2)
-	assign		___544_p.x ___613_p.x 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{273} %argrw{"wr"}
-	assign		___544_p.y ___613_p.y 	%argrw{"wr"}
+	assign		___544_p.x ___614_p.x 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{273} %argrw{"wr"}
+	assign		___544_p.y ___614_p.y 	%argrw{"wr"}
 	assign		___544_pwr roughness 	%argrw{"wr"}
 	functioncall	$const9 1322 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h:71
@@ -6173,7 +6173,7 @@ code ___main___
 	mul		___544_pwr ___544_pwr roughness 	%argrw{"wrr"}
 	assign		$tmp635 ___545_i 	%argrw{"wr"}
 	add		___545_i ___545_i $const19 	%argrw{"wrr"}
-	assign		___613_value ___544_value 	%argrw{"wr"}
+	assign		___614_value ___544_value 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:80
 # NOISE_SELECT(vector2)
 	return	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl"} %line{80}
@@ -6182,8 +6182,8 @@ code ___main___
 	functioncall	$const28 1494 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h:259
 # NOISE_HETERO_TERRAIN(vector2)
-	assign		___505_p.x ___613_p.x 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{259} %argrw{"wr"}
-	assign		___505_p.y ___613_p.y 	%argrw{"wr"}
+	assign		___505_p.x ___614_p.x 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{259} %argrw{"wr"}
+	assign		___505_p.y ___614_p.y 	%argrw{"wr"}
 	assign		___505_pwr roughness 	%argrw{"wr"}
 	functioncall	$const9 1409 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h:71
@@ -6398,12 +6398,12 @@ code ___main___
 	mul		___508_increment $tmp681 ___505_value 	%argrw{"wrr"}
 	mul		$tmp682 ___505_rmd ___508_increment 	%argrw{"wrr"}
 	add		___505_value ___505_value $tmp682 	%argrw{"wrr"}
-	assign		___613_value ___505_value 	%argrw{"wr"}
+	assign		___614_value ___505_value 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:80
 # NOISE_SELECT(vector2)
 	return	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl"} %line{80}
 	error		$const29 	%argrw{"r"}
-	assign		___613_value $const1 	%argrw{"wr"}
+	assign		___614_value $const1 	%argrw{"wr"}
 	return
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:141
 #   if (isconnected(Color) != 0) {
@@ -6428,8 +6428,8 @@ code ___main___
 	functioncall	$const33 1511 	%line{309} %argrw{"r"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h:28
 #     return vector2(a.x + b.x, a.y + b.y);
-	add		$tmp686.x ___613_p.x $tmp687.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{28} %argrw{"wrr"}
-	add		$tmp686.y ___613_p.y $tmp687.y 	%argrw{"wrr"}
+	add		$tmp686.x ___614_p.x $tmp687.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{28} %argrw{"wrr"}
+	add		$tmp686.y ___614_p.y $tmp687.y 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:143
 #                   noise_select(p + random_vector2_offset(2.0),
 	functioncall	$const14 2015 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl"} %line{143} %argrw{"r"}
@@ -7358,8 +7358,8 @@ code ___main___
 	functioncall	$const33 2025 	%line{309} %argrw{"r"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h:28
 #     return vector2(a.x + b.x, a.y + b.y);
-	add		$tmp894.x ___613_p.x $tmp895.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{28} %argrw{"wrr"}
-	add		$tmp894.y ___613_p.y $tmp895.y 	%argrw{"wrr"}
+	add		$tmp894.x ___614_p.x $tmp895.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector2.h"} %line{28} %argrw{"wrr"}
+	add		$tmp894.y ___614_p.y $tmp895.y 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:151
 #                   noise_select(p + random_vector2_offset(3.0),
 	functioncall	$const14 2529 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl"} %line{151} %argrw{"r"}
@@ -8272,10 +8272,10 @@ code ___main___
 	return
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:142
 #     Color = color(value,
-	color		Color ___613_value $tmp685 $tmp893 	%line{142} %argrw{"wrrr"}
+	color		Color ___614_value $tmp685 $tmp893 	%line{142} %argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:160
 #   return value;
-	assign		Fac ___613_value 	%line{160} %argrw{"wr"}
+	assign		Fac ___614_value 	%line{160} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:289
 #   else if (dimensions == "3D") {
 	eq		$tmp1101 dimensions $const37 	%line{289} %argrw{"wrr"}
@@ -8285,7 +8285,7 @@ code ___main___
 	functioncall	$const5 3930 	%line{290} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:174
 #   vector3 p = co;
-	assign		___616_p p 	%line{174} %argrw{"wr"}
+	assign		___617_p p 	%line{174} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:175
 #   if (distortion != 0.0) {
 	neq		$tmp1102 Distortion $const1 	%line{175} %argrw{"wrr"}
@@ -8313,7 +8313,7 @@ code ___main___
 	point		$tmp1105 $tmp1108 $tmp1111 $tmp1114 	%line{64} %argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:176
 #     p += vector3(safe_snoise(p + random_vector3_offset(0.0)) * distortion,
-	add		$tmp1115 ___616_p $tmp1105 	%line{176} %argrw{"wrr"}
+	add		$tmp1115 ___617_p $tmp1105 	%line{176} %argrw{"wrr"}
 	functioncall	$const9 2570 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h:83
 #   vector3 precision_correction = 0.5 * vector3(float(fabs(co.x) >= 1000000.0),
@@ -8373,7 +8373,7 @@ code ___main___
 	point		$tmp1135 $tmp1138 $tmp1141 $tmp1144 	%line{64} %argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:177
 #                  safe_snoise(p + random_vector3_offset(1.0)) * distortion,
-	add		$tmp1145 ___616_p $tmp1135 	%line{177} %argrw{"wrr"}
+	add		$tmp1145 ___617_p $tmp1135 	%line{177} %argrw{"wrr"}
 	functioncall	$const9 2604 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h:83
 #   vector3 precision_correction = 0.5 * vector3(float(fabs(co.x) >= 1000000.0),
@@ -8433,7 +8433,7 @@ code ___main___
 	point		$tmp1165 $tmp1168 $tmp1171 $tmp1174 	%line{64} %argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:178
 #                  safe_snoise(p + random_vector3_offset(2.0)) * distortion);
-	add		$tmp1175 ___616_p $tmp1165 	%line{178} %argrw{"wrr"}
+	add		$tmp1175 ___617_p $tmp1165 	%line{178} %argrw{"wrr"}
 	functioncall	$const9 2638 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h:83
 #   vector3 precision_correction = 0.5 * vector3(float(fabs(co.x) >= 1000000.0),
@@ -8475,7 +8475,7 @@ code ___main___
 	point		$tmp1103 $tmp1133 $tmp1163 $tmp1193 	%line{176} %argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:178
 #                  safe_snoise(p + random_vector3_offset(2.0)) * distortion);
-	add		___616_p ___616_p $tmp1103 	%line{178} %argrw{"wrr"}
+	add		___617_p ___617_p $tmp1103 	%line{178} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:181
 #   float value = noise_select(p, detail, roughness, lacunarity, offset, gain, type, use_normalize);
 	functioncall	$const14 3061 	%line{181} %argrw{"r"}
@@ -8486,7 +8486,7 @@ code ___main___
 	functioncall	$const16 2711 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h:253
 # NOISE_MULTI_FRACTAL(vector3)
-	assign		___493_p ___616_p 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{253} %argrw{"wr"}
+	assign		___493_p ___617_p 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{253} %argrw{"wr"}
 	assign		___493_value $const17 	%argrw{"wr"}
 	assign		___493_pwr $const17 	%argrw{"wr"}
 	for		$tmp1197 2650 2653 2679 2681 	%argrw{"r"}
@@ -8579,7 +8579,7 @@ code ___main___
 	mul		$tmp1240 $tmp1221 $tmp1222 	%line{253} %argrw{"wrr"}
 	add		$tmp1241 $tmp1240 $const17 	%argrw{"wrr"}
 	mul		___493_value ___493_value $tmp1241 	%argrw{"wrr"}
-	assign		___616_value ___493_value 	%argrw{"wr"}
+	assign		___617_value ___493_value 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:81
 # NOISE_SELECT(vector3)
 	return	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl"} %line{81}
@@ -8588,7 +8588,7 @@ code ___main___
 	functioncall	$const21 2799 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h:246
 # NOISE_FBM(vector3)
-	assign		___475_p ___616_p 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{246} %argrw{"wr"}
+	assign		___475_p ___617_p 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{246} %argrw{"wr"}
 	assign		___475_fscale $const17 	%argrw{"wr"}
 	assign		___475_amp $const17 	%argrw{"wr"}
 	assign		___475_maxamp $const1 	%argrw{"wr"}
@@ -8691,14 +8691,14 @@ code ___main___
 	add		$tmp1291 ___475_maxamp ___475_amp 	%argrw{"wrr"}
 	div		$tmp1292 $tmp1290 $tmp1291 	%argrw{"wrr"}
 	add		$tmp1293 $tmp1292 $const10 	%argrw{"wrr"}
-	mix		___616_value $tmp1289 $tmp1293 ___475_rmd 	%argrw{"wrrr"}
-	mix		___616_value ___475_sum ___478_sum2 ___475_rmd 	%argrw{"wrrr"}
+	mix		___617_value $tmp1289 $tmp1293 ___475_rmd 	%argrw{"wrrr"}
+	mix		___617_value ___475_sum ___478_sum2 ___475_rmd 	%argrw{"wrrr"}
 	return
 	if		use_normalize 2797 2798 	%argrw{"r"}
 	mul		$tmp1294 $const10 ___475_sum 	%argrw{"wrr"}
 	div		$tmp1295 $tmp1294 ___475_maxamp 	%argrw{"wrr"}
-	add		___616_value $tmp1295 $const10 	%argrw{"wrr"}
-	assign		___616_value ___475_sum 	%argrw{"wr"}
+	add		___617_value $tmp1295 $const10 	%argrw{"wrr"}
+	assign		___617_value ___475_sum 	%argrw{"wr"}
 	return
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:81
 # NOISE_SELECT(vector3)
@@ -8708,7 +8708,7 @@ code ___main___
 	functioncall	$const23 2890 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h:267
 # NOISE_HYBRID_MULTI_FRACTAL(vector3)
-	assign		___529_p ___616_p 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{267} %argrw{"wr"}
+	assign		___529_p ___617_p 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{267} %argrw{"wr"}
 	assign		___529_pwr $const17 	%argrw{"wr"}
 	assign		___529_value $const1 	%argrw{"wr"}
 	assign		___529_weight $const17 	%argrw{"wr"}
@@ -8822,7 +8822,7 @@ code ___main___
 	mul		$tmp1351 ___529_rmd ___529_weight 	%argrw{"wrr"}
 	mul		$tmp1352 $tmp1351 ___533_signal 	%argrw{"wrr"}
 	add		___529_value ___529_value $tmp1352 	%argrw{"wrr"}
-	assign		___616_value ___529_value 	%argrw{"wr"}
+	assign		___617_value ___529_value 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:81
 # NOISE_SELECT(vector3)
 	return	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl"} %line{81}
@@ -8831,7 +8831,7 @@ code ___main___
 	functioncall	$const26 2963 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h:274
 # NOISE_RIDGED_MULTI_FRACTAL(vector3)
-	assign		___547_p ___616_p 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{274} %argrw{"wr"}
+	assign		___547_p ___617_p 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{274} %argrw{"wr"}
 	assign		___547_pwr roughness 	%argrw{"wr"}
 	functioncall	$const9 2917 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h:83
@@ -8931,7 +8931,7 @@ code ___main___
 	mul		___547_pwr ___547_pwr roughness 	%argrw{"wrr"}
 	assign		$tmp1398 ___548_i 	%argrw{"wr"}
 	add		___548_i ___548_i $const19 	%argrw{"wrr"}
-	assign		___616_value ___547_value 	%argrw{"wr"}
+	assign		___617_value ___547_value 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:81
 # NOISE_SELECT(vector3)
 	return	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl"} %line{81}
@@ -8940,7 +8940,7 @@ code ___main___
 	functioncall	$const28 3057 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h:260
 # NOISE_HETERO_TERRAIN(vector3)
-	assign		___509_p ___616_p 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{260} %argrw{"wr"}
+	assign		___509_p ___617_p 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{260} %argrw{"wr"}
 	assign		___509_pwr roughness 	%argrw{"wr"}
 	functioncall	$const9 2990 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h:83
@@ -9071,12 +9071,12 @@ code ___main___
 	mul		___512_increment $tmp1463 ___509_value 	%argrw{"wrr"}
 	mul		$tmp1464 ___509_rmd ___512_increment 	%argrw{"wrr"}
 	add		___509_value ___509_value $tmp1464 	%argrw{"wrr"}
-	assign		___616_value ___509_value 	%argrw{"wr"}
+	assign		___617_value ___509_value 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:81
 # NOISE_SELECT(vector3)
 	return	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl"} %line{81}
 	error		$const29 	%argrw{"r"}
-	assign		___616_value $const1 	%argrw{"wr"}
+	assign		___617_value $const1 	%argrw{"wr"}
 	return
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:182
 #   if (isconnected(Color) != 0) {
@@ -9106,7 +9106,7 @@ code ___main___
 	point		$tmp1468 $tmp1471 $tmp1474 $tmp1477 	%line{64} %argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:184
 #                   noise_select(p + random_vector3_offset(3.0),
-	add		$tmp1478 ___616_p $tmp1468 	%line{184} %argrw{"wrr"}
+	add		$tmp1478 ___617_p $tmp1468 	%line{184} %argrw{"wrr"}
 	functioncall	$const14 3496 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:81
 # NOISE_SELECT(vector3)
@@ -9730,7 +9730,7 @@ code ___main___
 	point		$tmp1751 $tmp1754 $tmp1757 $tmp1760 	%line{64} %argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:192
 #                   noise_select(p + random_vector3_offset(4.0),
-	add		$tmp1761 ___616_p $tmp1751 	%line{192} %argrw{"wrr"}
+	add		$tmp1761 ___617_p $tmp1751 	%line{192} %argrw{"wrr"}
 	functioncall	$const14 3928 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:81
 # NOISE_SELECT(vector3)
@@ -10333,10 +10333,10 @@ code ___main___
 	return
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:183
 #     Color = color(value,
-	color		Color ___616_value $tmp1467 $tmp1750 	%line{183} %argrw{"wrrr"}
+	color		Color ___617_value $tmp1467 $tmp1750 	%line{183} %argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:201
 #   return value;
-	assign		Fac ___616_value 	%line{201} %argrw{"wr"}
+	assign		Fac ___617_value 	%line{201} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:293
 #   else if (dimensions == "4D") {
 	eq		$tmp2033 dimensions $const41 	%line{293} %argrw{"wrr"}
@@ -10350,10 +10350,10 @@ code ___main___
 	functioncall	$const5 6494 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:215
 #   vector4 p = co;
-	assign		___619_p.x $tmp2034.x 	%line{215} %argrw{"wr"}
-	assign		___619_p.y $tmp2034.y 	%argrw{"wr"}
-	assign		___619_p.z $tmp2034.z 	%argrw{"wr"}
-	assign		___619_p.w $tmp2034.w 	%argrw{"wr"}
+	assign		___620_p.x $tmp2034.x 	%line{215} %argrw{"wr"}
+	assign		___620_p.y $tmp2034.y 	%argrw{"wr"}
+	assign		___620_p.z $tmp2034.z 	%argrw{"wr"}
+	assign		___620_p.w $tmp2034.w 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:216
 #   if (distortion != 0.0) {
 	neq		$tmp2035 Distortion $const1 	%line{216} %argrw{"wrr"}
@@ -10386,10 +10386,10 @@ code ___main___
 	functioncall	$const33 3961 	%line{309} %argrw{"r"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector4.h:31
 #     return vector4(a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w);
-	add		$tmp2038.x ___619_p.x $tmp2039.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector4.h"} %line{31} %argrw{"wrr"}
-	add		$tmp2038.y ___619_p.y $tmp2039.y 	%argrw{"wrr"}
-	add		$tmp2038.z ___619_p.z $tmp2039.z 	%argrw{"wrr"}
-	add		$tmp2038.w ___619_p.w $tmp2039.w 	%argrw{"wrr"}
+	add		$tmp2038.x ___620_p.x $tmp2039.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector4.h"} %line{31} %argrw{"wrr"}
+	add		$tmp2038.y ___620_p.y $tmp2039.y 	%argrw{"wrr"}
+	add		$tmp2038.z ___620_p.z $tmp2039.z 	%argrw{"wrr"}
+	add		$tmp2038.w ___620_p.w $tmp2039.w 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:217
 #     p += vector4(safe_snoise(p + random_vector4_offset(0.0)) * distortion,
 	functioncall	$const9 4005 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl"} %line{217} %argrw{"r"}
@@ -10501,10 +10501,10 @@ code ___main___
 	functioncall	$const33 4024 	%line{309} %argrw{"r"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector4.h:31
 #     return vector4(a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w);
-	add		$tmp2066.x ___619_p.x $tmp2067.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector4.h"} %line{31} %argrw{"wrr"}
-	add		$tmp2066.y ___619_p.y $tmp2067.y 	%argrw{"wrr"}
-	add		$tmp2066.z ___619_p.z $tmp2067.z 	%argrw{"wrr"}
-	add		$tmp2066.w ___619_p.w $tmp2067.w 	%argrw{"wrr"}
+	add		$tmp2066.x ___620_p.x $tmp2067.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector4.h"} %line{31} %argrw{"wrr"}
+	add		$tmp2066.y ___620_p.y $tmp2067.y 	%argrw{"wrr"}
+	add		$tmp2066.z ___620_p.z $tmp2067.z 	%argrw{"wrr"}
+	add		$tmp2066.w ___620_p.w $tmp2067.w 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:218
 #                  safe_snoise(p + random_vector4_offset(1.0)) * distortion,
 	functioncall	$const9 4068 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl"} %line{218} %argrw{"r"}
@@ -10616,10 +10616,10 @@ code ___main___
 	functioncall	$const33 4087 	%line{309} %argrw{"r"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector4.h:31
 #     return vector4(a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w);
-	add		$tmp2094.x ___619_p.x $tmp2095.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector4.h"} %line{31} %argrw{"wrr"}
-	add		$tmp2094.y ___619_p.y $tmp2095.y 	%argrw{"wrr"}
-	add		$tmp2094.z ___619_p.z $tmp2095.z 	%argrw{"wrr"}
-	add		$tmp2094.w ___619_p.w $tmp2095.w 	%argrw{"wrr"}
+	add		$tmp2094.x ___620_p.x $tmp2095.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector4.h"} %line{31} %argrw{"wrr"}
+	add		$tmp2094.y ___620_p.y $tmp2095.y 	%argrw{"wrr"}
+	add		$tmp2094.z ___620_p.z $tmp2095.z 	%argrw{"wrr"}
+	add		$tmp2094.w ___620_p.w $tmp2095.w 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:219
 #                  safe_snoise(p + random_vector4_offset(2.0)) * distortion,
 	functioncall	$const9 4131 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl"} %line{219} %argrw{"r"}
@@ -10731,10 +10731,10 @@ code ___main___
 	functioncall	$const33 4150 	%line{309} %argrw{"r"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector4.h:31
 #     return vector4(a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w);
-	add		$tmp2122.x ___619_p.x $tmp2123.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector4.h"} %line{31} %argrw{"wrr"}
-	add		$tmp2122.y ___619_p.y $tmp2123.y 	%argrw{"wrr"}
-	add		$tmp2122.z ___619_p.z $tmp2123.z 	%argrw{"wrr"}
-	add		$tmp2122.w ___619_p.w $tmp2123.w 	%argrw{"wrr"}
+	add		$tmp2122.x ___620_p.x $tmp2123.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector4.h"} %line{31} %argrw{"wrr"}
+	add		$tmp2122.y ___620_p.y $tmp2123.y 	%argrw{"wrr"}
+	add		$tmp2122.z ___620_p.z $tmp2123.z 	%argrw{"wrr"}
+	add		$tmp2122.w ___620_p.w $tmp2123.w 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:220
 #                  safe_snoise(p + random_vector4_offset(3.0)) * distortion);
 	functioncall	$const9 4194 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl"} %line{220} %argrw{"r"}
@@ -10823,10 +10823,10 @@ code ___main___
 	functioncall	$const33 4200 	%line{309} %argrw{"r"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector4.h:31
 #     return vector4(a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w);
-	add		___619_p.x ___619_p.x $tmp2036.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector4.h"} %line{31} %argrw{"wrr"}
-	add		___619_p.y ___619_p.y $tmp2036.y 	%argrw{"wrr"}
-	add		___619_p.z ___619_p.z $tmp2036.z 	%argrw{"wrr"}
-	add		___619_p.w ___619_p.w $tmp2036.w 	%argrw{"wrr"}
+	add		___620_p.x ___620_p.x $tmp2036.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector4.h"} %line{31} %argrw{"wrr"}
+	add		___620_p.y ___620_p.y $tmp2036.y 	%argrw{"wrr"}
+	add		___620_p.z ___620_p.z $tmp2036.z 	%argrw{"wrr"}
+	add		___620_p.w ___620_p.w $tmp2036.w 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:223
 #   float value = noise_select(p, detail, roughness, lacunarity, offset, gain, type, use_normalize);
 	functioncall	$const14 4951 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl"} %line{223} %argrw{"r"}
@@ -10837,10 +10837,10 @@ code ___main___
 	functioncall	$const16 4328 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h:254
 # NOISE_MULTI_FRACTAL(vector4)
-	assign		___497_p.x ___619_p.x 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{254} %argrw{"wr"}
-	assign		___497_p.y ___619_p.y 	%argrw{"wr"}
-	assign		___497_p.z ___619_p.z 	%argrw{"wr"}
-	assign		___497_p.w ___619_p.w 	%argrw{"wr"}
+	assign		___497_p.x ___620_p.x 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{254} %argrw{"wr"}
+	assign		___497_p.y ___620_p.y 	%argrw{"wr"}
+	assign		___497_p.z ___620_p.z 	%argrw{"wr"}
+	assign		___497_p.w ___620_p.w 	%argrw{"wr"}
 	assign		___497_value $const17 	%argrw{"wr"}
 	assign		___497_pwr $const17 	%argrw{"wr"}
 	for		$tmp2152 4212 4215 4273 4275 	%argrw{"r"}
@@ -11042,7 +11042,7 @@ code ___main___
 	mul		$tmp2196 $tmp2177 $tmp2178 	%line{254} %argrw{"wrr"}
 	add		$tmp2197 $tmp2196 $const17 	%argrw{"wrr"}
 	mul		___497_value ___497_value $tmp2197 	%argrw{"wrr"}
-	assign		___619_value ___497_value 	%argrw{"wr"}
+	assign		___620_value ___497_value 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:82
 # NOISE_SELECT(vector4)
 	return	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl"} %line{82}
@@ -11051,10 +11051,10 @@ code ___main___
 	functioncall	$const21 4483 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h:247
 # NOISE_FBM(vector4)
-	assign		___480_p.x ___619_p.x 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{247} %argrw{"wr"}
-	assign		___480_p.y ___619_p.y 	%argrw{"wr"}
-	assign		___480_p.z ___619_p.z 	%argrw{"wr"}
-	assign		___480_p.w ___619_p.w 	%argrw{"wr"}
+	assign		___480_p.x ___620_p.x 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{247} %argrw{"wr"}
+	assign		___480_p.y ___620_p.y 	%argrw{"wr"}
+	assign		___480_p.z ___620_p.z 	%argrw{"wr"}
+	assign		___480_p.w ___620_p.w 	%argrw{"wr"}
 	assign		___480_fscale $const17 	%argrw{"wr"}
 	assign		___480_amp $const17 	%argrw{"wr"}
 	assign		___480_maxamp $const1 	%argrw{"wr"}
@@ -11285,14 +11285,14 @@ code ___main___
 	add		$tmp2249 ___480_maxamp ___480_amp 	%argrw{"wrr"}
 	div		$tmp2250 $tmp2248 $tmp2249 	%argrw{"wrr"}
 	add		$tmp2251 $tmp2250 $const10 	%argrw{"wrr"}
-	mix		___619_value $tmp2247 $tmp2251 ___480_rmd 	%argrw{"wrrr"}
-	mix		___619_value ___480_sum ___483_sum2 ___480_rmd 	%argrw{"wrrr"}
+	mix		___620_value $tmp2247 $tmp2251 ___480_rmd 	%argrw{"wrrr"}
+	mix		___620_value ___480_sum ___483_sum2 ___480_rmd 	%argrw{"wrrr"}
 	return
 	if		use_normalize 4481 4482 	%argrw{"r"}
 	mul		$tmp2252 $const10 ___480_sum 	%argrw{"wrr"}
 	div		$tmp2253 $tmp2252 ___480_maxamp 	%argrw{"wrr"}
-	add		___619_value $tmp2253 $const10 	%argrw{"wrr"}
-	assign		___619_value ___480_sum 	%argrw{"wr"}
+	add		___620_value $tmp2253 $const10 	%argrw{"wrr"}
+	assign		___620_value ___480_sum 	%argrw{"wr"}
 	return
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:82
 # NOISE_SELECT(vector4)
@@ -11302,10 +11302,10 @@ code ___main___
 	functioncall	$const23 4632 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h:268
 # NOISE_HYBRID_MULTI_FRACTAL(vector4)
-	assign		___535_p.x ___619_p.x 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{268} %argrw{"wr"}
-	assign		___535_p.y ___619_p.y 	%argrw{"wr"}
-	assign		___535_p.z ___619_p.z 	%argrw{"wr"}
-	assign		___535_p.w ___619_p.w 	%argrw{"wr"}
+	assign		___535_p.x ___620_p.x 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{268} %argrw{"wr"}
+	assign		___535_p.y ___620_p.y 	%argrw{"wr"}
+	assign		___535_p.z ___620_p.z 	%argrw{"wr"}
+	assign		___535_p.w ___620_p.w 	%argrw{"wr"}
 	assign		___535_pwr $const17 	%argrw{"wr"}
 	assign		___535_value $const1 	%argrw{"wr"}
 	assign		___535_weight $const17 	%argrw{"wr"}
@@ -11528,7 +11528,7 @@ code ___main___
 	mul		$tmp2310 ___535_rmd ___535_weight 	%argrw{"wrr"}
 	mul		$tmp2311 $tmp2310 ___539_signal 	%argrw{"wrr"}
 	add		___535_value ___535_value $tmp2311 	%argrw{"wrr"}
-	assign		___619_value ___535_value 	%argrw{"wr"}
+	assign		___620_value ___535_value 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:82
 # NOISE_SELECT(vector4)
 	return	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl"} %line{82}
@@ -11537,10 +11537,10 @@ code ___main___
 	functioncall	$const26 4763 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h:275
 # NOISE_RIDGED_MULTI_FRACTAL(vector4)
-	assign		___550_p.x ___619_p.x 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{275} %argrw{"wr"}
-	assign		___550_p.y ___619_p.y 	%argrw{"wr"}
-	assign		___550_p.z ___619_p.z 	%argrw{"wr"}
-	assign		___550_p.w ___619_p.w 	%argrw{"wr"}
+	assign		___550_p.x ___620_p.x 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{275} %argrw{"wr"}
+	assign		___550_p.y ___620_p.y 	%argrw{"wr"}
+	assign		___550_p.z ___620_p.z 	%argrw{"wr"}
+	assign		___550_p.w ___620_p.w 	%argrw{"wr"}
 	assign		___550_pwr roughness 	%argrw{"wr"}
 	functioncall	$const9 4685 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h:96
@@ -11749,7 +11749,7 @@ code ___main___
 	mul		___550_pwr ___550_pwr roughness 	%argrw{"wrr"}
 	assign		$tmp2358 ___551_i 	%argrw{"wr"}
 	add		___551_i ___551_i $const19 	%argrw{"wrr"}
-	assign		___619_value ___550_value 	%argrw{"wr"}
+	assign		___620_value ___550_value 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:82
 # NOISE_SELECT(vector4)
 	return	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl"} %line{82}
@@ -11758,10 +11758,10 @@ code ___main___
 	functioncall	$const28 4947 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h:261
 # NOISE_HETERO_TERRAIN(vector4)
-	assign		___513_p.x ___619_p.x 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{261} %argrw{"wr"}
-	assign		___513_p.y ___619_p.y 	%argrw{"wr"}
-	assign		___513_p.z ___619_p.z 	%argrw{"wr"}
-	assign		___513_p.w ___619_p.w 	%argrw{"wr"}
+	assign		___513_p.x ___620_p.x 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h"} %line{261} %argrw{"wr"}
+	assign		___513_p.y ___620_p.y 	%argrw{"wr"}
+	assign		___513_p.z ___620_p.z 	%argrw{"wr"}
+	assign		___513_p.w ___620_p.w 	%argrw{"wr"}
 	assign		___513_pwr roughness 	%argrw{"wr"}
 	functioncall	$const9 4816 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h:96
@@ -12065,12 +12065,12 @@ code ___main___
 	mul		___516_increment $tmp2425 ___513_value 	%argrw{"wrr"}
 	mul		$tmp2426 ___513_rmd ___516_increment 	%argrw{"wrr"}
 	add		___513_value ___513_value $tmp2426 	%argrw{"wrr"}
-	assign		___619_value ___513_value 	%argrw{"wr"}
+	assign		___620_value ___513_value 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:82
 # NOISE_SELECT(vector4)
 	return	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl"} %line{82}
 	error		$const29 	%argrw{"r"}
-	assign		___619_value $const1 	%argrw{"wr"}
+	assign		___620_value $const1 	%argrw{"wr"}
 	return
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:224
 #   if (isconnected(Color) != 0) {
@@ -12105,10 +12105,10 @@ code ___main___
 	functioncall	$const33 4972 	%line{309} %argrw{"r"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector4.h:31
 #     return vector4(a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w);
-	add		$tmp2430.x ___619_p.x $tmp2431.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector4.h"} %line{31} %argrw{"wrr"}
-	add		$tmp2430.y ___619_p.y $tmp2431.y 	%argrw{"wrr"}
-	add		$tmp2430.z ___619_p.z $tmp2431.z 	%argrw{"wrr"}
-	add		$tmp2430.w ___619_p.w $tmp2431.w 	%argrw{"wrr"}
+	add		$tmp2430.x ___620_p.x $tmp2431.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector4.h"} %line{31} %argrw{"wrr"}
+	add		$tmp2430.y ___620_p.y $tmp2431.y 	%argrw{"wrr"}
+	add		$tmp2430.z ___620_p.z $tmp2431.z 	%argrw{"wrr"}
+	add		$tmp2430.w ___620_p.w $tmp2431.w 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:226
 #                   noise_select(p + random_vector4_offset(4.0),
 	functioncall	$const14 5723 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl"} %line{226} %argrw{"r"}
@@ -13382,10 +13382,10 @@ code ___main___
 	functioncall	$const33 5741 	%line{309} %argrw{"r"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector4.h:31
 #     return vector4(a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w);
-	add		$tmp2719.x ___619_p.x $tmp2720.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector4.h"} %line{31} %argrw{"wrr"}
-	add		$tmp2719.y ___619_p.y $tmp2720.y 	%argrw{"wrr"}
-	add		$tmp2719.z ___619_p.z $tmp2720.z 	%argrw{"wrr"}
-	add		$tmp2719.w ___619_p.w $tmp2720.w 	%argrw{"wrr"}
+	add		$tmp2719.x ___620_p.x $tmp2720.x 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders\\vector4.h"} %line{31} %argrw{"wrr"}
+	add		$tmp2719.y ___620_p.y $tmp2720.y 	%argrw{"wrr"}
+	add		$tmp2719.z ___620_p.z $tmp2720.z 	%argrw{"wrr"}
+	add		$tmp2719.w ___620_p.w $tmp2720.w 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:234
 #                   noise_select(p + random_vector4_offset(5.0),
 	functioncall	$const14 6492 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl"} %line{234} %argrw{"r"}
@@ -14633,10 +14633,10 @@ code ___main___
 	return
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:225
 #     Color = color(value,
-	color		Color ___619_value $tmp2429 $tmp2718 	%line{225} %argrw{"wrrr"}
+	color		Color ___620_value $tmp2429 $tmp2718 	%line{225} %argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:243
 #   return value;
-	assign		Fac ___619_value 	%line{243} %argrw{"wr"}
+	assign		Fac ___620_value 	%line{243} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_noise_texture.osl:306
 #     error("Unknown Dimension!");
 	error		$const44 	%line{306} %argrw{"r"}

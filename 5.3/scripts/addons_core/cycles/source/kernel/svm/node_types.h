@@ -617,6 +617,9 @@ struct SVMNodeTexVoronoi {
   SVMInputFloat smoothness;
   SVMInputFloat exponent;
   SVMInputFloat randomness;
+  SVMInputFloat3 period;
+  SVMInputFloat period_w;
+  uint8_t tiling;
   uint8_t normalize;
   SVMStackOffset coord;
   SVMStackOffset distance_offset;
@@ -624,7 +627,7 @@ struct SVMNodeTexVoronoi {
   SVMStackOffset position_offset;
   SVMStackOffset w_out_offset;
   SVMStackOffset radius_offset;
-  uint8_t _pad[1];
+  uint8_t _pad[4];
 };
 static_assert(alignof(SVMNodeTexVoronoi) <= alignof(uint));
 static_assert(sizeof(SVMNodeTexVoronoi) % sizeof(uint) == 0);
@@ -1162,6 +1165,9 @@ struct SVMNodePrincipledBsdfData {
   SVMInputFloat specular_ior_level;
   SVMInputFloat anisotropic;
   SVMInputFloat anisotropic_rotation;
+  /* Transmission. */
+  SVMInputFloat transmission_dispersion_scale;
+  SVMInputFloat transmission_dispersion_abbe_number;
   /* Emission. */
   SVMInputFloat3 emission_color;
   SVMInputFloat emission_strength;
@@ -1347,5 +1353,23 @@ struct SVMNodeParallaxOcclusion {
 };
 static_assert(alignof(SVMNodeParallaxOcclusion) <= alignof(uint));
 static_assert(sizeof(SVMNodeParallaxOcclusion) % sizeof(uint) == 0);
+
+/* NODE_BILLBOARD_DISPLACEMENT */
+struct SVMNodeBillboardDisplacement {
+  uint8_t mode;
+  uint8_t axis;
+  SVMStackOffset position_offset;
+  SVMStackOffset pivot_offset;
+  SVMStackOffset displacement_offset;
+  SVMStackOffset position_out_offset;
+  SVMStackOffset rotation_offset;
+  SVMStackOffset normal_offset;
+  SVMStackOffset normal_out_offset;
+  uint8_t _pad[3];
+  SVMInputFloat3 up;
+  SVMInputFloat factor;
+};
+static_assert(alignof(SVMNodeBillboardDisplacement) <= alignof(uint));
+static_assert(sizeof(SVMNodeBillboardDisplacement) % sizeof(uint) == 0);
 
 CCL_NAMESPACE_END

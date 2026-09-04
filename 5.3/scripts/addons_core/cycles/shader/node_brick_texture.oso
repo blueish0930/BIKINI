@@ -21,19 +21,19 @@ param	float	RowHeight	0.25		%read{11,65} %write{2147483647,-1}
 oparam	float	Fac	0		%read{80,86} %write{70,78}
 oparam	color	Color	0.200000003 0.200000003 0.200000003		%read{2147483647,-1} %write{86,86}
 global	point	P	%read{0,0} %write{2147483647,-1}
-local	int	___370_nn	%read{56,56} %write{55,55}
-local	int	___370_n	%read{48,53} %write{47,49}
-local	int	___371_bricknum	%read{35,43} %write{32,32}
-local	int	___371_rownum	%read{19,42} %write{13,13}
-local	float	___371_offset	%read{29,34} %write{8,27}
-local	float	___371_brick_width	%read{23,64} %write{9,23}
-local	float	___371_x	%read{63,64} %write{37,37}
-local	float	___371_y	%read{63,65} %write{41,41}
-local	float	___371_min_dist	%read{68,78} %write{67,77}
+local	int	___371_nn	%read{56,56} %write{55,55}
+local	int	___371_n	%read{48,53} %write{47,49}
+local	int	___372_bricknum	%read{35,43} %write{32,32}
+local	int	___372_rownum	%read{19,42} %write{13,13}
+local	float	___372_offset	%read{29,34} %write{8,27}
+local	float	___372_brick_width	%read{23,64} %write{9,23}
+local	float	___372_x	%read{63,64} %write{37,37}
+local	float	___372_y	%read{63,65} %write{41,41}
+local	float	___372_min_dist	%read{68,78} %write{67,77}
 local	point	p	%read{3,6} %write{1,3}
 local	float	tint	%read{82,84} %write{4,62}
 local	color	Col	%read{86,86} %write{5,85}
-local	float	___376_facm	%read{83,83} %write{82,82}
+local	float	___377_facm	%read{83,83} %write{82,82}
 const	float	$const1	0		%read{4,78} %write{2147483647,-1}
 temp	point	$tmp1	%read{10,38} %write{6,6}
 const	string	$const2	"brick"		%read{7,7} %write{2147483647,-1}
@@ -122,16 +122,16 @@ code ___main___
 	functioncall	$const2 80 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_brick_texture.osl:31
 #   float offset = 0.0;
-	assign		___371_offset $const1 	%line{31} %argrw{"wr"}
+	assign		___372_offset $const1 	%line{31} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_brick_texture.osl:32
 #   float brick_width = BrickWidth;
-	assign		___371_brick_width BrickWidth 	%line{32} %argrw{"wr"}
+	assign		___372_brick_width BrickWidth 	%line{32} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_brick_texture.osl:35
 #   rownum = (int)floor(p[1] / row_height);
 	compref		$tmp3 $tmp1 $const3 	%line{35} %argrw{"wrr"}
 	div		$tmp4 $tmp3 RowHeight 	%argrw{"wrr"}
 	floor		$tmp2 $tmp4 	%argrw{"wr"}
-	assign		___371_rownum $tmp2 	%argrw{"wr"}
+	assign		___372_rownum $tmp2 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_brick_texture.osl:37
 #   if (offset_frequency && squash_frequency) {
 	neq		$tmp5 offset_frequency $const4 	%line{37} %argrw{"wrr"}
@@ -141,62 +141,62 @@ code ___main___
 	if		$tmp5 28 28 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_brick_texture.osl:38
 #     brick_width *= (rownum % squash_frequency) ? 1.0 : squash_amount;           /* squash */
-	mod		$tmp8 ___371_rownum squash_frequency 	%line{38} %argrw{"wrr"}
+	mod		$tmp8 ___372_rownum squash_frequency 	%line{38} %argrw{"wrr"}
 	if		$tmp8 22 23 	%argrw{"r"}
 	assign		$tmp7 $const5 	%argrw{"wr"}
 	assign		$tmp7 squash 	%argrw{"wr"}
-	mul		___371_brick_width ___371_brick_width $tmp7 	%argrw{"wrr"}
+	mul		___372_brick_width ___372_brick_width $tmp7 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_brick_texture.osl:39
 #     offset = (rownum % offset_frequency) ? 0.0 : (brick_width * offset_amount); /* offset */
-	mod		$tmp9 ___371_rownum offset_frequency 	%line{39} %argrw{"wrr"}
+	mod		$tmp9 ___372_rownum offset_frequency 	%line{39} %argrw{"wrr"}
 	if		$tmp9 27 28 	%argrw{"r"}
-	assign		___371_offset $const1 	%argrw{"wr"}
-	mul		___371_offset ___371_brick_width offset 	%argrw{"wrr"}
+	assign		___372_offset $const1 	%argrw{"wr"}
+	mul		___372_offset ___372_brick_width offset 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_brick_texture.osl:42
 #   bricknum = (int)floor((p[0] + offset) / brick_width);
 	compref		$tmp11 $tmp1 $const4 	%line{42} %argrw{"wrr"}
-	add		$tmp12 $tmp11 ___371_offset 	%argrw{"wrr"}
-	div		$tmp13 $tmp12 ___371_brick_width 	%argrw{"wrr"}
+	add		$tmp12 $tmp11 ___372_offset 	%argrw{"wrr"}
+	div		$tmp13 $tmp12 ___372_brick_width 	%argrw{"wrr"}
 	floor		$tmp10 $tmp13 	%argrw{"wr"}
-	assign		___371_bricknum $tmp10 	%argrw{"wr"}
+	assign		___372_bricknum $tmp10 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_brick_texture.osl:44
 #   x = (p[0] + offset) - brick_width * bricknum;
 	compref		$tmp14 $tmp1 $const4 	%line{44} %argrw{"wrr"}
-	add		$tmp15 $tmp14 ___371_offset 	%argrw{"wrr"}
-	assign		$tmp17 ___371_bricknum 	%argrw{"wr"}
-	mul		$tmp16 ___371_brick_width $tmp17 	%argrw{"wrr"}
-	sub		___371_x $tmp15 $tmp16 	%argrw{"wrr"}
+	add		$tmp15 $tmp14 ___372_offset 	%argrw{"wrr"}
+	assign		$tmp17 ___372_bricknum 	%argrw{"wr"}
+	mul		$tmp16 ___372_brick_width $tmp17 	%argrw{"wrr"}
+	sub		___372_x $tmp15 $tmp16 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_brick_texture.osl:45
 #   y = p[1] - row_height * rownum;
 	compref		$tmp18 $tmp1 $const3 	%line{45} %argrw{"wrr"}
-	assign		$tmp20 ___371_rownum 	%argrw{"wr"}
+	assign		$tmp20 ___372_rownum 	%argrw{"wr"}
 	mul		$tmp19 RowHeight $tmp20 	%argrw{"wrr"}
-	sub		___371_y $tmp18 $tmp19 	%argrw{"wrr"}
+	sub		___372_y $tmp18 $tmp19 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_brick_texture.osl:47
 #   tint = clamp((brick_noise((rownum << 16) + (bricknum & 65535)) + bias), 0.0, 1.0);
-	shl		$tmp22 ___371_rownum $const6 	%line{47} %argrw{"wrr"}
-	bitand		$tmp23 ___371_bricknum $const7 	%argrw{"wrr"}
+	shl		$tmp22 ___372_rownum $const6 	%line{47} %argrw{"wrr"}
+	bitand		$tmp23 ___372_bricknum $const7 	%argrw{"wrr"}
 	add		$tmp24 $tmp22 $tmp23 	%argrw{"wrr"}
 	functioncall	$const8 59 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_brick_texture.osl:12
 #   int n = (ns + 1013) & 2147483647;
 	add		$tmp25 $tmp24 $const9 	%line{12} %argrw{"wrr"}
-	bitand		___370_n $tmp25 $const10 	%argrw{"wrr"}
+	bitand		___371_n $tmp25 $const10 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_brick_texture.osl:13
 #   n = (n >> 13) ^ n;
-	shr		$tmp26 ___370_n $const11 	%line{13} %argrw{"wrr"}
-	xor		___370_n $tmp26 ___370_n 	%argrw{"wrr"}
+	shr		$tmp26 ___371_n $const11 	%line{13} %argrw{"wrr"}
+	xor		___371_n $tmp26 ___371_n 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_brick_texture.osl:14
 #   nn = (n * (n * n * 60493 + 19990303) + 1376312589) & 2147483647;
-	mul		$tmp27 ___370_n ___370_n 	%line{14} %argrw{"wrr"}
+	mul		$tmp27 ___371_n ___371_n 	%line{14} %argrw{"wrr"}
 	mul		$tmp28 $tmp27 $const12 	%argrw{"wrr"}
 	add		$tmp29 $tmp28 $const13 	%argrw{"wrr"}
-	mul		$tmp30 ___370_n $tmp29 	%argrw{"wrr"}
+	mul		$tmp30 ___371_n $tmp29 	%argrw{"wrr"}
 	add		$tmp31 $tmp30 $const14 	%argrw{"wrr"}
-	bitand		___370_nn $tmp31 $const10 	%argrw{"wrr"}
+	bitand		___371_nn $tmp31 $const10 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_brick_texture.osl:15
 #   return 0.5 * ((float)nn / 1073741824.0);
-	assign		$tmp32 ___370_nn 	%line{15} %argrw{"wr"}
+	assign		$tmp32 ___371_nn 	%line{15} %argrw{"wr"}
 	div		$tmp33 $tmp32 $const16 	%argrw{"wrr"}
 	mul		$tmp21 $const15 $tmp33 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_brick_texture.osl:47
@@ -209,14 +209,14 @@ code ___main___
 	max		tint $tmp35 $const1 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_brick_texture.osl:49
 #   float min_dist = min(min(x, y), min(brick_width - x, row_height - y));
-	min		$tmp36 ___371_x ___371_y 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_brick_texture.osl"} %line{49} %argrw{"wrr"}
-	sub		$tmp38 ___371_brick_width ___371_x 	%argrw{"wrr"}
-	sub		$tmp39 RowHeight ___371_y 	%argrw{"wrr"}
+	min		$tmp36 ___372_x ___372_y 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_brick_texture.osl"} %line{49} %argrw{"wrr"}
+	sub		$tmp38 ___372_brick_width ___372_x 	%argrw{"wrr"}
+	sub		$tmp39 RowHeight ___372_y 	%argrw{"wrr"}
 	min		$tmp37 $tmp38 $tmp39 	%argrw{"wrr"}
-	min		___371_min_dist $tmp36 $tmp37 	%argrw{"wrr"}
+	min		___372_min_dist $tmp36 $tmp37 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_brick_texture.osl:50
 #   if (min_dist >= mortar_size) {
-	ge		$tmp40 ___371_min_dist MortarSize 	%line{50} %argrw{"wrr"}
+	ge		$tmp40 ___372_min_dist MortarSize 	%line{50} %argrw{"wrr"}
 	if		$tmp40 72 80 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_brick_texture.osl:51
 #     return 0.0;
@@ -232,11 +232,11 @@ code ___main___
 	return
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_brick_texture.osl:57
 #     min_dist = 1.0 - min_dist / mortar_size;
-	div		$tmp42 ___371_min_dist MortarSize 	%line{57} %argrw{"wrr"}
-	sub		___371_min_dist $const5 $tmp42 	%argrw{"wrr"}
+	div		$tmp42 ___372_min_dist MortarSize 	%line{57} %argrw{"wrr"}
+	sub		___372_min_dist $const5 $tmp42 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_brick_texture.osl:58
 #     return smoothstep(0.0, mortar_smooth, min_dist);
-	smoothstep	Fac $const1 MortarSmooth ___371_min_dist 	%line{58} %argrw{"wrrr"}
+	smoothstep	Fac $const1 MortarSmooth ___372_min_dist 	%line{58} %argrw{"wrrr"}
 	return
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_brick_texture.osl:101
 #   if (Fac != 1.0) {
@@ -244,10 +244,10 @@ code ___main___
 	if		$tmp43 86 86 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_brick_texture.osl:102
 #     float facm = 1.0 - tint;
-	sub		___376_facm $const5 tint 	%line{102} %argrw{"wrr"}
+	sub		___377_facm $const5 tint 	%line{102} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_brick_texture.osl:103
 #     Col = facm * Color1 + tint * Color2;
-	mul		$tmp44 ___376_facm Color1 	%line{103} %argrw{"wrr"}
+	mul		$tmp44 ___377_facm Color1 	%line{103} %argrw{"wrr"}
 	mul		$tmp45 tint Color2 	%argrw{"wrr"}
 	add		Col $tmp44 $tmp45 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_brick_texture.osl:106

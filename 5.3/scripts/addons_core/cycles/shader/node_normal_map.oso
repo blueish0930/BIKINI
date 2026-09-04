@@ -15,11 +15,11 @@ global	normal	Ng	%read{44,44} %write{2147483647,-1}
 local	color	mcolor	%read{13,104} %write{8,103}
 local	int	is_backfacing	%read{46,106} %write{9,9}
 local	int	linear_interpolate_strength	%read{50,108} %write{10,75}
-local	vector	___371_tangent	%read{48,65} %write{19,19}
-local	vector	___371_ninterp	%read{47,70} %write{36,47}
-local	float	___371_tangent_sign	%read{49,49} %write{23,23}
-local	float	___371_is_smooth	%read{31,31} %write{18,30}
-local	vector	___371_B	%read{67,67} %write{49,49}
+local	vector	___372_tangent	%read{48,65} %write{19,19}
+local	vector	___372_ninterp	%read{47,70} %write{36,47}
+local	float	___372_tangent_sign	%read{49,49} %write{23,23}
+local	float	___372_is_smooth	%read{31,31} %write{18,30}
+local	vector	___372_B	%read{67,67} %write{49,49}
 const	float	$const1	2		%read{8,8} %write{2147483647,-1}
 temp	color	$tmp1	%read{8,8} %write{7,7}
 const	int	$const2	0		%read{1,111} %write{2147483647,-1}
@@ -143,14 +143,14 @@ code ___main___
 	if		$tmp11 75 106 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_normal_map.osl:28
 #     float is_smooth = 0.0;
-	assign		___371_is_smooth $const8 	%line{28} %argrw{"wr"}
+	assign		___372_is_smooth $const8 	%line{28} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_normal_map.osl:30
 #     if (!getattribute(attr_name, tangent) || !getattribute(attr_sign_name, tangent_sign)) {
-	getattribute	$tmp12 attr_name ___371_tangent 	%line{30} %argrw{"wrw"}
+	getattribute	$tmp12 attr_name ___372_tangent 	%line{30} %argrw{"wrw"}
 	eq		$tmp13 $tmp12 $const2 	%argrw{"wrr"}
 	neq		$tmp14 $tmp13 $const2 	%argrw{"wrr"}
 	if		$tmp14 23 27 	%argrw{"r"}
-	getattribute	$tmp15 attr_sign_name ___371_tangent_sign 	%argrw{"wrw"}
+	getattribute	$tmp15 attr_sign_name ___372_tangent_sign 	%argrw{"wrw"}
 	eq		$tmp16 $tmp15 $const2 	%argrw{"wrr"}
 	neq		$tmp17 $tmp16 $const2 	%argrw{"wrr"}
 	assign		$tmp14 $tmp17 	%argrw{"wr"}
@@ -163,17 +163,17 @@ code ___main___
 	exit	%line{32}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_normal_map.osl:35
 #     getattribute("geom:is_smooth", is_smooth);
-	getattribute	$tmp18 $const9 ___371_is_smooth 	%line{35} %argrw{"wrw"}
+	getattribute	$tmp18 $const9 ___372_is_smooth 	%line{35} %argrw{"wrw"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_normal_map.osl:36
 #     if (is_smooth) {
-	neq		$tmp19 ___371_is_smooth $const8 	%line{36} %argrw{"wrr"}
+	neq		$tmp19 ___372_is_smooth $const8 	%line{36} %argrw{"wrr"}
 	if		$tmp19 44 48 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_normal_map.osl:37
 #       if (base == "original" && getattribute("geom:undisplaced_N", ninterp)) {
 	eq		$tmp20 base $const10 	%line{37} %argrw{"wrr"}
 	neq		$tmp21 $tmp20 $const2 	%argrw{"wrr"}
 	if		$tmp21 39 39 	%argrw{"r"}
-	getattribute	$tmp22 $const11 ___371_ninterp 	%argrw{"wrw"}
+	getattribute	$tmp22 $const11 ___372_ninterp 	%argrw{"wrw"}
 	neq		$tmp23 $tmp22 $const2 	%argrw{"wrr"}
 	assign		$tmp21 $tmp23 	%argrw{"wr"}
 	if		$tmp21 41 44 	%argrw{"r"}
@@ -182,25 +182,25 @@ code ___main___
 	assign		linear_interpolate_strength $const4 	%line{40} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_normal_map.osl:42
 #       else if (getattribute("geom:normal_map_normal", ninterp)) {
-	getattribute	$tmp24 $const12 ___371_ninterp 	%line{42} %argrw{"wrw"}
+	getattribute	$tmp24 $const12 ___372_ninterp 	%line{42} %argrw{"wrw"}
 	if		$tmp24 43 44 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_normal_map.osl:45
 #         ninterp = N;
-	assign		___371_ninterp N 	%line{45} %argrw{"wr"}
+	assign		___372_ninterp N 	%line{45} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_normal_map.osl:49
 #       ninterp = normalize(transform("world", "object", Ng));
 	transformn	$tmp25 $const13 $const14 Ng 	%line{49} %argrw{"wrrr"}
-	normalize	___371_ninterp $tmp25 	%argrw{"wr"}
+	normalize	___372_ninterp $tmp25 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_normal_map.osl:52
 #       if (is_backfacing) {
 	if		is_backfacing 48 48 	%line{52} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_normal_map.osl:53
 #         ninterp = -ninterp;
-	neg		___371_ninterp ___371_ninterp 	%line{53} %argrw{"wr"}
+	neg		___372_ninterp ___372_ninterp 	%line{53} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_normal_map.osl:58
 #     vector B = tangent_sign * cross(ninterp, tangent);
-	cross		$tmp26 ___371_ninterp ___371_tangent 	%line{58} %argrw{"wrr"}
-	mul		___371_B ___371_tangent_sign $tmp26 	%argrw{"wrr"}
+	cross		$tmp26 ___372_ninterp ___372_tangent 	%line{58} %argrw{"wrr"}
+	mul		___372_B ___372_tangent_sign $tmp26 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_normal_map.osl:61
 #     if (!linear_interpolate_strength) {
 	eq		$tmp27 linear_interpolate_strength $const2 	%line{61} %argrw{"wrr"}
@@ -230,12 +230,12 @@ code ___main___
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_normal_map.osl:67
 #     Normal = normalize(mcolor[0] * tangent + mcolor[1] * B + mcolor[2] * ninterp);
 	compref		$tmp36 mcolor $const2 	%line{67} %argrw{"wrr"}
-	mul		$tmp37 $tmp36 ___371_tangent 	%argrw{"wrr"}
+	mul		$tmp37 $tmp36 ___372_tangent 	%argrw{"wrr"}
 	compref		$tmp38 mcolor $const4 	%argrw{"wrr"}
-	mul		$tmp39 $tmp38 ___371_B 	%argrw{"wrr"}
+	mul		$tmp39 $tmp38 ___372_B 	%argrw{"wrr"}
 	add		$tmp40 $tmp37 $tmp39 	%argrw{"wrr"}
 	compref		$tmp41 mcolor $const5 	%argrw{"wrr"}
-	mul		$tmp42 $tmp41 ___371_ninterp 	%argrw{"wrr"}
+	mul		$tmp42 $tmp41 ___372_ninterp 	%argrw{"wrr"}
 	add		$tmp43 $tmp40 $tmp42 	%argrw{"wrr"}
 	normalize	Normal $tmp43 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_normal_map.osl:70

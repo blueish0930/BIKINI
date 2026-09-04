@@ -30,9 +30,9 @@ local	float	___477_t	%read{55,86} %write{55,86}
 local	float	___475_rmd	%read{89,124} %write{88,88}
 local	float	___478_t	%read{113,113} %write{112,112}
 local	float	___478_sum2	%read{119,124} %write{114,114}
-local	point	___578_p	%read{13,46} %write{7,7}
-local	float	___578_n	%read{43,152} %write{8,149}
-local	point	___584_rp	%read{34,41} %write{31,40}
+local	point	___579_p	%read{13,46} %write{7,7}
+local	float	___579_n	%read{43,152} %write{8,149}
+local	point	___585_rp	%read{34,41} %write{31,40}
 local	point	p	%read{3,4} %write{1,3}
 temp	point	$tmp1	%read{6,6} %write{4,4}
 const	string	$const1	"wave"		%read{5,5} %write{2147483647,-1}
@@ -172,10 +172,10 @@ code ___main___
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wave_texture.osl:22
 #   point p = (p_input + 0.000001) * 0.999999;
 	add		$tmp2 $tmp1 $const2 	%line{22} %argrw{"wrr"}
-	mul		___578_p $tmp2 $const3 	%argrw{"wrr"}
+	mul		___579_p $tmp2 $const3 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wave_texture.osl:24
 #   float n = 0.0;
-	assign		___578_n $const4 	%line{24} %argrw{"wr"}
+	assign		___579_n $const4 	%line{24} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wave_texture.osl:26
 #   if (type == "bands") {
 	eq		$tmp3 wave_type $const5 	%line{26} %argrw{"wrr"}
@@ -186,74 +186,74 @@ code ___main___
 	if		$tmp4 15 29 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wave_texture.osl:28
 #       n = p[0] * 20.0;
-	compref		$tmp5 ___578_p $const7 	%line{28} %argrw{"wrr"}
-	mul		___578_n $tmp5 $const8 	%argrw{"wrr"}
+	compref		$tmp5 ___579_p $const7 	%line{28} %argrw{"wrr"}
+	mul		___579_n $tmp5 $const8 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wave_texture.osl:30
 #     else if (bands_direction == "y") {
 	eq		$tmp6 bands_direction $const9 	%line{30} %argrw{"wrr"}
 	if		$tmp6 19 29 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wave_texture.osl:31
 #       n = p[1] * 20.0;
-	compref		$tmp7 ___578_p $const10 	%line{31} %argrw{"wrr"}
-	mul		___578_n $tmp7 $const8 	%argrw{"wrr"}
+	compref		$tmp7 ___579_p $const10 	%line{31} %argrw{"wrr"}
+	mul		___579_n $tmp7 $const8 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wave_texture.osl:33
 #     else if (bands_direction == "z") {
 	eq		$tmp8 bands_direction $const11 	%line{33} %argrw{"wrr"}
 	if		$tmp8 23 29 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wave_texture.osl:34
 #       n = p[2] * 20.0;
-	compref		$tmp9 ___578_p $const12 	%line{34} %argrw{"wrr"}
-	mul		___578_n $tmp9 $const8 	%argrw{"wrr"}
+	compref		$tmp9 ___579_p $const12 	%line{34} %argrw{"wrr"}
+	mul		___579_n $tmp9 $const8 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wave_texture.osl:37
 #       n = (p[0] + p[1] + p[2]) * 10.0;
-	compref		$tmp10 ___578_p $const7 	%line{37} %argrw{"wrr"}
-	compref		$tmp11 ___578_p $const10 	%argrw{"wrr"}
+	compref		$tmp10 ___579_p $const7 	%line{37} %argrw{"wrr"}
+	compref		$tmp11 ___579_p $const10 	%argrw{"wrr"}
 	add		$tmp12 $tmp10 $tmp11 	%argrw{"wrr"}
-	compref		$tmp13 ___578_p $const12 	%argrw{"wrr"}
+	compref		$tmp13 ___579_p $const12 	%argrw{"wrr"}
 	add		$tmp14 $tmp12 $tmp13 	%argrw{"wrr"}
-	mul		___578_n $tmp14 $const13 	%argrw{"wrr"}
+	mul		___579_n $tmp14 $const13 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wave_texture.osl:40
 #   else if (type == "rings") {
 	eq		$tmp15 wave_type $const14 	%line{40} %argrw{"wrr"}
 	if		$tmp15 43 43 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wave_texture.osl:41
 #     point rp = p;
-	assign		___584_rp ___578_p 	%line{41} %argrw{"wr"}
+	assign		___585_rp ___579_p 	%line{41} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wave_texture.osl:42
 #     if (rings_direction == "x") {
 	eq		$tmp16 rings_direction $const6 	%line{42} %argrw{"wrr"}
 	if		$tmp16 35 41 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wave_texture.osl:43
 #       rp *= point(0.0, 1.0, 1.0);
-	mul		___584_rp ___584_rp $const15 	%line{43} %argrw{"wrr"}
+	mul		___585_rp ___585_rp $const15 	%line{43} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wave_texture.osl:45
 #     else if (rings_direction == "y") {
 	eq		$tmp18 rings_direction $const9 	%line{45} %argrw{"wrr"}
 	if		$tmp18 38 41 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wave_texture.osl:46
 #       rp *= point(1.0, 0.0, 1.0);
-	mul		___584_rp ___584_rp $const16 	%line{46} %argrw{"wrr"}
+	mul		___585_rp ___585_rp $const16 	%line{46} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wave_texture.osl:48
 #     else if (rings_direction == "z") {
 	eq		$tmp20 rings_direction $const11 	%line{48} %argrw{"wrr"}
 	if		$tmp20 41 41 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wave_texture.osl:49
 #       rp *= point(1.0, 1.0, 0.0);
-	mul		___584_rp ___584_rp $const17 	%line{49} %argrw{"wrr"}
+	mul		___585_rp ___585_rp $const17 	%line{49} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wave_texture.osl:53
 #     n = length(rp) * 20.0;
-	length		$tmp22 ___584_rp 	%line{53} %argrw{"wr"}
-	mul		___578_n $tmp22 $const8 	%argrw{"wrr"}
+	length		$tmp22 ___585_rp 	%line{53} %argrw{"wr"}
+	mul		___579_n $tmp22 $const8 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wave_texture.osl:56
 #   n += phase;
-	add		___578_n ___578_n PhaseOffset 	%line{56} %argrw{"wrr"}
+	add		___579_n ___579_n PhaseOffset 	%line{56} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wave_texture.osl:58
 #   if (distortion != 0.0) {
 	neq		$tmp23 Distortion $const4 	%line{58} %argrw{"wrr"}
 	if		$tmp23 136 136 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wave_texture.osl:59
 #     n = n + (distortion * (noise_fbm(p * dscale, detail, droughness, 2.0, 1) * 2.0 - 1.0));
-	mul		$tmp25 ___578_p DetailScale 	%line{59} %argrw{"wrr"}
+	mul		$tmp25 ___579_p DetailScale 	%line{59} %argrw{"wrr"}
 	functioncall	$const19 132 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_noise.h:246
 # NOISE_FBM(vector3)
@@ -374,14 +374,14 @@ code ___main___
 	mul		$tmp79 $tmp24 $const18 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wave_texture.osl"} %line{59} %argrw{"wrr"}
 	sub		$tmp80 $tmp79 $const20 	%argrw{"wrr"}
 	mul		$tmp81 Distortion $tmp80 	%argrw{"wrr"}
-	add		___578_n ___578_n $tmp81 	%argrw{"wrr"}
+	add		___579_n ___579_n $tmp81 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wave_texture.osl:62
 #   if (profile == "sine") {
 	eq		$tmp82 profile $const26 	%line{62} %argrw{"wrr"}
 	if		$tmp82 143 156 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wave_texture.osl:63
 #     return 0.5 + 0.5 * sin(n - M_PI_2);
-	sub		$tmp84 ___578_n $const27 	%line{63} %argrw{"wrr"}
+	sub		$tmp84 ___579_n $const27 	%line{63} %argrw{"wrr"}
 	sin		$tmp83 $tmp84 	%argrw{"wr"}
 	mul		$tmp85 $const22 $tmp83 	%argrw{"wrr"}
 	add		Fac $const22 $tmp85 	%argrw{"wrr"}
@@ -392,20 +392,20 @@ code ___main___
 	if		$tmp86 149 156 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wave_texture.osl:66
 #     n /= M_2PI;
-	div		___578_n ___578_n $const29 	%line{66} %argrw{"wrr"}
+	div		___579_n ___579_n $const29 	%line{66} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wave_texture.osl:67
 #     return n - floor(n);
-	floor		$tmp87 ___578_n 	%line{67} %argrw{"wr"}
-	sub		Fac ___578_n $tmp87 	%argrw{"wrr"}
+	floor		$tmp87 ___579_n 	%line{67} %argrw{"wr"}
+	sub		Fac ___579_n $tmp87 	%argrw{"wrr"}
 	return
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wave_texture.osl:70
 #     n /= M_2PI;
-	div		___578_n ___578_n $const29 	%line{70} %argrw{"wrr"}
+	div		___579_n ___579_n $const29 	%line{70} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_wave_texture.osl:71
 #     return abs(n - floor(n + 0.5)) * 2.0;
-	add		$tmp90 ___578_n $const22 	%line{71} %argrw{"wrr"}
+	add		$tmp90 ___579_n $const22 	%line{71} %argrw{"wrr"}
 	floor		$tmp89 $tmp90 	%argrw{"wr"}
-	sub		$tmp91 ___578_n $tmp89 	%argrw{"wrr"}
+	sub		$tmp91 ___579_n $tmp89 	%argrw{"wrr"}
 	abs		$tmp88 $tmp91 	%argrw{"wr"}
 	mul		Fac $tmp88 $const18 	%argrw{"wrr"}
 	return

@@ -12,10 +12,10 @@ oparam	vector	Displacement	0 0 0		%read{27,27} %write{23,27}
 global	normal	N	%read{5,5} %write{2147483647,-1}
 global	vector	dPdu	%read{10,10} %write{2147483647,-1}
 local	vector	offset	%read{16,24} %write{2,2}
-local	vector	___370_N_object	%read{11,19} %write{6,6}
-local	vector	___370_T_object	%read{9,17} %write{7,10}
-local	vector	___370_B_object	%read{15,22} %write{12,15}
-local	float	___370_tangent_sign	%read{15,15} %write{13,13}
+local	vector	___371_N_object	%read{11,19} %write{6,6}
+local	vector	___371_T_object	%read{9,17} %write{7,10}
+local	vector	___371_B_object	%read{15,22} %write{12,15}
+local	float	___371_tangent_sign	%read{15,15} %write{13,13}
 temp	vector	$tmp1	%read{1,1} %write{0,0}
 temp	color	$tmp2	%read{2,2} %write{1,1}
 const	string	$const1	"tangent"		%read{3,3} %write{2147483647,-1}
@@ -50,37 +50,37 @@ code ___main___
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_displacement.osl:19
 #     vector N_object = normalize(transform("world", "object", N));
 	transformn	$tmp4 $const2 $const3 N 	%line{19} %argrw{"wrrr"}
-	normalize	___370_N_object $tmp4 	%argrw{"wr"}
+	normalize	___371_N_object $tmp4 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_displacement.osl:22
 #     if (getattribute(attr_name, T_object)) {
-	getattribute	$tmp5 attr_name ___370_T_object 	%line{22} %argrw{"wrw"}
+	getattribute	$tmp5 attr_name ___371_T_object 	%line{22} %argrw{"wrw"}
 	if		$tmp5 10 11 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_displacement.osl:23
 #       T_object = normalize(T_object);
-	normalize	___370_T_object ___370_T_object 	%line{23} %argrw{"wr"}
+	normalize	___371_T_object ___371_T_object 	%line{23} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_displacement.osl:26
 #       T_object = normalize(dPdu);
-	normalize	___370_T_object dPdu 	%line{26} %argrw{"wr"}
+	normalize	___371_T_object dPdu 	%line{26} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_displacement.osl:29
 #     vector B_object = normalize(cross(N_object, T_object));
-	cross		$tmp6 ___370_N_object ___370_T_object 	%line{29} %argrw{"wrr"}
-	normalize	___370_B_object $tmp6 	%argrw{"wr"}
+	cross		$tmp6 ___371_N_object ___371_T_object 	%line{29} %argrw{"wrr"}
+	normalize	___371_B_object $tmp6 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_displacement.osl:31
 #     if (getattribute(attr_sign_name, tangent_sign)) {
-	getattribute	$tmp7 attr_sign_name ___370_tangent_sign 	%line{31} %argrw{"wrw"}
+	getattribute	$tmp7 attr_sign_name ___371_tangent_sign 	%line{31} %argrw{"wrw"}
 	if		$tmp7 16 16 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_displacement.osl:32
 #       B_object *= tangent_sign;
-	mul		___370_B_object ___370_B_object ___370_tangent_sign 	%line{32} %argrw{"wrr"}
+	mul		___371_B_object ___371_B_object ___371_tangent_sign 	%line{32} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_displacement.osl:35
 #     Displacement = T_object * offset[0] + N_object * offset[1] + B_object * offset[2];
 	compref		$tmp8 offset $const4 	%line{35} %argrw{"wrr"}
-	mul		$tmp9 ___370_T_object $tmp8 	%argrw{"wrr"}
+	mul		$tmp9 ___371_T_object $tmp8 	%argrw{"wrr"}
 	compref		$tmp10 offset $const5 	%argrw{"wrr"}
-	mul		$tmp11 ___370_N_object $tmp10 	%argrw{"wrr"}
+	mul		$tmp11 ___371_N_object $tmp10 	%argrw{"wrr"}
 	add		$tmp12 $tmp9 $tmp11 	%argrw{"wrr"}
 	compref		$tmp13 offset $const6 	%argrw{"wrr"}
-	mul		$tmp14 ___370_B_object $tmp13 	%argrw{"wrr"}
+	mul		$tmp14 ___371_B_object $tmp13 	%argrw{"wrr"}
 	add		Displacement $tmp12 $tmp14 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_displacement.osl:39
 #     Displacement = offset;

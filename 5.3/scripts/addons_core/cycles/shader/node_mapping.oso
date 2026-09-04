@@ -8,13 +8,13 @@ param	point	Location	0 0 0		%read{49,98} %write{2147483647,-1}
 param	point	Rotation	0 0 0		%read{3,186} %write{2147483647,-1}
 param	point	Scale	1 1 1		%read{47,239} %write{2147483647,-1}
 oparam	point	VectorOut	0 0 0		%read{2147483647,-1} %write{49,245}
-local	float	___371_cx	%read{24,217} %write{4,177}
-local	float	___371_cy	%read{16,217} %write{6,179}
-local	float	___371_cz	%read{16,214} %write{8,181}
-local	float	___371_sx	%read{22,214} %write{10,183}
-local	float	___371_sy	%read{20,212} %write{12,185}
-local	float	___371_sz	%read{18,213} %write{14,187}
-local	matrix	___371_mat	%read{46,219} %write{15,218}
+local	float	___372_cx	%read{24,217} %write{4,177}
+local	float	___372_cy	%read{16,217} %write{6,179}
+local	float	___372_cz	%read{16,214} %write{8,181}
+local	float	___372_sx	%read{22,214} %write{10,183}
+local	float	___372_sy	%read{20,212} %write{12,185}
+local	float	___372_sz	%read{18,213} %write{14,187}
+local	matrix	___372_mat	%read{46,219} %write{15,218}
 const	string	$const1	"point"		%read{0,0} %write{2147483647,-1}
 temp	int	$tmp1	%read{1,1} %write{0,0}
 temp	point	$tmp2	%read{49,49} %write{48,48}
@@ -193,81 +193,81 @@ code ___main___
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:16
 #   float cx = cos(euler[0]);
 	compref		$tmp4 Rotation $const3 	%line{16} %argrw{"wrr"}
-	cos		___371_cx $tmp4 	%argrw{"wr"}
+	cos		___372_cx $tmp4 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:17
 #   float cy = cos(euler[1]);
 	compref		$tmp5 Rotation $const4 	%line{17} %argrw{"wrr"}
-	cos		___371_cy $tmp5 	%argrw{"wr"}
+	cos		___372_cy $tmp5 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:18
 #   float cz = cos(euler[2]);
 	compref		$tmp6 Rotation $const5 	%line{18} %argrw{"wrr"}
-	cos		___371_cz $tmp6 	%argrw{"wr"}
+	cos		___372_cz $tmp6 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:19
 #   float sx = sin(euler[0]);
 	compref		$tmp7 Rotation $const3 	%line{19} %argrw{"wrr"}
-	sin		___371_sx $tmp7 	%argrw{"wr"}
+	sin		___372_sx $tmp7 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:20
 #   float sy = sin(euler[1]);
 	compref		$tmp8 Rotation $const4 	%line{20} %argrw{"wrr"}
-	sin		___371_sy $tmp8 	%argrw{"wr"}
+	sin		___372_sy $tmp8 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:21
 #   float sz = sin(euler[2]);
 	compref		$tmp9 Rotation $const5 	%line{21} %argrw{"wrr"}
-	sin		___371_sz $tmp9 	%argrw{"wr"}
+	sin		___372_sz $tmp9 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:23
 #   matrix mat = matrix(1.0);
-	assign		___371_mat $const6 	%line{23} %argrw{"wr"}
+	assign		___372_mat $const6 	%line{23} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:24
 #   mat[0][0] = cy * cz;
-	mul		$tmp10 ___371_cy ___371_cz 	%line{24} %argrw{"wrr"}
-	mxcompassign	___371_mat $const3 $const3 $tmp10 	%argrw{"wrrr"}
+	mul		$tmp10 ___372_cy ___372_cz 	%line{24} %argrw{"wrr"}
+	mxcompassign	___372_mat $const3 $const3 $tmp10 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:25
 #   mat[0][1] = cy * sz;
-	mul		$tmp11 ___371_cy ___371_sz 	%line{25} %argrw{"wrr"}
-	mxcompassign	___371_mat $const3 $const4 $tmp11 	%argrw{"wrrr"}
+	mul		$tmp11 ___372_cy ___372_sz 	%line{25} %argrw{"wrr"}
+	mxcompassign	___372_mat $const3 $const4 $tmp11 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:26
 #   mat[0][2] = -sy;
-	neg		$tmp12 ___371_sy 	%line{26} %argrw{"wr"}
-	mxcompassign	___371_mat $const3 $const5 $tmp12 	%argrw{"wrrr"}
+	neg		$tmp12 ___372_sy 	%line{26} %argrw{"wr"}
+	mxcompassign	___372_mat $const3 $const5 $tmp12 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:28
 #   mat[1][0] = sy * sx * cz - cx * sz;
-	mul		$tmp13 ___371_sy ___371_sx 	%line{28} %argrw{"wrr"}
-	mul		$tmp14 $tmp13 ___371_cz 	%argrw{"wrr"}
-	mul		$tmp15 ___371_cx ___371_sz 	%argrw{"wrr"}
+	mul		$tmp13 ___372_sy ___372_sx 	%line{28} %argrw{"wrr"}
+	mul		$tmp14 $tmp13 ___372_cz 	%argrw{"wrr"}
+	mul		$tmp15 ___372_cx ___372_sz 	%argrw{"wrr"}
 	sub		$tmp16 $tmp14 $tmp15 	%argrw{"wrr"}
-	mxcompassign	___371_mat $const4 $const3 $tmp16 	%argrw{"wrrr"}
+	mxcompassign	___372_mat $const4 $const3 $tmp16 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:29
 #   mat[1][1] = sy * sx * sz + cx * cz;
-	mul		$tmp17 ___371_sy ___371_sx 	%line{29} %argrw{"wrr"}
-	mul		$tmp18 $tmp17 ___371_sz 	%argrw{"wrr"}
-	mul		$tmp19 ___371_cx ___371_cz 	%argrw{"wrr"}
+	mul		$tmp17 ___372_sy ___372_sx 	%line{29} %argrw{"wrr"}
+	mul		$tmp18 $tmp17 ___372_sz 	%argrw{"wrr"}
+	mul		$tmp19 ___372_cx ___372_cz 	%argrw{"wrr"}
 	add		$tmp20 $tmp18 $tmp19 	%argrw{"wrr"}
-	mxcompassign	___371_mat $const4 $const4 $tmp20 	%argrw{"wrrr"}
+	mxcompassign	___372_mat $const4 $const4 $tmp20 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:30
 #   mat[1][2] = cy * sx;
-	mul		$tmp21 ___371_cy ___371_sx 	%line{30} %argrw{"wrr"}
-	mxcompassign	___371_mat $const4 $const5 $tmp21 	%argrw{"wrrr"}
+	mul		$tmp21 ___372_cy ___372_sx 	%line{30} %argrw{"wrr"}
+	mxcompassign	___372_mat $const4 $const5 $tmp21 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:32
 #   mat[2][0] = sy * cx * cz + sx * sz;
-	mul		$tmp22 ___371_sy ___371_cx 	%line{32} %argrw{"wrr"}
-	mul		$tmp23 $tmp22 ___371_cz 	%argrw{"wrr"}
-	mul		$tmp24 ___371_sx ___371_sz 	%argrw{"wrr"}
+	mul		$tmp22 ___372_sy ___372_cx 	%line{32} %argrw{"wrr"}
+	mul		$tmp23 $tmp22 ___372_cz 	%argrw{"wrr"}
+	mul		$tmp24 ___372_sx ___372_sz 	%argrw{"wrr"}
 	add		$tmp25 $tmp23 $tmp24 	%argrw{"wrr"}
-	mxcompassign	___371_mat $const5 $const3 $tmp25 	%argrw{"wrrr"}
+	mxcompassign	___372_mat $const5 $const3 $tmp25 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:33
 #   mat[2][1] = sy * cx * sz - sx * cz;
-	mul		$tmp26 ___371_sy ___371_cx 	%line{33} %argrw{"wrr"}
-	mul		$tmp27 $tmp26 ___371_sz 	%argrw{"wrr"}
-	mul		$tmp28 ___371_sx ___371_cz 	%argrw{"wrr"}
+	mul		$tmp26 ___372_sy ___372_cx 	%line{33} %argrw{"wrr"}
+	mul		$tmp27 $tmp26 ___372_sz 	%argrw{"wrr"}
+	mul		$tmp28 ___372_sx ___372_cz 	%argrw{"wrr"}
 	sub		$tmp29 $tmp27 $tmp28 	%argrw{"wrr"}
-	mxcompassign	___371_mat $const5 $const4 $tmp29 	%argrw{"wrrr"}
+	mxcompassign	___372_mat $const5 $const4 $tmp29 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:34
 #   mat[2][2] = cy * cx;
-	mul		$tmp30 ___371_cy ___371_cx 	%line{34} %argrw{"wrr"}
-	mxcompassign	___371_mat $const5 $const5 $tmp30 	%argrw{"wrrr"}
+	mul		$tmp30 ___372_cy ___372_cx 	%line{34} %argrw{"wrr"}
+	mxcompassign	___372_mat $const5 $const5 $tmp30 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:35
 #   return mat;
-	assign		$tmp3 ___371_mat 	%line{35} %argrw{"wr"}
+	assign		$tmp3 ___372_mat 	%line{35} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:46
 #     VectorOut = transform(euler_to_mat(Rotation), (VectorIn * Scale)) + Location;
 	mul		$tmp31 VectorIn Scale 	%line{46} %argrw{"wrr"}
@@ -283,81 +283,81 @@ code ___main___
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:16
 #   float cx = cos(euler[0]);
 	compref		$tmp36 Rotation $const3 	%line{16} %argrw{"wrr"}
-	cos		___371_cx $tmp36 	%argrw{"wr"}
+	cos		___372_cx $tmp36 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:17
 #   float cy = cos(euler[1]);
 	compref		$tmp37 Rotation $const4 	%line{17} %argrw{"wrr"}
-	cos		___371_cy $tmp37 	%argrw{"wr"}
+	cos		___372_cy $tmp37 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:18
 #   float cz = cos(euler[2]);
 	compref		$tmp38 Rotation $const5 	%line{18} %argrw{"wrr"}
-	cos		___371_cz $tmp38 	%argrw{"wr"}
+	cos		___372_cz $tmp38 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:19
 #   float sx = sin(euler[0]);
 	compref		$tmp39 Rotation $const3 	%line{19} %argrw{"wrr"}
-	sin		___371_sx $tmp39 	%argrw{"wr"}
+	sin		___372_sx $tmp39 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:20
 #   float sy = sin(euler[1]);
 	compref		$tmp40 Rotation $const4 	%line{20} %argrw{"wrr"}
-	sin		___371_sy $tmp40 	%argrw{"wr"}
+	sin		___372_sy $tmp40 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:21
 #   float sz = sin(euler[2]);
 	compref		$tmp41 Rotation $const5 	%line{21} %argrw{"wrr"}
-	sin		___371_sz $tmp41 	%argrw{"wr"}
+	sin		___372_sz $tmp41 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:23
 #   matrix mat = matrix(1.0);
-	assign		___371_mat $const6 	%line{23} %argrw{"wr"}
+	assign		___372_mat $const6 	%line{23} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:24
 #   mat[0][0] = cy * cz;
-	mul		$tmp42 ___371_cy ___371_cz 	%line{24} %argrw{"wrr"}
-	mxcompassign	___371_mat $const3 $const3 $tmp42 	%argrw{"wrrr"}
+	mul		$tmp42 ___372_cy ___372_cz 	%line{24} %argrw{"wrr"}
+	mxcompassign	___372_mat $const3 $const3 $tmp42 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:25
 #   mat[0][1] = cy * sz;
-	mul		$tmp43 ___371_cy ___371_sz 	%line{25} %argrw{"wrr"}
-	mxcompassign	___371_mat $const3 $const4 $tmp43 	%argrw{"wrrr"}
+	mul		$tmp43 ___372_cy ___372_sz 	%line{25} %argrw{"wrr"}
+	mxcompassign	___372_mat $const3 $const4 $tmp43 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:26
 #   mat[0][2] = -sy;
-	neg		$tmp44 ___371_sy 	%line{26} %argrw{"wr"}
-	mxcompassign	___371_mat $const3 $const5 $tmp44 	%argrw{"wrrr"}
+	neg		$tmp44 ___372_sy 	%line{26} %argrw{"wr"}
+	mxcompassign	___372_mat $const3 $const5 $tmp44 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:28
 #   mat[1][0] = sy * sx * cz - cx * sz;
-	mul		$tmp45 ___371_sy ___371_sx 	%line{28} %argrw{"wrr"}
-	mul		$tmp46 $tmp45 ___371_cz 	%argrw{"wrr"}
-	mul		$tmp47 ___371_cx ___371_sz 	%argrw{"wrr"}
+	mul		$tmp45 ___372_sy ___372_sx 	%line{28} %argrw{"wrr"}
+	mul		$tmp46 $tmp45 ___372_cz 	%argrw{"wrr"}
+	mul		$tmp47 ___372_cx ___372_sz 	%argrw{"wrr"}
 	sub		$tmp48 $tmp46 $tmp47 	%argrw{"wrr"}
-	mxcompassign	___371_mat $const4 $const3 $tmp48 	%argrw{"wrrr"}
+	mxcompassign	___372_mat $const4 $const3 $tmp48 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:29
 #   mat[1][1] = sy * sx * sz + cx * cz;
-	mul		$tmp49 ___371_sy ___371_sx 	%line{29} %argrw{"wrr"}
-	mul		$tmp50 $tmp49 ___371_sz 	%argrw{"wrr"}
-	mul		$tmp51 ___371_cx ___371_cz 	%argrw{"wrr"}
+	mul		$tmp49 ___372_sy ___372_sx 	%line{29} %argrw{"wrr"}
+	mul		$tmp50 $tmp49 ___372_sz 	%argrw{"wrr"}
+	mul		$tmp51 ___372_cx ___372_cz 	%argrw{"wrr"}
 	add		$tmp52 $tmp50 $tmp51 	%argrw{"wrr"}
-	mxcompassign	___371_mat $const4 $const4 $tmp52 	%argrw{"wrrr"}
+	mxcompassign	___372_mat $const4 $const4 $tmp52 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:30
 #   mat[1][2] = cy * sx;
-	mul		$tmp53 ___371_cy ___371_sx 	%line{30} %argrw{"wrr"}
-	mxcompassign	___371_mat $const4 $const5 $tmp53 	%argrw{"wrrr"}
+	mul		$tmp53 ___372_cy ___372_sx 	%line{30} %argrw{"wrr"}
+	mxcompassign	___372_mat $const4 $const5 $tmp53 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:32
 #   mat[2][0] = sy * cx * cz + sx * sz;
-	mul		$tmp54 ___371_sy ___371_cx 	%line{32} %argrw{"wrr"}
-	mul		$tmp55 $tmp54 ___371_cz 	%argrw{"wrr"}
-	mul		$tmp56 ___371_sx ___371_sz 	%argrw{"wrr"}
+	mul		$tmp54 ___372_sy ___372_cx 	%line{32} %argrw{"wrr"}
+	mul		$tmp55 $tmp54 ___372_cz 	%argrw{"wrr"}
+	mul		$tmp56 ___372_sx ___372_sz 	%argrw{"wrr"}
 	add		$tmp57 $tmp55 $tmp56 	%argrw{"wrr"}
-	mxcompassign	___371_mat $const5 $const3 $tmp57 	%argrw{"wrrr"}
+	mxcompassign	___372_mat $const5 $const3 $tmp57 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:33
 #   mat[2][1] = sy * cx * sz - sx * cz;
-	mul		$tmp58 ___371_sy ___371_cx 	%line{33} %argrw{"wrr"}
-	mul		$tmp59 $tmp58 ___371_sz 	%argrw{"wrr"}
-	mul		$tmp60 ___371_sx ___371_cz 	%argrw{"wrr"}
+	mul		$tmp58 ___372_sy ___372_cx 	%line{33} %argrw{"wrr"}
+	mul		$tmp59 $tmp58 ___372_sz 	%argrw{"wrr"}
+	mul		$tmp60 ___372_sx ___372_cz 	%argrw{"wrr"}
 	sub		$tmp61 $tmp59 $tmp60 	%argrw{"wrr"}
-	mxcompassign	___371_mat $const5 $const4 $tmp61 	%argrw{"wrrr"}
+	mxcompassign	___372_mat $const5 $const4 $tmp61 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:34
 #   mat[2][2] = cy * cx;
-	mul		$tmp62 ___371_cy ___371_cx 	%line{34} %argrw{"wrr"}
-	mxcompassign	___371_mat $const5 $const5 $tmp62 	%argrw{"wrrr"}
+	mul		$tmp62 ___372_cy ___372_cx 	%line{34} %argrw{"wrr"}
+	mxcompassign	___372_mat $const5 $const5 $tmp62 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:35
 #   return mat;
-	assign		$tmp35 ___371_mat 	%line{35} %argrw{"wr"}
+	assign		$tmp35 ___372_mat 	%line{35} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:49
 #     VectorOut = safe_divide(transform(transpose(euler_to_mat(Rotation)), (VectorIn - Location)),
 	transpose	$tmp34 $tmp35 	%line{49} %argrw{"wr"}
@@ -407,81 +407,81 @@ code ___main___
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:16
 #   float cx = cos(euler[0]);
 	compref		$tmp81 Rotation $const3 	%line{16} %argrw{"wrr"}
-	cos		___371_cx $tmp81 	%argrw{"wr"}
+	cos		___372_cx $tmp81 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:17
 #   float cy = cos(euler[1]);
 	compref		$tmp82 Rotation $const4 	%line{17} %argrw{"wrr"}
-	cos		___371_cy $tmp82 	%argrw{"wr"}
+	cos		___372_cy $tmp82 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:18
 #   float cz = cos(euler[2]);
 	compref		$tmp83 Rotation $const5 	%line{18} %argrw{"wrr"}
-	cos		___371_cz $tmp83 	%argrw{"wr"}
+	cos		___372_cz $tmp83 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:19
 #   float sx = sin(euler[0]);
 	compref		$tmp84 Rotation $const3 	%line{19} %argrw{"wrr"}
-	sin		___371_sx $tmp84 	%argrw{"wr"}
+	sin		___372_sx $tmp84 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:20
 #   float sy = sin(euler[1]);
 	compref		$tmp85 Rotation $const4 	%line{20} %argrw{"wrr"}
-	sin		___371_sy $tmp85 	%argrw{"wr"}
+	sin		___372_sy $tmp85 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:21
 #   float sz = sin(euler[2]);
 	compref		$tmp86 Rotation $const5 	%line{21} %argrw{"wrr"}
-	sin		___371_sz $tmp86 	%argrw{"wr"}
+	sin		___372_sz $tmp86 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:23
 #   matrix mat = matrix(1.0);
-	assign		___371_mat $const6 	%line{23} %argrw{"wr"}
+	assign		___372_mat $const6 	%line{23} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:24
 #   mat[0][0] = cy * cz;
-	mul		$tmp87 ___371_cy ___371_cz 	%line{24} %argrw{"wrr"}
-	mxcompassign	___371_mat $const3 $const3 $tmp87 	%argrw{"wrrr"}
+	mul		$tmp87 ___372_cy ___372_cz 	%line{24} %argrw{"wrr"}
+	mxcompassign	___372_mat $const3 $const3 $tmp87 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:25
 #   mat[0][1] = cy * sz;
-	mul		$tmp88 ___371_cy ___371_sz 	%line{25} %argrw{"wrr"}
-	mxcompassign	___371_mat $const3 $const4 $tmp88 	%argrw{"wrrr"}
+	mul		$tmp88 ___372_cy ___372_sz 	%line{25} %argrw{"wrr"}
+	mxcompassign	___372_mat $const3 $const4 $tmp88 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:26
 #   mat[0][2] = -sy;
-	neg		$tmp89 ___371_sy 	%line{26} %argrw{"wr"}
-	mxcompassign	___371_mat $const3 $const5 $tmp89 	%argrw{"wrrr"}
+	neg		$tmp89 ___372_sy 	%line{26} %argrw{"wr"}
+	mxcompassign	___372_mat $const3 $const5 $tmp89 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:28
 #   mat[1][0] = sy * sx * cz - cx * sz;
-	mul		$tmp90 ___371_sy ___371_sx 	%line{28} %argrw{"wrr"}
-	mul		$tmp91 $tmp90 ___371_cz 	%argrw{"wrr"}
-	mul		$tmp92 ___371_cx ___371_sz 	%argrw{"wrr"}
+	mul		$tmp90 ___372_sy ___372_sx 	%line{28} %argrw{"wrr"}
+	mul		$tmp91 $tmp90 ___372_cz 	%argrw{"wrr"}
+	mul		$tmp92 ___372_cx ___372_sz 	%argrw{"wrr"}
 	sub		$tmp93 $tmp91 $tmp92 	%argrw{"wrr"}
-	mxcompassign	___371_mat $const4 $const3 $tmp93 	%argrw{"wrrr"}
+	mxcompassign	___372_mat $const4 $const3 $tmp93 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:29
 #   mat[1][1] = sy * sx * sz + cx * cz;
-	mul		$tmp94 ___371_sy ___371_sx 	%line{29} %argrw{"wrr"}
-	mul		$tmp95 $tmp94 ___371_sz 	%argrw{"wrr"}
-	mul		$tmp96 ___371_cx ___371_cz 	%argrw{"wrr"}
+	mul		$tmp94 ___372_sy ___372_sx 	%line{29} %argrw{"wrr"}
+	mul		$tmp95 $tmp94 ___372_sz 	%argrw{"wrr"}
+	mul		$tmp96 ___372_cx ___372_cz 	%argrw{"wrr"}
 	add		$tmp97 $tmp95 $tmp96 	%argrw{"wrr"}
-	mxcompassign	___371_mat $const4 $const4 $tmp97 	%argrw{"wrrr"}
+	mxcompassign	___372_mat $const4 $const4 $tmp97 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:30
 #   mat[1][2] = cy * sx;
-	mul		$tmp98 ___371_cy ___371_sx 	%line{30} %argrw{"wrr"}
-	mxcompassign	___371_mat $const4 $const5 $tmp98 	%argrw{"wrrr"}
+	mul		$tmp98 ___372_cy ___372_sx 	%line{30} %argrw{"wrr"}
+	mxcompassign	___372_mat $const4 $const5 $tmp98 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:32
 #   mat[2][0] = sy * cx * cz + sx * sz;
-	mul		$tmp99 ___371_sy ___371_cx 	%line{32} %argrw{"wrr"}
-	mul		$tmp100 $tmp99 ___371_cz 	%argrw{"wrr"}
-	mul		$tmp101 ___371_sx ___371_sz 	%argrw{"wrr"}
+	mul		$tmp99 ___372_sy ___372_cx 	%line{32} %argrw{"wrr"}
+	mul		$tmp100 $tmp99 ___372_cz 	%argrw{"wrr"}
+	mul		$tmp101 ___372_sx ___372_sz 	%argrw{"wrr"}
 	add		$tmp102 $tmp100 $tmp101 	%argrw{"wrr"}
-	mxcompassign	___371_mat $const5 $const3 $tmp102 	%argrw{"wrrr"}
+	mxcompassign	___372_mat $const5 $const3 $tmp102 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:33
 #   mat[2][1] = sy * cx * sz - sx * cz;
-	mul		$tmp103 ___371_sy ___371_cx 	%line{33} %argrw{"wrr"}
-	mul		$tmp104 $tmp103 ___371_sz 	%argrw{"wrr"}
-	mul		$tmp105 ___371_sx ___371_cz 	%argrw{"wrr"}
+	mul		$tmp103 ___372_sy ___372_cx 	%line{33} %argrw{"wrr"}
+	mul		$tmp104 $tmp103 ___372_sz 	%argrw{"wrr"}
+	mul		$tmp105 ___372_sx ___372_cz 	%argrw{"wrr"}
 	sub		$tmp106 $tmp104 $tmp105 	%argrw{"wrr"}
-	mxcompassign	___371_mat $const5 $const4 $tmp106 	%argrw{"wrrr"}
+	mxcompassign	___372_mat $const5 $const4 $tmp106 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:34
 #   mat[2][2] = cy * cx;
-	mul		$tmp107 ___371_cy ___371_cx 	%line{34} %argrw{"wrr"}
-	mxcompassign	___371_mat $const5 $const5 $tmp107 	%argrw{"wrrr"}
+	mul		$tmp107 ___372_cy ___372_cx 	%line{34} %argrw{"wrr"}
+	mxcompassign	___372_mat $const5 $const5 $tmp107 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:35
 #   return mat;
-	assign		$tmp80 ___371_mat 	%line{35} %argrw{"wr"}
+	assign		$tmp80 ___372_mat 	%line{35} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:53
 #     VectorOut = transform(euler_to_mat(Rotation), (VectorIn * Scale));
 	mul		$tmp108 VectorIn Scale 	%line{53} %argrw{"wrr"}
@@ -496,81 +496,81 @@ code ___main___
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:16
 #   float cx = cos(euler[0]);
 	compref		$tmp112 Rotation $const3 	%line{16} %argrw{"wrr"}
-	cos		___371_cx $tmp112 	%argrw{"wr"}
+	cos		___372_cx $tmp112 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:17
 #   float cy = cos(euler[1]);
 	compref		$tmp113 Rotation $const4 	%line{17} %argrw{"wrr"}
-	cos		___371_cy $tmp113 	%argrw{"wr"}
+	cos		___372_cy $tmp113 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:18
 #   float cz = cos(euler[2]);
 	compref		$tmp114 Rotation $const5 	%line{18} %argrw{"wrr"}
-	cos		___371_cz $tmp114 	%argrw{"wr"}
+	cos		___372_cz $tmp114 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:19
 #   float sx = sin(euler[0]);
 	compref		$tmp115 Rotation $const3 	%line{19} %argrw{"wrr"}
-	sin		___371_sx $tmp115 	%argrw{"wr"}
+	sin		___372_sx $tmp115 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:20
 #   float sy = sin(euler[1]);
 	compref		$tmp116 Rotation $const4 	%line{20} %argrw{"wrr"}
-	sin		___371_sy $tmp116 	%argrw{"wr"}
+	sin		___372_sy $tmp116 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:21
 #   float sz = sin(euler[2]);
 	compref		$tmp117 Rotation $const5 	%line{21} %argrw{"wrr"}
-	sin		___371_sz $tmp117 	%argrw{"wr"}
+	sin		___372_sz $tmp117 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:23
 #   matrix mat = matrix(1.0);
-	assign		___371_mat $const6 	%line{23} %argrw{"wr"}
+	assign		___372_mat $const6 	%line{23} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:24
 #   mat[0][0] = cy * cz;
-	mul		$tmp118 ___371_cy ___371_cz 	%line{24} %argrw{"wrr"}
-	mxcompassign	___371_mat $const3 $const3 $tmp118 	%argrw{"wrrr"}
+	mul		$tmp118 ___372_cy ___372_cz 	%line{24} %argrw{"wrr"}
+	mxcompassign	___372_mat $const3 $const3 $tmp118 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:25
 #   mat[0][1] = cy * sz;
-	mul		$tmp119 ___371_cy ___371_sz 	%line{25} %argrw{"wrr"}
-	mxcompassign	___371_mat $const3 $const4 $tmp119 	%argrw{"wrrr"}
+	mul		$tmp119 ___372_cy ___372_sz 	%line{25} %argrw{"wrr"}
+	mxcompassign	___372_mat $const3 $const4 $tmp119 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:26
 #   mat[0][2] = -sy;
-	neg		$tmp120 ___371_sy 	%line{26} %argrw{"wr"}
-	mxcompassign	___371_mat $const3 $const5 $tmp120 	%argrw{"wrrr"}
+	neg		$tmp120 ___372_sy 	%line{26} %argrw{"wr"}
+	mxcompassign	___372_mat $const3 $const5 $tmp120 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:28
 #   mat[1][0] = sy * sx * cz - cx * sz;
-	mul		$tmp121 ___371_sy ___371_sx 	%line{28} %argrw{"wrr"}
-	mul		$tmp122 $tmp121 ___371_cz 	%argrw{"wrr"}
-	mul		$tmp123 ___371_cx ___371_sz 	%argrw{"wrr"}
+	mul		$tmp121 ___372_sy ___372_sx 	%line{28} %argrw{"wrr"}
+	mul		$tmp122 $tmp121 ___372_cz 	%argrw{"wrr"}
+	mul		$tmp123 ___372_cx ___372_sz 	%argrw{"wrr"}
 	sub		$tmp124 $tmp122 $tmp123 	%argrw{"wrr"}
-	mxcompassign	___371_mat $const4 $const3 $tmp124 	%argrw{"wrrr"}
+	mxcompassign	___372_mat $const4 $const3 $tmp124 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:29
 #   mat[1][1] = sy * sx * sz + cx * cz;
-	mul		$tmp125 ___371_sy ___371_sx 	%line{29} %argrw{"wrr"}
-	mul		$tmp126 $tmp125 ___371_sz 	%argrw{"wrr"}
-	mul		$tmp127 ___371_cx ___371_cz 	%argrw{"wrr"}
+	mul		$tmp125 ___372_sy ___372_sx 	%line{29} %argrw{"wrr"}
+	mul		$tmp126 $tmp125 ___372_sz 	%argrw{"wrr"}
+	mul		$tmp127 ___372_cx ___372_cz 	%argrw{"wrr"}
 	add		$tmp128 $tmp126 $tmp127 	%argrw{"wrr"}
-	mxcompassign	___371_mat $const4 $const4 $tmp128 	%argrw{"wrrr"}
+	mxcompassign	___372_mat $const4 $const4 $tmp128 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:30
 #   mat[1][2] = cy * sx;
-	mul		$tmp129 ___371_cy ___371_sx 	%line{30} %argrw{"wrr"}
-	mxcompassign	___371_mat $const4 $const5 $tmp129 	%argrw{"wrrr"}
+	mul		$tmp129 ___372_cy ___372_sx 	%line{30} %argrw{"wrr"}
+	mxcompassign	___372_mat $const4 $const5 $tmp129 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:32
 #   mat[2][0] = sy * cx * cz + sx * sz;
-	mul		$tmp130 ___371_sy ___371_cx 	%line{32} %argrw{"wrr"}
-	mul		$tmp131 $tmp130 ___371_cz 	%argrw{"wrr"}
-	mul		$tmp132 ___371_sx ___371_sz 	%argrw{"wrr"}
+	mul		$tmp130 ___372_sy ___372_cx 	%line{32} %argrw{"wrr"}
+	mul		$tmp131 $tmp130 ___372_cz 	%argrw{"wrr"}
+	mul		$tmp132 ___372_sx ___372_sz 	%argrw{"wrr"}
 	add		$tmp133 $tmp131 $tmp132 	%argrw{"wrr"}
-	mxcompassign	___371_mat $const5 $const3 $tmp133 	%argrw{"wrrr"}
+	mxcompassign	___372_mat $const5 $const3 $tmp133 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:33
 #   mat[2][1] = sy * cx * sz - sx * cz;
-	mul		$tmp134 ___371_sy ___371_cx 	%line{33} %argrw{"wrr"}
-	mul		$tmp135 $tmp134 ___371_sz 	%argrw{"wrr"}
-	mul		$tmp136 ___371_sx ___371_cz 	%argrw{"wrr"}
+	mul		$tmp134 ___372_sy ___372_cx 	%line{33} %argrw{"wrr"}
+	mul		$tmp135 $tmp134 ___372_sz 	%argrw{"wrr"}
+	mul		$tmp136 ___372_sx ___372_cz 	%argrw{"wrr"}
 	sub		$tmp137 $tmp135 $tmp136 	%argrw{"wrr"}
-	mxcompassign	___371_mat $const5 $const4 $tmp137 	%argrw{"wrrr"}
+	mxcompassign	___372_mat $const5 $const4 $tmp137 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:34
 #   mat[2][2] = cy * cx;
-	mul		$tmp138 ___371_cy ___371_cx 	%line{34} %argrw{"wrr"}
-	mxcompassign	___371_mat $const5 $const5 $tmp138 	%argrw{"wrrr"}
+	mul		$tmp138 ___372_cy ___372_cx 	%line{34} %argrw{"wrr"}
+	mxcompassign	___372_mat $const5 $const5 $tmp138 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:35
 #   return mat;
-	assign		$tmp111 ___371_mat 	%line{35} %argrw{"wr"}
+	assign		$tmp111 ___372_mat 	%line{35} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mapping.osl:56
 #     VectorOut = normalize((vector)transform(euler_to_mat(Rotation), safe_divide(VectorIn, Scale)));
 	functioncall	$const8 244 	%line{56} %argrw{"r"}

@@ -29,9 +29,9 @@ local	float	r2	%read{4,6} %write{3,4}
 local	float	alpha_x	%read{16,85} %write{5,16}
 local	float	alpha_y	%read{17,85} %write{6,17}
 local	vector	T	%read{69,85} %write{7,71}
-local	float	___376_aspect	%read{16,17} %write{15,15}
-local	color	___377_F0	%read{80,80} %write{76,76}
-local	color	___377_F82	%read{80,80} %write{79,79}
+local	float	___377_aspect	%read{16,17} %write{15,15}
+local	color	___378_F0	%read{80,80} %write{76,76}
+local	color	___378_F82	%read{80,80} %write{79,79}
 const	float	$const1	0		%read{3,83} %write{2147483647,-1}
 const	float	$const2	1		%read{2,68} %write{2147483647,-1}
 const	string	$const3	"clamp"		%read{1,77} %write{2147483647,-1}
@@ -143,13 +143,13 @@ code ___main___
 #     float aspect = sqrt(1.0 - clamp(Anisotropy, 0.0, 1.0) * 0.9);
 	mul		$tmp5 $tmp3 $const4 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl"} %line{30} %argrw{"wrr"}
 	sub		$tmp6 $const2 $tmp5 	%argrw{"wrr"}
-	sqrt		___376_aspect $tmp6 	%argrw{"wr"}
+	sqrt		___377_aspect $tmp6 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl:31
 #     alpha_x /= aspect;
-	div		alpha_x alpha_x ___376_aspect 	%line{31} %argrw{"wrr"}
+	div		alpha_x alpha_x ___377_aspect 	%line{31} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl:32
 #     alpha_y *= aspect;
-	mul		alpha_y alpha_y ___376_aspect 	%line{32} %argrw{"wrr"}
+	mul		alpha_y alpha_y ___377_aspect 	%line{32} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl:33
 #     if (Rotation != 0.0)
 	neq		$tmp7 Rotation $const1 	%line{33} %argrw{"wrr"}
@@ -248,17 +248,17 @@ code ___main___
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:140
 # color  clamp (color x, color minval, color maxval) { return max(min(x,maxval),minval); }
 	min		$tmp55 BaseColor $const13 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{140} %argrw{"wrr"}
-	max		___377_F0 $tmp55 $const12 	%argrw{"wrr"}
+	max		___378_F0 $tmp55 $const12 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl:39
 #     color F82 = clamp(EdgeTint, color(0.0), color(1.0));
 	functioncall	$const3 80 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl"} %line{39} %argrw{"r"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:140
 # color  clamp (color x, color minval, color maxval) { return max(min(x,maxval),minval); }
 	min		$tmp58 EdgeTint $const13 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{140} %argrw{"wrr"}
-	max		___377_F82 $tmp58 $const12 	%argrw{"wrr"}
+	max		___378_F82 $tmp58 $const12 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl:40
 #     BSDF = microfacet_f82_tint(distribution,
-	closure		BSDF $const16 distribution Normal T alpha_x alpha_y ___377_F0 ___377_F82 $const14 ThinFilmThickness $const15 ThinFilmIOR 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl"} %line{40} %argrw{"wrrrrrrrrrrrr"}
+	closure		BSDF $const16 distribution Normal T alpha_x alpha_y ___378_F0 ___378_F82 $const14 ThinFilmThickness $const15 ThinFilmIOR 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl"} %line{40} %argrw{"wrrrrrrrrrrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_metallic_bsdf.osl:57
 #                           max(IOR, 0.0),
 	assign		$tmp60 $const1 	%line{57} %argrw{"wr"}

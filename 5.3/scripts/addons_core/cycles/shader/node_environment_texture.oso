@@ -15,12 +15,12 @@ param	int	is_float	1		%read{63,63} %write{2147483647,-1}
 oparam	color	Color	0 0 0		%read{60,95} %write{48,108}
 oparam	float	Alpha	1		%read{53,60} %write{48,50}
 global	point	P	%read{0,0} %write{2147483647,-1} %derivs
-local	float	___412_u	%read{25,25} %write{13,13} %derivs
-local	float	___412_v	%read{25,25} %write{24,24} %derivs
-local	vector	___413_dir	%read{28,42} %write{27,38} %derivs
-local	float	___413_div	%read{36,38} %write{35,35} %derivs
-local	float	___413_u	%read{45,45} %write{41,41} %derivs
-local	float	___413_v	%read{45,45} %write{44,44} %derivs
+local	float	___413_u	%read{25,25} %write{13,13} %derivs
+local	float	___413_v	%read{25,25} %write{24,24} %derivs
+local	vector	___414_dir	%read{28,42} %write{27,38} %derivs
+local	float	___414_div	%read{36,38} %write{35,35} %derivs
+local	float	___414_u	%read{45,45} %write{41,41} %derivs
+local	float	___414_v	%read{45,45} %write{44,44} %derivs
 local	vector	p	%read{3,47} %write{1,45} %derivs
 const	string	$const1	"equirectangular"		%read{5,5} %write{2147483647,-1}
 temp	int	$tmp1	%read{6,6} %write{5,5}
@@ -130,7 +130,7 @@ code ___main___
 	atan2		$tmp2 $tmp3 $tmp4 	%argrw{"wrr"}
 	neg		$tmp5 $tmp2 	%argrw{"wr"}
 	div		$tmp6 $tmp5 $const5 	%argrw{"wrr"}
-	add		___412_u $tmp6 $const6 	%argrw{"wrr"}
+	add		___413_u $tmp6 $const6 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_environment_texture.osl:11
 #   float v = atan2(dir[2], hypot(dir[0], dir[1])) / M_PI + 0.5;
 	compref		$tmp8 p $const7 	%line{11} %argrw{"wrr"}
@@ -147,48 +147,48 @@ code ___main___
 #   float v = atan2(dir[2], hypot(dir[0], dir[1])) / M_PI + 0.5;
 	atan2		$tmp7 $tmp8 $tmp9 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_environment_texture.osl"} %line{11} %argrw{"wrr"}
 	div		$tmp15 $tmp7 $const9 	%argrw{"wrr"}
-	add		___412_v $tmp15 $const6 	%argrw{"wrr"}
+	add		___413_v $tmp15 $const6 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_environment_texture.osl:13
 #   return vector(u, v, 0.0);
-	vector		p ___412_u ___412_v $const10 	%line{13} %argrw{"wrrr"}
+	vector		p ___413_u ___413_v $const10 	%line{13} %argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_environment_texture.osl:55
 #     p = environment_texture_direction_to_mirrorball(p);
 	functioncall	$const11 46 	%line{55} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_environment_texture.osl:18
 #   vector dir = idir;
-	assign		___413_dir p 	%line{18} %argrw{"wr"}
+	assign		___414_dir p 	%line{18} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_environment_texture.osl:19
 #   dir[1] -= 1.0;
-	compref		$tmp16 ___413_dir $const3 	%line{19} %argrw{"wrr"}
+	compref		$tmp16 ___414_dir $const3 	%line{19} %argrw{"wrr"}
 	sub		$tmp17 $tmp16 $const12 	%argrw{"wrr"}
-	compassign	___413_dir $const3 $tmp17 	%argrw{"wrr"}
+	compassign	___414_dir $const3 $tmp17 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_environment_texture.osl:21
 #   float div = 2.0 * sqrt(max(-0.5 * dir[1], 0.0));
-	compref		$tmp20 ___413_dir $const3 	%line{21} %argrw{"wrr"}
+	compref		$tmp20 ___414_dir $const3 	%line{21} %argrw{"wrr"}
 	mul		$tmp21 $const14 $tmp20 	%argrw{"wrr"}
 	max		$tmp19 $tmp21 $const10 	%argrw{"wrr"}
 	sqrt		$tmp18 $tmp19 	%argrw{"wr"}
-	mul		___413_div $const13 $tmp18 	%argrw{"wrr"}
+	mul		___414_div $const13 $tmp18 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_environment_texture.osl:22
 #   if (div > 0.0)
-	gt		$tmp22 ___413_div $const10 	%line{22} %argrw{"wrr"}
+	gt		$tmp22 ___414_div $const10 	%line{22} %argrw{"wrr"}
 	if		$tmp22 39 39 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_environment_texture.osl:23
 #     dir /= div;
-	div		___413_dir ___413_dir ___413_div 	%line{23} %argrw{"wrr"}
+	div		___414_dir ___414_dir ___414_div 	%line{23} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_environment_texture.osl:25
 #   float u = 0.5 * (dir[0] + 1.0);
-	compref		$tmp23 ___413_dir $const4 	%line{25} %argrw{"wrr"}
+	compref		$tmp23 ___414_dir $const4 	%line{25} %argrw{"wrr"}
 	add		$tmp24 $tmp23 $const12 	%argrw{"wrr"}
-	mul		___413_u $const6 $tmp24 	%argrw{"wrr"}
+	mul		___414_u $const6 $tmp24 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_environment_texture.osl:26
 #   float v = 0.5 * (dir[2] + 1.0);
-	compref		$tmp25 ___413_dir $const7 	%line{26} %argrw{"wrr"}
+	compref		$tmp25 ___414_dir $const7 	%line{26} %argrw{"wrr"}
 	add		$tmp26 $tmp25 $const12 	%argrw{"wrr"}
-	mul		___413_v $const6 $tmp26 	%argrw{"wrr"}
+	mul		___414_v $const6 $tmp26 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_environment_texture.osl:28
 #   return vector(u, v, 0.0);
-	vector		p ___413_u ___413_v $const10 	%line{28} %argrw{"wrrr"}
+	vector		p ___414_u ___414_v $const10 	%line{28} %argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_environment_texture.osl:59
 #       filename, p[0], p[1], "wrap", "periodic", "interp", interpolation, "alpha", Alpha);
 	compref		$tmp27 p $const4 	%line{59} %argrw{"wrr"}

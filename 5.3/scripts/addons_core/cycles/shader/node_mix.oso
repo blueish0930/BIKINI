@@ -24,38 +24,38 @@ local	float	___370_h	%read{379,818} %write{373,816}
 local	float	___370_s	%read{376,826} %write{374,808}
 local	float	___370_v	%read{378,844} %write{375,809}
 local	color	___370_rgb	%read{411,845} %write{378,844}
-local	float	___415_tm	%read{21,21} %write{20,20}
-local	float	___416_tm	%read{40,87} %write{31,31}
-local	color	___416_outcol	%read{33,93} %write{32,92}
-local	float	___418_tm	%read{108,130} %write{102,102}
-local	color	___418_outcol	%read{107,137} %write{103,136}
-local	color	___423_outcol	%read{168,213} %write{167,212}
-local	float	___424_tmp	%read{174,182} %write{173,178}
-local	float	___425_tmp	%read{189,197} %write{188,193}
-local	float	___426_tmp	%read{204,212} %write{203,208}
-local	float	___427_tmp	%read{222,269} %write{221,262}
-local	float	___427_tm	%read{221,255} %write{217,217}
-local	color	___427_outcol	%read{225,270} %write{218,269}
-local	color	___428_outcol	%read{325,413} %write{274,412}
-local	color	___428_hsv2	%read{321,370} %write{320,320}
-local	color	___429_hsv	%read{373,375} %write{369,371}
-local	color	___429_tmp	%read{412,412} %write{411,411}
-local	float	___430_tm	%read{515,515} %write{417,417}
-local	color	___430_outcol	%read{420,560} %write{418,559}
-local	color	___430_hsv	%read{465,523} %write{464,519}
-local	color	___431_hsv2	%read{516,516} %write{513,513}
-local	float	___432_tm	%read{658,658} %write{564,564}
-local	color	___432_hsv	%read{657,666} %write{610,662}
-local	color	___432_hsv2	%read{659,659} %write{656,656}
-local	color	___433_outcol	%read{757,847} %write{706,846}
-local	color	___433_hsv2	%read{753,804} %write{752,752}
-local	color	___434_hsv	%read{807,809} %write{801,805}
-local	color	___434_tmp	%read{846,846} %write{845,845}
-local	float	___435_tm	%read{857,857} %write{851,851}
-local	color	___435_one	%read{853,858} %write{852,852}
-local	color	___435_scr	%read{861,861} %write{856,856}
-local	color	___436_outcol	%read{920,920} %write{868,919}
-local	color	___437_outcol	%read{939,939} %write{923,938}
+local	float	___416_tm	%read{21,21} %write{20,20}
+local	float	___417_tm	%read{40,87} %write{31,31}
+local	color	___417_outcol	%read{33,93} %write{32,92}
+local	float	___419_tm	%read{108,130} %write{102,102}
+local	color	___419_outcol	%read{107,137} %write{103,136}
+local	color	___424_outcol	%read{168,213} %write{167,212}
+local	float	___425_tmp	%read{174,182} %write{173,178}
+local	float	___426_tmp	%read{189,197} %write{188,193}
+local	float	___427_tmp	%read{204,212} %write{203,208}
+local	float	___428_tmp	%read{222,269} %write{221,262}
+local	float	___428_tm	%read{221,255} %write{217,217}
+local	color	___428_outcol	%read{225,270} %write{218,269}
+local	color	___429_outcol	%read{325,413} %write{274,412}
+local	color	___429_hsv2	%read{321,370} %write{320,320}
+local	color	___430_hsv	%read{373,375} %write{369,371}
+local	color	___430_tmp	%read{412,412} %write{411,411}
+local	float	___431_tm	%read{515,515} %write{417,417}
+local	color	___431_outcol	%read{420,560} %write{418,559}
+local	color	___431_hsv	%read{465,523} %write{464,519}
+local	color	___432_hsv2	%read{516,516} %write{513,513}
+local	float	___433_tm	%read{658,658} %write{564,564}
+local	color	___433_hsv	%read{657,666} %write{610,662}
+local	color	___433_hsv2	%read{659,659} %write{656,656}
+local	color	___434_outcol	%read{757,847} %write{706,846}
+local	color	___434_hsv2	%read{753,804} %write{752,752}
+local	color	___435_hsv	%read{807,809} %write{801,805}
+local	color	___435_tmp	%read{846,846} %write{845,845}
+local	float	___436_tm	%read{857,857} %write{851,851}
+local	color	___436_one	%read{853,858} %write{852,852}
+local	color	___436_scr	%read{861,861} %write{856,856}
+local	color	___437_outcol	%read{920,920} %write{868,919}
+local	color	___438_outcol	%read{939,939} %write{923,938}
 local	float	t	%read{6,917} %write{2,2}
 const	float	$const1	0		%read{2,937} %write{2147483647,-1}
 const	float	$const2	1		%read{1,936} %write{2147483647,-1}
@@ -653,10 +653,10 @@ code ___main___
 	functioncall	$const11 28 	%line{291} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:25
 #   float tm = 1.0 - t;
-	sub		___415_tm $const2 t 	%line{25} %argrw{"wrr"}
+	sub		___416_tm $const2 t 	%line{25} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:27
 #   return color(1.0) - (color(tm) + t * (color(1.0) - col2)) * (color(1.0) - col1);
-	assign		$tmp9 ___415_tm 	%line{27} %argrw{"wr"}
+	assign		$tmp9 ___416_tm 	%line{27} %argrw{"wr"}
 	sub		$tmp11 $const12 Color2 	%argrw{"wrr"}
 	mul		$tmp12 t $tmp11 	%argrw{"wrr"}
 	add		$tmp13 $tmp9 $tmp12 	%argrw{"wrr"}
@@ -672,91 +672,91 @@ code ___main___
 	functioncall	$const14 94 	%line{293} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:32
 #   float tm = 1.0 - t;
-	sub		___416_tm $const2 t 	%line{32} %argrw{"wrr"}
+	sub		___417_tm $const2 t 	%line{32} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:34
 #   color outcol = col1;
-	assign		___416_outcol Color1 	%line{34} %argrw{"wr"}
+	assign		___417_outcol Color1 	%line{34} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:36
 #   if (outcol[0] < 0.5)
-	compref		$tmp18 ___416_outcol $const15 	%line{36} %argrw{"wrr"}
+	compref		$tmp18 ___417_outcol $const15 	%line{36} %argrw{"wrr"}
 	lt		$tmp19 $tmp18 $const16 	%argrw{"wrr"}
 	if		$tmp19 43 53 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:37
 #     outcol[0] *= tm + 2.0 * t * col2[0];
-	compref		$tmp20 ___416_outcol $const15 	%line{37} %argrw{"wrr"}
+	compref		$tmp20 ___417_outcol $const15 	%line{37} %argrw{"wrr"}
 	mul		$tmp21 $const17 t 	%argrw{"wrr"}
 	compref		$tmp22 Color2 $const15 	%argrw{"wrr"}
 	mul		$tmp23 $tmp21 $tmp22 	%argrw{"wrr"}
-	add		$tmp24 ___416_tm $tmp23 	%argrw{"wrr"}
+	add		$tmp24 ___417_tm $tmp23 	%argrw{"wrr"}
 	mul		$tmp25 $tmp20 $tmp24 	%argrw{"wrr"}
-	compassign	___416_outcol $const15 $tmp25 	%argrw{"wrr"}
+	compassign	___417_outcol $const15 $tmp25 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:39
 #     outcol[0] = 1.0 - (tm + 2.0 * t * (1.0 - col2[0])) * (1.0 - outcol[0]);
 	mul		$tmp26 $const17 t 	%line{39} %argrw{"wrr"}
 	compref		$tmp27 Color2 $const15 	%argrw{"wrr"}
 	sub		$tmp28 $const2 $tmp27 	%argrw{"wrr"}
 	mul		$tmp29 $tmp26 $tmp28 	%argrw{"wrr"}
-	add		$tmp30 ___416_tm $tmp29 	%argrw{"wrr"}
-	compref		$tmp31 ___416_outcol $const15 	%argrw{"wrr"}
+	add		$tmp30 ___417_tm $tmp29 	%argrw{"wrr"}
+	compref		$tmp31 ___417_outcol $const15 	%argrw{"wrr"}
 	sub		$tmp32 $const2 $tmp31 	%argrw{"wrr"}
 	mul		$tmp33 $tmp30 $tmp32 	%argrw{"wrr"}
 	sub		$tmp34 $const2 $tmp33 	%argrw{"wrr"}
-	compassign	___416_outcol $const15 $tmp34 	%argrw{"wrr"}
+	compassign	___417_outcol $const15 $tmp34 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:41
 #   if (outcol[1] < 0.5)
-	compref		$tmp35 ___416_outcol $const18 	%line{41} %argrw{"wrr"}
+	compref		$tmp35 ___417_outcol $const18 	%line{41} %argrw{"wrr"}
 	lt		$tmp36 $tmp35 $const16 	%argrw{"wrr"}
 	if		$tmp36 63 73 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:42
 #     outcol[1] *= tm + 2.0 * t * col2[1];
-	compref		$tmp37 ___416_outcol $const18 	%line{42} %argrw{"wrr"}
+	compref		$tmp37 ___417_outcol $const18 	%line{42} %argrw{"wrr"}
 	mul		$tmp38 $const17 t 	%argrw{"wrr"}
 	compref		$tmp39 Color2 $const18 	%argrw{"wrr"}
 	mul		$tmp40 $tmp38 $tmp39 	%argrw{"wrr"}
-	add		$tmp41 ___416_tm $tmp40 	%argrw{"wrr"}
+	add		$tmp41 ___417_tm $tmp40 	%argrw{"wrr"}
 	mul		$tmp42 $tmp37 $tmp41 	%argrw{"wrr"}
-	compassign	___416_outcol $const18 $tmp42 	%argrw{"wrr"}
+	compassign	___417_outcol $const18 $tmp42 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:44
 #     outcol[1] = 1.0 - (tm + 2.0 * t * (1.0 - col2[1])) * (1.0 - outcol[1]);
 	mul		$tmp43 $const17 t 	%line{44} %argrw{"wrr"}
 	compref		$tmp44 Color2 $const18 	%argrw{"wrr"}
 	sub		$tmp45 $const2 $tmp44 	%argrw{"wrr"}
 	mul		$tmp46 $tmp43 $tmp45 	%argrw{"wrr"}
-	add		$tmp47 ___416_tm $tmp46 	%argrw{"wrr"}
-	compref		$tmp48 ___416_outcol $const18 	%argrw{"wrr"}
+	add		$tmp47 ___417_tm $tmp46 	%argrw{"wrr"}
+	compref		$tmp48 ___417_outcol $const18 	%argrw{"wrr"}
 	sub		$tmp49 $const2 $tmp48 	%argrw{"wrr"}
 	mul		$tmp50 $tmp47 $tmp49 	%argrw{"wrr"}
 	sub		$tmp51 $const2 $tmp50 	%argrw{"wrr"}
-	compassign	___416_outcol $const18 $tmp51 	%argrw{"wrr"}
+	compassign	___417_outcol $const18 $tmp51 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:46
 #   if (outcol[2] < 0.5)
-	compref		$tmp52 ___416_outcol $const19 	%line{46} %argrw{"wrr"}
+	compref		$tmp52 ___417_outcol $const19 	%line{46} %argrw{"wrr"}
 	lt		$tmp53 $tmp52 $const16 	%argrw{"wrr"}
 	if		$tmp53 83 93 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:47
 #     outcol[2] *= tm + 2.0 * t * col2[2];
-	compref		$tmp54 ___416_outcol $const19 	%line{47} %argrw{"wrr"}
+	compref		$tmp54 ___417_outcol $const19 	%line{47} %argrw{"wrr"}
 	mul		$tmp55 $const17 t 	%argrw{"wrr"}
 	compref		$tmp56 Color2 $const19 	%argrw{"wrr"}
 	mul		$tmp57 $tmp55 $tmp56 	%argrw{"wrr"}
-	add		$tmp58 ___416_tm $tmp57 	%argrw{"wrr"}
+	add		$tmp58 ___417_tm $tmp57 	%argrw{"wrr"}
 	mul		$tmp59 $tmp54 $tmp58 	%argrw{"wrr"}
-	compassign	___416_outcol $const19 $tmp59 	%argrw{"wrr"}
+	compassign	___417_outcol $const19 $tmp59 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:49
 #     outcol[2] = 1.0 - (tm + 2.0 * t * (1.0 - col2[2])) * (1.0 - outcol[2]);
 	mul		$tmp60 $const17 t 	%line{49} %argrw{"wrr"}
 	compref		$tmp61 Color2 $const19 	%argrw{"wrr"}
 	sub		$tmp62 $const2 $tmp61 	%argrw{"wrr"}
 	mul		$tmp63 $tmp60 $tmp62 	%argrw{"wrr"}
-	add		$tmp64 ___416_tm $tmp63 	%argrw{"wrr"}
-	compref		$tmp65 ___416_outcol $const19 	%argrw{"wrr"}
+	add		$tmp64 ___417_tm $tmp63 	%argrw{"wrr"}
+	compref		$tmp65 ___417_outcol $const19 	%argrw{"wrr"}
 	sub		$tmp66 $const2 $tmp65 	%argrw{"wrr"}
 	mul		$tmp67 $tmp64 $tmp66 	%argrw{"wrr"}
 	sub		$tmp68 $const2 $tmp67 	%argrw{"wrr"}
-	compassign	___416_outcol $const19 $tmp68 	%argrw{"wrr"}
+	compassign	___417_outcol $const19 $tmp68 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:51
 #   return outcol;
-	assign		Color ___416_outcol 	%line{51} %argrw{"wr"}
+	assign		Color ___417_outcol 	%line{51} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:294
 #   if (mix_type == "subtract")
 	eq		$tmp69 mix_type $const20 	%line{294} %argrw{"wrr"}
@@ -777,10 +777,10 @@ code ___main___
 	functioncall	$const23 138 	%line{297} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:61
 #   float tm = 1.0 - t;
-	sub		___418_tm $const2 t 	%line{61} %argrw{"wrr"}
+	sub		___419_tm $const2 t 	%line{61} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:63
 #   color outcol = col1;
-	assign		___418_outcol Color1 	%line{63} %argrw{"wr"}
+	assign		___419_outcol Color1 	%line{63} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:65
 #   if (col2[0] != 0.0)
 	compref		$tmp72 Color2 $const15 	%line{65} %argrw{"wrr"}
@@ -788,14 +788,14 @@ code ___main___
 	if		$tmp73 115 115 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:66
 #     outcol[0] = tm * outcol[0] + t * outcol[0] / col2[0];
-	compref		$tmp74 ___418_outcol $const15 	%line{66} %argrw{"wrr"}
-	mul		$tmp75 ___418_tm $tmp74 	%argrw{"wrr"}
-	compref		$tmp76 ___418_outcol $const15 	%argrw{"wrr"}
+	compref		$tmp74 ___419_outcol $const15 	%line{66} %argrw{"wrr"}
+	mul		$tmp75 ___419_tm $tmp74 	%argrw{"wrr"}
+	compref		$tmp76 ___419_outcol $const15 	%argrw{"wrr"}
 	mul		$tmp77 t $tmp76 	%argrw{"wrr"}
 	compref		$tmp78 Color2 $const15 	%argrw{"wrr"}
 	div		$tmp79 $tmp77 $tmp78 	%argrw{"wrr"}
 	add		$tmp80 $tmp75 $tmp79 	%argrw{"wrr"}
-	compassign	___418_outcol $const15 $tmp80 	%argrw{"wrr"}
+	compassign	___419_outcol $const15 $tmp80 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:67
 #   if (col2[1] != 0.0)
 	compref		$tmp81 Color2 $const18 	%line{67} %argrw{"wrr"}
@@ -803,14 +803,14 @@ code ___main___
 	if		$tmp82 126 126 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:68
 #     outcol[1] = tm * outcol[1] + t * outcol[1] / col2[1];
-	compref		$tmp83 ___418_outcol $const18 	%line{68} %argrw{"wrr"}
-	mul		$tmp84 ___418_tm $tmp83 	%argrw{"wrr"}
-	compref		$tmp85 ___418_outcol $const18 	%argrw{"wrr"}
+	compref		$tmp83 ___419_outcol $const18 	%line{68} %argrw{"wrr"}
+	mul		$tmp84 ___419_tm $tmp83 	%argrw{"wrr"}
+	compref		$tmp85 ___419_outcol $const18 	%argrw{"wrr"}
 	mul		$tmp86 t $tmp85 	%argrw{"wrr"}
 	compref		$tmp87 Color2 $const18 	%argrw{"wrr"}
 	div		$tmp88 $tmp86 $tmp87 	%argrw{"wrr"}
 	add		$tmp89 $tmp84 $tmp88 	%argrw{"wrr"}
-	compassign	___418_outcol $const18 $tmp89 	%argrw{"wrr"}
+	compassign	___419_outcol $const18 $tmp89 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:69
 #   if (col2[2] != 0.0)
 	compref		$tmp90 Color2 $const19 	%line{69} %argrw{"wrr"}
@@ -818,17 +818,17 @@ code ___main___
 	if		$tmp91 137 137 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:70
 #     outcol[2] = tm * outcol[2] + t * outcol[2] / col2[2];
-	compref		$tmp92 ___418_outcol $const19 	%line{70} %argrw{"wrr"}
-	mul		$tmp93 ___418_tm $tmp92 	%argrw{"wrr"}
-	compref		$tmp94 ___418_outcol $const19 	%argrw{"wrr"}
+	compref		$tmp92 ___419_outcol $const19 	%line{70} %argrw{"wrr"}
+	mul		$tmp93 ___419_tm $tmp92 	%argrw{"wrr"}
+	compref		$tmp94 ___419_outcol $const19 	%argrw{"wrr"}
 	mul		$tmp95 t $tmp94 	%argrw{"wrr"}
 	compref		$tmp96 Color2 $const19 	%argrw{"wrr"}
 	div		$tmp97 $tmp95 $tmp96 	%argrw{"wrr"}
 	add		$tmp98 $tmp93 $tmp97 	%argrw{"wrr"}
-	compassign	___418_outcol $const19 $tmp98 	%argrw{"wrr"}
+	compassign	___419_outcol $const19 $tmp98 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:72
 #   return outcol;
-	assign		Color ___418_outcol 	%line{72} %argrw{"wr"}
+	assign		Color ___419_outcol 	%line{72} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:298
 #   if (mix_type == "difference")
 	eq		$tmp99 mix_type $const24 	%line{298} %argrw{"wrr"}
@@ -888,97 +888,97 @@ code ___main___
 	functioncall	$const33 214 	%line{307} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:97
 #   color outcol = col1;
-	assign		___423_outcol Color1 	%line{97} %argrw{"wr"}
+	assign		___424_outcol Color1 	%line{97} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:99
 #   if (outcol[0] != 0.0) {
-	compref		$tmp114 ___423_outcol $const15 	%line{99} %argrw{"wrr"}
+	compref		$tmp114 ___424_outcol $const15 	%line{99} %argrw{"wrr"}
 	neq		$tmp115 $tmp114 $const1 	%argrw{"wrr"}
 	if		$tmp115 183 183 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:100
 #     float tmp = 1.0 - t * col2[0];
 	compref		$tmp116 Color2 $const15 	%line{100} %argrw{"wrr"}
 	mul		$tmp117 t $tmp116 	%argrw{"wrr"}
-	sub		___424_tmp $const2 $tmp117 	%argrw{"wrr"}
+	sub		___425_tmp $const2 $tmp117 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:101
 #     if (tmp <= 0.0)
-	le		$tmp118 ___424_tmp $const1 	%line{101} %argrw{"wrr"}
+	le		$tmp118 ___425_tmp $const1 	%line{101} %argrw{"wrr"}
 	if		$tmp118 177 183 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:102
 #       outcol[0] = 1.0;
-	compassign	___423_outcol $const15 $const2 	%line{102} %argrw{"wrr"}
+	compassign	___424_outcol $const15 $const2 	%line{102} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:103
 #     else if ((tmp = outcol[0] / tmp) > 1.0)
-	compref		$tmp119 ___423_outcol $const15 	%line{103} %argrw{"wrr"}
-	div		___424_tmp $tmp119 ___424_tmp 	%argrw{"wrr"}
-	gt		$tmp120 ___424_tmp $const2 	%argrw{"wrr"}
+	compref		$tmp119 ___424_outcol $const15 	%line{103} %argrw{"wrr"}
+	div		___425_tmp $tmp119 ___425_tmp 	%argrw{"wrr"}
+	gt		$tmp120 ___425_tmp $const2 	%argrw{"wrr"}
 	if		$tmp120 182 183 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:104
 #       outcol[0] = 1.0;
-	compassign	___423_outcol $const15 $const2 	%line{104} %argrw{"wrr"}
+	compassign	___424_outcol $const15 $const2 	%line{104} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:106
 #       outcol[0] = tmp;
-	compassign	___423_outcol $const15 ___424_tmp 	%line{106} %argrw{"wrr"}
+	compassign	___424_outcol $const15 ___425_tmp 	%line{106} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:108
 #   if (outcol[1] != 0.0) {
-	compref		$tmp121 ___423_outcol $const18 	%line{108} %argrw{"wrr"}
+	compref		$tmp121 ___424_outcol $const18 	%line{108} %argrw{"wrr"}
 	neq		$tmp122 $tmp121 $const1 	%argrw{"wrr"}
 	if		$tmp122 198 198 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:109
 #     float tmp = 1.0 - t * col2[1];
 	compref		$tmp123 Color2 $const18 	%line{109} %argrw{"wrr"}
 	mul		$tmp124 t $tmp123 	%argrw{"wrr"}
-	sub		___425_tmp $const2 $tmp124 	%argrw{"wrr"}
+	sub		___426_tmp $const2 $tmp124 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:110
 #     if (tmp <= 0.0)
-	le		$tmp125 ___425_tmp $const1 	%line{110} %argrw{"wrr"}
+	le		$tmp125 ___426_tmp $const1 	%line{110} %argrw{"wrr"}
 	if		$tmp125 192 198 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:111
 #       outcol[1] = 1.0;
-	compassign	___423_outcol $const18 $const2 	%line{111} %argrw{"wrr"}
+	compassign	___424_outcol $const18 $const2 	%line{111} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:112
 #     else if ((tmp = outcol[1] / tmp) > 1.0)
-	compref		$tmp126 ___423_outcol $const18 	%line{112} %argrw{"wrr"}
-	div		___425_tmp $tmp126 ___425_tmp 	%argrw{"wrr"}
-	gt		$tmp127 ___425_tmp $const2 	%argrw{"wrr"}
+	compref		$tmp126 ___424_outcol $const18 	%line{112} %argrw{"wrr"}
+	div		___426_tmp $tmp126 ___426_tmp 	%argrw{"wrr"}
+	gt		$tmp127 ___426_tmp $const2 	%argrw{"wrr"}
 	if		$tmp127 197 198 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:113
 #       outcol[1] = 1.0;
-	compassign	___423_outcol $const18 $const2 	%line{113} %argrw{"wrr"}
+	compassign	___424_outcol $const18 $const2 	%line{113} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:115
 #       outcol[1] = tmp;
-	compassign	___423_outcol $const18 ___425_tmp 	%line{115} %argrw{"wrr"}
+	compassign	___424_outcol $const18 ___426_tmp 	%line{115} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:117
 #   if (outcol[2] != 0.0) {
-	compref		$tmp128 ___423_outcol $const19 	%line{117} %argrw{"wrr"}
+	compref		$tmp128 ___424_outcol $const19 	%line{117} %argrw{"wrr"}
 	neq		$tmp129 $tmp128 $const1 	%argrw{"wrr"}
 	if		$tmp129 213 213 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:118
 #     float tmp = 1.0 - t * col2[2];
 	compref		$tmp130 Color2 $const19 	%line{118} %argrw{"wrr"}
 	mul		$tmp131 t $tmp130 	%argrw{"wrr"}
-	sub		___426_tmp $const2 $tmp131 	%argrw{"wrr"}
+	sub		___427_tmp $const2 $tmp131 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:119
 #     if (tmp <= 0.0)
-	le		$tmp132 ___426_tmp $const1 	%line{119} %argrw{"wrr"}
+	le		$tmp132 ___427_tmp $const1 	%line{119} %argrw{"wrr"}
 	if		$tmp132 207 213 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:120
 #       outcol[2] = 1.0;
-	compassign	___423_outcol $const19 $const2 	%line{120} %argrw{"wrr"}
+	compassign	___424_outcol $const19 $const2 	%line{120} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:121
 #     else if ((tmp = outcol[2] / tmp) > 1.0)
-	compref		$tmp133 ___423_outcol $const19 	%line{121} %argrw{"wrr"}
-	div		___426_tmp $tmp133 ___426_tmp 	%argrw{"wrr"}
-	gt		$tmp134 ___426_tmp $const2 	%argrw{"wrr"}
+	compref		$tmp133 ___424_outcol $const19 	%line{121} %argrw{"wrr"}
+	div		___427_tmp $tmp133 ___427_tmp 	%argrw{"wrr"}
+	gt		$tmp134 ___427_tmp $const2 	%argrw{"wrr"}
 	if		$tmp134 212 213 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:122
 #       outcol[2] = 1.0;
-	compassign	___423_outcol $const19 $const2 	%line{122} %argrw{"wrr"}
+	compassign	___424_outcol $const19 $const2 	%line{122} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:124
 #       outcol[2] = tmp;
-	compassign	___423_outcol $const19 ___426_tmp 	%line{124} %argrw{"wrr"}
+	compassign	___424_outcol $const19 ___427_tmp 	%line{124} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:127
 #   return outcol;
-	assign		Color ___423_outcol 	%line{127} %argrw{"wr"}
+	assign		Color ___424_outcol 	%line{127} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:308
 #   if (mix_type == "burn")
 	eq		$tmp135 mix_type $const34 	%line{308} %argrw{"wrr"}
@@ -988,112 +988,112 @@ code ___main___
 	functioncall	$const35 271 	%line{309} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:132
 #   float tmp, tm = 1.0 - t;
-	sub		___427_tm $const2 t 	%line{132} %argrw{"wrr"}
+	sub		___428_tm $const2 t 	%line{132} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:134
 #   color outcol = col1;
-	assign		___427_outcol Color1 	%line{134} %argrw{"wr"}
+	assign		___428_outcol Color1 	%line{134} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:136
 #   tmp = tm + t * col2[0];
 	compref		$tmp136 Color2 $const15 	%line{136} %argrw{"wrr"}
 	mul		$tmp137 t $tmp136 	%argrw{"wrr"}
-	add		___427_tmp ___427_tm $tmp137 	%argrw{"wrr"}
+	add		___428_tmp ___428_tm $tmp137 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:137
 #   if (tmp <= 0.0)
-	le		$tmp138 ___427_tmp $const1 	%line{137} %argrw{"wrr"}
+	le		$tmp138 ___428_tmp $const1 	%line{137} %argrw{"wrr"}
 	if		$tmp138 225 236 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:138
 #     outcol[0] = 0.0;
-	compassign	___427_outcol $const15 $const1 	%line{138} %argrw{"wrr"}
+	compassign	___428_outcol $const15 $const1 	%line{138} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:139
 #   else if ((tmp = (1.0 - (1.0 - outcol[0]) / tmp)) < 0.0)
-	compref		$tmp139 ___427_outcol $const15 	%line{139} %argrw{"wrr"}
+	compref		$tmp139 ___428_outcol $const15 	%line{139} %argrw{"wrr"}
 	sub		$tmp140 $const2 $tmp139 	%argrw{"wrr"}
-	div		$tmp141 $tmp140 ___427_tmp 	%argrw{"wrr"}
-	sub		___427_tmp $const2 $tmp141 	%argrw{"wrr"}
-	lt		$tmp142 ___427_tmp $const1 	%argrw{"wrr"}
+	div		$tmp141 $tmp140 ___428_tmp 	%argrw{"wrr"}
+	sub		___428_tmp $const2 $tmp141 	%argrw{"wrr"}
+	lt		$tmp142 ___428_tmp $const1 	%argrw{"wrr"}
 	if		$tmp142 232 236 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:140
 #     outcol[0] = 0.0;
-	compassign	___427_outcol $const15 $const1 	%line{140} %argrw{"wrr"}
+	compassign	___428_outcol $const15 $const1 	%line{140} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:141
 #   else if (tmp > 1.0)
-	gt		$tmp143 ___427_tmp $const2 	%line{141} %argrw{"wrr"}
+	gt		$tmp143 ___428_tmp $const2 	%line{141} %argrw{"wrr"}
 	if		$tmp143 235 236 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:142
 #     outcol[0] = 1.0;
-	compassign	___427_outcol $const15 $const2 	%line{142} %argrw{"wrr"}
+	compassign	___428_outcol $const15 $const2 	%line{142} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:144
 #     outcol[0] = tmp;
-	compassign	___427_outcol $const15 ___427_tmp 	%line{144} %argrw{"wrr"}
+	compassign	___428_outcol $const15 ___428_tmp 	%line{144} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:146
 #   tmp = tm + t * col2[1];
 	compref		$tmp144 Color2 $const18 	%line{146} %argrw{"wrr"}
 	mul		$tmp145 t $tmp144 	%argrw{"wrr"}
-	add		___427_tmp ___427_tm $tmp145 	%argrw{"wrr"}
+	add		___428_tmp ___428_tm $tmp145 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:147
 #   if (tmp <= 0.0)
-	le		$tmp146 ___427_tmp $const1 	%line{147} %argrw{"wrr"}
+	le		$tmp146 ___428_tmp $const1 	%line{147} %argrw{"wrr"}
 	if		$tmp146 242 253 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:148
 #     outcol[1] = 0.0;
-	compassign	___427_outcol $const18 $const1 	%line{148} %argrw{"wrr"}
+	compassign	___428_outcol $const18 $const1 	%line{148} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:149
 #   else if ((tmp = (1.0 - (1.0 - outcol[1]) / tmp)) < 0.0)
-	compref		$tmp147 ___427_outcol $const18 	%line{149} %argrw{"wrr"}
+	compref		$tmp147 ___428_outcol $const18 	%line{149} %argrw{"wrr"}
 	sub		$tmp148 $const2 $tmp147 	%argrw{"wrr"}
-	div		$tmp149 $tmp148 ___427_tmp 	%argrw{"wrr"}
-	sub		___427_tmp $const2 $tmp149 	%argrw{"wrr"}
-	lt		$tmp150 ___427_tmp $const1 	%argrw{"wrr"}
+	div		$tmp149 $tmp148 ___428_tmp 	%argrw{"wrr"}
+	sub		___428_tmp $const2 $tmp149 	%argrw{"wrr"}
+	lt		$tmp150 ___428_tmp $const1 	%argrw{"wrr"}
 	if		$tmp150 249 253 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:150
 #     outcol[1] = 0.0;
-	compassign	___427_outcol $const18 $const1 	%line{150} %argrw{"wrr"}
+	compassign	___428_outcol $const18 $const1 	%line{150} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:151
 #   else if (tmp > 1.0)
-	gt		$tmp151 ___427_tmp $const2 	%line{151} %argrw{"wrr"}
+	gt		$tmp151 ___428_tmp $const2 	%line{151} %argrw{"wrr"}
 	if		$tmp151 252 253 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:152
 #     outcol[1] = 1.0;
-	compassign	___427_outcol $const18 $const2 	%line{152} %argrw{"wrr"}
+	compassign	___428_outcol $const18 $const2 	%line{152} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:154
 #     outcol[1] = tmp;
-	compassign	___427_outcol $const18 ___427_tmp 	%line{154} %argrw{"wrr"}
+	compassign	___428_outcol $const18 ___428_tmp 	%line{154} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:156
 #   tmp = tm + t * col2[2];
 	compref		$tmp152 Color2 $const19 	%line{156} %argrw{"wrr"}
 	mul		$tmp153 t $tmp152 	%argrw{"wrr"}
-	add		___427_tmp ___427_tm $tmp153 	%argrw{"wrr"}
+	add		___428_tmp ___428_tm $tmp153 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:157
 #   if (tmp <= 0.0)
-	le		$tmp154 ___427_tmp $const1 	%line{157} %argrw{"wrr"}
+	le		$tmp154 ___428_tmp $const1 	%line{157} %argrw{"wrr"}
 	if		$tmp154 259 270 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:158
 #     outcol[2] = 0.0;
-	compassign	___427_outcol $const19 $const1 	%line{158} %argrw{"wrr"}
+	compassign	___428_outcol $const19 $const1 	%line{158} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:159
 #   else if ((tmp = (1.0 - (1.0 - outcol[2]) / tmp)) < 0.0)
-	compref		$tmp155 ___427_outcol $const19 	%line{159} %argrw{"wrr"}
+	compref		$tmp155 ___428_outcol $const19 	%line{159} %argrw{"wrr"}
 	sub		$tmp156 $const2 $tmp155 	%argrw{"wrr"}
-	div		$tmp157 $tmp156 ___427_tmp 	%argrw{"wrr"}
-	sub		___427_tmp $const2 $tmp157 	%argrw{"wrr"}
-	lt		$tmp158 ___427_tmp $const1 	%argrw{"wrr"}
+	div		$tmp157 $tmp156 ___428_tmp 	%argrw{"wrr"}
+	sub		___428_tmp $const2 $tmp157 	%argrw{"wrr"}
+	lt		$tmp158 ___428_tmp $const1 	%argrw{"wrr"}
 	if		$tmp158 266 270 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:160
 #     outcol[2] = 0.0;
-	compassign	___427_outcol $const19 $const1 	%line{160} %argrw{"wrr"}
+	compassign	___428_outcol $const19 $const1 	%line{160} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:161
 #   else if (tmp > 1.0)
-	gt		$tmp159 ___427_tmp $const2 	%line{161} %argrw{"wrr"}
+	gt		$tmp159 ___428_tmp $const2 	%line{161} %argrw{"wrr"}
 	if		$tmp159 269 270 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:162
 #     outcol[2] = 1.0;
-	compassign	___427_outcol $const19 $const2 	%line{162} %argrw{"wrr"}
+	compassign	___428_outcol $const19 $const2 	%line{162} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:164
 #     outcol[2] = tmp;
-	compassign	___427_outcol $const19 ___427_tmp 	%line{164} %argrw{"wrr"}
+	compassign	___428_outcol $const19 ___428_tmp 	%line{164} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:166
 #   return outcol;
-	assign		Color ___427_outcol 	%line{166} %argrw{"wr"}
+	assign		Color ___428_outcol 	%line{166} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:310
 #   if (mix_type == "hue")
 	eq		$tmp160 mix_type $const36 	%line{310} %argrw{"wrr"}
@@ -1103,7 +1103,7 @@ code ___main___
 	functioncall	$const37 414 	%line{311} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:171
 #   color outcol = col1;
-	assign		___428_outcol Color1 	%line{171} %argrw{"wr"}
+	assign		___429_outcol Color1 	%line{171} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:172
 #   color hsv2 = rgb_to_hsv(col2);
 	functioncall	$const38 321 	%line{172} %argrw{"r"}
@@ -1191,10 +1191,10 @@ code ___main___
 	add		___361_h ___361_h $const2 	%line{118} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:122
 #   return color(h, s, v);
-	color		___428_hsv2 ___361_h ___361_s ___361_v 	%line{122} %argrw{"wrrr"}
+	color		___429_hsv2 ___361_h ___361_s ___361_v 	%line{122} %argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:174
 #   if (hsv2[1] != 0.0) {
-	compref		$tmp186 ___428_hsv2 $const18 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{174} %argrw{"wrr"}
+	compref		$tmp186 ___429_hsv2 $const18 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{174} %argrw{"wrr"}
 	neq		$tmp187 $tmp186 $const1 	%argrw{"wrr"}
 	if		$tmp187 413 413 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:175
@@ -1202,16 +1202,16 @@ code ___main___
 	functioncall	$const38 370 	%line{175} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:85
 #   cmax = max(rgb[0], max(rgb[1], rgb[2]));
-	compref		$tmp188 ___428_outcol $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h"} %line{85} %argrw{"wrr"}
-	compref		$tmp190 ___428_outcol $const18 	%argrw{"wrr"}
-	compref		$tmp191 ___428_outcol $const19 	%argrw{"wrr"}
+	compref		$tmp188 ___429_outcol $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h"} %line{85} %argrw{"wrr"}
+	compref		$tmp190 ___429_outcol $const18 	%argrw{"wrr"}
+	compref		$tmp191 ___429_outcol $const19 	%argrw{"wrr"}
 	max		$tmp189 $tmp190 $tmp191 	%argrw{"wrr"}
 	max		___361_cmax $tmp188 $tmp189 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:86
 #   cmin = min(rgb[0], min(rgb[1], rgb[2]));
-	compref		$tmp192 ___428_outcol $const15 	%line{86} %argrw{"wrr"}
-	compref		$tmp194 ___428_outcol $const18 	%argrw{"wrr"}
-	compref		$tmp195 ___428_outcol $const19 	%argrw{"wrr"}
+	compref		$tmp192 ___429_outcol $const15 	%line{86} %argrw{"wrr"}
+	compref		$tmp194 ___429_outcol $const18 	%argrw{"wrr"}
+	compref		$tmp195 ___429_outcol $const19 	%argrw{"wrr"}
 	min		$tmp193 $tmp194 $tmp195 	%argrw{"wrr"}
 	min		___361_cmin $tmp192 $tmp193 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:87
@@ -1243,11 +1243,11 @@ code ___main___
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:103
 #     c = (color(cmax, cmax, cmax) - rgb) / cdelta;
 	color		$tmp198 ___361_cmax ___361_cmax ___361_cmax 	%line{103} %argrw{"wrrr"}
-	sub		$tmp199 $tmp198 ___428_outcol 	%argrw{"wrr"}
+	sub		$tmp199 $tmp198 ___429_outcol 	%argrw{"wrr"}
 	div		___361_c $tmp199 ___361_cdelta 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:105
 #     if (rgb[0] == cmax) {
-	compref		$tmp200 ___428_outcol $const15 	%line{105} %argrw{"wrr"}
+	compref		$tmp200 ___429_outcol $const15 	%line{105} %argrw{"wrr"}
 	eq		$tmp201 $tmp200 ___361_cmax 	%argrw{"wrr"}
 	if		$tmp201 354 365 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:106
@@ -1257,7 +1257,7 @@ code ___main___
 	sub		___361_h $tmp202 $tmp203 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:108
 #     else if (rgb[1] == cmax) {
-	compref		$tmp204 ___428_outcol $const18 	%line{108} %argrw{"wrr"}
+	compref		$tmp204 ___429_outcol $const18 	%line{108} %argrw{"wrr"}
 	eq		$tmp205 $tmp204 ___361_cmax 	%argrw{"wrr"}
 	if		$tmp205 361 365 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:109
@@ -1284,23 +1284,23 @@ code ___main___
 	add		___361_h ___361_h $const2 	%line{118} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:122
 #   return color(h, s, v);
-	color		___429_hsv ___361_h ___361_s ___361_v 	%line{122} %argrw{"wrrr"}
+	color		___430_hsv ___361_h ___361_s ___361_v 	%line{122} %argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:176
 #     hsv[0] = hsv2[0];
-	compref		$tmp213 ___428_hsv2 $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{176} %argrw{"wrr"}
-	compassign	___429_hsv $const15 $tmp213 	%argrw{"wrr"}
+	compref		$tmp213 ___429_hsv2 $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{176} %argrw{"wrr"}
+	compassign	___430_hsv $const15 $tmp213 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:177
 #     color tmp = hsv_to_rgb(hsv);
 	functioncall	$const41 412 	%line{177} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:130
 #   h = hsv[0];
-	compref		___370_h ___429_hsv $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h"} %line{130} %argrw{"wrr"}
+	compref		___370_h ___430_hsv $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h"} %line{130} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:131
 #   s = hsv[1];
-	compref		___370_s ___429_hsv $const18 	%line{131} %argrw{"wrr"}
+	compref		___370_s ___430_hsv $const18 	%line{131} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:132
 #   v = hsv[2];
-	compref		___370_v ___429_hsv $const19 	%line{132} %argrw{"wrr"}
+	compref		___370_v ___430_hsv $const19 	%line{132} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:134
 #   if (s == 0.0) {
 	eq		$tmp214 ___370_s $const1 	%line{134} %argrw{"wrr"}
@@ -1382,13 +1382,13 @@ code ___main___
 	color		___370_rgb ___370_v ___370_p ___370_q 	%line{166} %argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:170
 #   return rgb;
-	assign		___429_tmp ___370_rgb 	%line{170} %argrw{"wr"}
+	assign		___430_tmp ___370_rgb 	%line{170} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:179
 #     outcol = mix(outcol, tmp, t);
-	mix		___428_outcol ___428_outcol ___429_tmp t 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{179} %argrw{"wrrr"}
+	mix		___429_outcol ___429_outcol ___430_tmp t 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{179} %argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:182
 #   return outcol;
-	assign		Color ___428_outcol 	%line{182} %argrw{"wr"}
+	assign		Color ___429_outcol 	%line{182} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:312
 #   if (mix_type == "saturation")
 	eq		$tmp227 mix_type $const43 	%line{312} %argrw{"wrr"}
@@ -1398,25 +1398,25 @@ code ___main___
 	functioncall	$const44 561 	%line{313} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:187
 #   float tm = 1.0 - t;
-	sub		___430_tm $const2 t 	%line{187} %argrw{"wrr"}
+	sub		___431_tm $const2 t 	%line{187} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:189
 #   color outcol = col1;
-	assign		___430_outcol Color1 	%line{189} %argrw{"wr"}
+	assign		___431_outcol Color1 	%line{189} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:191
 #   color hsv = rgb_to_hsv(outcol);
 	functioncall	$const38 465 	%line{191} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:85
 #   cmax = max(rgb[0], max(rgb[1], rgb[2]));
-	compref		$tmp228 ___430_outcol $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h"} %line{85} %argrw{"wrr"}
-	compref		$tmp230 ___430_outcol $const18 	%argrw{"wrr"}
-	compref		$tmp231 ___430_outcol $const19 	%argrw{"wrr"}
+	compref		$tmp228 ___431_outcol $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h"} %line{85} %argrw{"wrr"}
+	compref		$tmp230 ___431_outcol $const18 	%argrw{"wrr"}
+	compref		$tmp231 ___431_outcol $const19 	%argrw{"wrr"}
 	max		$tmp229 $tmp230 $tmp231 	%argrw{"wrr"}
 	max		___361_cmax $tmp228 $tmp229 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:86
 #   cmin = min(rgb[0], min(rgb[1], rgb[2]));
-	compref		$tmp232 ___430_outcol $const15 	%line{86} %argrw{"wrr"}
-	compref		$tmp234 ___430_outcol $const18 	%argrw{"wrr"}
-	compref		$tmp235 ___430_outcol $const19 	%argrw{"wrr"}
+	compref		$tmp232 ___431_outcol $const15 	%line{86} %argrw{"wrr"}
+	compref		$tmp234 ___431_outcol $const18 	%argrw{"wrr"}
+	compref		$tmp235 ___431_outcol $const19 	%argrw{"wrr"}
 	min		$tmp233 $tmp234 $tmp235 	%argrw{"wrr"}
 	min		___361_cmin $tmp232 $tmp233 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:87
@@ -1448,11 +1448,11 @@ code ___main___
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:103
 #     c = (color(cmax, cmax, cmax) - rgb) / cdelta;
 	color		$tmp238 ___361_cmax ___361_cmax ___361_cmax 	%line{103} %argrw{"wrrr"}
-	sub		$tmp239 $tmp238 ___430_outcol 	%argrw{"wrr"}
+	sub		$tmp239 $tmp238 ___431_outcol 	%argrw{"wrr"}
 	div		___361_c $tmp239 ___361_cdelta 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:105
 #     if (rgb[0] == cmax) {
-	compref		$tmp240 ___430_outcol $const15 	%line{105} %argrw{"wrr"}
+	compref		$tmp240 ___431_outcol $const15 	%line{105} %argrw{"wrr"}
 	eq		$tmp241 $tmp240 ___361_cmax 	%argrw{"wrr"}
 	if		$tmp241 449 460 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:106
@@ -1462,7 +1462,7 @@ code ___main___
 	sub		___361_h $tmp242 $tmp243 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:108
 #     else if (rgb[1] == cmax) {
-	compref		$tmp244 ___430_outcol $const18 	%line{108} %argrw{"wrr"}
+	compref		$tmp244 ___431_outcol $const18 	%line{108} %argrw{"wrr"}
 	eq		$tmp245 $tmp244 ___361_cmax 	%argrw{"wrr"}
 	if		$tmp245 456 460 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:109
@@ -1489,10 +1489,10 @@ code ___main___
 	add		___361_h ___361_h $const2 	%line{118} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:122
 #   return color(h, s, v);
-	color		___430_hsv ___361_h ___361_s ___361_v 	%line{122} %argrw{"wrrr"}
+	color		___431_hsv ___361_h ___361_s ___361_v 	%line{122} %argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:193
 #   if (hsv[1] != 0.0) {
-	compref		$tmp253 ___430_hsv $const18 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{193} %argrw{"wrr"}
+	compref		$tmp253 ___431_hsv $const18 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{193} %argrw{"wrr"}
 	neq		$tmp254 $tmp253 $const1 	%argrw{"wrr"}
 	if		$tmp254 560 560 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:194
@@ -1582,27 +1582,27 @@ code ___main___
 	add		___361_h ___361_h $const2 	%line{118} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:122
 #   return color(h, s, v);
-	color		___431_hsv2 ___361_h ___361_s ___361_v 	%line{122} %argrw{"wrrr"}
+	color		___432_hsv2 ___361_h ___361_s ___361_v 	%line{122} %argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:196
 #     hsv[1] = tm * hsv[1] + t * hsv2[1];
-	compref		$tmp280 ___430_hsv $const18 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{196} %argrw{"wrr"}
-	mul		$tmp281 ___430_tm $tmp280 	%argrw{"wrr"}
-	compref		$tmp282 ___431_hsv2 $const18 	%argrw{"wrr"}
+	compref		$tmp280 ___431_hsv $const18 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{196} %argrw{"wrr"}
+	mul		$tmp281 ___431_tm $tmp280 	%argrw{"wrr"}
+	compref		$tmp282 ___432_hsv2 $const18 	%argrw{"wrr"}
 	mul		$tmp283 t $tmp282 	%argrw{"wrr"}
 	add		$tmp284 $tmp281 $tmp283 	%argrw{"wrr"}
-	compassign	___430_hsv $const18 $tmp284 	%argrw{"wrr"}
+	compassign	___431_hsv $const18 $tmp284 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:197
 #     outcol = hsv_to_rgb(hsv);
 	functioncall	$const41 560 	%line{197} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:130
 #   h = hsv[0];
-	compref		___370_h ___430_hsv $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h"} %line{130} %argrw{"wrr"}
+	compref		___370_h ___431_hsv $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h"} %line{130} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:131
 #   s = hsv[1];
-	compref		___370_s ___430_hsv $const18 	%line{131} %argrw{"wrr"}
+	compref		___370_s ___431_hsv $const18 	%line{131} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:132
 #   v = hsv[2];
-	compref		___370_v ___430_hsv $const19 	%line{132} %argrw{"wrr"}
+	compref		___370_v ___431_hsv $const19 	%line{132} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:134
 #   if (s == 0.0) {
 	eq		$tmp285 ___370_s $const1 	%line{134} %argrw{"wrr"}
@@ -1684,10 +1684,10 @@ code ___main___
 	color		___370_rgb ___370_v ___370_p ___370_q 	%line{166} %argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:170
 #   return rgb;
-	assign		___430_outcol ___370_rgb 	%line{170} %argrw{"wr"}
+	assign		___431_outcol ___370_rgb 	%line{170} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:200
 #   return outcol;
-	assign		Color ___430_outcol 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{200} %argrw{"wr"}
+	assign		Color ___431_outcol 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{200} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:314
 #   if (mix_type == "value")
 	eq		$tmp298 mix_type $const45 	%line{314} %argrw{"wrr"}
@@ -1697,7 +1697,7 @@ code ___main___
 	functioncall	$const46 703 	%line{315} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:205
 #   float tm = 1.0 - t;
-	sub		___432_tm $const2 t 	%line{205} %argrw{"wrr"}
+	sub		___433_tm $const2 t 	%line{205} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:207
 #   color hsv = rgb_to_hsv(col1);
 	functioncall	$const38 611 	%line{207} %argrw{"r"}
@@ -1785,7 +1785,7 @@ code ___main___
 	add		___361_h ___361_h $const2 	%line{118} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:122
 #   return color(h, s, v);
-	color		___432_hsv ___361_h ___361_s ___361_v 	%line{122} %argrw{"wrrr"}
+	color		___433_hsv ___361_h ___361_s ___361_v 	%line{122} %argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:208
 #   color hsv2 = rgb_to_hsv(col2);
 	functioncall	$const38 657 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{208} %argrw{"r"}
@@ -1873,27 +1873,27 @@ code ___main___
 	add		___361_h ___361_h $const2 	%line{118} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:122
 #   return color(h, s, v);
-	color		___432_hsv2 ___361_h ___361_s ___361_v 	%line{122} %argrw{"wrrr"}
+	color		___433_hsv2 ___361_h ___361_s ___361_v 	%line{122} %argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:210
 #   hsv[2] = tm * hsv[2] + t * hsv2[2];
-	compref		$tmp349 ___432_hsv $const19 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{210} %argrw{"wrr"}
-	mul		$tmp350 ___432_tm $tmp349 	%argrw{"wrr"}
-	compref		$tmp351 ___432_hsv2 $const19 	%argrw{"wrr"}
+	compref		$tmp349 ___433_hsv $const19 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{210} %argrw{"wrr"}
+	mul		$tmp350 ___433_tm $tmp349 	%argrw{"wrr"}
+	compref		$tmp351 ___433_hsv2 $const19 	%argrw{"wrr"}
 	mul		$tmp352 t $tmp351 	%argrw{"wrr"}
 	add		$tmp353 $tmp350 $tmp352 	%argrw{"wrr"}
-	compassign	___432_hsv $const19 $tmp353 	%argrw{"wrr"}
+	compassign	___433_hsv $const19 $tmp353 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:212
 #   return hsv_to_rgb(hsv);
 	functioncall	$const41 703 	%line{212} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:130
 #   h = hsv[0];
-	compref		___370_h ___432_hsv $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h"} %line{130} %argrw{"wrr"}
+	compref		___370_h ___433_hsv $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h"} %line{130} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:131
 #   s = hsv[1];
-	compref		___370_s ___432_hsv $const18 	%line{131} %argrw{"wrr"}
+	compref		___370_s ___433_hsv $const18 	%line{131} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:132
 #   v = hsv[2];
-	compref		___370_v ___432_hsv $const19 	%line{132} %argrw{"wrr"}
+	compref		___370_v ___433_hsv $const19 	%line{132} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:134
 #   if (s == 0.0) {
 	eq		$tmp354 ___370_s $const1 	%line{134} %argrw{"wrr"}
@@ -1985,7 +1985,7 @@ code ___main___
 	functioncall	$const48 848 	%line{317} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:217
 #   color outcol = col1;
-	assign		___433_outcol Color1 	%line{217} %argrw{"wr"}
+	assign		___434_outcol Color1 	%line{217} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:218
 #   color hsv2 = rgb_to_hsv(col2);
 	functioncall	$const38 753 	%line{218} %argrw{"r"}
@@ -2073,10 +2073,10 @@ code ___main___
 	add		___361_h ___361_h $const2 	%line{118} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:122
 #   return color(h, s, v);
-	color		___433_hsv2 ___361_h ___361_s ___361_v 	%line{122} %argrw{"wrrr"}
+	color		___434_hsv2 ___361_h ___361_s ___361_v 	%line{122} %argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:220
 #   if (hsv2[1] != 0.0) {
-	compref		$tmp393 ___433_hsv2 $const18 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{220} %argrw{"wrr"}
+	compref		$tmp393 ___434_hsv2 $const18 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{220} %argrw{"wrr"}
 	neq		$tmp394 $tmp393 $const1 	%argrw{"wrr"}
 	if		$tmp394 847 847 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:221
@@ -2084,16 +2084,16 @@ code ___main___
 	functioncall	$const38 802 	%line{221} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:85
 #   cmax = max(rgb[0], max(rgb[1], rgb[2]));
-	compref		$tmp395 ___433_outcol $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h"} %line{85} %argrw{"wrr"}
-	compref		$tmp397 ___433_outcol $const18 	%argrw{"wrr"}
-	compref		$tmp398 ___433_outcol $const19 	%argrw{"wrr"}
+	compref		$tmp395 ___434_outcol $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h"} %line{85} %argrw{"wrr"}
+	compref		$tmp397 ___434_outcol $const18 	%argrw{"wrr"}
+	compref		$tmp398 ___434_outcol $const19 	%argrw{"wrr"}
 	max		$tmp396 $tmp397 $tmp398 	%argrw{"wrr"}
 	max		___361_cmax $tmp395 $tmp396 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:86
 #   cmin = min(rgb[0], min(rgb[1], rgb[2]));
-	compref		$tmp399 ___433_outcol $const15 	%line{86} %argrw{"wrr"}
-	compref		$tmp401 ___433_outcol $const18 	%argrw{"wrr"}
-	compref		$tmp402 ___433_outcol $const19 	%argrw{"wrr"}
+	compref		$tmp399 ___434_outcol $const15 	%line{86} %argrw{"wrr"}
+	compref		$tmp401 ___434_outcol $const18 	%argrw{"wrr"}
+	compref		$tmp402 ___434_outcol $const19 	%argrw{"wrr"}
 	min		$tmp400 $tmp401 $tmp402 	%argrw{"wrr"}
 	min		___361_cmin $tmp399 $tmp400 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:87
@@ -2125,11 +2125,11 @@ code ___main___
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:103
 #     c = (color(cmax, cmax, cmax) - rgb) / cdelta;
 	color		$tmp405 ___361_cmax ___361_cmax ___361_cmax 	%line{103} %argrw{"wrrr"}
-	sub		$tmp406 $tmp405 ___433_outcol 	%argrw{"wrr"}
+	sub		$tmp406 $tmp405 ___434_outcol 	%argrw{"wrr"}
 	div		___361_c $tmp406 ___361_cdelta 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:105
 #     if (rgb[0] == cmax) {
-	compref		$tmp407 ___433_outcol $const15 	%line{105} %argrw{"wrr"}
+	compref		$tmp407 ___434_outcol $const15 	%line{105} %argrw{"wrr"}
 	eq		$tmp408 $tmp407 ___361_cmax 	%argrw{"wrr"}
 	if		$tmp408 786 797 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:106
@@ -2139,7 +2139,7 @@ code ___main___
 	sub		___361_h $tmp409 $tmp410 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:108
 #     else if (rgb[1] == cmax) {
-	compref		$tmp411 ___433_outcol $const18 	%line{108} %argrw{"wrr"}
+	compref		$tmp411 ___434_outcol $const18 	%line{108} %argrw{"wrr"}
 	eq		$tmp412 $tmp411 ___361_cmax 	%argrw{"wrr"}
 	if		$tmp412 793 797 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:109
@@ -2166,27 +2166,27 @@ code ___main___
 	add		___361_h ___361_h $const2 	%line{118} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:122
 #   return color(h, s, v);
-	color		___434_hsv ___361_h ___361_s ___361_v 	%line{122} %argrw{"wrrr"}
+	color		___435_hsv ___361_h ___361_s ___361_v 	%line{122} %argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:222
 #     hsv[0] = hsv2[0];
-	compref		$tmp420 ___433_hsv2 $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{222} %argrw{"wrr"}
-	compassign	___434_hsv $const15 $tmp420 	%argrw{"wrr"}
+	compref		$tmp420 ___434_hsv2 $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{222} %argrw{"wrr"}
+	compassign	___435_hsv $const15 $tmp420 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:223
 #     hsv[1] = hsv2[1];
-	compref		$tmp421 ___433_hsv2 $const18 	%line{223} %argrw{"wrr"}
-	compassign	___434_hsv $const18 $tmp421 	%argrw{"wrr"}
+	compref		$tmp421 ___434_hsv2 $const18 	%line{223} %argrw{"wrr"}
+	compassign	___435_hsv $const18 $tmp421 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:224
 #     color tmp = hsv_to_rgb(hsv);
 	functioncall	$const41 846 	%line{224} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:130
 #   h = hsv[0];
-	compref		___370_h ___434_hsv $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h"} %line{130} %argrw{"wrr"}
+	compref		___370_h ___435_hsv $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h"} %line{130} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:131
 #   s = hsv[1];
-	compref		___370_s ___434_hsv $const18 	%line{131} %argrw{"wrr"}
+	compref		___370_s ___435_hsv $const18 	%line{131} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:132
 #   v = hsv[2];
-	compref		___370_v ___434_hsv $const19 	%line{132} %argrw{"wrr"}
+	compref		___370_v ___435_hsv $const19 	%line{132} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:134
 #   if (s == 0.0) {
 	eq		$tmp422 ___370_s $const1 	%line{134} %argrw{"wrr"}
@@ -2268,13 +2268,13 @@ code ___main___
 	color		___370_rgb ___370_v ___370_p ___370_q 	%line{166} %argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_color.h:170
 #   return rgb;
-	assign		___434_tmp ___370_rgb 	%line{170} %argrw{"wr"}
+	assign		___435_tmp ___370_rgb 	%line{170} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:226
 #     outcol = mix(outcol, tmp, t);
-	mix		___433_outcol ___433_outcol ___434_tmp t 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{226} %argrw{"wrrr"}
+	mix		___434_outcol ___434_outcol ___435_tmp t 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{226} %argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:229
 #   return outcol;
-	assign		Color ___433_outcol 	%line{229} %argrw{"wr"}
+	assign		Color ___434_outcol 	%line{229} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:318
 #   if (mix_type == "soft_light")
 	eq		$tmp435 mix_type $const49 	%line{318} %argrw{"wrr"}
@@ -2284,23 +2284,23 @@ code ___main___
 	functioncall	$const50 865 	%line{319} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:234
 #   float tm = 1.0 - t;
-	sub		___435_tm $const2 t 	%line{234} %argrw{"wrr"}
+	sub		___436_tm $const2 t 	%line{234} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:236
 #   color one = color(1.0);
-	assign		___435_one $const12 	%line{236} %argrw{"wr"}
+	assign		___436_one $const12 	%line{236} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:237
 #   color scr = one - (one - col2) * (one - col1);
-	sub		$tmp436 ___435_one Color2 	%line{237} %argrw{"wrr"}
-	sub		$tmp437 ___435_one Color1 	%argrw{"wrr"}
+	sub		$tmp436 ___436_one Color2 	%line{237} %argrw{"wrr"}
+	sub		$tmp437 ___436_one Color1 	%argrw{"wrr"}
 	mul		$tmp438 $tmp436 $tmp437 	%argrw{"wrr"}
-	sub		___435_scr ___435_one $tmp438 	%argrw{"wrr"}
+	sub		___436_scr ___436_one $tmp438 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:239
 #   return tm * col1 + t * ((one - col1) * col2 * col1 + col1 * scr);
-	mul		$tmp439 ___435_tm Color1 	%line{239} %argrw{"wrr"}
-	sub		$tmp440 ___435_one Color1 	%argrw{"wrr"}
+	mul		$tmp439 ___436_tm Color1 	%line{239} %argrw{"wrr"}
+	sub		$tmp440 ___436_one Color1 	%argrw{"wrr"}
 	mul		$tmp441 $tmp440 Color2 	%argrw{"wrr"}
 	mul		$tmp442 $tmp441 Color1 	%argrw{"wrr"}
-	mul		$tmp443 Color1 ___435_scr 	%argrw{"wrr"}
+	mul		$tmp443 Color1 ___436_scr 	%argrw{"wrr"}
 	add		$tmp444 $tmp442 $tmp443 	%argrw{"wrr"}
 	mul		$tmp445 t $tmp444 	%argrw{"wrr"}
 	add		Color $tmp439 $tmp445 	%argrw{"wrr"}
@@ -2313,7 +2313,7 @@ code ___main___
 	functioncall	$const52 921 	%line{321} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:244
 #   color outcol = col1;
-	assign		___436_outcol Color1 	%line{244} %argrw{"wr"}
+	assign		___437_outcol Color1 	%line{244} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:246
 #   if (col2[0] > 0.5)
 	compref		$tmp447 Color2 $const15 	%line{246} %argrw{"wrr"}
@@ -2327,7 +2327,7 @@ code ___main___
 	mul		$tmp452 $const17 $tmp451 	%argrw{"wrr"}
 	mul		$tmp453 t $tmp452 	%argrw{"wrr"}
 	add		$tmp454 $tmp449 $tmp453 	%argrw{"wrr"}
-	compassign	___436_outcol $const15 $tmp454 	%argrw{"wrr"}
+	compassign	___437_outcol $const15 $tmp454 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:249
 #     outcol[0] = col1[0] + t * (2.0 * (col2[0]) - 1.0);
 	compref		$tmp455 Color1 $const15 	%line{249} %argrw{"wrr"}
@@ -2336,7 +2336,7 @@ code ___main___
 	sub		$tmp458 $tmp457 $const2 	%argrw{"wrr"}
 	mul		$tmp459 t $tmp458 	%argrw{"wrr"}
 	add		$tmp460 $tmp455 $tmp459 	%argrw{"wrr"}
-	compassign	___436_outcol $const15 $tmp460 	%argrw{"wrr"}
+	compassign	___437_outcol $const15 $tmp460 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:251
 #   if (col2[1] > 0.5)
 	compref		$tmp461 Color2 $const18 	%line{251} %argrw{"wrr"}
@@ -2350,7 +2350,7 @@ code ___main___
 	mul		$tmp466 $const17 $tmp465 	%argrw{"wrr"}
 	mul		$tmp467 t $tmp466 	%argrw{"wrr"}
 	add		$tmp468 $tmp463 $tmp467 	%argrw{"wrr"}
-	compassign	___436_outcol $const18 $tmp468 	%argrw{"wrr"}
+	compassign	___437_outcol $const18 $tmp468 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:254
 #     outcol[1] = col1[1] + t * (2.0 * (col2[1]) - 1.0);
 	compref		$tmp469 Color1 $const18 	%line{254} %argrw{"wrr"}
@@ -2359,7 +2359,7 @@ code ___main___
 	sub		$tmp472 $tmp471 $const2 	%argrw{"wrr"}
 	mul		$tmp473 t $tmp472 	%argrw{"wrr"}
 	add		$tmp474 $tmp469 $tmp473 	%argrw{"wrr"}
-	compassign	___436_outcol $const18 $tmp474 	%argrw{"wrr"}
+	compassign	___437_outcol $const18 $tmp474 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:256
 #   if (col2[2] > 0.5)
 	compref		$tmp475 Color2 $const19 	%line{256} %argrw{"wrr"}
@@ -2373,7 +2373,7 @@ code ___main___
 	mul		$tmp480 $const17 $tmp479 	%argrw{"wrr"}
 	mul		$tmp481 t $tmp480 	%argrw{"wrr"}
 	add		$tmp482 $tmp477 $tmp481 	%argrw{"wrr"}
-	compassign	___436_outcol $const19 $tmp482 	%argrw{"wrr"}
+	compassign	___437_outcol $const19 $tmp482 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:259
 #     outcol[2] = col1[2] + t * (2.0 * (col2[2]) - 1.0);
 	compref		$tmp483 Color1 $const19 	%line{259} %argrw{"wrr"}
@@ -2382,10 +2382,10 @@ code ___main___
 	sub		$tmp486 $tmp485 $const2 	%argrw{"wrr"}
 	mul		$tmp487 t $tmp486 	%argrw{"wrr"}
 	add		$tmp488 $tmp483 $tmp487 	%argrw{"wrr"}
-	compassign	___436_outcol $const19 $tmp488 	%argrw{"wrr"}
+	compassign	___437_outcol $const19 $tmp488 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:261
 #   return outcol;
-	assign		Color ___436_outcol 	%line{261} %argrw{"wr"}
+	assign		Color ___437_outcol 	%line{261} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:323
 #   if (use_clamp)
 	if		use_clamp 940 940 	%line{323} %argrw{"r"}
@@ -2394,7 +2394,7 @@ code ___main___
 	functioncall	$const53 940 	%line{324} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:266
 #   color outcol = col;
-	assign		___437_outcol Color 	%line{266} %argrw{"wr"}
+	assign		___438_outcol Color 	%line{266} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:268
 #   outcol[0] = clamp(col[0], 0.0, 1.0);
 	compref		$tmp490 Color $const15 	%line{268} %argrw{"wrr"}
@@ -2405,7 +2405,7 @@ code ___main___
 	max		$tmp489 $tmp491 $const1 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:268
 #   outcol[0] = clamp(col[0], 0.0, 1.0);
-	compassign	___437_outcol $const15 $tmp489 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{268} %argrw{"wrr"}
+	compassign	___438_outcol $const15 $tmp489 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{268} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:269
 #   outcol[1] = clamp(col[1], 0.0, 1.0);
 	compref		$tmp493 Color $const18 	%line{269} %argrw{"wrr"}
@@ -2416,7 +2416,7 @@ code ___main___
 	max		$tmp492 $tmp494 $const1 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:269
 #   outcol[1] = clamp(col[1], 0.0, 1.0);
-	compassign	___437_outcol $const18 $tmp492 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{269} %argrw{"wrr"}
+	compassign	___438_outcol $const18 $tmp492 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{269} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:270
 #   outcol[2] = clamp(col[2], 0.0, 1.0);
 	compref		$tmp496 Color $const19 	%line{270} %argrw{"wrr"}
@@ -2427,8 +2427,8 @@ code ___main___
 	max		$tmp495 $tmp497 $const1 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:270
 #   outcol[2] = clamp(col[2], 0.0, 1.0);
-	compassign	___437_outcol $const19 $tmp495 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{270} %argrw{"wrr"}
+	compassign	___438_outcol $const19 $tmp495 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl"} %line{270} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_mix.osl:272
 #   return outcol;
-	assign		Color ___437_outcol 	%line{272} %argrw{"wr"}
+	assign		Color ___438_outcol 	%line{272} %argrw{"wr"}
 	end

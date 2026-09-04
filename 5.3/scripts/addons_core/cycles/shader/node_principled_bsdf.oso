@@ -2,7 +2,7 @@ OpenShadingLanguage 1.00
 # Compiled by oslc 1.15.3.0
 # options: -q -O2 -IE:/Blender_Source/intern/cycles/kernel/osl/shaders -IE:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders -o E:/build_windows_Full_x64_vc17_Release/intern/cycles/kernel/osl/shaders/node_principled_bsdf.oso
 shader node_principled_bsdf
-param	string	distribution	"multi_ggx"		%read{163,207} %write{2147483647,-1}
+param	string	distribution	"multi_ggx"		%read{163,217} %write{2147483647,-1}
 param	string	subsurface_method	"random_walk"		%read{141,145} %write{2147483647,-1}
 param	color	BaseColor	0.800000012 0.800000012 0.800000012		%read{17,17} %write{2147483647,-1}
 param	float	SubsurfaceWeight	0		%read{11,11} %write{2147483647,-1}
@@ -17,26 +17,27 @@ param	color	SpecularTint	1 1 1		%read{13,13} %write{2147483647,-1}
 param	float	Roughness	0.5		%read{23,23} %write{2147483647,-1}
 param	float	Anisotropic	0		%read{36,39} %write{2147483647,-1}
 param	float	AnisotropicRotation	0		%read{46,48} %write{2147483647,-1}
-param	float	SheenWeight	0		%read{16,252} %write{2147483647,-1}
-param	float	SheenRoughness	0.5		%read{260,260} %write{2147483647,-1}
-param	color	SheenTint	0.5 0.5 0.5		%read{263,263} %write{2147483647,-1}
+param	float	SheenWeight	0		%read{16,244} %write{2147483647,-1}
+param	float	SheenRoughness	0.5		%read{253,253} %write{2147483647,-1}
+param	color	SheenTint	0.5 0.5 0.5		%read{251,251} %write{2147483647,-1}
 param	float	CoatWeight	0		%read{14,14} %write{2147483647,-1}
-param	float	CoatRoughness	0.0299999993		%read{246,246} %write{2147483647,-1}
-param	float	CoatIOR	1.5		%read{227,227} %write{2147483647,-1}
-param	color	CoatTint	1 1 1		%read{15,239} %write{2147483647,-1}
+param	float	CoatRoughness	0.0299999993		%read{239,239} %write{2147483647,-1}
+param	float	CoatIOR	1.5		%read{237,237} %write{2147483647,-1}
+param	color	CoatTint	1 1 1		%read{15,241} %write{2147483647,-1}
 param	float	IOR	1.45000005		%read{107,172} %write{2147483647,-1}
 param	float	TransmissionWeight	0		%read{8,168} %write{2147483647,-1}
-param	color	EmissionColor	1 1 1		%read{217,222} %write{2147483647,-1}
-param	float	EmissionStrength	0		%read{214,222} %write{2147483647,-1}
-param	float	Alpha	1		%read{269,269} %write{2147483647,-1}
+param	float	TransmissionDispersionScale	0		%read{194,194} %write{2147483647,-1}
+param	float	TransmissionDispersionAbbeNumber	20		%read{196,196} %write{2147483647,-1}
+param	color	EmissionColor	1 1 1		%read{227,232} %write{2147483647,-1}
+param	float	EmissionStrength	0		%read{224,232} %write{2147483647,-1}
+param	float	Alpha	1		%read{260,260} %write{2147483647,-1}
 param	int	ThinWall	0		%read{28,178} %write{2147483647,-1}
-param	float	ThinFilmThickness	0		%read{156,207} %write{2147483647,-1}
-param	float	ThinFilmIOR	1.33000004		%read{163,207} %write{2147483647,-1}
-param	normal	Normal	0 0 0		%read{50,257} %write{0,0} %initexpr
-param	normal	CoatNormal	0 0 0		%read{231,257} %write{1,1} %initexpr
+param	float	ThinFilmThickness	0		%read{156,217} %write{2147483647,-1}
+param	float	ThinFilmIOR	1.33000004		%read{163,217} %write{2147483647,-1}
+param	normal	Normal	0 0 0		%read{50,249} %write{0,0} %initexpr
+param	normal	CoatNormal	0 0 0		%read{241,249} %write{1,1} %initexpr
 param	normal	Tangent	0 0 0		%read{35,35} %write{2,2} %initexpr
-oparam	closure color	BSDF			%read{151,274} %write{131,275}
-global	vector	I	%read{231,231} %write{2147483647,-1}
+oparam	closure color	BSDF			%read{151,265} %write{131,266}
 global	normal	N	%read{0,1} %write{2147483647,-1}
 global	vector	dPdu	%read{2,2} %write{2147483647,-1}
 local	vector	___257_axis	%read{54,56} %write{51,51}
@@ -49,60 +50,62 @@ local	float	___257_z	%read{64,92} %write{56,56}
 local	matrix	___257_M	%read{98,98} %write{96,96}
 local	float	___349_f0	%read{112,190} %write{111,189}
 local	float	___350_sqrt_f0	%read{123,124} %write{122,122}
-local	float	CLOSURE_WEIGHT_CUTOFF	%read{129,252} %write{3,3}
-local	float	metallic	%read{100,208} %write{6,6}
-local	float	transmission	%read{180,196} %write{9,9}
+local	float	CLOSURE_WEIGHT_CUTOFF	%read{129,244} %write{3,3}
+local	float	metallic	%read{100,218} %write{6,6}
+local	float	transmission	%read{180,206} %write{9,9}
 local	float	subsurface_weight	%read{134,147} %write{12,12}
-local	color	specular_tint	%read{160,206} %write{13,13}
-local	float	coat_weight	%read{225,255} %write{14,14}
+local	color	specular_tint	%read{160,216} %write{13,13}
+local	float	coat_weight	%read{235,247} %write{14,14}
 local	color	coat_tint	%read{2147483647,-1} %write{15,15}
-local	float	sheen_weight	%read{264,264} %write{16,16}
+local	float	sheen_weight	%read{256,256} %write{16,16}
 local	color	base_color	%read{18,133} %write{17,17}
-local	color	clamped_base_color	%read{138,205} %write{18,18}
+local	color	clamped_base_color	%read{138,215} %write{18,18}
 local	float	diffuse_roughness	%read{129,138} %write{21,21}
-local	float	r2	%read{25,195} %write{24,25}
-local	float	alpha_x	%read{44,207} %write{26,44}
-local	float	alpha_y	%read{45,207} %write{27,45}
+local	float	r2	%read{25,205} %write{24,25}
+local	float	alpha_x	%read{44,217} %write{26,44}
+local	float	alpha_y	%read{45,217} %write{27,45}
 local	int	is_backfacing	%read{173,176} %write{34,34}
-local	vector	T	%read{97,207} %write{35,99}
-local	float	___376_aspect	%read{44,45} %write{43,43}
-local	float	___377_eta	%read{109,162} %write{107,128}
-local	float	___377_f0	%read{117,160} %write{112,117}
-local	closure color	___382_SubsurfBSDF	%read{146,146} %write{136,145}
-local	vector	___384_radius	%read{145,145} %write{140,140}
-local	float	___384_subsurface_ior	%read{145,145} %write{143,144}
-local	color	___385_F0	%read{163,163} %write{160,160}
-local	color	___385_F90	%read{163,163} %write{161,161}
-local	float	___386_eta	%read{174,194} %write{172,177}
-local	float	___386_thinfilm_ior	%read{179,195} %write{174,175}
-local	closure color	___387_ThinGlassBSDF	%read{183,183} %write{179,179}
-local	color	___388_F0	%read{195,195} %write{191,191}
-local	color	___388_F90	%read{195,195} %write{192,192}
-local	closure color	___388_TransmissionBSDF	%read{199,199} %write{195,195}
-local	closure color	MetallicBSDF	%read{211,211} %write{202,207}
-local	color	___389_F0	%read{207,207} %write{205,205}
-local	color	___389_F82	%read{207,207} %write{206,206}
-local	float	___391_coat_ior	%read{230,249} %write{227,227}
-local	float	___392_coat_neta	%read{232,232} %write{230,230}
-local	float	___392_cosNI	%read{233,233} %write{231,231}
-local	float	___392_cosNT	%read{238,238} %write{237,237}
-local	float	___391_coat_r2	%read{248,249} %write{247,248}
-local	closure color	___391_CoatBSDF	%read{250,250} %write{249,249}
-local	normal	___393_sheen_normal	%read{262,262} %write{258,258}
-local	closure color	___393_SheenBSDF	%read{265,265} %write{262,262}
+local	vector	T	%read{97,217} %write{35,99}
+local	float	___517_aspect	%read{44,45} %write{43,43}
+local	float	___518_eta	%read{109,162} %write{107,128}
+local	float	___518_f0	%read{117,160} %write{112,117}
+local	closure color	___523_SubsurfBSDF	%read{146,146} %write{136,145}
+local	vector	___525_radius	%read{145,145} %write{140,140}
+local	float	___525_subsurface_ior	%read{145,145} %write{143,144}
+local	color	___526_F0	%read{163,163} %write{160,160}
+local	color	___526_F90	%read{163,163} %write{161,161}
+local	float	___527_eta	%read{174,204} %write{172,177}
+local	float	___527_thinfilm_ior	%read{179,205} %write{174,175}
+local	closure color	___528_ThinGlassBSDF	%read{183,183} %write{179,179}
+local	color	___529_F0	%read{205,205} %write{191,191}
+local	color	___529_F90	%read{205,205} %write{192,192}
+local	float	___529_dispersion_scale	%read{200,200} %write{195,195}
+local	float	___529_abbe_number	%read{198,200} %write{196,196}
+local	float	___529_inv_abbe	%read{205,205} %write{200,201}
+local	closure color	___529_TransmissionBSDF	%read{209,209} %write{205,205}
+local	closure color	MetallicBSDF	%read{221,221} %write{212,217}
+local	color	___530_F0	%read{217,217} %write{215,215}
+local	color	___530_F82	%read{217,217} %write{216,216}
+local	float	___532_coat_ior	%read{241,241} %write{237,237}
+local	float	___532_coat_alpha	%read{241,241} %write{240,240}
+local	closure color	___532_CoatBSDF	%read{242,242} %write{241,241}
+local	normal	___533_sheen_normal	%read{255,255} %write{250,250}
+local	color	___533_sheen_tint	%read{255,255} %write{251,251}
+local	float	___533_sheen_roughness	%read{255,255} %write{254,254}
+local	closure color	___533_SheenBSDF	%read{256,256} %write{255,255}
 const	float	$const1	9.99999975e-06		%read{3,172} %write{2147483647,-1}
-const	float	$const2	0		%read{6,270} %write{2147483647,-1}
-const	float	$const3	1		%read{5,272} %write{2147483647,-1}
-const	string	$const4	"clamp"		%read{4,268} %write{2147483647,-1}
+const	float	$const2	0		%read{6,261} %write{2147483647,-1}
+const	float	$const3	1		%read{5,263} %write{2147483647,-1}
+const	string	$const4	"clamp"		%read{4,259} %write{2147483647,-1}
 temp	float	$tmp1	%read{6,6} %write{5,5}
 temp	float	$tmp2	%read{9,9} %write{8,8}
 temp	float	$tmp3	%read{12,12} %write{11,11}
-const	color	$const5	0 0 0		%read{13,263} %write{2147483647,-1}
-const	color	$const6	1 1 1		%read{18,249} %write{2147483647,-1}
+const	color	$const5	0 0 0		%read{13,251} %write{2147483647,-1}
+const	color	$const6	1 1 1		%read{18,216} %write{2147483647,-1}
 temp	float	$tmp8	%read{21,21} %write{20,20}
 temp	float	$tmp9	%read{24,24} %write{23,23}
 temp	int	$tmp10	%read{29,29} %write{28,28}
-const	int	$const7	0		%read{28,218} %write{2147483647,-1}
+const	int	$const7	0		%read{28,228} %write{2147483647,-1}
 temp	int	$tmp11	%read{30,34} %write{29,33}
 temp	int	$tmp12	%read{32,32} %write{31,31}
 temp	int	$tmp13	%read{33,33} %write{32,32}
@@ -185,7 +188,7 @@ const	string	$const19	"oren_nayar_diffuse_bsdf"		%read{131,131} %write{214748364
 temp	closure color	$tmp79	%read{133,133} %write{132,132}
 const	string	$const20	"diffuse"		%read{132,132} %write{2147483647,-1}
 temp	int	$tmp80	%read{135,135} %write{134,134}
-const	vector	$const21	0 0 0		%read{138,249} %write{2147483647,-1}
+const	vector	$const21	0 0 0		%read{138,205} %write{2147483647,-1}
 const	string	$const22	"thin_subsurface"		%read{138,138} %write{2147483647,-1}
 temp	vector	$tmp82	%read{140,140} %write{139,139}
 const	string	$const23	"random_walk_skin"		%read{141,141} %write{2147483647,-1}
@@ -196,7 +199,7 @@ const	string	$const26	"anisotropy"		%read{145,145} %write{2147483647,-1}
 const	string	$const27	"bssrdf"		%read{145,145} %write{2147483647,-1}
 temp	closure color	$tmp85	%read{150,150} %write{146,146}
 temp	float	$tmp86	%read{149,151} %write{147,147}
-const	string	$const28	"mix"		%read{148,271} %write{2147483647,-1}
+const	string	$const28	"mix"		%read{148,262} %write{2147483647,-1}
 temp	float	$tmp87	%read{150,150} %write{149,149}
 temp	closure color	$tmp88	%read{152,152} %write{150,150}
 temp	closure color	$tmp89	%read{152,152} %write{151,151}
@@ -207,10 +210,10 @@ temp	int	$tmp92	%read{157,157} %write{156,156}
 temp	int	$tmp93	%read{158,158} %write{157,157}
 temp	closure color	$tmp94	%read{164,164} %write{163,163}
 temp	float	$tmp97	%read{163,163} %write{162,162}
-const	string	$const30	"thinfilm_thickness"		%read{163,207} %write{2147483647,-1}
-const	string	$const31	"thinfilm_ior"		%read{163,207} %write{2147483647,-1}
-const	string	$const32	"generalized_schlick_bsdf"		%read{163,195} %write{2147483647,-1}
-const	string	$const33	"layer"		%read{164,266} %write{2147483647,-1}
+const	string	$const30	"thinfilm_thickness"		%read{163,217} %write{2147483647,-1}
+const	string	$const31	"thinfilm_ior"		%read{163,217} %write{2147483647,-1}
+const	string	$const32	"generalized_schlick_bsdf"		%read{163,205} %write{2147483647,-1}
+const	string	$const33	"layer"		%read{164,257} %write{2147483647,-1}
 temp	int	$tmp98	%read{166,166} %write{165,165}
 temp	int	$tmp99	%read{167,171} %write{166,170}
 temp	int	$tmp100	%read{169,169} %write{168,168}
@@ -223,176 +226,165 @@ temp	closure color	$tmp106	%read{185,185} %write{184,184}
 temp	float	$tmp107	%read{191,191} %write{190,190}
 temp	float	$tmp108	%read{189,189} %write{187,187}
 temp	float	$tmp109	%read{189,189} %write{188,188}
-temp	color	$tmp112	%read{195,195} %write{193,193}
-temp	float	$tmp113	%read{195,195} %write{194,194}
-temp	float	$tmp114	%read{198,200} %write{196,196}
-temp	float	$tmp115	%read{199,199} %write{198,198}
-temp	closure color	$tmp116	%read{201,201} %write{199,199}
-temp	closure color	$tmp117	%read{201,201} %write{200,200}
-temp	int	$tmp118	%read{204,204} %write{203,203}
-const	string	$const35	"microfacet_f82_tint"		%read{207,207} %write{2147483647,-1}
-temp	float	$tmp120	%read{210,212} %write{208,208}
-temp	float	$tmp121	%read{211,211} %write{210,210}
-temp	closure color	$tmp122	%read{213,213} %write{211,211}
-temp	closure color	$tmp123	%read{213,213} %write{212,212}
-temp	int	$tmp124	%read{215,215} %write{214,214}
-temp	int	$tmp125	%read{216,220} %write{215,219}
-temp	int	$tmp127	%read{218,218} %write{217,217}
-temp	int	$tmp128	%read{219,219} %write{218,218}
-temp	closure color	$tmp129	%read{223,223} %write{221,221}
-const	string	$const36	"emission"		%read{221,221} %write{2147483647,-1}
-temp	color	$tmp130	%read{223,223} %write{222,222}
-temp	closure color	$tmp131	%read{224,224} %write{223,223}
-temp	int	$tmp132	%read{226,226} %write{225,225}
-temp	int	$tmp134	%read{229,229} %write{228,228}
-temp	float	$tmp135	%read{235,235} %write{232,232}
-temp	float	$tmp136	%read{234,234} %write{233,233}
-temp	float	$tmp137	%read{235,235} %write{234,234}
-temp	float	$tmp138	%read{236,236} %write{235,235}
-temp	float	$tmp139	%read{237,237} %write{236,236}
-temp	color	$tmp140	%read{244,244} %write{243,243}
-temp	color	$tmp142	%read{243,243} %write{239,239}
-temp	float	$tmp143	%read{239,239} %write{238,238}
-temp	float	$tmp144	%read{243,243} %write{242,242}
-temp	float	$tmp145	%read{242,242} %write{241,241}
-temp	float	$tmp146	%read{247,247} %write{246,246}
-const	string	$const37	"multi_ggx"		%read{249,249} %write{2147483647,-1}
-const	string	$const38	"dielectric_bsdf"		%read{249,249} %write{2147483647,-1}
-temp	closure color	$tmp150	%read{251,251} %write{250,250}
-temp	int	$tmp151	%read{253,253} %write{252,252}
-temp	normal	$tmp152	%read{258,258} %write{257,257}
-temp	float	$tmp153	%read{257,257} %write{256,256}
-temp	float	$tmp154	%read{256,256} %write{255,255}
-temp	float	$tmp155	%read{262,262} %write{261,261}
-temp	float	$tmp156	%read{261,261} %write{260,260}
-const	string	$const39	"sheen"		%read{262,262} %write{2147483647,-1}
-temp	color	$tmp157	%read{264,264} %write{263,263}
-temp	color	$tmp159	%read{265,265} %write{264,264}
-temp	closure color	$tmp160	%read{266,266} %write{265,265}
-temp	closure color	$tmp161	%read{273,273} %write{267,267}
-const	string	$const40	"transparent"		%read{267,267} %write{2147483647,-1}
-temp	float	$tmp162	%read{272,274} %write{270,270}
-temp	float	$tmp163	%read{270,270} %write{269,269}
-temp	float	$tmp164	%read{273,273} %write{272,272}
-temp	closure color	$tmp165	%read{275,275} %write{273,273}
-temp	closure color	$tmp166	%read{275,275} %write{274,274}
+temp	float	$tmp110	%read{195,195} %write{194,194}
+const	string	$const35	"safe_divide"		%read{197,197} %write{2147483647,-1}
+temp	int	$tmp111	%read{199,199} %write{198,198}
+temp	color	$tmp114	%read{205,205} %write{203,203}
+temp	float	$tmp115	%read{205,205} %write{204,204}
+const	string	$const36	"inv_abbe"		%read{205,205} %write{2147483647,-1}
+temp	float	$tmp116	%read{208,210} %write{206,206}
+temp	float	$tmp117	%read{209,209} %write{208,208}
+temp	closure color	$tmp118	%read{211,211} %write{209,209}
+temp	closure color	$tmp119	%read{211,211} %write{210,210}
+temp	int	$tmp120	%read{214,214} %write{213,213}
+const	string	$const37	"microfacet_f82_tint"		%read{217,217} %write{2147483647,-1}
+temp	float	$tmp122	%read{220,222} %write{218,218}
+temp	float	$tmp123	%read{221,221} %write{220,220}
+temp	closure color	$tmp124	%read{223,223} %write{221,221}
+temp	closure color	$tmp125	%read{223,223} %write{222,222}
+temp	int	$tmp126	%read{225,225} %write{224,224}
+temp	int	$tmp127	%read{226,230} %write{225,229}
+temp	int	$tmp129	%read{228,228} %write{227,227}
+temp	int	$tmp130	%read{229,229} %write{228,228}
+temp	closure color	$tmp131	%read{233,233} %write{231,231}
+const	string	$const38	"emission"		%read{231,231} %write{2147483647,-1}
+temp	color	$tmp132	%read{233,233} %write{232,232}
+temp	closure color	$tmp133	%read{234,234} %write{233,233}
+temp	int	$tmp134	%read{236,236} %write{235,235}
+temp	float	$tmp135	%read{240,240} %write{239,239}
+const	string	$const39	"coat_bsdf"		%read{241,241} %write{2147483647,-1}
+temp	closure color	$tmp136	%read{243,243} %write{242,242}
+temp	int	$tmp137	%read{245,245} %write{244,244}
+temp	normal	$tmp138	%read{250,250} %write{249,249}
+temp	float	$tmp139	%read{249,249} %write{248,248}
+temp	float	$tmp140	%read{248,248} %write{247,247}
+temp	float	$tmp142	%read{254,254} %write{253,253}
+const	string	$const40	"sheen_bsdf"		%read{255,255} %write{2147483647,-1}
+temp	closure color	$tmp143	%read{257,257} %write{256,256}
+temp	closure color	$tmp144	%read{264,264} %write{258,258}
+const	string	$const41	"transparent"		%read{258,258} %write{2147483647,-1}
+temp	float	$tmp145	%read{263,265} %write{261,261}
+temp	float	$tmp146	%read{261,261} %write{260,260}
+temp	float	$tmp147	%read{264,264} %write{263,263}
+temp	closure color	$tmp148	%read{266,266} %write{264,264}
+temp	closure color	$tmp149	%read{266,266} %write{265,265}
 code Normal
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:38
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:41
 #                             normal Normal = N,
-	assign		Normal N 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{38} %argrw{"wr"}
+	assign		Normal N 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{41} %argrw{"wr"}
 code CoatNormal
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:39
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:42
 #                             normal CoatNormal = N,
-	assign		CoatNormal N 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{39} %argrw{"wr"}
+	assign		CoatNormal N 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{42} %argrw{"wr"}
 code Tangent
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:40
-#                             normal Tangent = normalize(dPdu),
-	normalize	Tangent dPdu 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{40} %argrw{"wr"}
-code ___main___
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:43
-#   float CLOSURE_WEIGHT_CUTOFF = 1e-5;
-	assign		CLOSURE_WEIGHT_CUTOFF $const1 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{43} %argrw{"wr"}
+#                             normal Tangent = normalize(dPdu),
+	normalize	Tangent dPdu 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{43} %argrw{"wr"}
+code ___main___
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:46
+#   float CLOSURE_WEIGHT_CUTOFF = 1e-5;
+	assign		CLOSURE_WEIGHT_CUTOFF $const1 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{46} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:49
 #   float metallic = clamp(Metallic, 0.0, 1.0);
-	functioncall	$const4 7 	%line{46} %argrw{"r"}
+	functioncall	$const4 7 	%line{49} %argrw{"r"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
 # float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
 	min		$tmp1 Metallic $const3 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
 	max		metallic $tmp1 $const2 	%argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:47
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:50
 #   float transmission = clamp(TransmissionWeight, 0.0, 1.0);
-	functioncall	$const4 10 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{47} %argrw{"r"}
+	functioncall	$const4 10 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{50} %argrw{"r"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
 # float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
 	min		$tmp2 TransmissionWeight $const3 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
 	max		transmission $tmp2 $const2 	%argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:48
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:51
 #   float subsurface_weight = clamp(SubsurfaceWeight, 0.0, 1.0);
-	functioncall	$const4 13 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{48} %argrw{"r"}
+	functioncall	$const4 13 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{51} %argrw{"r"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
 # float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
 	min		$tmp3 SubsurfaceWeight $const3 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
 	max		subsurface_weight $tmp3 $const2 	%argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:49
-#   color specular_tint = max(SpecularTint, color(0.0));
-	max		specular_tint SpecularTint $const5 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{49} %argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:50
-#   float coat_weight = max(CoatWeight, 0.0);
-	max		coat_weight CoatWeight $const2 	%line{50} %argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:51
-#   color coat_tint = max(CoatTint, color(0.0));
-	max		coat_tint CoatTint $const5 	%line{51} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:52
-#   float sheen_weight = max(SheenWeight, 0.0);
-	max		sheen_weight SheenWeight $const2 	%line{52} %argrw{"wrr"}
+#   color specular_tint = max(SpecularTint, color(0.0));
+	max		specular_tint SpecularTint $const5 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{52} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:53
-#   color base_color = max(BaseColor, color(0.0));
-	max		base_color BaseColor $const5 	%line{53} %argrw{"wrr"}
+#   float coat_weight = max(CoatWeight, 0.0);
+	max		coat_weight CoatWeight $const2 	%line{53} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:54
-#   color clamped_base_color = min(base_color, color(1.0));
-	min		clamped_base_color base_color $const6 	%line{54} %argrw{"wrr"}
+#   color coat_tint = max(CoatTint, color(0.0));
+	max		coat_tint CoatTint $const5 	%line{54} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:55
+#   float sheen_weight = max(SheenWeight, 0.0);
+	max		sheen_weight SheenWeight $const2 	%line{55} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:56
+#   color base_color = max(BaseColor, color(0.0));
+	max		base_color BaseColor $const5 	%line{56} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:57
+#   color clamped_base_color = min(base_color, color(1.0));
+	min		clamped_base_color base_color $const6 	%line{57} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:58
 #   float diffuse_roughness = clamp(DiffuseRoughness, 0.0, 1.0);
-	functioncall	$const4 22 	%line{55} %argrw{"r"}
+	functioncall	$const4 22 	%line{58} %argrw{"r"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
 # float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
 	min		$tmp8 DiffuseRoughness $const3 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
 	max		diffuse_roughness $tmp8 $const2 	%argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:57
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:60
 #   float r2 = clamp(Roughness, 0.0, 1.0);
-	functioncall	$const4 25 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{57} %argrw{"r"}
+	functioncall	$const4 25 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{60} %argrw{"r"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
 # float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
 	min		$tmp9 Roughness $const3 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
 	max		r2 $tmp9 $const2 	%argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:58
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:61
 #   r2 = r2 * r2;
-	mul		r2 r2 r2 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{58} %argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:60
+	mul		r2 r2 r2 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{61} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:63
 #   float alpha_x = r2, alpha_y = r2;
-	assign		alpha_x r2 	%line{60} %argrw{"wr"}
+	assign		alpha_x r2 	%line{63} %argrw{"wr"}
 	assign		alpha_y r2 	%argrw{"wr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:62
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:65
 #   int is_backfacing = !ThinWall && backfacing();
-	eq		$tmp10 ThinWall $const7 	%line{62} %argrw{"wrr"}
+	eq		$tmp10 ThinWall $const7 	%line{65} %argrw{"wrr"}
 	neq		$tmp11 $tmp10 $const7 	%argrw{"wrr"}
 	if		$tmp11 34 34 	%argrw{"r"}
 	backfacing	$tmp12 	%argrw{"w"}
 	neq		$tmp13 $tmp12 $const7 	%argrw{"wrr"}
 	assign		$tmp11 $tmp13 	%argrw{"wr"}
 	assign		is_backfacing $tmp11 	%argrw{"wr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:65
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:68
 #   vector T = Tangent;
-	assign		T Tangent 	%line{65} %argrw{"wr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:66
+	assign		T Tangent 	%line{68} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:69
 #   if (Anisotropic > 0.0) {
-	gt		$tmp14 Anisotropic $const2 	%line{66} %argrw{"wrr"}
+	gt		$tmp14 Anisotropic $const2 	%line{69} %argrw{"wrr"}
 	if		$tmp14 100 100 	%argrw{"r"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:67
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:70
 #     float aspect = sqrt(1.0 - clamp(Anisotropic, 0.0, 1.0) * 0.9);
-	functioncall	$const4 41 	%line{67} %argrw{"r"}
+	functioncall	$const4 41 	%line{70} %argrw{"r"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
 # float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
 	min		$tmp16 Anisotropic $const3 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
 	max		$tmp15 $tmp16 $const2 	%argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:67
-#     float aspect = sqrt(1.0 - clamp(Anisotropic, 0.0, 1.0) * 0.9);
-	mul		$tmp17 $tmp15 $const8 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{67} %argrw{"wrr"}
-	sub		$tmp18 $const3 $tmp17 	%argrw{"wrr"}
-	sqrt		___376_aspect $tmp18 	%argrw{"wr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:68
-#     alpha_x /= aspect;
-	div		alpha_x alpha_x ___376_aspect 	%line{68} %argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:69
-#     alpha_y *= aspect;
-	mul		alpha_y alpha_y ___376_aspect 	%line{69} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:70
-#     if (AnisotropicRotation != 0.0)
-	neq		$tmp19 AnisotropicRotation $const2 	%line{70} %argrw{"wrr"}
-	if		$tmp19 100 100 	%argrw{"r"}
+#     float aspect = sqrt(1.0 - clamp(Anisotropic, 0.0, 1.0) * 0.9);
+	mul		$tmp17 $tmp15 $const8 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{70} %argrw{"wrr"}
+	sub		$tmp18 $const3 $tmp17 	%argrw{"wrr"}
+	sqrt		___517_aspect $tmp18 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:71
+#     alpha_x /= aspect;
+	div		alpha_x alpha_x ___517_aspect 	%line{71} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:72
+#     alpha_y *= aspect;
+	mul		alpha_y alpha_y ___517_aspect 	%line{72} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:73
+#     if (AnisotropicRotation != 0.0)
+	neq		$tmp19 AnisotropicRotation $const2 	%line{73} %argrw{"wrr"}
+	if		$tmp19 100 100 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:74
 #       T = rotate(T, AnisotropicRotation * M_2PI, point(0.0, 0.0, 0.0), Normal);
-	mul		$tmp20 AnisotropicRotation $const9 	%line{71} %argrw{"wrr"}
+	mul		$tmp20 AnisotropicRotation $const9 	%line{74} %argrw{"wrr"}
 	functioncall	$const11 100 	%argrw{"r"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:270
 #     vector axis = normalize (b - a);
@@ -474,47 +466,47 @@ code ___main___
 	sub		$tmp63 T $const10 	%line{288} %argrw{"wrr"}
 	transformv	$tmp62 ___257_M $tmp63 	%argrw{"wrr"}
 	add		T $tmp62 $const10 	%argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:74
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:77
 #   if (metallic < 1.0 && TransmissionWeight < 1.0) {
-	lt		$tmp64 metallic $const3 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{74} %argrw{"wrr"}
+	lt		$tmp64 metallic $const3 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{77} %argrw{"wrr"}
 	neq		$tmp65 $tmp64 $const7 	%argrw{"wrr"}
 	if		$tmp65 106 106 	%argrw{"r"}
 	lt		$tmp66 TransmissionWeight $const3 	%argrw{"wrr"}
 	neq		$tmp67 $tmp66 $const7 	%argrw{"wrr"}
 	assign		$tmp65 $tmp67 	%argrw{"wr"}
 	if		$tmp65 165 165 	%argrw{"r"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:75
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:78
 #     float eta = max(IOR, 1e-5);
-	max		___377_eta IOR $const1 	%line{75} %argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:76
+	max		___518_eta IOR $const1 	%line{78} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:79
 #     float f0 = F0_from_ior(eta);
-	functioncall	$const14 113 	%line{76} %argrw{"r"}
+	functioncall	$const14 113 	%line{79} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_fresnel.h:42
 #   float f0 = (eta - 1.0) / (eta + 1.0);
-	sub		$tmp68 ___377_eta $const3 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_fresnel.h"} %line{42} %argrw{"wrr"}
-	add		$tmp69 ___377_eta $const3 	%argrw{"wrr"}
+	sub		$tmp68 ___518_eta $const3 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_fresnel.h"} %line{42} %argrw{"wrr"}
+	add		$tmp69 ___518_eta $const3 	%argrw{"wrr"}
 	div		___349_f0 $tmp68 $tmp69 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_fresnel.h:43
 #   return f0 * f0;
-	mul		___377_f0 ___349_f0 ___349_f0 	%line{43} %argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:77
+	mul		___518_f0 ___349_f0 ___349_f0 	%line{43} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:80
 #     if (SpecularIORLevel != 0.5) {
-	neq		$tmp70 SpecularIORLevel $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{77} %argrw{"wrr"}
+	neq		$tmp70 SpecularIORLevel $const15 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{80} %argrw{"wrr"}
 	if		$tmp70 129 129 	%argrw{"r"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:78
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:81
 #       f0 *= 2.0 * max(SpecularIORLevel, 0.0);
-	max		$tmp71 SpecularIORLevel $const2 	%line{78} %argrw{"wrr"}
+	max		$tmp71 SpecularIORLevel $const2 	%line{81} %argrw{"wrr"}
 	mul		$tmp72 $const16 $tmp71 	%argrw{"wrr"}
-	mul		___377_f0 ___377_f0 $tmp72 	%argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:79
+	mul		___518_f0 ___518_f0 $tmp72 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:82
 #       eta = ior_from_F0(f0);
-	functioncall	$const17 126 	%line{79} %argrw{"r"}
+	functioncall	$const17 126 	%line{82} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_fresnel.h:48
 #   float sqrt_f0 = sqrt(clamp(f0, 0.0, 0.99));
 	functioncall	$const4 122 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_fresnel.h"} %line{48} %argrw{"r"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
 # float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
-	min		$tmp74 ___377_f0 $const18 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
+	min		$tmp74 ___518_f0 $const18 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
 	max		$tmp73 $tmp74 $const2 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_fresnel.h:48
 #   float sqrt_f0 = sqrt(clamp(f0, 0.0, 0.99));
@@ -523,54 +515,54 @@ code ___main___
 #   return (1.0 + sqrt_f0) / (1.0 - sqrt_f0);
 	add		$tmp75 $const3 ___350_sqrt_f0 	%line{49} %argrw{"wrr"}
 	sub		$tmp76 $const3 ___350_sqrt_f0 	%argrw{"wrr"}
-	div		___377_eta $tmp75 $tmp76 	%argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:80
+	div		___518_eta $tmp75 $tmp76 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:83
 #       if (IOR < 1.0) {
-	lt		$tmp77 IOR $const3 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{80} %argrw{"wrr"}
+	lt		$tmp77 IOR $const3 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{83} %argrw{"wrr"}
 	if		$tmp77 129 129 	%argrw{"r"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:81
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:84
 #         eta = 1.0 / eta;
-	div		___377_eta $const3 ___377_eta 	%line{81} %argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:85
+	div		___518_eta $const3 ___518_eta 	%line{84} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:88
 #     if (diffuse_roughness > CLOSURE_WEIGHT_CUTOFF) {
-	gt		$tmp78 diffuse_roughness CLOSURE_WEIGHT_CUTOFF 	%line{85} %argrw{"wrr"}
+	gt		$tmp78 diffuse_roughness CLOSURE_WEIGHT_CUTOFF 	%line{88} %argrw{"wrr"}
 	if		$tmp78 132 134 	%argrw{"r"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:86
-#       BSDF = oren_nayar_diffuse_bsdf(Normal, base_color, diffuse_roughness);
-	closure		BSDF $const19 Normal base_color diffuse_roughness 	%line{86} %argrw{"wrrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:89
-#       BSDF = base_color * diffuse(Normal);
-	closure		$tmp79 $const20 Normal 	%line{89} %argrw{"wrr"}
-	mul		BSDF $tmp79 base_color 	%argrw{"wrr"}
+#       BSDF = oren_nayar_diffuse_bsdf(Normal, base_color, diffuse_roughness);
+	closure		BSDF $const19 Normal base_color diffuse_roughness 	%line{89} %argrw{"wrrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:92
-#     if (subsurface_weight > CLOSURE_WEIGHT_CUTOFF) {
-	gt		$tmp80 subsurface_weight CLOSURE_WEIGHT_CUTOFF 	%line{92} %argrw{"wrr"}
-	if		$tmp80 153 153 	%argrw{"r"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:93
-#       closure color SubsurfBSDF = 0;
-	assign		___382_SubsurfBSDF $const7 	%line{93} %argrw{"wr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:94
-#       if (ThinWall) {
-	if		ThinWall 139 146 	%line{94} %argrw{"r"}
+#       BSDF = base_color * diffuse(Normal);
+	closure		$tmp79 $const20 Normal 	%line{92} %argrw{"wrr"}
+	mul		BSDF $tmp79 base_color 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:95
+#     if (subsurface_weight > CLOSURE_WEIGHT_CUTOFF) {
+	gt		$tmp80 subsurface_weight CLOSURE_WEIGHT_CUTOFF 	%line{95} %argrw{"wrr"}
+	if		$tmp80 153 153 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:96
+#       closure color SubsurfBSDF = 0;
+	assign		___523_SubsurfBSDF $const7 	%line{96} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:97
+#       if (ThinWall) {
+	if		ThinWall 139 146 	%line{97} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:98
 #         SubsurfBSDF = thin_subsurface(
-	closure		___382_SubsurfBSDF $const22 Normal $const21 clamped_base_color SubsurfaceAnisotropy diffuse_roughness 	%line{95} %argrw{"wrrrrrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:99
+	closure		___523_SubsurfBSDF $const22 Normal $const21 clamped_base_color SubsurfaceAnisotropy diffuse_roughness 	%line{98} %argrw{"wrrrrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:102
 #         vector radius = max(SubsurfaceScale * SubsurfaceRadius, vector(0.0));
-	mul		$tmp82 SubsurfaceScale SubsurfaceRadius 	%line{99} %argrw{"wrr"}
-	max		___384_radius $tmp82 $const21 	%argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:100
+	mul		$tmp82 SubsurfaceScale SubsurfaceRadius 	%line{102} %argrw{"wrr"}
+	max		___525_radius $tmp82 $const21 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:103
 #         float subsurface_ior = (subsurface_method == "random_walk_skin") ? SubsurfaceIOR : eta;
-	eq		$tmp84 subsurface_method $const23 	%line{100} %argrw{"wrr"}
+	eq		$tmp84 subsurface_method $const23 	%line{103} %argrw{"wrr"}
 	if		$tmp84 144 145 	%argrw{"r"}
-	assign		___384_subsurface_ior SubsurfaceIOR 	%argrw{"wr"}
-	assign		___384_subsurface_ior ___377_eta 	%argrw{"wr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:101
+	assign		___525_subsurface_ior SubsurfaceIOR 	%argrw{"wr"}
+	assign		___525_subsurface_ior ___518_eta 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:104
 #         SubsurfBSDF = bssrdf(subsurface_method,
-	closure		___382_SubsurfBSDF $const27 subsurface_method Normal ___384_radius clamped_base_color $const24 r2 $const25 ___384_subsurface_ior $const26 SubsurfaceAnisotropy 	%line{101} %argrw{"wrrrrrrrrrrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:112
+	closure		___523_SubsurfBSDF $const27 subsurface_method Normal ___525_radius clamped_base_color $const24 r2 $const25 ___525_subsurface_ior $const26 SubsurfaceAnisotropy 	%line{104} %argrw{"wrrrrrrrrrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:115
 #       BSDF = mix(clamped_base_color * SubsurfBSDF, BSDF, 1.0 - subsurface_weight);
-	mul		$tmp85 ___382_SubsurfBSDF clamped_base_color 	%line{112} %argrw{"wrr"}
+	mul		$tmp85 ___523_SubsurfBSDF clamped_base_color 	%line{115} %argrw{"wrr"}
 	sub		$tmp86 $const3 subsurface_weight 	%argrw{"wrr"}
 	functioncall	$const28 153 	%argrw{"r"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:164
@@ -579,243 +571,230 @@ code ___main___
 	mul		$tmp88 $tmp85 $tmp87 	%argrw{"wrr"}
 	mul		$tmp89 BSDF $tmp86 	%argrw{"wrr"}
 	add		BSDF $tmp88 $tmp89 	%argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:115
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:118
 #     if (eta != 1.0 || ThinFilmThickness > 0.1) {
-	neq		$tmp90 ___377_eta $const3 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{115} %argrw{"wrr"}
+	neq		$tmp90 ___518_eta $const3 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{118} %argrw{"wrr"}
 	neq		$tmp91 $tmp90 $const7 	%argrw{"wrr"}
 	if		$tmp91 156 159 	%argrw{"r"}
 	gt		$tmp92 ThinFilmThickness $const29 	%argrw{"wrr"}
 	neq		$tmp93 $tmp92 $const7 	%argrw{"wrr"}
 	assign		$tmp91 $tmp93 	%argrw{"wr"}
 	if		$tmp91 165 165 	%argrw{"r"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:117
-#       color F0 = f0 * specular_tint;
-	mul		___385_F0 ___377_f0 specular_tint 	%line{117} %argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:118
-#       color F90 = color(1.0);
-	assign		___385_F90 $const6 	%line{118} %argrw{"wr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:128
-#                                             -eta,
-	neg		$tmp97 ___377_eta 	%line{128} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:120
+#       color F0 = f0 * specular_tint;
+	mul		___526_F0 ___518_f0 specular_tint 	%line{120} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:121
+#       color F90 = color(1.0);
+	assign		___526_F90 $const6 	%line{121} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:131
+#                                             -eta,
+	neg		$tmp97 ___518_eta 	%line{131} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:123
 #       BSDF = layer(generalized_schlick_bsdf(Normal,
-	closure		$tmp94 $const32 Normal T $const6 $const5 alpha_x alpha_y ___385_F0 ___385_F90 $tmp97 distribution $const30 ThinFilmThickness $const31 ThinFilmIOR 	%line{120} %argrw{"wrrrrrrrrrrrrrrr"}
+	closure		$tmp94 $const32 Normal T $const6 $const5 alpha_x alpha_y ___526_F0 ___526_F90 $tmp97 distribution $const30 ThinFilmThickness $const31 ThinFilmIOR 	%line{123} %argrw{"wrrrrrrrrrrrrrrr"}
 	closure		BSDF $const33 $tmp94 BSDF 	%argrw{"wrrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:138
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:141
 #   if (metallic < 1.0 && TransmissionWeight > CLOSURE_WEIGHT_CUTOFF) {
-	lt		$tmp98 metallic $const3 	%line{138} %argrw{"wrr"}
+	lt		$tmp98 metallic $const3 	%line{141} %argrw{"wrr"}
 	neq		$tmp99 $tmp98 $const7 	%argrw{"wrr"}
 	if		$tmp99 171 171 	%argrw{"r"}
 	gt		$tmp100 TransmissionWeight CLOSURE_WEIGHT_CUTOFF 	%argrw{"wrr"}
 	neq		$tmp101 $tmp100 $const7 	%argrw{"wrr"}
 	assign		$tmp99 $tmp101 	%argrw{"wr"}
-	if		$tmp99 202 202 	%argrw{"r"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:139
-#     float eta = max(IOR, 1e-5);
-	max		___386_eta IOR $const1 	%line{139} %argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:140
-#     float thinfilm_ior = is_backfacing ? ThinFilmIOR / eta : ThinFilmIOR;
-	if		is_backfacing 175 176 	%line{140} %argrw{"r"}
-	div		___386_thinfilm_ior ThinFilmIOR ___386_eta 	%argrw{"wrr"}
-	assign		___386_thinfilm_ior ThinFilmIOR 	%argrw{"wr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:141
-#     eta = is_backfacing ? 1.0 / eta : eta;
-	if		is_backfacing 178 178 	%line{141} %argrw{"r"}
-	div		___386_eta $const3 ___386_eta 	%argrw{"wrr"}
+	if		$tmp99 212 212 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:142
-#     if (ThinWall) {
-	if		ThinWall 186 202 	%line{142} %argrw{"r"}
+#     float eta = max(IOR, 1e-5);
+	max		___527_eta IOR $const1 	%line{142} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:143
+#     float thinfilm_ior = is_backfacing ? ThinFilmIOR / eta : ThinFilmIOR;
+	if		is_backfacing 175 176 	%line{143} %argrw{"r"}
+	div		___527_thinfilm_ior ThinFilmIOR ___527_eta 	%argrw{"wrr"}
+	assign		___527_thinfilm_ior ThinFilmIOR 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:144
+#     eta = is_backfacing ? 1.0 / eta : eta;
+	if		is_backfacing 178 178 	%line{144} %argrw{"r"}
+	div		___527_eta $const3 ___527_eta 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:145
+#     if (ThinWall) {
+	if		ThinWall 186 212 	%line{145} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:146
 #       closure color ThinGlassBSDF = thin_glass(Normal,
-	closure		___387_ThinGlassBSDF $const34 Normal $const21 specular_tint clamped_base_color ___386_eta r2 ThinFilmThickness ___386_thinfilm_ior 	%line{143} %argrw{"wrrrrrrrrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:151
+	closure		___528_ThinGlassBSDF $const34 Normal $const21 specular_tint clamped_base_color ___527_eta r2 ThinFilmThickness ___527_thinfilm_ior 	%line{146} %argrw{"wrrrrrrrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:154
 #       BSDF = mix(ThinGlassBSDF, BSDF, 1.0 - transmission);
-	sub		$tmp103 $const3 transmission 	%line{151} %argrw{"wrr"}
+	sub		$tmp103 $const3 transmission 	%line{154} %argrw{"wrr"}
 	functioncall	$const28 186 	%argrw{"r"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:164
 # closure color mix (closure color x, closure color y, float a) { return x*(1-a) + y*a; }
 	sub		$tmp104 $const3 $tmp103 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{164} %argrw{"wrr"}
-	mul		$tmp105 ___387_ThinGlassBSDF $tmp104 	%argrw{"wrr"}
+	mul		$tmp105 ___528_ThinGlassBSDF $tmp104 	%argrw{"wrr"}
 	mul		$tmp106 BSDF $tmp103 	%argrw{"wrr"}
 	add		BSDF $tmp105 $tmp106 	%argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:154
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:157
 #       color F0 = F0_from_ior(eta) * specular_tint;
-	functioncall	$const14 191 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{154} %argrw{"r"}
+	functioncall	$const14 191 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{157} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_fresnel.h:42
 #   float f0 = (eta - 1.0) / (eta + 1.0);
-	sub		$tmp108 ___386_eta $const3 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_fresnel.h"} %line{42} %argrw{"wrr"}
-	add		$tmp109 ___386_eta $const3 	%argrw{"wrr"}
+	sub		$tmp108 ___527_eta $const3 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_fresnel.h"} %line{42} %argrw{"wrr"}
+	add		$tmp109 ___527_eta $const3 	%argrw{"wrr"}
 	div		___349_f0 $tmp108 $tmp109 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_fresnel.h:43
 #   return f0 * f0;
 	mul		$tmp107 ___349_f0 ___349_f0 	%line{43} %argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:154
-#       color F0 = F0_from_ior(eta) * specular_tint;
-	mul		___388_F0 $tmp107 specular_tint 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{154} %argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:155
-#       color F90 = color(1.0);
-	assign		___388_F90 $const6 	%line{155} %argrw{"wr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:160
-#                                                                 sqrt(clamped_base_color),
-	sqrt		$tmp112 clamped_base_color 	%line{160} %argrw{"wr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:165
-#                                                                 -eta,
-	neg		$tmp113 ___386_eta 	%line{165} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:157
+#       color F0 = F0_from_ior(eta) * specular_tint;
+	mul		___529_F0 $tmp107 specular_tint 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{157} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:158
+#       color F90 = color(1.0);
+	assign		___529_F90 $const6 	%line{158} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:159
+#       float dispersion_scale = clamp(TransmissionDispersionScale, 0.0, 1.0);
+	functioncall	$const4 196 	%line{159} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
+# float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
+	min		$tmp110 TransmissionDispersionScale $const3 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
+	max		___529_dispersion_scale $tmp110 $const2 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:160
+#       float abbe_number = max(TransmissionDispersionAbbeNumber, 0.0);
+	max		___529_abbe_number TransmissionDispersionAbbeNumber $const2 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{160} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:161
+#       float inv_abbe = safe_divide(dispersion_scale, abbe_number);
+	functioncall	$const35 203 	%line{161} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_math.h:12
+#   return (b != 0.0) ? a / b : 0.0;
+	neq		$tmp111 ___529_abbe_number $const2 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_math.h"} %line{12} %argrw{"wrr"}
+	if		$tmp111 201 202 	%argrw{"r"}
+	div		___529_inv_abbe ___529_dispersion_scale ___529_abbe_number 	%argrw{"wrr"}
+	assign		___529_inv_abbe $const2 	%argrw{"wr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:165
+#                                                                 sqrt(clamped_base_color),
+	sqrt		$tmp114 clamped_base_color 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{165} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:170
+#                                                                 -eta,
+	neg		$tmp115 ___527_eta 	%line{170} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:162
 #       closure color TransmissionBSDF = generalized_schlick_bsdf(Normal,
-	closure		___388_TransmissionBSDF $const32 Normal $const21 $const6 $tmp112 r2 r2 ___388_F0 ___388_F90 $tmp113 distribution $const30 ThinFilmThickness $const31 ___386_thinfilm_ior 	%line{157} %argrw{"wrrrrrrrrrrrrrrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:171
-#       BSDF = mix(TransmissionBSDF, BSDF, 1.0 - transmission);
-	sub		$tmp114 $const3 transmission 	%line{171} %argrw{"wrr"}
-	functioncall	$const28 202 	%argrw{"r"}
-# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:164
-# closure color mix (closure color x, closure color y, float a) { return x*(1-a) + y*a; }
-	sub		$tmp115 $const3 $tmp114 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{164} %argrw{"wrr"}
-	mul		$tmp116 ___388_TransmissionBSDF $tmp115 	%argrw{"wrr"}
-	mul		$tmp117 BSDF $tmp114 	%argrw{"wrr"}
-	add		BSDF $tmp116 $tmp117 	%argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:175
-#   closure color MetallicBSDF = 0;
-	assign		MetallicBSDF $const7 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{175} %argrw{"wr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:176
-#   if (metallic > CLOSURE_WEIGHT_CUTOFF) {
-	gt		$tmp118 metallic CLOSURE_WEIGHT_CUTOFF 	%line{176} %argrw{"wrr"}
-	if		$tmp118 214 214 	%argrw{"r"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:177
-#     color F0 = clamped_base_color;
-	assign		___389_F0 clamped_base_color 	%line{177} %argrw{"wr"}
+	closure		___529_TransmissionBSDF $const32 Normal $const21 $const6 $tmp114 r2 r2 ___529_F0 ___529_F90 $tmp115 distribution $const30 ThinFilmThickness $const31 ___527_thinfilm_ior $const36 ___529_inv_abbe 	%line{162} %argrw{"wrrrrrrrrrrrrrrrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:178
+#       BSDF = mix(TransmissionBSDF, BSDF, 1.0 - transmission);
+	sub		$tmp116 $const3 transmission 	%line{178} %argrw{"wrr"}
+	functioncall	$const28 212 	%argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:164
+# closure color mix (closure color x, closure color y, float a) { return x*(1-a) + y*a; }
+	sub		$tmp117 $const3 $tmp116 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{164} %argrw{"wrr"}
+	mul		$tmp118 ___529_TransmissionBSDF $tmp117 	%argrw{"wrr"}
+	mul		$tmp119 BSDF $tmp116 	%argrw{"wrr"}
+	add		BSDF $tmp118 $tmp119 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:182
+#   closure color MetallicBSDF = 0;
+	assign		MetallicBSDF $const7 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{182} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:183
+#   if (metallic > CLOSURE_WEIGHT_CUTOFF) {
+	gt		$tmp120 metallic CLOSURE_WEIGHT_CUTOFF 	%line{183} %argrw{"wrr"}
+	if		$tmp120 224 224 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:184
+#     color F0 = clamped_base_color;
+	assign		___530_F0 clamped_base_color 	%line{184} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:185
 #     color F82 = min(specular_tint, color(1.0));
-	min		___389_F82 specular_tint $const6 	%line{178} %argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:179
+	min		___530_F82 specular_tint $const6 	%line{185} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:186
 #     MetallicBSDF = microfacet_f82_tint(distribution,
-	closure		MetallicBSDF $const35 distribution Normal T alpha_x alpha_y ___389_F0 ___389_F82 $const30 ThinFilmThickness $const31 ThinFilmIOR 	%line{179} %argrw{"wrrrrrrrrrrrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:190
-#     BSDF = mix(MetallicBSDF, BSDF, 1.0 - metallic);
-	sub		$tmp120 $const3 metallic 	%line{190} %argrw{"wrr"}
-	functioncall	$const28 214 	%argrw{"r"}
-# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:164
-# closure color mix (closure color x, closure color y, float a) { return x*(1-a) + y*a; }
-	sub		$tmp121 $const3 $tmp120 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{164} %argrw{"wrr"}
-	mul		$tmp122 MetallicBSDF $tmp121 	%argrw{"wrr"}
-	mul		$tmp123 BSDF $tmp120 	%argrw{"wrr"}
-	add		BSDF $tmp122 $tmp123 	%argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:193
-#   if (EmissionStrength != 0.0 && EmissionColor != color(0.0)) {
-	neq		$tmp124 EmissionStrength $const2 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{193} %argrw{"wrr"}
-	neq		$tmp125 $tmp124 $const7 	%argrw{"wrr"}
-	if		$tmp125 220 220 	%argrw{"r"}
-	neq		$tmp127 EmissionColor $const5 	%argrw{"wrr"}
-	neq		$tmp128 $tmp127 $const7 	%argrw{"wrr"}
-	assign		$tmp125 $tmp128 	%argrw{"wr"}
-	if		$tmp125 225 225 	%argrw{"r"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:194
-#     BSDF += EmissionStrength * EmissionColor * emission();
-	closure		$tmp129 $const36 	%line{194} %argrw{"wr"}
-	mul		$tmp130 EmissionStrength EmissionColor 	%argrw{"wrr"}
-	mul		$tmp131 $tmp129 $tmp130 	%argrw{"wrr"}
-	add		BSDF BSDF $tmp131 	%argrw{"wrr"}
+	closure		MetallicBSDF $const37 distribution Normal T alpha_x alpha_y ___530_F0 ___530_F82 $const30 ThinFilmThickness $const31 ThinFilmIOR 	%line{186} %argrw{"wrrrrrrrrrrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:197
-#   if (coat_weight > CLOSURE_WEIGHT_CUTOFF) {
-	gt		$tmp132 coat_weight CLOSURE_WEIGHT_CUTOFF 	%line{197} %argrw{"wrr"}
-	if		$tmp132 252 252 	%argrw{"r"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:198
-#     float coat_ior = max(CoatIOR, 1.0);
-	max		___391_coat_ior CoatIOR $const3 	%line{198} %argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:199
-#     if (CoatTint != color(1.0)) {
-	neq		$tmp134 CoatTint $const6 	%line{199} %argrw{"wrr"}
-	if		$tmp134 245 245 	%argrw{"r"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:200
-#       float coat_neta = 1.0 / coat_ior;
-	div		___392_coat_neta $const3 ___391_coat_ior 	%line{200} %argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:201
-#       float cosNI = dot(I, CoatNormal);
-	dot		___392_cosNI I CoatNormal 	%line{201} %argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:202
-#       float cosNT = sqrt(1.0 - coat_neta * coat_neta * (1 - cosNI * cosNI));
-	mul		$tmp135 ___392_coat_neta ___392_coat_neta 	%line{202} %argrw{"wrr"}
-	mul		$tmp136 ___392_cosNI ___392_cosNI 	%argrw{"wrr"}
-	sub		$tmp137 $const3 $tmp136 	%argrw{"wrr"}
-	mul		$tmp138 $tmp135 $tmp137 	%argrw{"wrr"}
-	sub		$tmp139 $const3 $tmp138 	%argrw{"wrr"}
-	sqrt		___392_cosNT $tmp139 	%argrw{"wr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:203
-#       BSDF *= mix(color(1.0), pow(CoatTint, 1.0 / cosNT), clamp(coat_weight, 0.0, 1.0));
-	div		$tmp143 $const3 ___392_cosNT 	%line{203} %argrw{"wrr"}
-	pow		$tmp142 CoatTint $tmp143 	%argrw{"wrr"}
-	functioncall	$const4 243 	%argrw{"r"}
-# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
-# float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
-	min		$tmp145 coat_weight $const3 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
-	max		$tmp144 $tmp145 $const2 	%argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:203
-#       BSDF *= mix(color(1.0), pow(CoatTint, 1.0 / cosNT), clamp(coat_weight, 0.0, 1.0));
-	mix		$tmp140 $const6 $tmp142 $tmp144 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{203} %argrw{"wrrr"}
-	mul		BSDF BSDF $tmp140 	%argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:205
-#     float coat_r2 = clamp(CoatRoughness, 0.0, 1.0);
-	functioncall	$const4 248 	%line{205} %argrw{"r"}
-# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
-# float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
-	min		$tmp146 CoatRoughness $const3 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
-	max		___391_coat_r2 $tmp146 $const2 	%argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:206
-#     coat_r2 = coat_r2 * coat_r2;
-	mul		___391_coat_r2 ___391_coat_r2 ___391_coat_r2 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{206} %argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:208
-#     closure color CoatBSDF = dielectric_bsdf(
-	closure		___391_CoatBSDF $const38 CoatNormal $const21 $const6 $const5 ___391_coat_r2 ___391_coat_r2 ___391_coat_ior $const37 	%line{208} %argrw{"wrrrrrrrrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:210
-#     BSDF = layer(coat_weight * CoatBSDF, BSDF);
-	mul		$tmp150 ___391_CoatBSDF coat_weight 	%line{210} %argrw{"wrr"}
-	closure		BSDF $const33 $tmp150 BSDF 	%argrw{"wrrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:213
-#   if (SheenWeight > CLOSURE_WEIGHT_CUTOFF) {
-	gt		$tmp151 SheenWeight CLOSURE_WEIGHT_CUTOFF 	%line{213} %argrw{"wrr"}
-	if		$tmp151 267 267 	%argrw{"r"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:214
-#     normal sheen_normal = normalize(mix(Normal, CoatNormal, clamp(coat_weight, 0.0, 1.0)));
-	functioncall	$const4 257 	%line{214} %argrw{"r"}
-# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
-# float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
-	min		$tmp154 coat_weight $const3 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
-	max		$tmp153 $tmp154 $const2 	%argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:214
-#     normal sheen_normal = normalize(mix(Normal, CoatNormal, clamp(coat_weight, 0.0, 1.0)));
-	mix		$tmp152 Normal CoatNormal $tmp153 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{214} %argrw{"wrrr"}
-	normalize	___393_sheen_normal $tmp152 	%argrw{"wr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:215
-#     closure color SheenBSDF = sheen(sheen_normal, clamp(SheenRoughness, 0.0, 1.0));
-	functioncall	$const4 262 	%line{215} %argrw{"r"}
-# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
-# float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
-	min		$tmp156 SheenRoughness $const3 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
-	max		$tmp155 $tmp156 $const2 	%argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:215
-#     closure color SheenBSDF = sheen(sheen_normal, clamp(SheenRoughness, 0.0, 1.0));
-	closure		___393_SheenBSDF $const39 ___393_sheen_normal $tmp155 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{215} %argrw{"wrrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:216
-#     BSDF = layer(sheen_weight * max(SheenTint, color(0.0)) * SheenBSDF, BSDF);
-	max		$tmp157 SheenTint $const5 	%line{216} %argrw{"wrr"}
-	mul		$tmp159 sheen_weight $tmp157 	%argrw{"wrr"}
-	mul		$tmp160 ___393_SheenBSDF $tmp159 	%argrw{"wrr"}
-	closure		BSDF $const33 $tmp160 BSDF 	%argrw{"wrrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:219
-#   BSDF = mix(transparent(), BSDF, clamp(Alpha, 0.0, 1.0));
-	closure		$tmp161 $const40 	%line{219} %argrw{"wr"}
-	functioncall	$const4 271 	%argrw{"r"}
-# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
-# float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
-	min		$tmp163 Alpha $const3 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
-	max		$tmp162 $tmp163 $const2 	%argrw{"wrr"}
-# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:219
-#   BSDF = mix(transparent(), BSDF, clamp(Alpha, 0.0, 1.0));
-	functioncall	$const28 276 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{219} %argrw{"r"}
+#     BSDF = mix(MetallicBSDF, BSDF, 1.0 - metallic);
+	sub		$tmp122 $const3 metallic 	%line{197} %argrw{"wrr"}
+	functioncall	$const28 224 	%argrw{"r"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:164
 # closure color mix (closure color x, closure color y, float a) { return x*(1-a) + y*a; }
-	sub		$tmp164 $const3 $tmp162 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{164} %argrw{"wrr"}
-	mul		$tmp165 $tmp161 $tmp164 	%argrw{"wrr"}
-	mul		$tmp166 BSDF $tmp162 	%argrw{"wrr"}
-	add		BSDF $tmp165 $tmp166 	%argrw{"wrr"}
+	sub		$tmp123 $const3 $tmp122 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{164} %argrw{"wrr"}
+	mul		$tmp124 MetallicBSDF $tmp123 	%argrw{"wrr"}
+	mul		$tmp125 BSDF $tmp122 	%argrw{"wrr"}
+	add		BSDF $tmp124 $tmp125 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:200
+#   if (EmissionStrength != 0.0 && EmissionColor != color(0.0)) {
+	neq		$tmp126 EmissionStrength $const2 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{200} %argrw{"wrr"}
+	neq		$tmp127 $tmp126 $const7 	%argrw{"wrr"}
+	if		$tmp127 230 230 	%argrw{"r"}
+	neq		$tmp129 EmissionColor $const5 	%argrw{"wrr"}
+	neq		$tmp130 $tmp129 $const7 	%argrw{"wrr"}
+	assign		$tmp127 $tmp130 	%argrw{"wr"}
+	if		$tmp127 235 235 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:201
+#     BSDF += EmissionStrength * EmissionColor * emission();
+	closure		$tmp131 $const38 	%line{201} %argrw{"wr"}
+	mul		$tmp132 EmissionStrength EmissionColor 	%argrw{"wrr"}
+	mul		$tmp133 $tmp131 $tmp132 	%argrw{"wrr"}
+	add		BSDF BSDF $tmp133 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:204
+#   if (coat_weight > CLOSURE_WEIGHT_CUTOFF) {
+	gt		$tmp134 coat_weight CLOSURE_WEIGHT_CUTOFF 	%line{204} %argrw{"wrr"}
+	if		$tmp134 244 244 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:205
+#     float coat_ior = max(CoatIOR, 1.0);
+	max		___532_coat_ior CoatIOR $const3 	%line{205} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:206
+#     float coat_alpha = clamp(CoatRoughness, 0.0, 1.0);
+	functioncall	$const4 241 	%line{206} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
+# float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
+	min		$tmp135 CoatRoughness $const3 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
+	max		___532_coat_alpha $tmp135 $const2 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:207
+#     closure color CoatBSDF = coat_bsdf(CoatTint, coat_ior, coat_alpha, CoatNormal);
+	closure		___532_CoatBSDF $const39 CoatTint ___532_coat_ior ___532_coat_alpha CoatNormal 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{207} %argrw{"wrrrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:208
+#     BSDF = layer(coat_weight * CoatBSDF, BSDF);
+	mul		$tmp136 ___532_CoatBSDF coat_weight 	%line{208} %argrw{"wrr"}
+	closure		BSDF $const33 $tmp136 BSDF 	%argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:211
+#   if (SheenWeight > CLOSURE_WEIGHT_CUTOFF) {
+	gt		$tmp137 SheenWeight CLOSURE_WEIGHT_CUTOFF 	%line{211} %argrw{"wrr"}
+	if		$tmp137 258 258 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:212
+#     normal sheen_normal = normalize(mix(Normal, CoatNormal, clamp(coat_weight, 0.0, 1.0)));
+	functioncall	$const4 249 	%line{212} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
+# float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
+	min		$tmp140 coat_weight $const3 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
+	max		$tmp139 $tmp140 $const2 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:212
+#     normal sheen_normal = normalize(mix(Normal, CoatNormal, clamp(coat_weight, 0.0, 1.0)));
+	mix		$tmp138 Normal CoatNormal $tmp139 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{212} %argrw{"wrrr"}
+	normalize	___533_sheen_normal $tmp138 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:213
+#     color sheen_tint = max(SheenTint, color(0.0));
+	max		___533_sheen_tint SheenTint $const5 	%line{213} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:214
+#     float sheen_roughness = clamp(SheenRoughness, 0.0, 1.0);
+	functioncall	$const4 255 	%line{214} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
+# float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
+	min		$tmp142 SheenRoughness $const3 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
+	max		___533_sheen_roughness $tmp142 $const2 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:215
+#     closure color SheenBSDF = sheen_bsdf(sheen_normal, sheen_tint, sheen_roughness);
+	closure		___533_SheenBSDF $const40 ___533_sheen_normal ___533_sheen_tint ___533_sheen_roughness 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{215} %argrw{"wrrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:216
+#     BSDF = layer(sheen_weight * SheenBSDF, BSDF);
+	mul		$tmp143 ___533_SheenBSDF sheen_weight 	%line{216} %argrw{"wrr"}
+	closure		BSDF $const33 $tmp143 BSDF 	%argrw{"wrrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:219
+#   BSDF = mix(transparent(), BSDF, clamp(Alpha, 0.0, 1.0));
+	closure		$tmp144 $const41 	%line{219} %argrw{"wr"}
+	functioncall	$const4 262 	%argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:141
+# float  clamp (float x, float minval, float maxval) { return max(min(x,maxval),minval); }
+	min		$tmp146 Alpha $const3 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{141} %argrw{"wrr"}
+	max		$tmp145 $tmp146 $const2 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl:219
+#   BSDF = mix(transparent(), BSDF, clamp(Alpha, 0.0, 1.0));
+	functioncall	$const28 267 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_principled_bsdf.osl"} %line{219} %argrw{"r"}
+# E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:164
+# closure color mix (closure color x, closure color y, float a) { return x*(1-a) + y*a; }
+	sub		$tmp147 $const3 $tmp145 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{164} %argrw{"wrr"}
+	mul		$tmp148 $tmp144 $tmp147 	%argrw{"wrr"}
+	mul		$tmp149 BSDF $tmp145 	%argrw{"wrr"}
+	add		BSDF $tmp148 $tmp149 	%argrw{"wrr"}
 	end

@@ -11,10 +11,10 @@ param	color	Color2	0.200000003 0.200000003 0.200000003		%read{43,43} %write{2147
 oparam	float	Fac	0		%read{40,40} %write{36,38}
 oparam	color	Color	0 0 0		%read{2147483647,-1} %write{42,43}
 global	point	P	%read{0,0} %write{2147483647,-1}
-local	point	___370_p	%read{18,26} %write{9,17}
-local	int	___370_xi	%read{30,30} %write{21,21}
-local	int	___370_yi	%read{31,31} %write{25,25}
-local	int	___370_zi	%read{33,33} %write{29,29}
+local	point	___371_p	%read{18,26} %write{9,17}
+local	int	___371_xi	%read{30,30} %write{21,21}
+local	int	___371_yi	%read{31,31} %write{25,25}
+local	int	___371_zi	%read{33,33} %write{29,29}
 local	point	p	%read{3,4} %write{1,3}
 temp	point	$tmp1	%read{6,14} %write{4,4}
 const	string	$const1	"checker"		%read{5,5} %write{2147483647,-1}
@@ -72,43 +72,43 @@ code ___main___
 	compref		$tmp2 $tmp1 $const2 	%line{12} %argrw{"wrr"}
 	add		$tmp3 $tmp2 $const3 	%argrw{"wrr"}
 	mul		$tmp4 $tmp3 $const4 	%argrw{"wrr"}
-	compassign	___370_p $const2 $tmp4 	%argrw{"wrr"}
+	compassign	___371_p $const2 $tmp4 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_checker_texture.osl:13
 #   p[1] = (ip[1] + 0.000001) * 0.999999;
 	compref		$tmp5 $tmp1 $const5 	%line{13} %argrw{"wrr"}
 	add		$tmp6 $tmp5 $const3 	%argrw{"wrr"}
 	mul		$tmp7 $tmp6 $const4 	%argrw{"wrr"}
-	compassign	___370_p $const5 $tmp7 	%argrw{"wrr"}
+	compassign	___371_p $const5 $tmp7 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_checker_texture.osl:14
 #   p[2] = (ip[2] + 0.000001) * 0.999999;
 	compref		$tmp8 $tmp1 $const6 	%line{14} %argrw{"wrr"}
 	add		$tmp9 $tmp8 $const3 	%argrw{"wrr"}
 	mul		$tmp10 $tmp9 $const4 	%argrw{"wrr"}
-	compassign	___370_p $const6 $tmp10 	%argrw{"wrr"}
+	compassign	___371_p $const6 $tmp10 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_checker_texture.osl:16
 #   int xi = (int)fabs(floor(p[0]));
-	compref		$tmp13 ___370_p $const2 	%line{16} %argrw{"wrr"}
+	compref		$tmp13 ___371_p $const2 	%line{16} %argrw{"wrr"}
 	floor		$tmp12 $tmp13 	%argrw{"wr"}
 	fabs		$tmp11 $tmp12 	%argrw{"wr"}
-	assign		___370_xi $tmp11 	%argrw{"wr"}
+	assign		___371_xi $tmp11 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_checker_texture.osl:17
 #   int yi = (int)fabs(floor(p[1]));
-	compref		$tmp16 ___370_p $const5 	%line{17} %argrw{"wrr"}
+	compref		$tmp16 ___371_p $const5 	%line{17} %argrw{"wrr"}
 	floor		$tmp15 $tmp16 	%argrw{"wr"}
 	fabs		$tmp14 $tmp15 	%argrw{"wr"}
-	assign		___370_yi $tmp14 	%argrw{"wr"}
+	assign		___371_yi $tmp14 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_checker_texture.osl:18
 #   int zi = (int)fabs(floor(p[2]));
-	compref		$tmp19 ___370_p $const6 	%line{18} %argrw{"wrr"}
+	compref		$tmp19 ___371_p $const6 	%line{18} %argrw{"wrr"}
 	floor		$tmp18 $tmp19 	%argrw{"wr"}
 	fabs		$tmp17 $tmp18 	%argrw{"wr"}
-	assign		___370_zi $tmp17 	%argrw{"wr"}
+	assign		___371_zi $tmp17 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_checker_texture.osl:20
 #   if ((xi % 2 == yi % 2) == (zi % 2)) {
-	mod		$tmp20 ___370_xi $const6 	%line{20} %argrw{"wrr"}
-	mod		$tmp21 ___370_yi $const6 	%argrw{"wrr"}
+	mod		$tmp20 ___371_xi $const6 	%line{20} %argrw{"wrr"}
+	mod		$tmp21 ___371_yi $const6 	%argrw{"wrr"}
 	eq		$tmp22 $tmp20 $tmp21 	%argrw{"wrr"}
-	mod		$tmp23 ___370_zi $const6 	%argrw{"wrr"}
+	mod		$tmp23 ___371_zi $const6 	%argrw{"wrr"}
 	eq		$tmp24 $tmp22 $tmp23 	%argrw{"wrr"}
 	if		$tmp24 38 40 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_checker_texture.osl:21

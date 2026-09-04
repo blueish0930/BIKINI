@@ -11,13 +11,13 @@ param	point	Vector	0 0 0		%read{1,1} %write{0,0} %initexpr
 oparam	float	Fac	0		%read{2147483647,-1} %write{131,131}
 oparam	color	Color	0 0 0		%read{126,129} %write{125,125}
 global	point	P	%read{0,0} %write{2147483647,-1}
-local	float	___370_dist	%read{44,121} %write{5,118}
-local	float	___370_a	%read{27,36} %write{12,12}
-local	float	___370_b	%read{27,37} %write{19,19}
-local	float	___370_c	%read{28,38} %write{26,26}
-local	float	___370_x	%read{44,122} %write{30,119}
-local	float	___370_y	%read{45,123} %write{35,120}
-local	float	___370_z	%read{46,124} %write{41,121}
+local	float	___371_dist	%read{44,121} %write{5,118}
+local	float	___371_a	%read{27,36} %write{12,12}
+local	float	___371_b	%read{27,37} %write{19,19}
+local	float	___371_c	%read{28,38} %write{26,26}
+local	float	___371_x	%read{44,122} %write{30,119}
+local	float	___371_y	%read{45,123} %write{35,120}
+local	float	___371_z	%read{46,124} %write{41,121}
 local	point	p	%read{3,20} %write{1,3}
 const	string	$const1	"magic"		%read{4,4} %write{2147483647,-1}
 const	int	$const2	0		%read{6,126} %write{2147483647,-1}
@@ -133,7 +133,7 @@ code ___main___
 	functioncall	$const1 126 	%line{97} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:10
 #   float dist = distortion;
-	assign		___370_dist Distortion 	%line{10} %argrw{"wr"}
+	assign		___371_dist Distortion 	%line{10} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:12
 #   float a = mod(p.x * scale, M_2PI);
 	compref		$tmp1 p $const2 	%line{12} %argrw{"wrr"}
@@ -144,7 +144,7 @@ code ___main___
 	div		$tmp4 $tmp2 $const3 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{132} %argrw{"wrr"}
 	floor		$tmp3 $tmp4 	%argrw{"wr"}
 	mul		$tmp5 $const3 $tmp3 	%argrw{"wrr"}
-	sub		___370_a $tmp2 $tmp5 	%argrw{"wrr"}
+	sub		___371_a $tmp2 $tmp5 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:13
 #   float b = mod(p.y * scale, M_2PI);
 	compref		$tmp6 p $const5 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl"} %line{13} %argrw{"wrr"}
@@ -155,7 +155,7 @@ code ___main___
 	div		$tmp9 $tmp7 $const3 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{132} %argrw{"wrr"}
 	floor		$tmp8 $tmp9 	%argrw{"wr"}
 	mul		$tmp10 $const3 $tmp8 	%argrw{"wrr"}
-	sub		___370_b $tmp7 $tmp10 	%argrw{"wrr"}
+	sub		___371_b $tmp7 $tmp10 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:14
 #   float c = mod(p.z * scale, M_2PI);
 	compref		$tmp11 p $const6 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl"} %line{14} %argrw{"wrr"}
@@ -166,189 +166,189 @@ code ___main___
 	div		$tmp14 $tmp12 $const3 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{132} %argrw{"wrr"}
 	floor		$tmp13 $tmp14 	%argrw{"wr"}
 	mul		$tmp15 $const3 $tmp13 	%argrw{"wrr"}
-	sub		___370_c $tmp12 $tmp15 	%argrw{"wrr"}
+	sub		___371_c $tmp12 $tmp15 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:16
 #   float x = sin((a + b + c) * 5.0);
-	add		$tmp16 ___370_a ___370_b 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl"} %line{16} %argrw{"wrr"}
-	add		$tmp17 $tmp16 ___370_c 	%argrw{"wrr"}
+	add		$tmp16 ___371_a ___371_b 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl"} %line{16} %argrw{"wrr"}
+	add		$tmp17 $tmp16 ___371_c 	%argrw{"wrr"}
 	mul		$tmp18 $tmp17 $const7 	%argrw{"wrr"}
-	sin		___370_x $tmp18 	%argrw{"wr"}
+	sin		___371_x $tmp18 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:17
 #   float y = cos((-a + b - c) * 5.0);
-	neg		$tmp19 ___370_a 	%line{17} %argrw{"wr"}
-	add		$tmp20 $tmp19 ___370_b 	%argrw{"wrr"}
-	sub		$tmp21 $tmp20 ___370_c 	%argrw{"wrr"}
+	neg		$tmp19 ___371_a 	%line{17} %argrw{"wr"}
+	add		$tmp20 $tmp19 ___371_b 	%argrw{"wrr"}
+	sub		$tmp21 $tmp20 ___371_c 	%argrw{"wrr"}
 	mul		$tmp22 $tmp21 $const7 	%argrw{"wrr"}
-	cos		___370_y $tmp22 	%argrw{"wr"}
+	cos		___371_y $tmp22 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:18
 #   float z = -cos((-a - b + c) * 5.0);
-	neg		$tmp24 ___370_a 	%line{18} %argrw{"wr"}
-	sub		$tmp25 $tmp24 ___370_b 	%argrw{"wrr"}
-	add		$tmp26 $tmp25 ___370_c 	%argrw{"wrr"}
+	neg		$tmp24 ___371_a 	%line{18} %argrw{"wr"}
+	sub		$tmp25 $tmp24 ___371_b 	%argrw{"wrr"}
+	add		$tmp26 $tmp25 ___371_c 	%argrw{"wrr"}
 	mul		$tmp27 $tmp26 $const7 	%argrw{"wrr"}
 	cos		$tmp23 $tmp27 	%argrw{"wr"}
-	neg		___370_z $tmp23 	%argrw{"wr"}
+	neg		___371_z $tmp23 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:20
 #   if (n > 0) {
 	gt		$tmp28 depth $const2 	%line{20} %argrw{"wrr"}
 	if		$tmp28 116 116 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:21
 #     x *= dist;
-	mul		___370_x ___370_x ___370_dist 	%line{21} %argrw{"wrr"}
+	mul		___371_x ___371_x ___371_dist 	%line{21} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:22
 #     y *= dist;
-	mul		___370_y ___370_y ___370_dist 	%line{22} %argrw{"wrr"}
+	mul		___371_y ___371_y ___371_dist 	%line{22} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:23
 #     z *= dist;
-	mul		___370_z ___370_z ___370_dist 	%line{23} %argrw{"wrr"}
+	mul		___371_z ___371_z ___371_dist 	%line{23} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:24
 #     y = -cos(x - y + z);
-	sub		$tmp30 ___370_x ___370_y 	%line{24} %argrw{"wrr"}
-	add		$tmp31 $tmp30 ___370_z 	%argrw{"wrr"}
+	sub		$tmp30 ___371_x ___371_y 	%line{24} %argrw{"wrr"}
+	add		$tmp31 $tmp30 ___371_z 	%argrw{"wrr"}
 	cos		$tmp29 $tmp31 	%argrw{"wr"}
-	neg		___370_y $tmp29 	%argrw{"wr"}
+	neg		___371_y $tmp29 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:25
 #     y *= dist;
-	mul		___370_y ___370_y ___370_dist 	%line{25} %argrw{"wrr"}
+	mul		___371_y ___371_y ___371_dist 	%line{25} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:27
 #     if (n > 1) {
 	gt		$tmp32 depth $const5 	%line{27} %argrw{"wrr"}
 	if		$tmp32 116 116 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:28
 #       x = cos(x - y - z);
-	sub		$tmp33 ___370_x ___370_y 	%line{28} %argrw{"wrr"}
-	sub		$tmp34 $tmp33 ___370_z 	%argrw{"wrr"}
-	cos		___370_x $tmp34 	%argrw{"wr"}
+	sub		$tmp33 ___371_x ___371_y 	%line{28} %argrw{"wrr"}
+	sub		$tmp34 $tmp33 ___371_z 	%argrw{"wrr"}
+	cos		___371_x $tmp34 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:29
 #       x *= dist;
-	mul		___370_x ___370_x ___370_dist 	%line{29} %argrw{"wrr"}
+	mul		___371_x ___371_x ___371_dist 	%line{29} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:31
 #       if (n > 2) {
 	gt		$tmp35 depth $const6 	%line{31} %argrw{"wrr"}
 	if		$tmp35 116 116 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:32
 #         z = sin(-x - y - z);
-	neg		$tmp36 ___370_x 	%line{32} %argrw{"wr"}
-	sub		$tmp37 $tmp36 ___370_y 	%argrw{"wrr"}
-	sub		$tmp38 $tmp37 ___370_z 	%argrw{"wrr"}
-	sin		___370_z $tmp38 	%argrw{"wr"}
+	neg		$tmp36 ___371_x 	%line{32} %argrw{"wr"}
+	sub		$tmp37 $tmp36 ___371_y 	%argrw{"wrr"}
+	sub		$tmp38 $tmp37 ___371_z 	%argrw{"wrr"}
+	sin		___371_z $tmp38 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:33
 #         z *= dist;
-	mul		___370_z ___370_z ___370_dist 	%line{33} %argrw{"wrr"}
+	mul		___371_z ___371_z ___371_dist 	%line{33} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:35
 #         if (n > 3) {
 	gt		$tmp39 depth $const8 	%line{35} %argrw{"wrr"}
 	if		$tmp39 116 116 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:36
 #           x = -cos(-x + y - z);
-	neg		$tmp41 ___370_x 	%line{36} %argrw{"wr"}
-	add		$tmp42 $tmp41 ___370_y 	%argrw{"wrr"}
-	sub		$tmp43 $tmp42 ___370_z 	%argrw{"wrr"}
+	neg		$tmp41 ___371_x 	%line{36} %argrw{"wr"}
+	add		$tmp42 $tmp41 ___371_y 	%argrw{"wrr"}
+	sub		$tmp43 $tmp42 ___371_z 	%argrw{"wrr"}
 	cos		$tmp40 $tmp43 	%argrw{"wr"}
-	neg		___370_x $tmp40 	%argrw{"wr"}
+	neg		___371_x $tmp40 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:37
 #           x *= dist;
-	mul		___370_x ___370_x ___370_dist 	%line{37} %argrw{"wrr"}
+	mul		___371_x ___371_x ___371_dist 	%line{37} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:39
 #           if (n > 4) {
 	gt		$tmp44 depth $const9 	%line{39} %argrw{"wrr"}
 	if		$tmp44 116 116 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:40
 #             y = -sin(-x + y + z);
-	neg		$tmp46 ___370_x 	%line{40} %argrw{"wr"}
-	add		$tmp47 $tmp46 ___370_y 	%argrw{"wrr"}
-	add		$tmp48 $tmp47 ___370_z 	%argrw{"wrr"}
+	neg		$tmp46 ___371_x 	%line{40} %argrw{"wr"}
+	add		$tmp47 $tmp46 ___371_y 	%argrw{"wrr"}
+	add		$tmp48 $tmp47 ___371_z 	%argrw{"wrr"}
 	sin		$tmp45 $tmp48 	%argrw{"wr"}
-	neg		___370_y $tmp45 	%argrw{"wr"}
+	neg		___371_y $tmp45 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:41
 #             y *= dist;
-	mul		___370_y ___370_y ___370_dist 	%line{41} %argrw{"wrr"}
+	mul		___371_y ___371_y ___371_dist 	%line{41} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:43
 #             if (n > 5) {
 	gt		$tmp49 depth $const10 	%line{43} %argrw{"wrr"}
 	if		$tmp49 116 116 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:44
 #               y = -cos(-x + y + z);
-	neg		$tmp51 ___370_x 	%line{44} %argrw{"wr"}
-	add		$tmp52 $tmp51 ___370_y 	%argrw{"wrr"}
-	add		$tmp53 $tmp52 ___370_z 	%argrw{"wrr"}
+	neg		$tmp51 ___371_x 	%line{44} %argrw{"wr"}
+	add		$tmp52 $tmp51 ___371_y 	%argrw{"wrr"}
+	add		$tmp53 $tmp52 ___371_z 	%argrw{"wrr"}
 	cos		$tmp50 $tmp53 	%argrw{"wr"}
-	neg		___370_y $tmp50 	%argrw{"wr"}
+	neg		___371_y $tmp50 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:45
 #               y *= dist;
-	mul		___370_y ___370_y ___370_dist 	%line{45} %argrw{"wrr"}
+	mul		___371_y ___371_y ___371_dist 	%line{45} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:47
 #               if (n > 6) {
 	gt		$tmp54 depth $const11 	%line{47} %argrw{"wrr"}
 	if		$tmp54 116 116 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:48
 #                 x = cos(x + y + z);
-	add		$tmp55 ___370_x ___370_y 	%line{48} %argrw{"wrr"}
-	add		$tmp56 $tmp55 ___370_z 	%argrw{"wrr"}
-	cos		___370_x $tmp56 	%argrw{"wr"}
+	add		$tmp55 ___371_x ___371_y 	%line{48} %argrw{"wrr"}
+	add		$tmp56 $tmp55 ___371_z 	%argrw{"wrr"}
+	cos		___371_x $tmp56 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:49
 #                 x *= dist;
-	mul		___370_x ___370_x ___370_dist 	%line{49} %argrw{"wrr"}
+	mul		___371_x ___371_x ___371_dist 	%line{49} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:51
 #                 if (n > 7) {
 	gt		$tmp57 depth $const12 	%line{51} %argrw{"wrr"}
 	if		$tmp57 116 116 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:52
 #                   z = sin(x + y - z);
-	add		$tmp58 ___370_x ___370_y 	%line{52} %argrw{"wrr"}
-	sub		$tmp59 $tmp58 ___370_z 	%argrw{"wrr"}
-	sin		___370_z $tmp59 	%argrw{"wr"}
+	add		$tmp58 ___371_x ___371_y 	%line{52} %argrw{"wrr"}
+	sub		$tmp59 $tmp58 ___371_z 	%argrw{"wrr"}
+	sin		___371_z $tmp59 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:53
 #                   z *= dist;
-	mul		___370_z ___370_z ___370_dist 	%line{53} %argrw{"wrr"}
+	mul		___371_z ___371_z ___371_dist 	%line{53} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:55
 #                   if (n > 8) {
 	gt		$tmp60 depth $const13 	%line{55} %argrw{"wrr"}
 	if		$tmp60 116 116 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:56
 #                     x = -cos(-x - y + z);
-	neg		$tmp62 ___370_x 	%line{56} %argrw{"wr"}
-	sub		$tmp63 $tmp62 ___370_y 	%argrw{"wrr"}
-	add		$tmp64 $tmp63 ___370_z 	%argrw{"wrr"}
+	neg		$tmp62 ___371_x 	%line{56} %argrw{"wr"}
+	sub		$tmp63 $tmp62 ___371_y 	%argrw{"wrr"}
+	add		$tmp64 $tmp63 ___371_z 	%argrw{"wrr"}
 	cos		$tmp61 $tmp64 	%argrw{"wr"}
-	neg		___370_x $tmp61 	%argrw{"wr"}
+	neg		___371_x $tmp61 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:57
 #                     x *= dist;
-	mul		___370_x ___370_x ___370_dist 	%line{57} %argrw{"wrr"}
+	mul		___371_x ___371_x ___371_dist 	%line{57} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:59
 #                     if (n > 9) {
 	gt		$tmp65 depth $const14 	%line{59} %argrw{"wrr"}
 	if		$tmp65 116 116 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:60
 #                       y = -sin(x - y + z);
-	sub		$tmp67 ___370_x ___370_y 	%line{60} %argrw{"wrr"}
-	add		$tmp68 $tmp67 ___370_z 	%argrw{"wrr"}
+	sub		$tmp67 ___371_x ___371_y 	%line{60} %argrw{"wrr"}
+	add		$tmp68 $tmp67 ___371_z 	%argrw{"wrr"}
 	sin		$tmp66 $tmp68 	%argrw{"wr"}
-	neg		___370_y $tmp66 	%argrw{"wr"}
+	neg		___371_y $tmp66 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:61
 #                       y *= dist;
-	mul		___370_y ___370_y ___370_dist 	%line{61} %argrw{"wrr"}
+	mul		___371_y ___371_y ___371_dist 	%line{61} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:73
 #   if (dist != 0.0) {
-	neq		$tmp69 ___370_dist $const15 	%line{73} %argrw{"wrr"}
+	neq		$tmp69 ___371_dist $const15 	%line{73} %argrw{"wrr"}
 	if		$tmp69 122 122 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:74
 #     dist *= 2.0;
-	mul		___370_dist ___370_dist $const16 	%line{74} %argrw{"wrr"}
+	mul		___371_dist ___371_dist $const16 	%line{74} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:75
 #     x /= dist;
-	div		___370_x ___370_x ___370_dist 	%line{75} %argrw{"wrr"}
+	div		___371_x ___371_x ___371_dist 	%line{75} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:76
 #     y /= dist;
-	div		___370_y ___370_y ___370_dist 	%line{76} %argrw{"wrr"}
+	div		___371_y ___371_y ___371_dist 	%line{76} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:77
 #     z /= dist;
-	div		___370_z ___370_z ___370_dist 	%line{77} %argrw{"wrr"}
+	div		___371_z ___371_z ___371_dist 	%line{77} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:80
 #   return color(0.5 - x, 0.5 - y, 0.5 - z);
-	sub		$tmp70 $const17 ___370_x 	%line{80} %argrw{"wrr"}
-	sub		$tmp71 $const17 ___370_y 	%argrw{"wrr"}
-	sub		$tmp72 $const17 ___370_z 	%argrw{"wrr"}
+	sub		$tmp70 $const17 ___371_x 	%line{80} %argrw{"wrr"}
+	sub		$tmp71 $const17 ___371_y 	%argrw{"wrr"}
+	sub		$tmp72 $const17 ___371_z 	%argrw{"wrr"}
 	color		Color $tmp70 $tmp71 $tmp72 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_magic_texture.osl:98
 #   Fac = (Color[0] + Color[1] + Color[2]) * (1.0 / 3.0);

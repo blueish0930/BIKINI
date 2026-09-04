@@ -67,7 +67,9 @@ enum NodeAttributeType : uint8_t {
   NODE_ATTR_FLOAT3,
   NODE_ATTR_FLOAT4,
   NODE_ATTR_RGBA,
-  NODE_ATTR_MATRIX
+  NODE_ATTR_MATRIX,
+  NODE_ATTR_QUATERNION,
+  NODE_ATTR_SPHERICAL_HARMONICS,
 };
 
 enum NodeGeometry : uint8_t {
@@ -280,6 +282,18 @@ enum NodeVectorRotateType : uint {
   NODE_VECTOR_ROTATE_TYPE_AXIS_Y,
   NODE_VECTOR_ROTATE_TYPE_AXIS_Z,
   NODE_VECTOR_ROTATE_TYPE_EULER_XYZ,
+};
+
+enum NodeBillboardMode : uint8_t {
+  NODE_BILLBOARD_VIEW = 0,
+  NODE_BILLBOARD_SPHERICAL = 1,
+  NODE_BILLBOARD_CYLINDRICAL = 2,
+};
+
+enum NodeBillboardAxis : uint8_t {
+  NODE_BILLBOARD_AXIS_X = 0,
+  NODE_BILLBOARD_AXIS_Y = 1,
+  NODE_BILLBOARD_AXIS_Z = 2,
 };
 
 enum NodeVectorTransformType : uint {

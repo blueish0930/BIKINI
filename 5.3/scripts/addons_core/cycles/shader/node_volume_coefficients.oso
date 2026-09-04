@@ -12,18 +12,18 @@ param	float	Alpha	0.5		%read{7,7} %write{2147483647,-1}
 param	float	Diameter	20		%read{14,14} %write{2147483647,-1}
 param	vector	EmissionCoefficients	0 0 0		%read{110,110} %write{2147483647,-1}
 oparam	closure color	Volume			%read{112,112} %write{108,112}
-local	float	___370_d	%read{15,90} %write{14,14}
-local	float	___372_log_d	%read{31,54} %write{30,30}
-local	float	___372_a	%read{36,36} %write{33,33}
-local	float	___372_b	%read{36,36} %write{35,35}
-local	float	___372_c	%read{45,45} %write{41,41}
-local	float	___373_log_d	%read{60,75} %write{59,59}
-local	float	___373_temp	%read{75,75} %write{63,63}
-local	closure color	___374_scatter	%read{102,102} %write{1,101}
-local	float	___378_param.g_HG	%read{94,94} %write{18,81} %mystruct{___378_param} %mystructfield{0}
-local	float	___378_param.g_D	%read{95,95} %write{22,85} %mystruct{___378_param} %mystructfield{1}
-local	float	___378_param.alpha	%read{95,95} %write{23,89} %mystruct{___378_param} %mystructfield{2}
-local	float	___378_param.mixture	%read{97,99} %write{26,93} %mystruct{___378_param} %mystructfield{3}
+local	float	___371_d	%read{15,90} %write{14,14}
+local	float	___373_log_d	%read{31,54} %write{30,30}
+local	float	___373_a	%read{36,36} %write{33,33}
+local	float	___373_b	%read{36,36} %write{35,35}
+local	float	___373_c	%read{45,45} %write{41,41}
+local	float	___374_log_d	%read{60,75} %write{59,59}
+local	float	___374_temp	%read{75,75} %write{63,63}
+local	closure color	___375_scatter	%read{102,102} %write{1,101}
+local	float	___379_param.g_HG	%read{94,94} %write{18,81} %mystruct{___379_param} %mystructfield{0}
+local	float	___379_param.g_D	%read{95,95} %write{22,85} %mystruct{___379_param} %mystructfield{1}
+local	float	___379_param.alpha	%read{95,95} %write{23,89} %mystruct{___379_param} %mystructfield{2}
+local	float	___379_param.mixture	%read{97,99} %write{26,93} %mystruct{___379_param} %mystructfield{3}
 local	closure color	scatter_closure	%read{104,104} %write{102,102}
 const	string	$const1	"scatter"		%read{0,0} %write{2147483647,-1}
 const	int	$const2	0		%read{1,1} %write{2147483647,-1}
@@ -164,28 +164,28 @@ code ___main___
 	functioncall	$const1 103 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_volume_coefficients.osl"} %line{18} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:54
 #   closure color scatter = 0;
-	assign		___374_scatter $const2 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h"} %line{54} %argrw{"wr"}
+	assign		___375_scatter $const2 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h"} %line{54} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:55
 #   if (phase == "Fournier-Forand") {
 	eq		$tmp1 phase $const3 	%line{55} %argrw{"wrr"}
 	if		$tmp1 5 102 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:56
 #     scatter = fournier_forand(Backscatter, IOR);
-	closure		___374_scatter $const4 Backscatter IOR 	%line{56} %argrw{"wrrr"}
+	closure		___375_scatter $const4 Backscatter IOR 	%line{56} %argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:58
 #   else if (phase == "Draine") {
 	eq		$tmp2 phase $const5 	%line{58} %argrw{"wrr"}
 	if		$tmp2 8 102 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:59
 #     scatter = draine(Anisotropy, Alpha);
-	closure		___374_scatter $const6 Anisotropy Alpha 	%line{59} %argrw{"wrrr"}
+	closure		___375_scatter $const6 Anisotropy Alpha 	%line{59} %argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:61
 #   else if (phase == "Rayleigh") {
 	eq		$tmp3 phase $const7 	%line{61} %argrw{"wrr"}
 	if		$tmp3 11 102 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:62
 #     scatter = rayleigh();
-	closure		___374_scatter $const8 	%line{62} %argrw{"wr"}
+	closure		___375_scatter $const8 	%line{62} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:64
 #   else if (phase == "Mie") {
 	eq		$tmp4 phase $const9 	%line{64} %argrw{"wrr"}
@@ -195,147 +195,147 @@ code ___main___
 	functioncall	$const10 94 	%line{67} %argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:16
 #   float d = max(Diameter, 0.0);
-	max		___370_d Diameter $const11 	%line{16} %argrw{"wrr"}
+	max		___371_d Diameter $const11 	%line{16} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:17
 #   if (d <= 0.1) {
-	le		$tmp5 ___370_d $const12 	%line{17} %argrw{"wrr"}
+	le		$tmp5 ___371_d $const12 	%line{17} %argrw{"wrr"}
 	if		$tmp5 28 28 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:19
 #     return {13.8 * d * d, 1.1456 * d * sin(9.29044 * d), 250.0, 0.252977 - 312.983 * pow(d, 4.3)};
-	mul		$tmp6 $const13 ___370_d 	%line{19} %argrw{"wrr"}
-	mul		___378_param.g_HG $tmp6 ___370_d 	%argrw{"wrr"}
-	mul		$tmp7 $const14 ___370_d 	%argrw{"wrr"}
-	mul		$tmp9 $const15 ___370_d 	%argrw{"wrr"}
+	mul		$tmp6 $const13 ___371_d 	%line{19} %argrw{"wrr"}
+	mul		___379_param.g_HG $tmp6 ___371_d 	%argrw{"wrr"}
+	mul		$tmp7 $const14 ___371_d 	%argrw{"wrr"}
+	mul		$tmp9 $const15 ___371_d 	%argrw{"wrr"}
 	sin		$tmp8 $tmp9 	%argrw{"wr"}
-	mul		___378_param.g_D $tmp7 $tmp8 	%argrw{"wrr"}
-	assign		___378_param.alpha $const16 	%argrw{"wr"}
-	pow		$tmp10 ___370_d $const19 	%argrw{"wrr"}
+	mul		___379_param.g_D $tmp7 $tmp8 	%argrw{"wrr"}
+	assign		___379_param.alpha $const16 	%argrw{"wr"}
+	pow		$tmp10 ___371_d $const19 	%argrw{"wrr"}
 	mul		$tmp11 $const18 $tmp10 	%argrw{"wrr"}
-	sub		___378_param.mixture $const17 $tmp11 	%argrw{"wrr"}
+	sub		___379_param.mixture $const17 $tmp11 	%argrw{"wrr"}
 	return
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:22
 #   if (d < 1.5) {
-	lt		$tmp12 ___370_d $const20 	%line{22} %argrw{"wrr"}
+	lt		$tmp12 ___371_d $const20 	%line{22} %argrw{"wrr"}
 	if		$tmp12 57 57 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:24
 #     float log_d = log(d);
-	log		___372_log_d ___370_d 	%line{24} %argrw{"wr"}
+	log		___373_log_d ___371_d 	%line{24} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:25
 #     float a = (log_d - 0.238604) * (log_d + 1.00667);
-	sub		$tmp13 ___372_log_d $const21 	%line{25} %argrw{"wrr"}
-	add		$tmp14 ___372_log_d $const22 	%argrw{"wrr"}
-	mul		___372_a $tmp13 $tmp14 	%argrw{"wrr"}
+	sub		$tmp13 ___373_log_d $const21 	%line{25} %argrw{"wrr"}
+	add		$tmp14 ___373_log_d $const22 	%argrw{"wrr"}
+	mul		___373_a $tmp13 $tmp14 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:26
 #     float b = 0.507522 - 0.15677 * log_d;
-	mul		$tmp15 $const24 ___372_log_d 	%line{26} %argrw{"wrr"}
-	sub		___372_b $const23 $tmp15 	%argrw{"wrr"}
+	mul		$tmp15 $const24 ___373_log_d 	%line{26} %argrw{"wrr"}
+	sub		___373_b $const23 $tmp15 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:27
 #     float c = 1.19692 * cos(a / b) + 1.37932 * log_d + 0.0625835;
-	div		$tmp17 ___372_a ___372_b 	%line{27} %argrw{"wrr"}
+	div		$tmp17 ___373_a ___373_b 	%line{27} %argrw{"wrr"}
 	cos		$tmp16 $tmp17 	%argrw{"wr"}
 	mul		$tmp18 $const25 $tmp16 	%argrw{"wrr"}
-	mul		$tmp19 $const26 ___372_log_d 	%argrw{"wrr"}
+	mul		$tmp19 $const26 ___373_log_d 	%argrw{"wrr"}
 	add		$tmp20 $tmp18 $tmp19 	%argrw{"wrr"}
-	add		___372_c $tmp20 $const27 	%argrw{"wrr"}
+	add		___373_c $tmp20 $const27 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:28
 #     return {0.862 - 0.143 * log_d * log_d,
-	mul		$tmp21 $const29 ___372_log_d 	%line{28} %argrw{"wrr"}
-	mul		$tmp22 $tmp21 ___372_log_d 	%argrw{"wrr"}
-	sub		___378_param.g_HG $const28 $tmp22 	%argrw{"wrr"}
+	mul		$tmp21 $const29 ___373_log_d 	%line{28} %argrw{"wrr"}
+	mul		$tmp22 $tmp21 ___373_log_d 	%argrw{"wrr"}
+	sub		___379_param.g_HG $const28 $tmp22 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:29
 #             0.379685 * cos(c) + 0.344213,
-	cos		$tmp23 ___372_c 	%line{29} %argrw{"wr"}
+	cos		$tmp23 ___373_c 	%line{29} %argrw{"wr"}
 	mul		$tmp24 $const30 $tmp23 	%argrw{"wrr"}
-	add		___378_param.g_D $tmp24 $const31 	%argrw{"wrr"}
+	add		___379_param.g_D $tmp24 $const31 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:28
 #     return {0.862 - 0.143 * log_d * log_d,
-	assign		___378_param.alpha $const16 	%line{28} %argrw{"wr"}
+	assign		___379_param.alpha $const16 	%line{28} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:31
 #             0.146209 * cos(3.38707 * log_d + 2.11193) + 0.316072 + 0.0778917 * log_d};
-	mul		$tmp26 $const33 ___372_log_d 	%line{31} %argrw{"wrr"}
+	mul		$tmp26 $const33 ___373_log_d 	%line{31} %argrw{"wrr"}
 	add		$tmp27 $tmp26 $const34 	%argrw{"wrr"}
 	cos		$tmp25 $tmp27 	%argrw{"wr"}
 	mul		$tmp28 $const32 $tmp25 	%argrw{"wrr"}
 	add		$tmp29 $tmp28 $const35 	%argrw{"wrr"}
-	mul		$tmp30 $const36 ___372_log_d 	%argrw{"wrr"}
-	add		___378_param.mixture $tmp29 $tmp30 	%argrw{"wrr"}
+	mul		$tmp30 $const36 ___373_log_d 	%argrw{"wrr"}
+	add		___379_param.mixture $tmp29 $tmp30 	%argrw{"wrr"}
 	return
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:34
 #   if (d < 5.0) {
-	lt		$tmp31 ___370_d $const37 	%line{34} %argrw{"wrr"}
+	lt		$tmp31 ___371_d $const37 	%line{34} %argrw{"wrr"}
 	if		$tmp31 79 79 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:36
 #     float log_d = log(d);
-	log		___373_log_d ___370_d 	%line{36} %argrw{"wr"}
+	log		___374_log_d ___371_d 	%line{36} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:37
 #     float temp = cos(5.68947 * (log(log_d) - 0.0292149));
-	log		$tmp32 ___373_log_d 	%line{37} %argrw{"wr"}
+	log		$tmp32 ___374_log_d 	%line{37} %argrw{"wr"}
 	sub		$tmp33 $tmp32 $const39 	%argrw{"wrr"}
 	mul		$tmp34 $const38 $tmp33 	%argrw{"wrr"}
-	cos		___373_temp $tmp34 	%argrw{"wr"}
+	cos		___374_temp $tmp34 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:38
 #     return {0.0604931 * log(log_d) + 0.940256,
-	log		$tmp35 ___373_log_d 	%line{38} %argrw{"wr"}
+	log		$tmp35 ___374_log_d 	%line{38} %argrw{"wr"}
 	mul		$tmp36 $const40 $tmp35 	%argrw{"wrr"}
-	add		___378_param.g_HG $tmp36 $const41 	%argrw{"wrr"}
+	add		___379_param.g_HG $tmp36 $const41 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:39
 #             0.500411 - (0.081287 / (-2.0 * log_d + tan(log_d) + 1.27551)),
-	mul		$tmp37 $const44 ___373_log_d 	%line{39} %argrw{"wrr"}
-	tan		$tmp38 ___373_log_d 	%argrw{"wr"}
+	mul		$tmp37 $const44 ___374_log_d 	%line{39} %argrw{"wrr"}
+	tan		$tmp38 ___374_log_d 	%argrw{"wr"}
 	add		$tmp39 $tmp37 $tmp38 	%argrw{"wrr"}
 	add		$tmp40 $tmp39 $const45 	%argrw{"wrr"}
 	div		$tmp41 $const43 $tmp40 	%argrw{"wrr"}
-	sub		___378_param.g_D $const42 $tmp41 	%argrw{"wrr"}
+	sub		___379_param.g_D $const42 $tmp41 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:40
 #             7.30354 * log_d + 6.31675,
-	mul		$tmp42 $const46 ___373_log_d 	%line{40} %argrw{"wrr"}
-	add		___378_param.alpha $tmp42 $const47 	%argrw{"wrr"}
+	mul		$tmp42 $const46 ___374_log_d 	%line{40} %argrw{"wrr"}
+	add		___379_param.alpha $tmp42 $const47 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:41
 #             0.026914 * (log_d - temp) + 0.3764};
-	sub		$tmp43 ___373_log_d ___373_temp 	%line{41} %argrw{"wrr"}
+	sub		$tmp43 ___374_log_d ___374_temp 	%line{41} %argrw{"wrr"}
 	mul		$tmp44 $const48 $tmp43 	%argrw{"wrr"}
-	add		___378_param.mixture $tmp44 $const49 	%argrw{"wrr"}
+	add		___379_param.mixture $tmp44 $const49 	%argrw{"wrr"}
 	return
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:45
 #   return {exp(-0.0990567 / (d - 1.67154)),
-	sub		$tmp45 ___370_d $const51 	%line{45} %argrw{"wrr"}
+	sub		$tmp45 ___371_d $const51 	%line{45} %argrw{"wrr"}
 	div		$tmp46 $const50 $tmp45 	%argrw{"wrr"}
-	exp		___378_param.g_HG $tmp46 	%argrw{"wr"}
+	exp		___379_param.g_HG $tmp46 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:46
 #           exp(-2.20679 / (d + 3.91029) - 0.428934),
-	add		$tmp47 ___370_d $const53 	%line{46} %argrw{"wrr"}
+	add		$tmp47 ___371_d $const53 	%line{46} %argrw{"wrr"}
 	div		$tmp48 $const52 $tmp47 	%argrw{"wrr"}
 	sub		$tmp49 $tmp48 $const54 	%argrw{"wrr"}
-	exp		___378_param.g_D $tmp49 	%argrw{"wr"}
+	exp		___379_param.g_D $tmp49 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:47
 #           exp(3.62489 - 8.29288 / (d + 5.52825)),
-	add		$tmp50 ___370_d $const57 	%line{47} %argrw{"wrr"}
+	add		$tmp50 ___371_d $const57 	%line{47} %argrw{"wrr"}
 	div		$tmp51 $const56 $tmp50 	%argrw{"wrr"}
 	sub		$tmp52 $const55 $tmp51 	%argrw{"wrr"}
-	exp		___378_param.alpha $tmp52 	%argrw{"wr"}
+	exp		___379_param.alpha $tmp52 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:48
 #           exp(-0.599085 / (d - 0.641583) - 0.665888)};
-	sub		$tmp53 ___370_d $const59 	%line{48} %argrw{"wrr"}
+	sub		$tmp53 ___371_d $const59 	%line{48} %argrw{"wrr"}
 	div		$tmp54 $const58 $tmp53 	%argrw{"wrr"}
 	sub		$tmp55 $tmp54 $const60 	%argrw{"wrr"}
-	exp		___378_param.mixture $tmp55 	%argrw{"wr"}
+	exp		___379_param.mixture $tmp55 	%argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:68
 #     scatter = mix(henyey_greenstein(param.g_HG), draine(param.g_D, param.alpha), param.mixture);
-	closure		$tmp56 $const61 ___378_param.g_HG 	%line{68} %argrw{"wrr"}
-	closure		$tmp57 $const6 ___378_param.g_D ___378_param.alpha 	%argrw{"wrrr"}
+	closure		$tmp56 $const61 ___379_param.g_HG 	%line{68} %argrw{"wrr"}
+	closure		$tmp57 $const6 ___379_param.g_D ___379_param.alpha 	%argrw{"wrrr"}
 	functioncall	$const62 101 	%argrw{"r"}
 # E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h:164
 # closure color mix (closure color x, closure color y, float a) { return x*(1-a) + y*a; }
-	sub		$tmp58 $const64 ___378_param.mixture 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{164} %argrw{"wrr"}
+	sub		$tmp58 $const64 ___379_param.mixture 	%filename{"E:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders/stdosl.h"} %line{164} %argrw{"wrr"}
 	mul		$tmp59 $tmp56 $tmp58 	%argrw{"wrr"}
-	mul		$tmp60 $tmp57 ___378_param.mixture 	%argrw{"wrr"}
-	add		___374_scatter $tmp59 $tmp60 	%argrw{"wrr"}
+	mul		$tmp60 $tmp57 ___379_param.mixture 	%argrw{"wrr"}
+	add		___375_scatter $tmp59 $tmp60 	%argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:71
 #     scatter = henyey_greenstein(Anisotropy);
-	closure		___374_scatter $const61 Anisotropy 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h"} %line{71} %argrw{"wrr"}
+	closure		___375_scatter $const61 Anisotropy 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h"} %line{71} %argrw{"wrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders\\node_scatter.h:73
 #   return scatter;
-	assign		scatter_closure ___374_scatter 	%line{73} %argrw{"wr"}
+	assign		scatter_closure ___375_scatter 	%line{73} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_volume_coefficients.osl:21
 #   Volume = color(ScatterCoefficients) * scatter_closure +
 	assign		$tmp61 ScatterCoefficients 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_volume_coefficients.osl"} %line{21} %argrw{"wr"}

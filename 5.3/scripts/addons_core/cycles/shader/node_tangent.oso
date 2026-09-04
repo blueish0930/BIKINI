@@ -10,7 +10,7 @@ global	point	P	%read{10,10} %write{2147483647,-1}
 global	normal	N	%read{34,36} %write{2147483647,-1}
 global	vector	dPdu	%read{0,0} %write{2147483647,-1}
 local	vector	T	%read{33,34} %write{1,33}
-local	point	___371_generated	%read{13,30} %write{7,10}
+local	point	___372_generated	%read{13,30} %write{7,10}
 const	vector	$const1	0 0 0		%read{1,1} %write{2147483647,-1}
 const	string	$const2	"uv_map"		%read{2,2} %write{2147483647,-1}
 temp	int	$tmp1	%read{3,3} %write{2,2}
@@ -69,22 +69,22 @@ code ___main___
 	if		$tmp3 33 33 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_tangent.osl:20
 #     if (!getattribute("geom:generated", generated))
-	getattribute	$tmp4 $const4 ___371_generated 	%line{20} %argrw{"wrw"}
+	getattribute	$tmp4 $const4 ___372_generated 	%line{20} %argrw{"wrw"}
 	eq		$tmp5 $tmp4 $const5 	%argrw{"wrr"}
 	if		$tmp5 11 11 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_tangent.osl:21
 #       generated = P;
-	assign		___371_generated P 	%line{21} %argrw{"wr"}
+	assign		___372_generated P 	%line{21} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_tangent.osl:23
 #     if (axis == "x")
 	eq		$tmp6 axis $const6 	%line{23} %argrw{"wrr"}
 	if		$tmp6 19 33 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_tangent.osl:24
 #       T = vector(0.0, -(generated[2] - 0.5), (generated[1] - 0.5));
-	compref		$tmp7 ___371_generated $const8 	%line{24} %argrw{"wrr"}
+	compref		$tmp7 ___372_generated $const8 	%line{24} %argrw{"wrr"}
 	sub		$tmp8 $tmp7 $const9 	%argrw{"wrr"}
 	neg		$tmp9 $tmp8 	%argrw{"wr"}
-	compref		$tmp10 ___371_generated $const10 	%argrw{"wrr"}
+	compref		$tmp10 ___372_generated $const10 	%argrw{"wrr"}
 	sub		$tmp11 $tmp10 $const9 	%argrw{"wrr"}
 	vector		T $const7 $tmp9 $tmp11 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_tangent.osl:25
@@ -93,18 +93,18 @@ code ___main___
 	if		$tmp12 27 33 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_tangent.osl:26
 #       T = vector(-(generated[2] - 0.5), 0.0, (generated[0] - 0.5));
-	compref		$tmp13 ___371_generated $const8 	%line{26} %argrw{"wrr"}
+	compref		$tmp13 ___372_generated $const8 	%line{26} %argrw{"wrr"}
 	sub		$tmp14 $tmp13 $const9 	%argrw{"wrr"}
 	neg		$tmp15 $tmp14 	%argrw{"wr"}
-	compref		$tmp16 ___371_generated $const5 	%argrw{"wrr"}
+	compref		$tmp16 ___372_generated $const5 	%argrw{"wrr"}
 	sub		$tmp17 $tmp16 $const9 	%argrw{"wrr"}
 	vector		T $tmp15 $const7 $tmp17 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_tangent.osl:28
 #       T = vector(-(generated[1] - 0.5), (generated[0] - 0.5), 0.0);
-	compref		$tmp18 ___371_generated $const10 	%line{28} %argrw{"wrr"}
+	compref		$tmp18 ___372_generated $const10 	%line{28} %argrw{"wrr"}
 	sub		$tmp19 $tmp18 $const9 	%argrw{"wrr"}
 	neg		$tmp20 $tmp19 	%argrw{"wr"}
-	compref		$tmp21 ___371_generated $const5 	%argrw{"wrr"}
+	compref		$tmp21 ___372_generated $const5 	%argrw{"wrr"}
 	sub		$tmp22 $tmp21 $const9 	%argrw{"wrr"}
 	vector		T $tmp20 $tmp22 $const7 	%argrw{"wrrr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_tangent.osl:31

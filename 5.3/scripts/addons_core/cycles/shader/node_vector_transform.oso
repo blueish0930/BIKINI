@@ -7,7 +7,7 @@ param	string	convert_from	"world"		%read{7,14} %write{2147483647,-1}
 param	string	convert_to	"object"		%read{7,14} %write{2147483647,-1}
 param	vector	VectorIn	0 0 0		%read{7,13} %write{2147483647,-1}
 oparam	vector	VectorOut	0 0 0		%read{10,10} %write{7,14}
-local	point	___371_Point	%read{14,14} %write{13,13}
+local	point	___372_Point	%read{14,14} %write{13,13}
 const	string	$const1	"vector"		%read{0,0} %write{2147483647,-1}
 temp	int	$tmp1	%read{1,1} %write{0,0}
 temp	int	$tmp2	%read{2,6} %write{1,5}
@@ -44,8 +44,8 @@ code ___main___
 	if		$tmp6 15 15 	%argrw{"r"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_transform.osl:19
 #     point Point = (point)VectorIn;
-	assign		___371_Point VectorIn 	%line{19} %argrw{"wr"}
+	assign		___372_Point VectorIn 	%line{19} %argrw{"wr"}
 # E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_vector_transform.osl:20
 #     VectorOut = transform(convert_from, convert_to, Point);
-	transform	VectorOut convert_from convert_to ___371_Point 	%line{20} %argrw{"wrrr"}
+	transform	VectorOut convert_from convert_to ___372_Point 	%line{20} %argrw{"wrrr"}
 	end
