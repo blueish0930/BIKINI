@@ -1235,6 +1235,7 @@ class NODE_MT_gn_bikini_simulation_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "GeometryNodeTimeShift")
         layout.separator()
         self.node_operator(layout, "GeometryNodeXPBDSolver")
+        self.node_operator(layout, "GeometryNodeFlipSolver")
         self.node_operator(layout, "GeometryNodeMakeItStand")
         self.draw_assets_for_catalog(layout, self.menu_path)
 
