@@ -176,6 +176,7 @@ class NODE_MT_shader_node_input_constant_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "FunctionNodeInputString")
         self.node_operator(layout, "ShaderNodeValue")
         self.node_operator(layout, "FunctionNodeInputVector")
+        self.node_operator(layout, "FunctionNodeInputRotation")
 
         self.draw_assets_for_catalog(layout, self.menu_path)
 
@@ -512,6 +513,53 @@ class NODE_MT_shader_node_displacement_base(node_add_menu.NodeMenu):
         self.draw_assets_for_catalog(layout, self.bl_label)
 
 
+class NODE_MT_shader_node_matrix_base(node_add_menu.NodeMenu):
+    bl_label = "Matrix"
+    menu_path = "Utilities/Matrix"
+
+    def draw(self, _context):
+        layout = self.layout
+        self.node_operator(layout, "FunctionNodeCombineMatrix")
+        self.node_operator(layout, "FunctionNodeCombineTransform")
+        self.node_operator(layout, "FunctionNodeMatrixDeterminant", label="Determinant")
+        self.node_operator(layout, "FunctionNodeInvertMatrix")
+        self.node_operator(layout, "FunctionNodeMatrixMultiply")
+        self.node_operator(layout, "FunctionNodeMatrixSVD")
+        self.node_operator(layout, "FunctionNodeProjectPoint")
+        self.node_operator(layout, "FunctionNodeSeparateMatrix")
+        self.node_operator(layout, "FunctionNodeSeparateTransform")
+        self.node_operator(layout, "FunctionNodeTransformDirection")
+        self.node_operator(layout, "FunctionNodeTransformPoint")
+        self.node_operator(layout, "FunctionNodeTransposeMatrix")
+
+        self.draw_assets_for_catalog(layout, self.menu_path)
+
+
+class NODE_MT_shader_node_rotation_base(node_add_menu.NodeMenu):
+    bl_label = "Rotation"
+    menu_path = "Utilities/Rotation"
+
+    def draw(self, _context):
+        layout = self.layout
+        self.node_operator(layout, "FunctionNodeAlignRotationToVector")
+        self.node_operator(layout, "FunctionNodeAxesToRotation")
+        self.node_operator(layout, "FunctionNodeAxisAngleToRotation")
+        self.node_operator(layout, "FunctionNodeEulerToRotation")
+        self.node_operator(layout, "FunctionNodeInvertRotation")
+        props = self.node_operator(layout, "ShaderNodeMix", label="Mix Rotation")
+        ops = props.settings.add()
+        ops.name = "data_type"
+        ops.value = "'ROTATION'"
+        self.node_operator(layout, "FunctionNodeRotateRotation")
+        self.node_operator(layout, "FunctionNodeRotateVector")
+        self.node_operator(layout, "FunctionNodeRotationToAxisAngle")
+        self.node_operator(layout, "FunctionNodeRotationToEuler")
+        self.node_operator(layout, "FunctionNodeRotationToQuaternion")
+        self.node_operator(layout, "FunctionNodeQuaternionToRotation")
+
+        self.draw_assets_for_catalog(layout, self.menu_path)
+
+
 class NODE_MT_shader_node_utilities_base(node_add_menu.NodeMenu):
     bl_label = "Utilities"
 
@@ -521,6 +569,8 @@ class NODE_MT_shader_node_utilities_base(node_add_menu.NodeMenu):
         self.draw_menu(layout, "Utilities/Math")
         self.draw_menu(layout, "Utilities/Text")
         self.draw_menu(layout, "Utilities/Vector")
+        self.draw_menu(layout, "Utilities/Matrix")
+        self.draw_menu(layout, "Utilities/Rotation")
         layout.separator()
         self.node_operator(layout, "NodeImplicitConversion")
         self.repeat_zone(layout, label="Repeat")
@@ -538,7 +588,7 @@ class NODE_MT_shader_node_utilities_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "ShaderNodeStoreNamedPortal")
         layout.separator()
         self.node_operator(layout, "NodeExpression")
-        self.node_operator(layout, "ShaderNodeHLSL")
+        self.node_operator(layout, "ShaderNodeWrangle")
         if cycles_shader_nodes_poll(context):
             layout.separator()
             self.node_operator(layout, "ShaderNodeScript")
@@ -586,6 +636,8 @@ add_menus = {
     "NODE_MT_category_shader_vector": NODE_MT_shader_node_vector_base,
     "NODE_MT_category_shader_math": NODE_MT_shader_node_math_base,
     "NODE_MT_category_shader_text": NODE_MT_shader_node_text_base,
+    "NODE_MT_category_shader_matrix": NODE_MT_shader_node_matrix_base,
+    "NODE_MT_category_shader_rotation": NODE_MT_shader_node_rotation_base,
     "NODE_MT_category_shader_utilities": NODE_MT_shader_node_utilities_base,
     "NODE_MT_shader_node_add_all": NODE_MT_shader_node_all_base,
 }
@@ -608,6 +660,8 @@ swap_menus = {
     "NODE_MT_shader_node_vector_swap": NODE_MT_shader_node_vector_base,
     "NODE_MT_shader_node_math_swap": NODE_MT_shader_node_math_base,
     "NODE_MT_shader_node_text_swap": NODE_MT_shader_node_text_base,
+    "NODE_MT_shader_node_matrix_swap": NODE_MT_shader_node_matrix_base,
+    "NODE_MT_shader_node_rotation_swap": NODE_MT_shader_node_rotation_base,
     "NODE_MT_shader_node_utilities_swap": NODE_MT_shader_node_utilities_base,
     "NODE_MT_shader_node_swap_all": NODE_MT_shader_node_all_base,
 }
