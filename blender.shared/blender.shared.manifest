@@ -57,7 +57,6 @@
     <file name="SDL3.dll"/>
     <file name="embree4.dll"/>
     <file name="sycl8.dll"/>
-    <file name="ur_adapter_level_zero.dll"/>
     <file name="ur_adapter_level_zero_v2.dll"/>
     <file name="ur_loader.dll"/>
     <file name="ur_win_proxy_loader.dll"/>

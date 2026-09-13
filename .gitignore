@@ -27,6 +27,12 @@
 /blender.exe.locked*
 /blender.exe.stale*
 /blender.exe.*.bak
+/blender_locked_prev*.exe
+/blender_new.exe
+/blender.pdb.old
+/blender.crash.txt*
+/_startup_err.txt
+/apic_build_lock/
 
 # Dev / verification builds and helper scripts (not the portable product).
 /blender_enable_io_verify.exe

@@ -719,14 +719,59 @@ window.VEX_FUNCS = [
     ret: "vector[]", zh: "返回 [min, max] 两个 vector。", en: "Returns [min, max].",
     ex: "vector[] bb = boundingbox();\nv@P = mix(bb[0], bb[1], 0.5);" }),
   F({ id: "addpoint", cat: "geo", name: "addpoint",
-    sigs: ["addpoint() -> int", "addpoint(pos) -> int", "addpoint(idx) -> int", "addpoint(geo, pos) -> int", "addpoint(geo, idx) -> int"],
+    sigs: ["addpoint() -> int", "addpoint(pos) -> int", "addpoint(idx) -> int", "addpoint(geo, pos) -> int", "addpoint(geo, idx) -> int", "addpoint(geo, index, type) -> int"],
+    params: [
+      P("geo", "in", "int", "2 参时强制为 0。3 参时是源几何输入。", "Forced to 0 for 2-arg. 3-arg: source geometry input."),
+      P("pos", "in", "vector", "新点位置。", "New point position."),
+      P("idx / index", "in", "int", "源点下标。", "Source point index."),
+      P("type", "in", "enum", "mesh 网格点，point 点云点。", "mesh vertex or point-cloud point.")
+    ],
+    ret: "int",
+    enums: [
+      { name: "type", values: [
+        { v: "\"mesh\" | 0", zh: "复制为网格顶点", en: "Copy as a mesh vertex" },
+        { v: "\"point\" | 1", zh: "点云点", en: "Point-cloud point" }
+      ]}
+    ],
+    zh: "新点下标。无参复制当前点 P。addpoint(geo, index, type) 复制该输入上第 index 个点的全部点属性。并行安全。",
+    en: "New point index. No-arg copies current P. addpoint(geo, index, type) copies every point attribute from that input. Parallel-safe.",
+    ex: "int np = addpoint(v@P + v@N * 0.1);\nsetattribute(0, \"point\", np, \"Cd\", vector(1, 0, 0), \"set\");\n\n// 复制当前点位置；2 参 geo 非 0 会被改成 0 并提示\nint cp = addpoint(0, i@index);\n\n// 从几何输入 1 复制网格点（含全部属性）\nint pt = addpoint(1, i@index, \"mesh\");" }),
+  F({ id: "addprim", cat: "geo", name: "addprim",
+    sigs: [
+      "addprim(geo, type, pts, [close]) -> int",
+      "addprim(type, pts, [close]) -> int",
+      "addprim(geo, \"edge\", pts, [close]) -> int",
+      "addprim(geo, \"face\", pts) -> int",
+      "addprim(geo, \"curve\", pts, [close]) -> int"
+    ],
+    params: [
+      P("geo", "in", "int", "强制为 0，可省略。写非 0 会提示并改成 0。", "Forced to 0. Optional. Non-zero is coerced to 0 with a notice."),
+      P("type", "in", "enum", "字符串或 0/1/2。", "String or 0/1/2."),
+      P("pts", "in", "int[]", "点编号。edge ≥ 2，face ≥ 3，curve ≥ 1。", "Point indices. edge ≥ 2, face ≥ 3, curve ≥ 1."),
+      P("close", "in", "bool", "默认 false。face 忽略，总是闭合。", "Default false. Ignored for face (always closed).")
+    ],
+    ret: "int",
+    enums: [
+      { name: "type", values: [
+        { v: "\"edge\" | \"edges\" | \"polyline\" | 0", zh: "连续点对成边：12,15,24 → 12-15 与 15-24。close 且 ≥3 点时再连末点→首点", en: "Consecutive pairs: 12,15,24 → 12-15 and 15-24. close with ≥3 points also joins last to first" },
+        { v: "\"face\" | \"faces\" | \"poly\" | \"polygon\" | \"prim\" | 1", zh: "按逆时针绕序建面，总是闭合，至少 3 点", en: "Face, CCW winding, always closed, at least 3 points" },
+        { v: "\"curve\" | \"curves\" | \"spline\" | 2", zh: "曲线（poly）。close 写成 cyclic", en: "Poly curve. close sets cyclic" }
+      ]}
+    ],
+    zh: "新建 prim，返回新边 / 面 / 曲线下标。别名 <code>add_prim</code>。edge 在连续点之间连边；face 按官方逆时针绕序；close 只对 edge 和 curve 有效。",
+    en: "Create a prim; returns the new edge / face / curve index. Alias <code>add_prim</code>. edge connects consecutive points; face uses CCW winding; close only affects edge and curve.",
+    ex: "int[] pts = array(0, 1, 2, 3);\n\n// 边：0-1、1-2、2-3；close 时再连 3-0\nint e = addprim(0, \"edge\", pts, false);\nint loop = addprim(0, \"polyline\", pts, true);\n\n// 面：逆时针绕序，总是闭合（close 无效）\nint f = addprim(0, \"face\", pts);\nint q = addprim(0, \"poly\", pts);\n\n// 曲线：close 写成 cyclic\nint c = addprim(0, \"curve\", pts, true);\nint s = addprim(0, \"spline\", pts, false);" }),
+  F({ id: "add_prim", cat: "geo", name: "add_prim",
+    sigs: ["add_prim(geo, type, pts, [close]) -> int"],
     params: [
       P("geo", "in", "int", "强制为 0。", "Forced to 0."),
-      P("pos", "in", "vector", "新点位置。", "New point position."),
-      P("idx", "in", "int", "复制该点的 P。", "Copy P from that point.")
+      P("type", "in", "enum"),
+      P("pts", "in", "int[]"),
+      P("close", "in", "bool")
     ],
-    ret: "int", zh: "新点下标。无参复制当前点 P。并行安全。", en: "New point index. No-arg copies current P. Parallel-safe.",
-    ex: "int np = addpoint(v@P + v@N * 0.1);\nsetattribute(0, \"point\", np, \"Cd\", vector(1, 0, 0), \"set\");\n\n// 复制当前点位置；geo 非 0 会被改成 0 并提示\nint cp = addpoint(0, i@index);" }),
+    ret: "int",
+    zh: "addprim 的别名。", en: "Alias of addprim.",
+    ex: "int f = add_prim(0, \"face\", array(0, 1, 2));" }),
   F({ id: "delete_geometry", cat: "geo", name: "delete_geometry",
     sigs: ["delete_geometry(geo, domain, [index], [behavior]) -> int", "delete_geometry(domain, [index], [behavior]) -> int"],
     params: [

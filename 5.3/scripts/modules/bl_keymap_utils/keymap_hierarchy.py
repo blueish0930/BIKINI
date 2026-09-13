@@ -17,6 +17,23 @@ def _km_expand_from_toolsystem(space_type, context_mode):
     return _fn
 
 
+def _km_expand_from_operator_modal():
+    # Modal keymaps of operator types that are registered at run-time, e.g. node tools.
+    # They can't be listed statically below, since they only exist once their operator does.
+    def _fn():
+        import bpy
+        window_manager = bpy.data.window_managers[0] if bpy.data.window_managers else None
+        if window_manager is None:
+            return
+        keyconfig = window_manager.keyconfigs.default
+        if keyconfig is None:
+            return
+        for keymap in keyconfig.keymaps:
+            if keymap.is_operator_modal:
+                yield (keymap.name, 'EMPTY', 'WINDOW', [])
+    return _fn
+
+
 def _km_hierarchy_iter_recursive(items):
     for sub in items:
         if callable(sub):
@@ -251,6 +268,7 @@ _km_hierarchy = [
     ('Gesture Polyline', 'EMPTY', 'WINDOW', []),
 
     ('Standard Modal Map', 'EMPTY', 'WINDOW', []),
+    _km_expand_from_operator_modal(),
     ('Transform Modal Map', 'EMPTY', 'WINDOW', []),
     ('Transform Axis Target Modal Map', 'EMPTY', 'WINDOW', []),
     ('Eyedropper Modal Map', 'EMPTY', 'WINDOW', []),

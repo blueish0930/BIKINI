@@ -274,8 +274,8 @@ bump(0.05);</code></pre>
 <ul>
 <li class="zh"><code>Ctrl+Enter</code> 才编译。编辑过程中不会自动跑。</li>
 <li class="en"><code>Ctrl+Enter</code> compiles. The script does not run while you type.</li>
-<li class="zh"><code>addpoint</code> / <code>setattribute</code> / <code>delete_geometry</code> 的 <code>geo</code> 永远当 0；写非 0 会提示并改成 0。</li>
-<li class="en"><code>geo</code> on <code>addpoint</code> / <code>setattribute</code> / <code>delete_geometry</code> is always 0; a non-zero value is forced to 0 with a notice.</li>
+<li class="zh"><code>addprim</code> / <code>setattribute</code> / <code>delete_geometry</code> 以及两参数的 <code>addpoint(geo, pos)</code> 的 <code>geo</code> 永远当 0；写非 0 会提示并改成 0。<code>addpoint(geo, index, type)</code> 的 geo 是源几何输入。<code>addprim</code> 的 type 为 <code>edge</code> / <code>face</code> / <code>curve</code>（可用 <code>polyline</code>、<code>poly</code>、<code>spline</code> 等别名，或 0/1/2）。</li>
+<li class="en"><code>geo</code> on <code>addprim</code> / <code>setattribute</code> / <code>delete_geometry</code> and 2-arg <code>addpoint(geo, pos)</code> is always 0; a non-zero value is forced to 0 with a notice. <code>addpoint(geo, index, type)</code> uses geo as the source input. <code>addprim</code> type is <code>edge</code> / <code>face</code> / <code>curve</code> (aliases like <code>polyline</code>, <code>poly</code>, <code>spline</code>, or 0/1/2).</li>
 <li class="zh"><code>2@</code> / <code>3@</code> 和数组属性是 wrangle only，不写回 Blender 原生层。</li>
 <li class="en"><code>2@</code> / <code>3@</code> and array attributes are wrangle-only; they are not native Blender attributes.</li>
 </ul>

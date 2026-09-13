@@ -337,13 +337,14 @@ pre code{background:none;padding:0}
         t("函数清单", "Functions") + "</p>" +
       "<h1>" + t("VEX 函数清单", "VEX function list") + "</h1>" +
       '<p class="lead">' + t(
-        "内置函数名与源码 builtin_from_name 一致。左侧按分类列出；点一个函数看签名、输入/输出、类型、枚举和示例。只有 mix/lerp 与 vector/vec3 是别名。",
-        "Names match builtin_from_name. Pick a function on the left for signatures, in/out, types, enums, and examples. The only aliases are mix/lerp and vector/vec3."
+        "内置函数名与源码 builtin_from_name 一致。左侧按分类列出；点一个函数看签名、输入/输出、类型、枚举和示例。别名：mix/lerp、vector/vec3、addprim/add_prim。",
+        "Names match builtin_from_name. Pick a function on the left for signatures, in/out, types, enums, and examples. Aliases: mix/lerp, vector/vec3, addprim/add_prim."
       ) + "</p>" +
       '<div class="cta">' +
         '<a class="btn btn-primary" href="vex.html">' + t("先读语言介绍", "Read the language intro") + "</a>" +
         '<a class="btn btn-ghost" href="#sin">sin</a>' +
         '<a class="btn btn-ghost" href="#nearestpoints">nearestpoints</a>' +
+        '<a class="btn btn-ghost" href="#addprim">addprim</a>' +
         '<a class="btn btn-ghost" href="#setattribute">setattribute</a>' +
         '<a class="btn btn-ghost" href="#raycast">raycast</a>' +
       "</div>" +
@@ -351,8 +352,8 @@ pre code{background:none;padding:0}
         FUNCS.length + "</span></h2>" +
       '<div class="cat-grid">' + cards + "</div>" +
       '<div class="note">' + t(
-        "点分类卡片会展开左侧该组。编译执行用 Ctrl+Enter；geo 在 addpoint / setattribute / delete_geometry 里一律当 0。",
-        "Category cards expand that group in the sidebar. Compile with Ctrl+Enter. geo on addpoint / setattribute / delete_geometry is always 0."
+        "点分类卡片会展开左侧该组。编译执行用 Ctrl+Enter。addprim / setattribute / delete_geometry 以及两参数 addpoint 的 geo 一律当 0；addpoint(geo, index, type) 的 geo 是源几何。",
+        "Category cards expand that group in the sidebar. Compile with Ctrl+Enter. geo on addprim / setattribute / delete_geometry and 2-arg addpoint is always 0. addpoint(geo, index, type) uses geo as the source input."
       ) + "</div>";
   }
 

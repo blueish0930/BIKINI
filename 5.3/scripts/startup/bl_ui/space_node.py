@@ -1039,6 +1039,9 @@ class NODE_PT_overlay(Panel):
         snode = context.space_data
         overlay = snode.overlay
 
+        col = layout.column()
+        col.prop(overlay, "link_style", text="Link Style", expand=True)
+
         layout.active = overlay.show_overlays
 
         col = layout.column()
