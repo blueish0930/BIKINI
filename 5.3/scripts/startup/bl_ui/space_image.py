@@ -736,6 +736,7 @@ class IMAGE_HT_tool_header(Header):
 
         if tool_mode == 'PAINT':
             if (tool is not None) and tool.use_brushes:
+                layout.popover("IMAGE_PT_paint_layers", text="Layers")
                 layout.popover("IMAGE_PT_paint_settings_advanced")
                 layout.popover("IMAGE_PT_tools_brush_texture")
                 layout.popover("IMAGE_PT_tools_mask_texture")
@@ -1240,6 +1241,35 @@ class IMAGE_PT_udim_tiles(Panel):
         if tile:
             col = layout.column(align=True)
             col.operator("image.tile_fill")
+
+
+class IMAGE_UL_paint_layers(UIList):
+    def draw_item(self, _context, layout, _data, item, _icon, _active_data, _active_propname, _index):
+        layer = item
+        split = layout.split(factor=0.4)
+        split.prop(layer, "name", text="", emboss=False)
+        row = split.row(align=True)
+        row.prop(layer, "hide", text="", emboss=False)
+        row.prop(layer, "blend_mode", text="")
+        row.prop(layer, "opacity", text="")
+        row.prop(layer, "lock", text="", emboss=False)
+
+
+class IMAGE_PT_paint_layers(Panel, ImagePaintPanel):
+    bl_label = "Paint Layers"
+    bl_context = ".paint_common_2d"
+    bl_category = "Tool"
+    bl_ui_units_x = 14
+
+    @classmethod
+    def poll(cls, context):
+        sima = context.space_data
+        return bool(sima and sima.mode == 'PAINT')
+
+    def draw(self, context):
+        from bl_ui.space_view3d_toolbar import draw_paint_layers
+        ima = context.space_data.image
+        draw_paint_layers(self.layout, ima)
 
 
 class IMAGE_PT_paint_select(Panel, ImagePaintPanel, BrushSelectPanel):
@@ -1877,6 +1907,8 @@ classes = (
     IMAGE_PT_render_slots,
     IMAGE_UL_udim_tiles,
     IMAGE_PT_udim_tiles,
+    IMAGE_UL_paint_layers,
+    IMAGE_PT_paint_layers,
     IMAGE_PT_view_display,
     IMAGE_PT_paint_select,
     IMAGE_PT_paint_settings,

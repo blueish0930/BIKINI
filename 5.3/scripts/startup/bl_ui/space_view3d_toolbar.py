@@ -31,6 +31,7 @@ from bl_ui.properties_paint_common import (
     brush_settings_advanced,
     draw_color_settings,
     supports_shape_panel,
+    show_experimental_texture_paint,
 )
 from bl_ui.utils import PresetPanel
 
@@ -504,6 +505,145 @@ class SelectPaintSlotHelper:
         elif have_image:
             layout.separator()
             layout.operator("image.save_all_modified", text="Save All Images", icon='FILE_TICK')
+            ima = _texture_paint_image(context)
+            if ima is not None:
+                layout.separator()
+                layout.label(text="Paint Layers")
+                draw_paint_layers(layout, ima)
+
+
+def _texture_paint_image(context):
+    settings = context.tool_settings.image_paint
+    if settings.mode == 'IMAGE':
+        return settings.canvas
+    ob = context.object
+    mat = ob.active_material if ob else None
+    if mat and mat.texture_paint_images:
+        idx = min(mat.paint_active_slot, len(mat.texture_paint_images) - 1)
+        if idx >= 0:
+            return mat.texture_paint_images[idx]
+    return None
+
+
+class VIEW3D_UL_paint_layers(UIList):
+    def draw_item(self, _context, layout, _data, item, _icon, _active_data, _active_propname, _index):
+        layer = item
+        split = layout.split(factor=0.4)
+        split.prop(layer, "name", text="", emboss=False)
+        row = split.row(align=True)
+        row.prop(layer, "hide", text="", emboss=False)
+        row.prop(layer, "blend_mode", text="")
+        row.prop(layer, "opacity", text="")
+        row.prop(layer, "lock", text="", emboss=False)
+
+
+def draw_paint_layers(layout, ima):
+    if ima is None:
+        layout.label(text="No paint image")
+        return
+    if not hasattr(ima, "paint_layers"):
+        layout.label(text="Rebuild Blender (paint layers RNA missing)")
+        return
+
+    row = layout.row()
+    col = row.column(align=True)
+    for i, layer in enumerate(ima.paint_layers):
+        is_active = (i == ima.paint_layers.active_index)
+        box = col.box()
+        header = box.row(align=True)
+        header.prop(layer, "hide", text="", emboss=False)
+        sel = header.operator(
+            "image.paint_layer_set_active",
+            text="",
+            icon='RADIOBUT_ON' if is_active else 'RADIOBUT_OFF',
+            depress=is_active,
+        )
+        sel.index = i
+        header.prop(layer, "show_masks", text="", emboss=False,
+                    icon='TRIA_DOWN' if layer.show_masks else 'TRIA_RIGHT')
+        header.prop(layer, "name", text="", emboss=is_active)
+        header.prop(layer, "blend_mode", text="")
+        header.prop(layer, "opacity", text="")
+        header.prop(layer, "lock", text="", emboss=False)
+        if layer.show_masks:
+            sub = box.column(align=True)
+            sub.use_property_split = True
+            sub.use_property_decorate = False
+            idrow = sub.row(align=True)
+            idrow.prop(layer, "use_image", text="")
+            imgrow = idrow.row(align=True)
+            imgrow.enabled = layer.use_image
+            imgrow.prop(layer, "source_image", text="Image")
+            op_img = imgrow.operator("image.paint_layer_open_image", text="", icon='FILEBROWSER')
+            op_img.as_mask = False
+            op_img.layer_index = i
+            sub.separator(factor=0.3)
+            sub.label(text="Masks")
+            for j, mask in enumerate(layer.masks):
+                mask_active = is_active and layer.paint_mask and (j == layer.masks.active_index)
+                mbox = sub.box()
+                mrow = mbox.row(align=True)
+                mrow.prop(mask, "hide", text="", emboss=False)
+                mop = mrow.operator(
+                    "image.paint_layer_mask_set_active",
+                    text="",
+                    icon='RADIOBUT_ON' if mask_active else 'RADIOBUT_OFF',
+                    depress=mask_active,
+                )
+                mop.index = j
+                mop.layer_index = i
+                mrow.prop(mask, "name", text="")
+                mrow.prop(mask, "blend_mode", text="")
+                mrow.prop(mask, "opacity", text="")
+                mrow.prop(mask, "invert", text="", emboss=False)
+                mrow.prop(mask, "lock", text="", emboss=False)
+                msrc = mbox.row(align=True)
+                msrc.prop(mask, "use_image", text="")
+                mimg = msrc.row(align=True)
+                mimg.enabled = mask.use_image
+                mimg.prop(mask, "source_image", text="Image")
+                mop_img = mimg.operator("image.paint_layer_open_image", text="", icon='FILEBROWSER')
+                mop_img.as_mask = True
+                mop_img.layer_index = i
+                mop_img.mask_index = j
+            brow = sub.row(align=True)
+            add_op = brow.operator("image.paint_layer_mask_add", icon='ADD', text="Mask")
+            add_op.layer_index = i
+            rem_op = brow.operator("image.paint_layer_mask_remove", icon='REMOVE', text="")
+            rem_op.layer_index = i
+            up_op = brow.operator("image.paint_layer_mask_move", icon='TRIA_UP', text="")
+            up_op.direction = 'UP'
+            up_op.layer_index = i
+            down_op = brow.operator("image.paint_layer_mask_move", icon='TRIA_DOWN', text="")
+            down_op.direction = 'DOWN'
+            down_op.layer_index = i
+            if layer.paint_mask:
+                sub.label(text="Painting mask", icon='MOD_MASK')
+
+    tools = row.column(align=True)
+    tools.operator("image.paint_layer_add", icon='ADD', text="")
+    tools.operator("image.paint_layer_remove", icon='REMOVE', text="")
+    tools.separator()
+    tools.operator("image.paint_layer_move", icon='TRIA_UP', text="").direction = 'UP'
+    tools.operator("image.paint_layer_move", icon='TRIA_DOWN', text="").direction = 'DOWN'
+    tools.separator()
+    tools.operator("image.paint_layer_duplicate", icon='DUPLICATE', text="")
+    tools.operator("image.paint_layer_merge_down", icon='DOWNARROW_HLT', text="")
+    layout.operator("image.paint_layer_flatten", text="Flatten Layers")
+
+
+class VIEW3D_PT_paint_layers(Panel, View3DPaintPanel):
+    bl_context = ".imagepaint"
+    bl_label = "Paint Layers"
+    bl_ui_units_x = 14
+
+    @classmethod
+    def poll(cls, context):
+        return context.image_paint_object is not None or (
+            context.tool_settings and context.tool_settings.image_paint)
+
+    def draw(self, context):
+        draw_paint_layers(self.layout, _texture_paint_image(context))
 
 
 class VIEW3D_PT_slots_projectpaint(SelectPaintSlotHelper, View3DPanel, Panel):
@@ -544,7 +684,7 @@ class VIEW3D_PT_slots_paint_canvas(SelectPaintSlotHelper, View3DPanel, Panel):
 
     @classmethod
     def poll(cls, context):
-        if not context.preferences.experimental.use_sculpt_texture_paint:
+        if not context.preferences.experimental.use_3d_texture_paint:
             return False
 
         from bl_ui.space_toolsystem_common import ToolSelectPanelHelper
@@ -898,7 +1038,8 @@ class VIEW3D_PT_tools_brush_falloff_normal(View3DPaintPanel, Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.image_paint_object
+        brush = context.tool_settings.image_paint.brush
+        return context.image_paint_object and not show_experimental_texture_paint(brush)
 
     def draw_header(self, context):
         tool_settings = context.tool_settings
@@ -1313,21 +1454,38 @@ class VIEW3D_PT_tools_imagepaint_symmetry(Panel, View3DPaintPanel):
 
     def draw(self, context):
         layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
 
-        split = layout.split()
+        image_paint = context.tool_settings.image_paint
+        brush = image_paint.brush
 
-        col = split.column()
-        col.alignment = 'RIGHT'
-        col.label(text="Mirror")
-
-        col = split.column()
-
-        row = col.row(align=True)
         ob = context.object
         mesh = ob.data
+
+        row = layout.row(align=True, heading="Mirror")
         row.prop(mesh, "use_mirror_x", text="X", toggle=True)
         row.prop(mesh, "use_mirror_y", text="Y", toggle=True)
         row.prop(mesh, "use_mirror_z", text="Z", toggle=True)
+
+        if show_experimental_texture_paint(brush):
+            row = layout.row(align=True, heading="Tiling")
+            row.prop(image_paint, "tile_x", text="X", toggle=True)
+            row.prop(image_paint, "tile_y", text="Y", toggle=True)
+            row.prop(image_paint, "tile_z", text="Z", toggle=True)
+
+            layout.prop(image_paint, "use_symmetry_feather", text="Feather")
+            layout.prop(mesh, "radial_symmetry", text="Radial")
+            layout.prop(image_paint, "tile_offset", text="Tile Offset")
+
+
+class VIEW3D_PT_tools_imagepaint_symmetry_for_topbar(Panel):
+    bl_space_type = 'TOPBAR'
+    bl_region_type = 'HEADER'
+    bl_label = "Symmetry"
+    bl_ui_units_x = 13
+
+    draw = VIEW3D_PT_tools_imagepaint_symmetry.draw
 
 
 class VIEW3D_PT_tools_imagepaint_options(View3DPaintPanel, Panel):
@@ -1350,12 +1508,18 @@ class VIEW3D_PT_tools_imagepaint_options(View3DPaintPanel, Panel):
         ipaint = tool_settings.image_paint
 
         layout.prop(ipaint, "use_screen_space")
-        layout.prop(ipaint, "seam_bleed")
-        layout.prop(ipaint, "dither", slider=True)
 
         col = layout.column()
-        col.prop(ipaint, "use_occlude")
-        col.prop(ipaint, "use_backface_culling", text="Backface Culling")
+        if show_experimental_texture_paint(ipaint.brush):
+            # TODO: Enable dither support
+            col.prop(ipaint, "dither", slider=True)
+            col.active = False
+        else:
+            col.prop(ipaint, "seam_bleed")
+            col.prop(ipaint, "dither", slider=True)
+
+            col.prop(ipaint, "use_occlude")
+            col.prop(ipaint, "use_backface_culling", text="Backface Culling")
 
 
 class VIEW3D_PT_tools_imagepaint_options_cavity(Panel):
@@ -2347,6 +2511,8 @@ classes = (
     VIEW3D_PT_tools_armatureedit_options,
     VIEW3D_PT_tools_posemode_options,
 
+    VIEW3D_UL_paint_layers,
+    VIEW3D_PT_paint_layers,
     VIEW3D_PT_slots_projectpaint,
     VIEW3D_PT_slots_paint_canvas,
     VIEW3D_PT_slots_color_attributes,
@@ -2392,6 +2558,7 @@ classes = (
     VIEW3D_PT_tools_imagepaint_options_cavity,
 
     VIEW3D_PT_tools_imagepaint_symmetry,
+    VIEW3D_PT_tools_imagepaint_symmetry_for_topbar,
     VIEW3D_PT_tools_imagepaint_options,
 
     VIEW3D_PT_tools_imagepaint_options_external,
