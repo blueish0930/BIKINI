@@ -83,6 +83,7 @@
 - Camera View、Island UV、Island Padding
 - Portal、FFT、Import Geo、Geo SDF
 - Render Material、ShaderToy
+- Terrain / Erosion（盖亚风格：山体图元、水力/热力侵蚀、雪/河/海、阶地、坡度遮罩、卫星着色）
 
 **着色器**
 

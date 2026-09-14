@@ -1413,6 +1413,7 @@ class NODE_MT_gn_lib_cgal_mesh_analyze_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "GeometryNodeCgalMeshVolume")
         self.node_operator(layout, "GeometryNodeCgalCentroid")
         self.node_operator(layout, "GeometryNodeCgalSideOfMesh")
+        self.node_operator(layout, "GeometryNodeWindingNumber")
         self.node_operator(layout, "GeometryNodeCgalSkeleton")
         self.node_operator(layout, "GeometryNodeCgalSegmentation")
         self.node_operator(layout, "GeometryNodeCgalCurvature")

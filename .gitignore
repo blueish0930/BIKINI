@@ -58,3 +58,12 @@ Thumbs.db
 /blender_test.exe
 /blender_test.pdb
 /gtest_list.txt
+
+# Local screenshots / GPU test images / one-off helper scripts.
+/_*.py
+/blender_*screenshot*.png
+/blender_gui*.png
+/blender_opengl*.png
+/blender_vulkan*.png
+/terrain_*bake*.png
+/pelican_*.html

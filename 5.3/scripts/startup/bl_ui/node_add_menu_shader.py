@@ -381,6 +381,10 @@ class NODE_MT_shader_node_color_base(node_add_menu.NodeMenu):
         layout.separator()
         self.node_operator(layout, "ShaderNodeRGBToBW")
         self.node_operator(layout, "ShaderNodeShaderToRGB", poll=object_eevee_shader_nodes_poll(context))
+        props = self.node_operator(layout, "ShaderNodeDerivative", label="DDX / DDY")
+        ops = props.settings.add()
+        ops.name = "data_type"
+        ops.value = "'RGBA'"
 
         self.draw_assets_for_catalog(layout, self.bl_label)
 
@@ -442,6 +446,10 @@ class NODE_MT_shader_node_vector_base(node_add_menu.NodeMenu):
             defaults_callback=node_add_menu.set_vector_math_node_defaults)
         self.node_operator(layout, "ShaderNodeVectorRotate")
         self.node_operator(layout, "ShaderNodeVectorTransform")
+        props = self.node_operator(layout, "ShaderNodeDerivative", label="DDX / DDY")
+        ops = props.settings.add()
+        ops.name = "data_type"
+        ops.value = "'VECTOR'"
 
         self.draw_assets_for_catalog(layout, self.menu_path)
 
@@ -453,7 +461,10 @@ class NODE_MT_shader_node_math_base(node_add_menu.NodeMenu):
     def draw(self, context):
         layout = self.layout
 
+        self.node_operator_with_searchable_enum(context, layout, "FunctionNodeBooleanMath", "operation")
         self.node_operator(layout, "ShaderNodeClamp")
+        self.node_operator_with_searchable_enum(
+            context, layout, "ShaderNodeDerivative", "operation")
         self.node_operator(layout, "ShaderNodeFloatCurve")
         self.node_operator(layout, "ShaderNodeMapRange")
         self.node_operator_with_searchable_enum(

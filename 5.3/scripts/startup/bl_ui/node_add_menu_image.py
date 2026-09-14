@@ -179,6 +179,105 @@ class NODE_MT_image_node_texture_base(node_add_menu.NodeMenu):
         self.draw_assets_for_catalog(layout, self.bl_label)
 
 
+class NODE_MT_image_node_terrain_base(node_add_menu.NodeMenu):
+    bl_label = "Terrain"
+
+    def draw(self, context):
+        layout = self.layout
+        self.draw_menu(layout, path="Terrain/Primitive")
+        self.draw_menu(layout, path="Terrain/Erosion")
+        self.draw_menu(layout, path="Terrain/Simulate")
+        self.draw_menu(layout, path="Terrain/Modify")
+        layout.separator()
+        self.draw_menu(layout, path="Terrain/Derive")
+        self.draw_menu(layout, path="Terrain/Color")
+        self.draw_menu(layout, path="Terrain/Combine")
+        self.draw_assets_for_catalog(layout, self.bl_label)
+
+
+class NODE_MT_image_node_terrain_primitive_base(node_add_menu.NodeMenu):
+    bl_label = "Primitive"
+    menu_path = "Terrain/Primitive"
+
+    def draw(self, context):
+        layout = self.layout
+        self.node_operator_with_searchable_enum(
+            context, layout, "ImageNodeTerrainPrimitive", "primitive_type")
+        self.draw_assets_for_catalog(layout, self.menu_path)
+
+
+class NODE_MT_image_node_terrain_erosion_base(node_add_menu.NodeMenu):
+    bl_label = "Erosion"
+    menu_path = "Terrain/Erosion"
+
+    def draw(self, context):
+        layout = self.layout
+        self.node_operator_with_searchable_enum(
+            context, layout, "ImageNodeTerrainErosion", "erosion_type")
+        layout.separator()
+        props = self.node_operator(layout, "ImageNodeTerrainErosion", label="HydroFix")
+        if props is not None:
+            item = props.settings.add()
+            item.name = "erosion_type"
+            item.value = repr("HYDROFIX")
+        self.draw_assets_for_catalog(layout, self.menu_path)
+
+
+class NODE_MT_image_node_terrain_simulate_base(node_add_menu.NodeMenu):
+    bl_label = "Simulate"
+    menu_path = "Terrain/Simulate"
+
+    def draw(self, context):
+        layout = self.layout
+        self.node_operator_with_searchable_enum(
+            context, layout, "ImageNodeTerrainSimulate", "simulate_type")
+        self.draw_assets_for_catalog(layout, self.menu_path)
+
+
+class NODE_MT_image_node_terrain_modify_base(node_add_menu.NodeMenu):
+    bl_label = "Modify"
+    menu_path = "Terrain/Modify"
+
+    def draw(self, context):
+        layout = self.layout
+        self.node_operator_with_searchable_enum(
+            context, layout, "ImageNodeTerrainModify", "modify_type")
+        self.draw_assets_for_catalog(layout, self.menu_path)
+
+
+class NODE_MT_image_node_terrain_derive_base(node_add_menu.NodeMenu):
+    bl_label = "Derive"
+    menu_path = "Terrain/Derive"
+
+    def draw(self, context):
+        layout = self.layout
+        self.node_operator_with_searchable_enum(
+            context, layout, "ImageNodeTerrainDerive", "derive_type")
+        self.draw_assets_for_catalog(layout, self.menu_path)
+
+
+class NODE_MT_image_node_terrain_color_base(node_add_menu.NodeMenu):
+    bl_label = "Color"
+    menu_path = "Terrain/Color"
+
+    def draw(self, context):
+        layout = self.layout
+        self.node_operator_with_searchable_enum(
+            context, layout, "ImageNodeTerrainColor", "color_type")
+        self.draw_assets_for_catalog(layout, self.menu_path)
+
+
+class NODE_MT_image_node_terrain_combine_base(node_add_menu.NodeMenu):
+    bl_label = "Combine"
+    menu_path = "Terrain/Combine"
+
+    def draw(self, context):
+        layout = self.layout
+        self.node_operator_with_searchable_enum(
+            context, layout, "ImageNodeTerrainCombine", "combine_type")
+        self.draw_assets_for_catalog(layout, self.menu_path)
+
+
 class NODE_MT_image_node_transform_base(node_add_menu.NodeMenu):
     bl_label = "Transform"
 
@@ -421,6 +520,7 @@ class NODE_MT_image_node_all_base(node_add_menu.NodeMenu):
         self.draw_menu(layout, "Color")
         self.draw_menu(layout, "Filter")
         self.draw_menu(layout, "Texture")
+        self.draw_menu(layout, "Terrain")
         self.draw_menu(layout, "Transform")
         self.draw_menu(layout, "Utilities")
         layout.separator()
@@ -436,6 +536,14 @@ add_menus = {
     "NODE_MT_category_image_filter": NODE_MT_image_node_filter_base,
     "NODE_MT_category_image_filter_blur": NODE_MT_image_node_filter_blur_base,
     "NODE_MT_category_image_texture": NODE_MT_image_node_texture_base,
+    "NODE_MT_category_image_terrain": NODE_MT_image_node_terrain_base,
+    "NODE_MT_category_image_terrain_primitive": NODE_MT_image_node_terrain_primitive_base,
+    "NODE_MT_category_image_terrain_erosion": NODE_MT_image_node_terrain_erosion_base,
+    "NODE_MT_category_image_terrain_simulate": NODE_MT_image_node_terrain_simulate_base,
+    "NODE_MT_category_image_terrain_modify": NODE_MT_image_node_terrain_modify_base,
+    "NODE_MT_category_image_terrain_derive": NODE_MT_image_node_terrain_derive_base,
+    "NODE_MT_category_image_terrain_color": NODE_MT_image_node_terrain_color_base,
+    "NODE_MT_category_image_terrain_combine": NODE_MT_image_node_terrain_combine_base,
     "NODE_MT_category_image_transform": NODE_MT_image_node_transform_base,
     "NODE_MT_category_image_utilities": NODE_MT_image_node_utilities_base,
     "NODE_MT_category_image_math": NODE_MT_image_node_math_base,
@@ -463,6 +571,14 @@ swap_menus = {
     "NODE_MT_image_node_filter_swap": NODE_MT_image_node_filter_base,
     "NODE_MT_image_node_filter_blur_swap": NODE_MT_image_node_filter_blur_base,
     "NODE_MT_image_node_texture_swap": NODE_MT_image_node_texture_base,
+    "NODE_MT_image_node_terrain_swap": NODE_MT_image_node_terrain_base,
+    "NODE_MT_image_node_terrain_primitive_swap": NODE_MT_image_node_terrain_primitive_base,
+    "NODE_MT_image_node_terrain_erosion_swap": NODE_MT_image_node_terrain_erosion_base,
+    "NODE_MT_image_node_terrain_simulate_swap": NODE_MT_image_node_terrain_simulate_base,
+    "NODE_MT_image_node_terrain_modify_swap": NODE_MT_image_node_terrain_modify_base,
+    "NODE_MT_image_node_terrain_derive_swap": NODE_MT_image_node_terrain_derive_base,
+    "NODE_MT_image_node_terrain_color_swap": NODE_MT_image_node_terrain_color_base,
+    "NODE_MT_image_node_terrain_combine_swap": NODE_MT_image_node_terrain_combine_base,
     "NODE_MT_image_node_transform_swap": NODE_MT_image_node_transform_base,
     "NODE_MT_image_node_utilities_swap": NODE_MT_image_node_utilities_base,
     "NODE_MT_image_node_math_swap": NODE_MT_image_node_math_base,
