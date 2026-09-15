@@ -1145,6 +1145,11 @@ def km_node_editor(params):
 
     # Allow node selection with both for RMB select
 
+    items.extend([
+        ("node.minimap_navigate", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
+        ("node.minimap_navigate", {"type": 'WHEELUPMOUSE', "value": 'PRESS'}, None),
+        ("node.minimap_navigate", {"type": 'WHEELDOWNMOUSE', "value": 'PRESS'}, None),
+    ])
     items.extend(_template_node_select(type='LEFTMOUSE', value='PRESS', select_passthrough=True))
 
     items.extend([

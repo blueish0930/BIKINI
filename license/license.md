@@ -1,3 +1,12 @@
+<!-- BIKINI note: this file is mostly auto-generated third-party license texts.
+     NVIDIA DLSS / NGX is proprietary — see ../others/NVIDIA-RTX-SDK.txt and the package root README.md
+     section「特别说明：NVIDIA DLSS 4.5」. DLSS binaries are NOT licensed under GPL. -->
+
+# BIKINI — NVIDIA DLSS / NGX notice
+
+This portable build may include `nvngx_dlssd.dll` (NVIDIA DLSS / NGX). That component is **proprietary** under the NVIDIA RTX SDKs License (`others/NVIDIA-RTX-SDK.txt`). It is distributed only as object code with this application, is not open source, and is **not** covered by Blender’s GPL. See the package root `README.md` for a short Chinese/English summary.
+
+---
 <!--
 
 This document is auto-generated with `make license`.

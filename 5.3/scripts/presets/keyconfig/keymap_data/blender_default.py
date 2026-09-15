@@ -1092,6 +1092,8 @@ def km_user_interface(_params):
          {"properties": [("scroll_direction", 'TOP')]}),
         ("ui.view_item_page_scroll", {"type": 'END', "value": 'PRESS'},
          {"properties": [("scroll_direction", 'BOTTOM')]}),
+        ("ui.region_start_filter", {"type": 'F', "value": 'PRESS', "ctrl": True}, None),
+        ("ui.region_clear_filter", {"type": 'F', "value": 'PRESS', "alt": True}, None),
     ])
 
     return keymap
@@ -2293,6 +2295,9 @@ def km_node_editor(params):
     # Shift+CLICK → data type; Alt+CLICK → structure/shape (Auto/Single/Field/Grid/List).
     # Ctrl+CLICK_DRAG remains link-detach (must stay CLICK_DRAG, not CLICK).
     items.extend([
+        ("node.minimap_navigate", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
+        ("node.minimap_navigate", {"type": 'WHEELUPMOUSE', "value": 'PRESS'}, None),
+        ("node.minimap_navigate", {"type": 'WHEELDOWNMOUSE', "value": 'PRESS'}, None),
         ("node.socket_type_menu",
          {"type": 'LEFTMOUSE', "value": 'CLICK', "shift": True}, None),
         ("node.socket_structure_menu",
@@ -4073,6 +4078,8 @@ def km_grease_pencil_paint_mode(params):
     )
 
     items.extend([
+        # Select All
+        *_template_items_select_actions(params, "grease_pencil.select_all"),
         # Active material
         op_menu("VIEW3D_MT_greasepencil_material_active", {"type": 'U', "value": 'PRESS'}),
         # Active layer
@@ -4126,6 +4133,11 @@ def km_grease_pencil_paint_mode(params):
 
         *_template_items_context_panel("VIEW3D_PT_greasepencil_draw_context_menu", params.context_menu_event),
     ])
+
+    if params.select_mouse == 'LEFTMOUSE' and not params.legacy:
+        items.extend([
+            op_tool_cycle("builtin.select_lasso", {"type": 'W', "value": 'PRESS'}),
+        ])
 
     return keymap
 

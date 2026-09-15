@@ -1039,8 +1039,8 @@ class NODE_PT_overlay(Panel):
         snode = context.space_data
         overlay = snode.overlay
 
-        col = layout.column()
-        col.prop(overlay, "link_style", text="Link Style", expand=True)
+        row = layout.row(align=True)
+        row.prop(overlay, "link_style", expand=True)
 
         layout.active = overlay.show_overlays
 
@@ -1053,6 +1053,16 @@ class NODE_PT_overlay(Panel):
 
         col.prop(overlay, "show_context_path", text="Context Path")
         col.prop(snode, "show_annotation", text="Annotations")
+
+        col.separator()
+        row = col.row(align=True)
+        row.prop(overlay, "show_coordinates", text="", icon='GRID', toggle=True)
+        sub = row.row(align=True)
+        sub.active = overlay.show_coordinates
+        sub.prop(overlay, "coordinate_alpha", text="Coordinate")
+
+        row = col.row(align=True)
+        row.prop(overlay, "show_thumbnail", text="Thumbnail", icon='IMAGE', toggle=True)
 
         if snode.supports_previews:
             col.separator()
@@ -1072,6 +1082,10 @@ class NODE_PT_overlay(Panel):
 
             subcol = col.column(align=True)
             subcol.active = overlay.show_render_size and snode.show_backdrop
+
+            subcol = col.column()
+            subcol.prop(overlay, "show_text_info")
+            subcol.active = snode.show_backdrop
 
             row = subcol.row(align=True)
             row.prop(overlay, "show_render_size", text="Render Region")

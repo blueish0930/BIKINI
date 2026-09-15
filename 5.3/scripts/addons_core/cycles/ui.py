@@ -19,6 +19,9 @@ from bl_ui.properties_view_layer import (
 )
 
 from bl_ui.properties_object import has_geometry_visibility
+from bpy.app.translations import (
+    pgettext_rpt as rpt_,
+)
 
 
 class CyclesPresetPanel(PresetPanel, Panel):
@@ -151,6 +154,9 @@ def show_preview_denoise_active(context):
     if not cscene.use_preview_denoising:
         return False
 
+    if cscene.preview_denoiser == 'DLSS':
+        return has_dlss_gpu_devices(context)
+
     if cscene.preview_denoiser == 'OPTIX':
         return has_optixdenoiser_gpu_devices(context)
 
@@ -162,6 +168,9 @@ def show_denoise_active(context):
     cscene = context.scene.cycles
     if not cscene.use_denoising:
         return False
+
+    if cscene.denoiser == 'DLSS':
+        return has_dlss_gpu_devices(context)
 
     if cscene.denoiser == 'OPTIX':
         return has_optixdenoiser_gpu_devices(context)
@@ -190,19 +199,12 @@ def has_oidn_gpu_devices(context):
     return context.preferences.addons[__package__].preferences.has_oidn_gpu_devices()
 
 
+def has_dlss_gpu_devices(context):
+    return context.preferences.addons[__package__].preferences.has_dlss_gpu_devices()
+
+
 def has_optixdenoiser_gpu_devices(context):
     return context.preferences.addons[__package__].preferences.has_optixdenoiser_gpu_devices()
-
-
-def use_mnee(context):
-    # The MNEE kernel doesn't compile on macOS < 13.
-    if use_metal(context):
-        import platform
-        version, _, _ = platform.mac_ver()
-        major_version = version.split(".")[0]
-        if int(major_version) < 13:
-            return False
-    return True
 
 
 class CYCLES_RENDER_PT_sampling(CyclesButtonsPanel, Panel):
@@ -225,22 +227,27 @@ class CYCLES_RENDER_PT_sampling_viewport(CyclesButtonsPanel, Panel):
         scene = context.scene
         cscene = scene.cycles
 
+        use_dlss = (cscene.use_preview_denoising and
+                    cscene.preview_denoiser == 'DLSS' and
+                    has_dlss_gpu_devices(context))
+
         layout.use_property_split = True
         layout.use_property_decorate = False
 
         heading = layout.column(align=True, heading="Noise Threshold")
+        heading.active = not use_dlss
         row = heading.row(align=True)
         row.prop(cscene, "use_preview_adaptive_sampling", text="")
         sub = row.row()
-        sub.active = cscene.use_preview_adaptive_sampling
+        sub.active = cscene.use_preview_adaptive_sampling and not use_dlss
         sub.prop(cscene, "preview_adaptive_threshold", text="")
 
-        if cscene.use_preview_adaptive_sampling:
-            col = layout.column(align=True)
+        col = layout.column(align=True)
+        if cscene.use_preview_adaptive_sampling and not use_dlss:
             col.prop(cscene, "preview_samples", text="Max Samples")
             col.prop(cscene, "preview_adaptive_min_samples", text="Min Samples")
         else:
-            layout.prop(cscene, "preview_samples", text="Samples")
+            col.prop(cscene, "preview_samples", text="Samples")
 
 
 class CYCLES_RENDER_PT_sampling_viewport_denoise(CyclesButtonsPanel, Panel):
@@ -269,10 +276,23 @@ class CYCLES_RENDER_PT_sampling_viewport_denoise(CyclesButtonsPanel, Panel):
         sub.active = show_preview_denoise_active(context)
         sub.prop(cscene, "preview_denoiser", text="Denoiser")
 
-        col.prop(cscene, "preview_denoising_input_passes", text="Passes")
-
         has_oidn_gpu = has_oidn_gpu_devices(context)
         effective_preview_denoiser = get_effective_preview_denoiser(context, has_oidn_gpu)
+
+        if effective_preview_denoiser == 'DLSS':
+            if has_dlss_gpu_devices(context):
+                col.prop(cscene, "preview_denoising_upscale_quality", text="Upscale Mode")
+                col.label(text=rpt_("Each sample is one temporal DLSS frame"))
+                col.label(text=rpt_("0 = unlimited (keep refining while idle)"))
+            else:
+                col.label(text=rpt_("Requires NVIDIA GPU with compute capability %s") % "7.5",
+                          icon='INFO', translate=False)
+                col.label(text=rpt_("and NVIDIA driver version %s or newer") % "590",
+                          icon='BLANK1', translate=False)
+            return
+
+        col.prop(cscene, "preview_denoising_input_passes", text="Passes")
+
         if effective_preview_denoiser == 'OPENIMAGEDENOISE':
             col.prop(cscene, "preview_denoising_prefilter", text="Prefilter")
             col.prop(cscene, "preview_denoising_quality", text="Quality")
@@ -298,18 +318,23 @@ class CYCLES_RENDER_PT_sampling_render(CyclesButtonsPanel, Panel):
         scene = context.scene
         cscene = scene.cycles
 
+        use_dlss = (cscene.use_denoising and
+                    cscene.denoiser == 'DLSS' and
+                    has_dlss_gpu_devices(context))
+
         layout.use_property_split = True
         layout.use_property_decorate = False
 
         heading = layout.column(align=True, heading="Noise Threshold")
+        heading.active = not use_dlss
         row = heading.row(align=True)
         row.prop(cscene, "use_adaptive_sampling", text="")
         sub = row.row()
-        sub.active = cscene.use_adaptive_sampling
+        sub.active = cscene.use_adaptive_sampling and not use_dlss
         sub.prop(cscene, "adaptive_threshold", text="")
 
         col = layout.column(align=True)
-        if cscene.use_adaptive_sampling:
+        if cscene.use_adaptive_sampling and not use_dlss:
             col.prop(cscene, "samples", text="Max Samples")
             col.prop(cscene, "adaptive_min_samples", text="Min Samples")
         else:
@@ -342,6 +367,18 @@ class CYCLES_RENDER_PT_sampling_render_denoise(CyclesButtonsPanel, Panel):
         sub = col.column()
         sub.active = show_denoise_active(context)
         sub.prop(cscene, "denoiser", text="Denoiser")
+
+        if cscene.denoiser == 'DLSS':
+            if has_dlss_gpu_devices(context):
+                col.prop(cscene, "denoising_upscale_quality", text="Upscale Mode")
+                col.label(text=rpt_("Each sample is one temporal DLSS frame"))
+                col.label(text=rpt_("Raise samples to match a settled viewport"))
+            else:
+                col.label(text=rpt_("Requires NVIDIA GPU with compute capability %s") % "7.5",
+                          icon='INFO', translate=False)
+                col.label(text=rpt_("and NVIDIA driver version %s or newer") % "590",
+                          icon='BLANK1', translate=False)
+            return
 
         col.prop(cscene, "denoising_input_passes", text="Passes")
         if cscene.denoiser == 'OPENIMAGEDENOISE':
@@ -905,7 +942,7 @@ class CYCLES_RENDER_PT_performance_texture_cache(CyclesButtonsPanel, Panel):
 
         col.prop(rd, "use_auto_generate_texture_cache", text="Auto Generate")
 
-        row = col.split(factor=0.4)
+        row = col.split(factor=col.property_split_factor)
         row.label()
         sub = row.row(align=True)
         sub.operator("render.generate_texture_cache", text="Generate")
@@ -1411,7 +1448,7 @@ class CYCLES_OBJECT_PT_shading_caustics(CyclesButtonsPanel, Panel):
 
     @classmethod
     def poll(cls, context):
-        return CyclesButtonsPanel.poll(context) and use_mnee(context) and context.object.type != 'LIGHT'
+        return CyclesButtonsPanel.poll(context) and context.object.type != 'LIGHT'
 
     def draw(self, context):
         layout = self.layout
@@ -1677,8 +1714,7 @@ class CYCLES_LIGHT_PT_settings(CyclesButtonsPanel, Panel):
         sub.active = not (light.type == 'AREA' and clamp.is_portal)
         sub.prop(light, "use_shadow", text="Cast Shadow")
         sub.prop(clamp, "use_multiple_importance_sampling", text="Multiple Importance")
-        if use_mnee(context):
-            sub.prop(clamp, "is_caustics_light", text="Shadow Caustics")
+        sub.prop(clamp, "is_caustics_light", text="Shadow Caustics")
 
         if light.type == 'AREA':
             col.prop(clamp, "is_portal", text="Portal")

@@ -280,6 +280,15 @@ def enum_openimagedenoise_denoiser(self, context):
     return []
 
 
+def enum_dlss_denoiser(self, context):
+    import _cycles
+    if _cycles.with_dlss and (not context or bool(
+            context.preferences.addons[__package__].preferences.get_devices_for_type('CUDA'))):
+        return [('DLSS', "DLSS",
+                 n_("Use NVIDIA DLSS Ray Reconstruction"), 8)]
+    return []
+
+
 def enum_optix_denoiser(self, context):
     if not context or bool(context.preferences.addons[__package__].preferences.get_devices_for_type('OPTIX')):
         return [('OPTIX', "OptiX", n_(
@@ -290,8 +299,9 @@ def enum_optix_denoiser(self, context):
 def enum_preview_denoiser(self, context):
     optix_items = enum_optix_denoiser(self, context)
     oidn_items = enum_openimagedenoise_denoiser(self, context)
+    dlss_items = enum_dlss_denoiser(self, context)
 
-    if len(optix_items) or len(oidn_items):
+    if len(optix_items) or len(oidn_items) or len(dlss_items):
         items = [
             ('AUTO',
              "Automatic",
@@ -303,6 +313,7 @@ def enum_preview_denoiser(self, context):
 
     items += optix_items
     items += oidn_items
+    items += dlss_items
     return items
 
 
@@ -310,6 +321,7 @@ def enum_denoiser(self, context):
     items = []
     items += enum_optix_denoiser(self, context)
     items += enum_openimagedenoise_denoiser(self, context)
+    items += enum_dlss_denoiser(self, context)
     return items
 
 
@@ -347,6 +359,28 @@ enum_denoising_quality = (
      "Fast",
      "High performance",
      3),
+)
+enum_denoising_upscale_quality = (
+    ('NONE',
+     "None",
+     "Highest quality without upscaling",
+     0),
+    ('QUALITY',
+     "Quality",
+     "Offers higher image quality than balanced mode",
+     1),
+    ('BALANCED',
+     "Balanced",
+     "Offers both optimized performance and image quality",
+     2),
+    ('PERFORMANCE',
+     "Performance",
+     "Offers a higher performance boost than balanced mode",
+     3),
+    ('ULTRA_PERFORMANCE',
+     "Ultra Performance",
+     "Offers the highest performance boost",
+     4),
 )
 
 enum_direct_light_sampling_type = (
@@ -449,6 +483,12 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         description="Perform denoising on GPU devices configured in the system tab in the user preferences. This is significantly faster than on CPU, but requires additional GPU memory. When large scenes need more GPU memory, this option can be disabled",
         default=False,
     )
+    denoising_upscale_quality: EnumProperty(
+        name="Denoising Upscale Quality",
+        description="Overall upscale factor and denoising quality when using DLSS. Other render passes keep the internal resolution, so prefer None for compositing",
+        items=enum_denoising_upscale_quality,
+        default='NONE',
+    )
 
     use_preview_denoising: BoolProperty(
         name="Use Viewport Denoising",
@@ -490,16 +530,22 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         description="Perform denoising on GPU devices configured in the system tab in the user preferences. This is significantly faster than on CPU, but requires additional GPU memory. When large scenes need more GPU memory, this option can be disabled",
         default=True,
     )
+    preview_denoising_upscale_quality: EnumProperty(
+        name="Viewport Denoising Upscale Quality",
+        description="Overall upscale factor and denoising quality when using DLSS",
+        items=enum_denoising_upscale_quality,
+        default='BALANCED',
+    )
 
     samples: IntProperty(
         name="Samples",
-        description="Number of samples to render for each pixel",
+        description="Number of samples to render for each pixel. With DLSS each sample is one temporal frame",
         min=1, max=(1 << 24),
         default=4096,
     )
     preview_samples: IntProperty(
         name="Viewport Samples",
-        description="Number of samples to render in the viewport, unlimited if 0",
+        description="Number of samples to render in the viewport, unlimited if 0. With DLSS each sample is one temporal frame",
         min=0,
         soft_min=1,
         max=(1 << 24),
@@ -1850,6 +1896,35 @@ class CyclesPreferences(bpy.types.AddonPreferences):
 
         return False
 
+    def has_dlss_gpu_devices(self):
+        compute_device_type = self.get_compute_device_type()
+
+        # DLSS runs on NVIDIA CUDA/OptiX devices. Check both lists when either
+        # backend is selected, because the DLSS flag is reported on CUDA devices.
+        types_to_check = []
+        if compute_device_type == 'CUDA':
+            types_to_check = ['CUDA']
+        elif compute_device_type == 'OPTIX':
+            types_to_check = ['OPTIX', 'CUDA']
+        else:
+            return False
+
+        for device_type_name in types_to_check:
+            for device in self.get_device_list(device_type_name):
+                device_type = device[1]
+                if device_type == 'CPU':
+                    continue
+
+                # Skip devices that do not meet the driver requirement.
+                if not device[8]:
+                    continue
+
+                has_device_dlss_support = device[9] if len(device) > 9 else False
+                if has_device_dlss_support and self.find_existing_device_entry(device).use:
+                    return True
+
+        return False
+
     def has_optixdenoiser_gpu_devices(self):
         compute_device_type = self.get_compute_device_type()
 
@@ -1968,7 +2043,7 @@ class CyclesPreferences(bpy.types.AddonPreferences):
                         translate=False)
                     col.label(text=rpt_("  - oneAPI Level-Zero Loader"), icon='BLANK1', translate=False)
             elif device_type == 'METAL':
-                mac_version = "12.2"
+                mac_version = "13.0"
                 col.label(text=rpt_("Requires Apple Silicon with macOS %s or newer") % mac_version,
                           icon='BLANK1', translate=False)
             return

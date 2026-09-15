@@ -57,6 +57,7 @@ class AddPresetSampling(AddPresetBase, Operator):
         "cycles.denoising_input_passes",
         "cycles.denoising_prefilter",
         "cycles.denoising_quality",
+        "cycles.denoising_upscale_quality",
     ]
 
     preset_subdir = "cycles/sampling"
