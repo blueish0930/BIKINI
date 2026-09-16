@@ -196,6 +196,12 @@ struct IntegratorStateGPU {
   /* Count number of queued kernels. */
   ccl_global IntegratorQueueCounter *queue_counter;
 
+#ifdef WITH_CYCLES_SPPM_CAUSTICS
+  /* === BIKINI SPPM Begin === */
+  ccl_global uint64_t *photon_volume_profile;
+  /* === BIKINI SPPM End === */
+#endif
+
   /* Count number of kernels queued for specific shaders. */
   ccl_global int *sort_key_counter[DEVICE_GPU_KERNEL_INTEGRATOR_NUM];
 

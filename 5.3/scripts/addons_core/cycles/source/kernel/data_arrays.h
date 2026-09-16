@@ -54,7 +54,7 @@ KERNEL_DATA_ARRAY(float4, attributes_float4)
 KERNEL_DATA_ARRAY(uchar4, attributes_uchar4)
 KERNEL_DATA_ARRAY(packed_normal, attributes_normal)
 KERNEL_DATA_ARRAY(Quaternion, attributes_quaternion)
-KERNEL_DATA_ARRAY(PackedSphericalHarmonics, attributes_spherical_harmonics)
+KERNEL_DATA_ARRAY(PackedSphericalHarmonicsRest, attributes_spherical_harmonics_rest)
 
 /* lights */
 KERNEL_DATA_ARRAY(KernelLightDistribution, light_distribution)
@@ -90,6 +90,22 @@ KERNEL_DATA_ARRAY(KernelOctreeNode, volume_tree_nodes)
 KERNEL_DATA_ARRAY(KernelOctreeRoot, volume_tree_roots)
 KERNEL_DATA_ARRAY(int, volume_tree_root_ids)
 KERNEL_DATA_ARRAY(float, volume_step_size)
+
+#ifdef WITH_CYCLES_SPPM_CAUSTICS
+/* === BIKINI SPPM Begin === */
+KERNEL_DATA_ARRAY(float4, photon_pos)
+KERNEL_DATA_ARRAY(float4, photon_beam_start)
+KERNEL_DATA_ARRAY(float4, photon_flux)
+KERNEL_DATA_ARRAY(float4, photon_beam_sigma)
+KERNEL_DATA_ARRAY(int, photon_cell_start)
+KERNEL_DATA_ARRAY(uint, photon_shader_caster)
+KERNEL_DATA_ARRAY(float4, photon_volume_beam_start)
+KERNEL_DATA_ARRAY(float4, photon_volume_beam_end)
+KERNEL_DATA_ARRAY(float4, photon_volume_beam_flux)
+KERNEL_DATA_ARRAY(float4, photon_volume_beam_sigma)
+KERNEL_DATA_ARRAY(KernelPhotonBeamNode, photon_volume_beam_nodes)
+/* === BIKINI SPPM End === */
+#endif
 
 /* image textures */
 KERNEL_DATA_ARRAY(KernelImageTexture, image_textures)

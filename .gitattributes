@@ -1,3 +1,4 @@
-# Keep text documentation stable across Windows and Unix checkouts.
 *.md text eol=lf
 blender.exe filter=lfs diff=lfs merge=lfs -text
+*.pdb filter=lfs diff=lfs merge=lfs -text
+dlss5/* filter=lfs diff=lfs merge=lfs -text

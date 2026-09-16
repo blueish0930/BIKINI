@@ -94,9 +94,19 @@ ccl_device bool shadow_linking_shade_light(KernelGlobals kg,
 
   const ccl_global KernelLight *klight = &kernel_data_fetch(lights, isect.prim);
 
+#ifdef WITH_CYCLES_SPPM_CAUSTICS
+  /* === BIKINI SPPM Begin === */
+  if (photon_caustic_path_owned(kg, path_flag) ||
+      !is_light_shader_visible_to_path(klight->shader_id, path_visibility, path_flag))
+  {
+    return false;
+  }
+  /* === BIKINI SPPM End === */
+#else
   if (!is_light_shader_visible_to_path(klight->shader_id, path_visibility, path_flag)) {
     return false;
   }
+#endif
 
   /* MIS weighting. */
   mis_weight = shadow_linking_light_sample_mis_weight(

@@ -14,6 +14,12 @@
 #include "kernel/geom/object.h"
 #include "kernel/types.h"
 
+#ifdef WITH_CYCLES_SPPM_CAUSTICS
+/* === BIKINI SPPM Begin === */
+#  include "kernel/svm/photon_caustics.h"
+/* === BIKINI SPPM End === */
+#endif
+
 CCL_NAMESPACE_BEGIN
 
 ccl_device_inline ShaderEvalResult integrate_light_forward(
@@ -34,6 +40,15 @@ ccl_device_inline ShaderEvalResult integrate_light_forward(
 
   /* Advance ray to new start distance. */
   INTEGRATOR_STATE_WRITE(state, ray, tmin) = intersection_t_offset(isect.t);
+
+#ifdef WITH_CYCLES_SPPM_CAUSTICS
+  /* === BIKINI SPPM Begin === */
+  /* Photon map already carries this light along the specular caustic chain. */
+  if (photon_caustic_path_owned(kg, path_flag)) {
+    return SHADER_EVAL_EMPTY;
+  }
+  /* === BIKINI SPPM End === */
+#endif
 
   const LightEval light_eval = light_eval_from_intersection(
       kg, &isect, ray_P, ray_D, N, path_flag);

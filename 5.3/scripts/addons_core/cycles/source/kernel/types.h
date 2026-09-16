@@ -27,6 +27,17 @@
 
 CCL_NAMESPACE_BEGIN
 
+#ifdef WITH_CYCLES_SPPM_CAUSTICS
+/* === BIKINI SPPM Begin === */
+struct KernelPhotonBeamNode {
+  packed_float3 bmin;
+  int left;
+  packed_float3 bmax;
+  int right;
+};
+/* === BIKINI SPPM End === */
+#endif
+
 // NOLINTBEGIN
 
 /* Constants */
@@ -42,6 +53,9 @@ CCL_NAMESPACE_BEGIN
 #define LOCAL_MAX_HITS 4
 
 #define VOLUME_BOUNDS_MAX 1024
+#ifdef WITH_CYCLES_SPPM_CAUSTICS
+#  define PHOTON_LIGHTGROUP_CHUNK 8
+#endif
 
 #define SHADER_NONE (~0)
 #define OBJECT_NONE (~0)
@@ -288,6 +302,17 @@ enum PathRayFlag : uint32_t {
 
   /* Path has associated wavelength. */
   PATH_RAY_SPECTRAL = (1U << 27U),
+
+#ifdef WITH_CYCLES_SPPM_CAUSTICS
+  /* === BIKINI SPPM Begin === */
+  /* One sample per pixel per work writes the SPPM measurement point. */
+  PATH_RAY_PHOTON_HITPOINT_WRITER = (1U << 28U),
+  /* Specular chain already carried by the photon map (partition PT). */
+  PATH_RAY_PHOTON_CAUSTIC_CHAIN = (1U << 29U),
+  /* Reserved for volume beams (P3). */
+  PATH_RAY_PHOTON_CAMERA_PATH = (1U << 30U),
+  /* === BIKINI SPPM End === */
+#endif
 };
 
 // 8bit enum, just in case we need to move more variables in it
@@ -380,6 +405,11 @@ enum PassType {
   PASS_VOLUME_INDIRECT,
   PASS_VOLUME_SCATTER,
   PASS_VOLUME_TRANSMIT,
+#ifdef WITH_CYCLES_SPPM_CAUSTICS
+  /* === BIKINI SPPM Begin === */
+  PASS_CAUSTICS,
+  /* === BIKINI SPPM End === */
+#endif
   PASS_CATEGORY_LIGHT_END = 31,
 
   /* Data passes */
@@ -430,6 +460,14 @@ enum PassType {
    * When reading this pass, it is converted to majorant transmittance */
   PASS_VOLUME_MAJORANT,
   PASS_VOLUME_MAJORANT_SAMPLE_COUNT,
+#ifdef WITH_CYCLES_SPPM_CAUSTICS
+  /* === BIKINI SPPM Begin === */
+  PASS_PHOTON_HITPOINT,
+  PASS_PHOTON_WEIGHT,
+  PASS_PHOTON_TAU,
+  PASS_PHOTON_STATE,
+  /* === BIKINI SPPM End === */
+#endif
   PASS_CATEGORY_DATA_END = 63,
 
   /* Denoising passes */
@@ -1017,6 +1055,14 @@ enum ShaderDataObjectFlag : uint {
   SD_OBJECT_HAS_VOLUME_MOTION = (1u << 11),
   /* Geometry has per-corner normals instead of per-vertex. */
   SD_OBJECT_HAS_CORNER_NORMALS = (1u << 12),
+#ifdef WITH_CYCLES_SPPM_CAUSTICS
+  /* === BIKINI SPPM Begin === */
+  SD_OBJECT_PHOTON_CASTER = (1u << 13),
+  SD_OBJECT_PHOTON_RECEIVER = (1u << 14),
+  SD_OBJECT_PHOTON_NO_CAST = (1u << 15),
+  SD_OBJECT_PHOTON_NO_RECEIVE = (1u << 16),
+  /* === BIKINI SPPM End === */
+#endif
 
   /* object is using caustics */
   SD_OBJECT_CAUSTICS = (SD_OBJECT_CAUSTICS_CASTER | SD_OBJECT_CAUSTICS_RECEIVER),
@@ -1025,7 +1071,12 @@ enum ShaderDataObjectFlag : uint {
                      SD_OBJECT_NEGATIVE_SCALE | SD_OBJECT_HAS_VOLUME |
                      SD_OBJECT_INTERSECTS_VOLUME | SD_OBJECT_SHADOW_CATCHER |
                      SD_OBJECT_HAS_VOLUME_ATTRIBUTES | SD_OBJECT_CAUSTICS |
-                     SD_OBJECT_HAS_VOLUME_MOTION | SD_OBJECT_HAS_CORNER_NORMALS)
+                     SD_OBJECT_HAS_VOLUME_MOTION | SD_OBJECT_HAS_CORNER_NORMALS
+#ifdef WITH_CYCLES_SPPM_CAUSTICS
+                     | SD_OBJECT_PHOTON_CASTER | SD_OBJECT_PHOTON_RECEIVER |
+                     SD_OBJECT_PHOTON_NO_CAST | SD_OBJECT_PHOTON_NO_RECEIVE
+#endif
+                     )
 };
 
 struct ccl_align(16) ShaderData {
@@ -1691,7 +1742,14 @@ struct KernelShader {
   float cryptomatte_id;
   int flags;
   int pass_id;
-  int pad2, pad3;
+#ifdef WITH_CYCLES_SPPM_CAUSTICS
+  /* === BIKINI SPPM Begin === */
+  int photon_cast;
+  /* === BIKINI SPPM End === */
+#else
+  int pad2;
+#endif
+  int pad3;
 };
 static_assert_align(KernelShader, 16);
 
@@ -1845,6 +1903,17 @@ enum DeviceKernel : int {
   DEVICE_KERNEL_CRYPTOMATTE_POSTPROCESS,
 
   DEVICE_KERNEL_PREFIX_SUM,
+
+#ifdef WITH_CYCLES_SPPM_CAUSTICS
+  /* === BIKINI SPPM Begin === */
+  DEVICE_KERNEL_FILM_PHOTON_GATHER,
+  DEVICE_KERNEL_FILM_PHOTON_SMOOTH,
+  DEVICE_KERNEL_PHOTON_TRACE,
+  DEVICE_KERNEL_PHOTON_BIN_COUNT,
+  DEVICE_KERNEL_PHOTON_BIN_CURSOR_INIT,
+  DEVICE_KERNEL_PHOTON_BIN_SCATTER,
+  /* === BIKINI SPPM End === */
+#endif
 
   DEVICE_KERNEL_NUM,
 };

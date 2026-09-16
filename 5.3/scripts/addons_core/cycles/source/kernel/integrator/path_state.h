@@ -151,6 +151,14 @@ ccl_device_inline void path_state_next(KernelGlobals kg,
   flag &= ~(PATH_RAY_REFLECT | PATH_RAY_SINGULAR | PATH_RAY_TRANSPARENT |
             PATH_RAY_IMPORTANCE_BAKE | PATH_RAY_MIS_SKIP | PATH_RAY_MIS_HAD_TRANSMISSION);
 
+#ifdef WITH_CYCLES_SPPM_CAUSTICS
+  /* === BIKINI SPPM Begin === */
+  if (label & (LABEL_DIFFUSE | LABEL_VOLUME_SCATTER)) {
+    flag &= ~PATH_RAY_PHOTON_CAMERA_PATH;
+  }
+  /* === BIKINI SPPM End === */
+#endif
+
 #ifdef __VOLUME__
   if (label & LABEL_VOLUME_SCATTER) {
     /* volume scatter */

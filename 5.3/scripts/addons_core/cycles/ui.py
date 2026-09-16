@@ -708,6 +708,38 @@ class CYCLES_RENDER_PT_light_paths_caustics(CyclesButtonsPanel, Panel):
         col.prop(cscene, "caustics_reflective", text="Reflective")
         col.prop(cscene, "caustics_refractive", text="Refractive")
 
+        col = layout.column()
+        col.prop(cscene, "use_photon_caustics")
+        sub = layout.column(align=True)
+        sub.enabled = cscene.use_photon_caustics
+        sub.prop(cscene, "photon_caustics_count")
+        sub.prop(cscene, "photon_caustics_detail")
+        sub.prop(cscene, "photon_caustics_intensity")
+        sub.prop(cscene, "photon_caustics_casters")
+        sub.prop(cscene, "use_photon_volume_caustics")
+        vol = sub.column(align=True)
+        vol.enabled = cscene.use_photon_caustics and cscene.use_photon_volume_caustics
+        vol.prop(cscene, "photon_volume_beam_radius_scale")
+
+        if cscene.use_photon_caustics:
+            import _cycles
+            report = getattr(_cycles, "photon_material_report", lambda: ())()
+            if report:
+                box = layout.box()
+                bcol = box.column(align=True)
+                n_max = 8
+                bcol.label(
+                    text="%d material(s) approximated for caustics:" % len(report),
+                    icon='ERROR',
+                )
+                for name, level, reason in report[:n_max]:
+                    bcol.label(
+                        text="%s: %s" % (name, reason),
+                        icon='MATERIAL' if level < 2 else 'CANCEL',
+                    )
+                if len(report) > n_max:
+                    bcol.label(text="... and %d more" % (len(report) - n_max))
+
 
 class CYCLES_RENDER_PT_light_paths_fast_gi(CyclesButtonsPanel, Panel):
     bl_label = "Fast GI Approximation"
@@ -1183,6 +1215,9 @@ class CYCLES_RENDER_PT_passes_light(CyclesButtonsPanel, Panel):
         col.prop(view_layer, "use_pass_environment")
         col.prop(view_layer, "use_pass_ambient_occlusion", text="Ambient Occlusion")
         col.prop(cycles_view_layer, "use_pass_shadow_catcher")
+        sub = col.column(align=True)
+        sub.active = context.scene.cycles.use_photon_caustics
+        sub.prop(cycles_view_layer, "use_pass_caustics", text="Caustics")
 
 
 class CYCLES_RENDER_PT_passes_crypto(CyclesButtonsPanel, ViewLayerCryptomattePanelHelper, Panel):
@@ -1715,6 +1750,8 @@ class CYCLES_LIGHT_PT_settings(CyclesButtonsPanel, Panel):
         sub.prop(light, "use_shadow", text="Cast Shadow")
         sub.prop(clamp, "use_multiple_importance_sampling", text="Multiple Importance")
         sub.prop(clamp, "is_caustics_light", text="Shadow Caustics")
+        if context.scene.cycles.use_photon_caustics:
+            sub.prop(clamp, "photon_cast", text="Photon Caustics")
 
         if light.type == 'AREA':
             col.prop(clamp, "is_portal", text="Portal")
@@ -1913,6 +1950,8 @@ class CYCLES_WORLD_PT_settings_surface(CyclesButtonsPanel, Panel):
         subsub.prop(cworld, "sample_map_resolution")
         sub.prop(cworld, "max_bounces")
         sub.prop(cworld, "is_caustics_light", text="Shadow Caustics")
+        if context.scene.cycles.use_photon_caustics:
+            sub.prop(cworld, "photon_cast", text="Photon Caustics")
         sub.prop(cworld, "use_shadows", text="Cast Shadow")
 
 
@@ -2078,7 +2117,7 @@ class CYCLES_MATERIAL_PT_settings_surface(CyclesButtonsPanel, Panel):
     bl_context = "material"
 
     @staticmethod
-    def draw_shared(self, mat):
+    def draw_shared(self, mat, cscene=None):
         layout = self.layout
         layout.use_property_split = True
         layout.use_property_decorate = False
@@ -2090,9 +2129,13 @@ class CYCLES_MATERIAL_PT_settings_surface(CyclesButtonsPanel, Panel):
         col.prop(cmat, "emission_sampling")
         col.prop(mat, "use_transparent_shadow")
         col.prop(cmat, "use_bump_map_correction")
+        if cscene is not None and cscene.use_photon_caustics:
+            sub = col.column()
+            sub.active = cscene.photon_caustics_casters == 'SELECTED'
+            sub.prop(cmat, "photon_cast")
 
     def draw(self, context):
-        self.draw_shared(self, context.material)
+        self.draw_shared(self, context.material, context.scene.cycles)
 
 
 class CYCLES_MATERIAL_PT_settings_volume(CyclesButtonsPanel, Panel):

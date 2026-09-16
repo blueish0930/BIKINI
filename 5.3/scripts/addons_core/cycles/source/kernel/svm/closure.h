@@ -17,6 +17,11 @@
 
 #include "kernel/svm/math_util.h"
 #include "kernel/svm/node_types.h"
+#ifdef WITH_CYCLES_SPPM_CAUSTICS
+/* === BIKINI SPPM Begin === */
+#  include "kernel/svm/photon_caustics.h"
+/* === BIKINI SPPM End === */
+#endif
 #include "kernel/svm/util.h"
 
 #include "kernel/util/colorspace.h"
@@ -249,10 +254,17 @@ ccl_device
       }
 
 #ifdef __CAUSTICS_TRICKS__
+#  ifdef WITH_CYCLES_SPPM_CAUSTICS
+      const bool reflective_caustics = (photon_caustics_reflective(kg, sd) ||
+                                        (ray_visibility & PATH_RAY_VISIBILITY_DIFFUSE) == 0);
+      const bool refractive_caustics = (photon_caustics_refractive(kg, sd) ||
+                                        (ray_visibility & PATH_RAY_VISIBILITY_DIFFUSE) == 0);
+#  else
       const bool reflective_caustics = (kernel_data.integrator.caustics_reflective ||
                                         (ray_visibility & PATH_RAY_VISIBILITY_DIFFUSE) == 0);
       const bool refractive_caustics = (kernel_data.integrator.caustics_refractive ||
                                         (ray_visibility & PATH_RAY_VISIBILITY_DIFFUSE) == 0);
+#  endif
 #else
       const bool reflective_caustics = true;
       const bool refractive_caustics = true;
@@ -324,8 +336,9 @@ ccl_device
             if (bsdf && fresnel) {
               const bool backfacing = (sd->runtime_flag & SR_BACKFACING);
               bsdf->N = valid_reflection_N;
-              bsdf->T = zero_float3();
-              bsdf->alpha_x = bsdf->alpha_y = sqr(roughness);
+              bsdf->T = T;
+              bsdf->alpha_x = alpha_x;
+              bsdf->alpha_y = alpha_y;
 
               const float dispersion_scale = saturatef(
                   stack_load(stack, data.transmission_dispersion_scale));
@@ -497,11 +510,17 @@ ccl_device
           kg, &offset);
 
 #ifdef __CAUSTICS_TRICKS__
+#  ifdef WITH_CYCLES_SPPM_CAUSTICS
+      if (!photon_caustics_reflective(kg, sd) && (ray_visibility & PATH_RAY_VISIBILITY_DIFFUSE)) {
+        break;
+      }
+#  else
       if (!kernel_data.integrator.caustics_reflective &&
           (ray_visibility & PATH_RAY_VISIBILITY_DIFFUSE))
       {
         break;
       }
+#  endif
 #endif
       ccl_private MicrofacetBsdf *bsdf = (ccl_private MicrofacetBsdf *)bsdf_alloc(
           sd, sizeof(MicrofacetBsdf), rgb_to_spectrum(make_float3(mix_weight)));
@@ -601,11 +620,17 @@ ccl_device
           kg, &offset);
 
 #ifdef __CAUSTICS_TRICKS__
+#  ifdef WITH_CYCLES_SPPM_CAUSTICS
+      if (!photon_caustics_reflective(kg, sd) && (ray_visibility & PATH_RAY_VISIBILITY_DIFFUSE)) {
+        break;
+      }
+#  else
       if (!kernel_data.integrator.caustics_reflective &&
           (ray_visibility & PATH_RAY_VISIBILITY_DIFFUSE))
       {
         break;
       }
+#  endif
 #endif
       float3 N = stack_load_float3_default(stack, bsdf_data.normal_offset, sd->N);
       N = safe_normalize_fallback(N, sd->N);
@@ -634,7 +659,7 @@ ccl_device
       else {
         bsdf->T = stack_load_float3(stack, bsdf_data.tangent_offset);
 
-        /* rotate tangent */
+        /* Rotate tangent. */
         const float rotation = stack_load(stack, bsdf_data.rotation);
         if (rotation != 0.0f) {
           bsdf->T = rotate_around_axis(bsdf->T, bsdf->N, rotation * M_2PI_F);
@@ -673,11 +698,17 @@ ccl_device
           svm_node_get<SVMNodeRefractionBsdfData>(kg, &offset);
 
 #ifdef __CAUSTICS_TRICKS__
+#  ifdef WITH_CYCLES_SPPM_CAUSTICS
+      if (!photon_caustics_refractive(kg, sd) && (ray_visibility & PATH_RAY_VISIBILITY_DIFFUSE)) {
+        break;
+      }
+#  else
       if (!kernel_data.integrator.caustics_refractive &&
           (ray_visibility & PATH_RAY_VISIBILITY_DIFFUSE))
       {
         break;
       }
+#  endif
 #endif
       float3 N = stack_load_float3_default(stack, bsdf_data.normal_offset, sd->N);
       N = safe_normalize_fallback(N, sd->N);
@@ -716,10 +747,17 @@ ccl_device
           kg, &offset);
 
 #ifdef __CAUSTICS_TRICKS__
+#  ifdef WITH_CYCLES_SPPM_CAUSTICS
+      const bool reflective_caustics = (photon_caustics_reflective(kg, sd) ||
+                                        (ray_visibility & PATH_RAY_VISIBILITY_DIFFUSE) == 0);
+      const bool refractive_caustics = (photon_caustics_refractive(kg, sd) ||
+                                        (ray_visibility & PATH_RAY_VISIBILITY_DIFFUSE) == 0);
+#  else
       const bool reflective_caustics = (kernel_data.integrator.caustics_reflective ||
                                         (ray_visibility & PATH_RAY_VISIBILITY_DIFFUSE) == 0);
       const bool refractive_caustics = (kernel_data.integrator.caustics_refractive ||
                                         (ray_visibility & PATH_RAY_VISIBILITY_DIFFUSE) == 0);
+#  endif
       if (!(reflective_caustics || refractive_caustics)) {
         break;
       }
@@ -743,11 +781,34 @@ ccl_device
 
       if (bsdf && fresnel) {
         bsdf->N = maybe_ensure_valid_specular_reflection(sd, N);
-        bsdf->T = zero_float3();
+        const float anisotropy = clamp(stack_load(stack, bsdf_data.anisotropy), -0.99f, 0.99f);
+        const float roughness = sqr(saturatef(stack_load(stack, bsdf_data.roughness)));
+        if (!stack_valid(bsdf_data.tangent_offset) || fabsf(anisotropy) <= 1e-4f) {
+          /* Isotropic case. */
+          bsdf->T = zero_float3();
+          bsdf->alpha_x = bsdf->alpha_y = roughness;
+        }
+        else {
+          bsdf->T = stack_load_float3(stack, bsdf_data.tangent_offset);
+
+          /* Rotate tangent. */
+          const float rotation = stack_load(stack, bsdf_data.rotation);
+          if (rotation != 0.0f) {
+            bsdf->T = rotate_around_axis(bsdf->T, bsdf->N, rotation * M_2PI_F);
+          }
+
+          if (anisotropy < 0.0f) {
+            bsdf->alpha_x = roughness / (1.0f + anisotropy);
+            bsdf->alpha_y = roughness * (1.0f + anisotropy);
+          }
+          else {
+            bsdf->alpha_x = roughness * (1.0f - anisotropy);
+            bsdf->alpha_y = roughness / (1.0f - anisotropy);
+          }
+        }
 
         const float ior = fmaxf(stack_load(stack, bsdf_data.ior), 1e-5f);
         bsdf->ior = (sd->runtime_flag & SR_BACKFACING) ? 1.0f / ior : ior;
-        bsdf->alpha_x = bsdf->alpha_y = sqr(saturatef(stack_load(stack, bsdf_data.roughness)));
 
         fresnel->f0 = make_float3(F0_from_ior(ior));
         fresnel->f90 = white;
@@ -804,11 +865,19 @@ ccl_device
                                                                                           &offset);
 
 #ifdef __CAUSTICS_TRICKS__
+#  ifdef WITH_CYCLES_SPPM_CAUSTICS
+      if (type == CLOSURE_BSDF_GLOSSY_TOON_ID && !photon_caustics_reflective(kg, sd) &&
+          (ray_visibility & PATH_RAY_VISIBILITY_DIFFUSE))
+      {
+        break;
+      }
+#  else
       if (type == CLOSURE_BSDF_GLOSSY_TOON_ID && !kernel_data.integrator.caustics_reflective &&
           (ray_visibility & PATH_RAY_VISIBILITY_DIFFUSE))
       {
         break;
       }
+#  endif
 #endif
       float3 N = stack_load_float3_default(stack, bsdf_data.normal_offset, sd->N);
       N = safe_normalize_fallback(N, sd->N);

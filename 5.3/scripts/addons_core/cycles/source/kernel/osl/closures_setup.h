@@ -17,6 +17,12 @@
 
 #include "kernel/osl/types.h"
 
+#ifdef WITH_CYCLES_SPPM_CAUSTICS
+/* === BIKINI SPPM Begin === */
+#  include "kernel/svm/photon_caustics.h"
+/* === BIKINI SPPM End === */
+#endif
+
 CCL_NAMESPACE_BEGIN
 
 #define OSL_CLOSURE_STRUCT_BEGIN(Upper, lower) \
@@ -47,6 +53,7 @@ ccl_device_forceinline void osl_zero_albedo(float3 *layer_albedo)
 }
 
 ccl_device_forceinline bool osl_closure_skip(KernelGlobals kg,
+                                             const ccl_private ShaderData *sd,
                                              const PathRayVisibility path_visibility,
                                              const int scattering)
 {
@@ -54,8 +61,14 @@ ccl_device_forceinline bool osl_closure_skip(KernelGlobals kg,
   if ((scattering & LABEL_GLOSSY) && (path_visibility & PATH_RAY_VISIBILITY_DIFFUSE)) {
     const bool has_reflect = (scattering & LABEL_REFLECT);
     const bool has_transmit = (scattering & LABEL_TRANSMIT);
+#ifdef WITH_CYCLES_SPPM_CAUSTICS
+    const bool reflect_caustics_disabled = !photon_caustics_reflective(kg, sd);
+    const bool refract_caustics_disabled = !photon_caustics_refractive(kg, sd);
+#else
+    (void)sd;
     const bool reflect_caustics_disabled = !kernel_data.integrator.caustics_reflective;
     const bool refract_caustics_disabled = !kernel_data.integrator.caustics_refractive;
+#endif
 
     /* Reflective Caustics */
     if (reflect_caustics_disabled && has_reflect && !has_transmit) {
@@ -84,7 +97,7 @@ ccl_device void osl_closure_diffuse_setup(KernelGlobals kg,
                                           const ccl_private DiffuseClosure *closure,
                                           float3 * /*layer_albedo*/)
 {
-  if (osl_closure_skip(kg, path_visibility, LABEL_DIFFUSE)) {
+  if (osl_closure_skip(kg, sd, path_visibility, LABEL_DIFFUSE)) {
     return;
   }
 
@@ -101,7 +114,7 @@ ccl_device void osl_closure_oren_nayar_setup(KernelGlobals kg,
                                              const ccl_private OrenNayarClosure *closure,
                                              float3 * /*layer_albedo*/)
 {
-  if (osl_closure_skip(kg, path_visibility, LABEL_DIFFUSE)) {
+  if (osl_closure_skip(kg, sd, path_visibility, LABEL_DIFFUSE)) {
     return;
   }
 
@@ -119,7 +132,7 @@ ccl_device void osl_closure_oren_nayar_diffuse_bsdf_setup(
     const ccl_private OrenNayarDiffuseBSDFClosure *closure,
     float3 * /*layer_albedo*/)
 {
-  if (osl_closure_skip(kg, path_visibility, LABEL_DIFFUSE)) {
+  if (osl_closure_skip(kg, sd, path_visibility, LABEL_DIFFUSE)) {
     return;
   }
 
@@ -138,7 +151,7 @@ ccl_device void osl_closure_burley_diffuse_bsdf_setup(
     ccl_private const BurleyDiffuseBSDFClosure *closure,
     float3 * /*layer_albedo*/)
 {
-  if (osl_closure_skip(kg, path_visibility, LABEL_DIFFUSE)) {
+  if (osl_closure_skip(kg, sd, path_visibility, LABEL_DIFFUSE)) {
     return;
   }
 
@@ -161,7 +174,7 @@ ccl_device void osl_closure_translucent_setup(KernelGlobals kg,
                                               const ccl_private TranslucentClosure *closure,
                                               float3 * /*layer_albedo*/)
 {
-  if (osl_closure_skip(kg, path_visibility, LABEL_DIFFUSE)) {
+  if (osl_closure_skip(kg, sd, path_visibility, LABEL_DIFFUSE)) {
     return;
   }
 
@@ -178,7 +191,7 @@ ccl_device void osl_closure_translucent_bsdf_setup(
     const ccl_private TranslucentBSDFClosure *closure,
     float3 * /*layer_albedo*/)
 {
-  if (osl_closure_skip(kg, path_visibility, LABEL_DIFFUSE)) {
+  if (osl_closure_skip(kg, sd, path_visibility, LABEL_DIFFUSE)) {
     return;
   }
 
@@ -194,7 +207,7 @@ ccl_device void osl_closure_reflection_setup(KernelGlobals kg,
                                              const ccl_private ReflectionClosure *closure,
                                              float3 * /*layer_albedo*/)
 {
-  if (osl_closure_skip(kg, path_visibility, LABEL_SINGULAR)) {
+  if (osl_closure_skip(kg, sd, path_visibility, LABEL_SINGULAR)) {
     return;
   }
 
@@ -218,7 +231,7 @@ ccl_device void osl_closure_refraction_setup(KernelGlobals kg,
                                              const ccl_private RefractionClosure *closure,
                                              float3 * /*layer_albedo*/)
 {
-  if (osl_closure_skip(kg, path_visibility, LABEL_SINGULAR)) {
+  if (osl_closure_skip(kg, sd, path_visibility, LABEL_SINGULAR)) {
     return;
   }
 
@@ -228,8 +241,10 @@ ccl_device void osl_closure_refraction_setup(KernelGlobals kg,
     return;
   }
 
+  const bool backfacing = (sd->runtime_flag & SR_BACKFACING);
+
   bsdf->N = maybe_ensure_valid_specular_reflection(sd, safe_normalize_fallback(closure->N, sd->N));
-  bsdf->ior = closure->ior;
+  bsdf->ior = backfacing ? 1.0f / closure->ior : closure->ior;
   bsdf->alpha_x = bsdf->alpha_y = 0.0f;
 
   sd->runtime_flag |= bsdf_microfacet_ggx_refraction_setup(bsdf);
@@ -279,7 +294,7 @@ ccl_device void osl_closure_coat_bsdf_setup(KernelGlobals kg,
 {
   osl_zero_albedo(layer_albedo);
 
-  if (osl_closure_skip(kg, path_visibility, LABEL_GLOSSY | LABEL_REFLECT)) {
+  if (osl_closure_skip(kg, sd, path_visibility, LABEL_GLOSSY | LABEL_REFLECT)) {
     return;
   }
 
@@ -307,7 +322,7 @@ ccl_device void osl_closure_dielectric_bsdf_setup(KernelGlobals kg,
 {
   osl_zero_albedo(layer_albedo);
 
-  if (osl_closure_skip(kg, path_visibility, LABEL_GLOSSY | LABEL_REFLECT)) {
+  if (osl_closure_skip(kg, sd, path_visibility, LABEL_GLOSSY | LABEL_REFLECT)) {
     return;
   }
 
@@ -324,10 +339,12 @@ ccl_device void osl_closure_dielectric_bsdf_setup(KernelGlobals kg,
     return;
   }
 
+  const bool backfacing = (sd->runtime_flag & SR_BACKFACING);
+
   bsdf->N = maybe_ensure_valid_specular_reflection(sd, safe_normalize_fallback(closure->N, sd->N));
   bsdf->alpha_x = closure->alpha_x;
   bsdf->alpha_y = closure->alpha_y;
-  bsdf->ior = closure->ior;
+  bsdf->ior = backfacing ? 1.0f / closure->ior : closure->ior;
   bsdf->T = closure->T;
 
   const bool beckmann = closure->distribution == make_string("beckmann", 14712237670914973463ull);
@@ -336,6 +353,9 @@ ccl_device void osl_closure_dielectric_bsdf_setup(KernelGlobals kg,
   fresnel->thin_film = {closure->thinfilm_thickness, closure->thinfilm_ior};
   fresnel->tint = {rgb_to_spectrum(closure->reflection_tint),
                    rgb_to_spectrum(closure->transmission_tint)};
+  if (backfacing) {
+    adjust_thin_film_ior_at_backface(fresnel->thin_film.ior, bsdf->ior);
+  }
   bsdf_dielectric_tint_setup(kg, bsdf, sd, fresnel, beckmann, multiggx);
 
   if (layer_albedo != nullptr) {
@@ -356,7 +376,7 @@ ccl_device void osl_closure_conductor_bsdf_setup(KernelGlobals kg,
                                                  const ccl_private ConductorBSDFClosure *closure,
                                                  float3 * /*layer_albedo*/)
 {
-  if (osl_closure_skip(kg, path_visibility, LABEL_GLOSSY | LABEL_REFLECT)) {
+  if (osl_closure_skip(kg, sd, path_visibility, LABEL_GLOSSY | LABEL_REFLECT)) {
     return;
   }
 
@@ -416,7 +436,7 @@ ccl_device void osl_closure_generalized_schlick_bsdf_setup(
     label |= LABEL_TRANSMIT;
   }
 
-  if (osl_closure_skip(kg, path_visibility, label)) {
+  if (osl_closure_skip(kg, sd, path_visibility, label)) {
     return;
   }
 
@@ -432,6 +452,8 @@ ccl_device void osl_closure_generalized_schlick_bsdf_setup(
     return;
   }
 
+  const bool backfacing = (sd->runtime_flag & SR_BACKFACING);
+
   bsdf->N = maybe_ensure_valid_specular_reflection(sd, safe_normalize_fallback(closure->N, sd->N));
   bsdf->alpha_x = closure->alpha_x;
   bsdf->alpha_y = closure->alpha_y;
@@ -442,10 +464,12 @@ ccl_device void osl_closure_generalized_schlick_bsdf_setup(
      * to the F0...F90 range, this allows us to use the real IOR.
      * Computing it back from F0 might give a different result in case of specular
      * tinting. */
-    bsdf->ior = bsdf_glass_ior(sd, -closure->exponent, closure->inv_abbe);
+    const float ior = backfacing ? 1.0f / -closure->exponent : -closure->exponent;
+    bsdf->ior = bsdf_glass_ior(sd, ior, closure->inv_abbe);
   }
   else {
-    bsdf->ior = ior_from_F0(average(closure->f0));
+    const float ior = ior_from_F0(average(closure->f0));
+    bsdf->ior = backfacing ? 1.0f / ior : ior;
   }
 
   bool preserve_energy = false;
@@ -477,10 +501,17 @@ ccl_device void osl_closure_generalized_schlick_bsdf_setup(
     preserve_energy = (closure->distribution == make_string("multi_ggx", 16842698693386468366ull));
   }
 
+#ifdef WITH_CYCLES_SPPM_CAUSTICS
+  const bool reflective_caustics = (photon_caustics_reflective(kg, sd) ||
+                                    (path_visibility & PATH_RAY_VISIBILITY_DIFFUSE) == 0);
+  const bool refractive_caustics = (photon_caustics_refractive(kg, sd) ||
+                                    (path_visibility & PATH_RAY_VISIBILITY_DIFFUSE) == 0);
+#else
   const bool reflective_caustics = (kernel_data.integrator.caustics_reflective ||
                                     (path_visibility & PATH_RAY_VISIBILITY_DIFFUSE) == 0);
   const bool refractive_caustics = (kernel_data.integrator.caustics_refractive ||
                                     (path_visibility & PATH_RAY_VISIBILITY_DIFFUSE) == 0);
+#endif
 
   fresnel->tint.reflectance = reflective_caustics ? rgb_to_spectrum(closure->reflection_tint) :
                                                     zero_spectrum();
@@ -491,6 +522,9 @@ ccl_device void osl_closure_generalized_schlick_bsdf_setup(
   fresnel->exponent = closure->exponent;
   fresnel->thin_film.thickness = closure->thinfilm_thickness;
   fresnel->thin_film.ior = closure->thinfilm_ior;
+  if (backfacing) {
+    adjust_thin_film_ior_at_backface(fresnel->thin_film.ior, bsdf->ior);
+  }
   bsdf_microfacet_setup_fresnel_generalized_schlick(kg, bsdf, sd->wi, fresnel, preserve_energy);
 
   if (layer_albedo != nullptr) {
@@ -526,14 +560,21 @@ ccl_device void osl_closure_thin_glass_setup(KernelGlobals kg,
     label |= LABEL_REFLECT;
   }
 
-  if (osl_closure_skip(kg, path_visibility, label)) {
+  if (osl_closure_skip(kg, sd, path_visibility, label)) {
     return;
   }
 
+#ifdef WITH_CYCLES_SPPM_CAUSTICS
+  const bool reflective_caustics = (photon_caustics_reflective(kg, sd) ||
+                                    (path_visibility & PATH_RAY_VISIBILITY_DIFFUSE) == 0);
+  const bool refractive_caustics = (photon_caustics_refractive(kg, sd) ||
+                                    (path_visibility & PATH_RAY_VISIBILITY_DIFFUSE) == 0);
+#else
   const bool reflective_caustics = (kernel_data.integrator.caustics_reflective ||
                                     (path_visibility & PATH_RAY_VISIBILITY_DIFFUSE) == 0);
   const bool refractive_caustics = (kernel_data.integrator.caustics_refractive ||
                                     (path_visibility & PATH_RAY_VISIBILITY_DIFFUSE) == 0);
+#endif
 
   const float3 valid_reflection_N = maybe_ensure_valid_specular_reflection(
       sd, safe_normalize_fallback(closure->N, sd->N));
@@ -569,7 +610,7 @@ ccl_device void osl_closure_thin_subsurface_setup(KernelGlobals kg,
 {
   osl_zero_albedo(layer_albedo);
 
-  if (osl_closure_skip(kg, path_visibility, LABEL_DIFFUSE)) {
+  if (osl_closure_skip(kg, sd, path_visibility, LABEL_DIFFUSE)) {
     return;
   }
 
@@ -591,7 +632,7 @@ ccl_device void osl_closure_microfacet_setup(KernelGlobals kg,
   osl_zero_albedo(layer_albedo);
 
   const int label = (closure->refract) ? LABEL_TRANSMIT : LABEL_REFLECT;
-  if (osl_closure_skip(kg, path_visibility, LABEL_GLOSSY | label)) {
+  if (osl_closure_skip(kg, sd, path_visibility, LABEL_GLOSSY | label)) {
     return;
   }
 
@@ -601,10 +642,12 @@ ccl_device void osl_closure_microfacet_setup(KernelGlobals kg,
     return;
   }
 
+  const bool backfacing = (sd->runtime_flag & SR_BACKFACING);
+
   bsdf->N = maybe_ensure_valid_specular_reflection(sd, safe_normalize_fallback(closure->N, sd->N));
   bsdf->alpha_x = closure->alpha_x;
   bsdf->alpha_y = closure->alpha_y;
-  bsdf->ior = closure->ior;
+  bsdf->ior = backfacing ? 1.0f / closure->ior : closure->ior;
   bsdf->T = closure->T;
 
   /* Beckmann */
@@ -662,7 +705,7 @@ ccl_device void osl_closure_microfacet_f82_tint_setup(
     const ccl_private MicrofacetF82TintClosure *closure,
     float3 * /*layer_albedo*/)
 {
-  if (osl_closure_skip(kg, path_visibility, LABEL_GLOSSY | LABEL_REFLECT)) {
+  if (osl_closure_skip(kg, sd, path_visibility, LABEL_GLOSSY | LABEL_REFLECT)) {
     return;
   }
 
@@ -716,7 +759,7 @@ ccl_device void osl_closure_microfacet_multi_ggx_glass_setup(
   /* Technically, the MultiGGX closure may also transmit. However,
    * since this is set statically and only used for caustic flags, this
    * is probably as good as it gets. */
-  if (osl_closure_skip(kg, path_visibility, LABEL_GLOSSY | LABEL_REFLECT)) {
+  if (osl_closure_skip(kg, sd, path_visibility, LABEL_GLOSSY | LABEL_REFLECT)) {
     return;
   }
 
@@ -726,10 +769,12 @@ ccl_device void osl_closure_microfacet_multi_ggx_glass_setup(
     return;
   }
 
+  const bool backfacing = (sd->runtime_flag & SR_BACKFACING);
+
   bsdf->N = maybe_ensure_valid_specular_reflection(sd, safe_normalize_fallback(closure->N, sd->N));
   bsdf->alpha_x = closure->alpha_x;
   bsdf->alpha_y = bsdf->alpha_x;
-  bsdf->ior = closure->ior;
+  bsdf->ior = backfacing ? 1.0f / closure->ior : closure->ior;
 
   bsdf->T = zero_float3();
 
@@ -748,7 +793,7 @@ ccl_device void osl_closure_microfacet_multi_ggx_aniso_setup(
 {
   osl_zero_albedo(layer_albedo);
 
-  if (osl_closure_skip(kg, path_visibility, LABEL_GLOSSY | LABEL_REFLECT)) {
+  if (osl_closure_skip(kg, sd, path_visibility, LABEL_GLOSSY | LABEL_REFLECT)) {
     return;
   }
 
@@ -784,7 +829,7 @@ ccl_device void osl_closure_ashikhmin_velvet_setup(
     const ccl_private AshikhminVelvetClosure *closure,
     float3 * /*layer_albedo*/)
 {
-  if (osl_closure_skip(kg, path_visibility, LABEL_DIFFUSE)) {
+  if (osl_closure_skip(kg, sd, path_visibility, LABEL_DIFFUSE)) {
     return;
   }
 
@@ -811,7 +856,7 @@ ccl_device void osl_closure_sheen_bsdf_setup(KernelGlobals kg,
 {
   osl_zero_albedo(layer_albedo);
 
-  if (osl_closure_skip(kg, path_visibility, LABEL_DIFFUSE)) {
+  if (osl_closure_skip(kg, sd, path_visibility, LABEL_DIFFUSE)) {
     return;
   }
 
@@ -833,7 +878,7 @@ ccl_device void osl_closure_diffuse_toon_setup(KernelGlobals kg,
                                                const ccl_private DiffuseToonClosure *closure,
                                                float3 * /*layer_albedo*/)
 {
-  if (osl_closure_skip(kg, path_visibility, LABEL_DIFFUSE)) {
+  if (osl_closure_skip(kg, sd, path_visibility, LABEL_DIFFUSE)) {
     return;
   }
 
@@ -858,7 +903,7 @@ ccl_device void osl_closure_glossy_toon_setup(KernelGlobals kg,
                                               const ccl_private GlossyToonClosure *closure,
                                               float3 * /*layer_albedo*/)
 {
-  if (osl_closure_skip(kg, path_visibility, LABEL_GLOSSY)) {
+  if (osl_closure_skip(kg, sd, path_visibility, LABEL_GLOSSY)) {
     return;
   }
 
@@ -1098,7 +1143,7 @@ ccl_device void osl_closure_hair_reflection_setup(KernelGlobals kg,
                                                   const ccl_private HairReflectionClosure *closure,
                                                   float3 * /*layer_albedo*/)
 {
-  if (osl_closure_skip(kg, path_visibility, LABEL_GLOSSY)) {
+  if (osl_closure_skip(kg, sd, path_visibility, LABEL_GLOSSY)) {
     return;
   }
 
@@ -1126,7 +1171,7 @@ ccl_device void osl_closure_hair_transmission_setup(
     const ccl_private HairTransmissionClosure *closure,
     float3 * /*layer_albedo*/)
 {
-  if (osl_closure_skip(kg, path_visibility, LABEL_GLOSSY)) {
+  if (osl_closure_skip(kg, sd, path_visibility, LABEL_GLOSSY)) {
     return;
   }
 
@@ -1154,7 +1199,7 @@ ccl_device void osl_closure_hair_chiang_setup(KernelGlobals kg,
                                               float3 * /*layer_albedo*/)
 {
 #ifdef __HAIR__
-  if (osl_closure_skip(kg, path_visibility, LABEL_GLOSSY)) {
+  if (osl_closure_skip(kg, sd, path_visibility, LABEL_GLOSSY)) {
     return;
   }
 
@@ -1185,7 +1230,7 @@ ccl_device void osl_closure_hair_huang_setup(KernelGlobals kg,
                                              float3 * /*layer_albedo*/)
 {
 #ifdef __HAIR__
-  if (osl_closure_skip(kg, path_visibility, LABEL_GLOSSY)) {
+  if (osl_closure_skip(kg, sd, path_visibility, LABEL_GLOSSY)) {
     return;
   }
 

@@ -212,6 +212,8 @@ def list_render_passes(scene, srl):
     if srl.use_pass_transmission_direct:   yield (n_("Transmission Direct"),   "RGB",  'COLOR')
     if srl.use_pass_transmission_indirect: yield (n_("Transmission Indirect"), "RGB",  'COLOR')
     if srl.use_pass_transmission_color:    yield (n_("Transmission Color"),    "RGB",  'COLOR')
+    if crl.use_pass_caustics and scene.cycles.use_photon_caustics:
+                                           yield (n_("Caustics"),              "RGB",  'COLOR')
     if crl.use_pass_volume_direct:         yield (n_("Volume Direct"),         "RGB",  'COLOR')
     if crl.use_pass_volume_indirect:       yield (n_("Volume Indirect"),       "RGB",  'COLOR')
     if crl.use_pass_volume_scatter:        yield (n_("Volume Scatter"),        "RGB",  'COLOR')
@@ -270,9 +272,13 @@ def list_render_passes(scene, srl):
         else:
             yield (aov.name, "RGBA", 'COLOR')
 
-    # Light groups.
+    # Light groups. Photon caustics also get a per-group pass when the
+    # Caustics AOV is on, so they can be graded in comp without a re-render.
+    split_caustics = crl.use_pass_caustics and scene.cycles.use_photon_caustics
     for lightgroup in srl.lightgroups:
         yield ("Combined_%s" % lightgroup.name, "RGB", 'COLOR')
+        if split_caustics:
+            yield ("Caustics_%s" % lightgroup.name, "RGB", 'COLOR')
 
     # Path guiding debug passes.
     if _cycles.with_debug and scene.cycles.use_guiding:

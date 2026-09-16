@@ -708,6 +708,54 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         default=True,
     )
 
+    use_photon_caustics: BoolProperty(
+        name="Photon Caustics",
+        description="Trace photons through specular surfaces and gather sharp caustics on diffuse "
+        "receivers (SPPM). Does not replace Shadow Caustics (MNEE)",
+        default=False,
+        update=update_render_passes,
+    )
+    photon_caustics_count: IntProperty(
+        name="Photons",
+        description="Millions of photons per progressive pass. Caustics refine with every "
+        "pass while rendering; higher counts refine faster",
+        min=1, max=1000,
+        default=100,
+    )
+    photon_caustics_detail: FloatProperty(
+        name="Detail",
+        description="Sharpness of the caustic pattern. Higher values shrink the gather radius",
+        min=0.1, max=100.0,
+        default=10.0,
+    )
+    photon_caustics_intensity: FloatProperty(
+        name="Intensity",
+        description="Artistic multiplier for caustic brightness. 1.0 is physically correct",
+        min=0.0, max=100.0, soft_min=0.0, soft_max=5.0,
+        default=1.0,
+    )
+    photon_caustics_casters: EnumProperty(
+        name="Casters",
+        description="Which materials cast photon caustics",
+        items=(
+            ('ALL', "All Materials", "Every caustic-capable material casts photons"),
+            ('SELECTED', "Selected Materials Only",
+             "Only materials with Cast Photon Caustics enabled"),
+        ),
+        default='ALL',
+    )
+    use_photon_volume_caustics: BoolProperty(
+        name="Volume Caustics",
+        description="Add single-scattering photon beams inside volumes (Tyndall). Requires Photon Caustics",
+        default=False,
+    )
+    photon_volume_beam_radius_scale: FloatProperty(
+        name="Volume Beam Radius",
+        description="Query radius multiplier for volume photon beams. Higher values merge sparse beams",
+        min=1.0, max=4.0, soft_min=1.0, soft_max=2.0,
+        default=1.0,
+    )
+
     blur_glossy: FloatProperty(
         name="Filter Glossy",
         description="Adaptively blur glossy shaders and image textures after blurry bounces, "
@@ -1238,6 +1286,11 @@ class CyclesMaterialSettings(bpy.types.PropertyGroup):
         description="Apply corrections to solve shadow terminator artifacts caused by bump mapping",
         default=True,
     )
+    photon_cast: BoolProperty(
+        name="Cast Photon Caustics",
+        description="When Casters is set to Selected Materials Only, this material emits photons",
+        default=False,
+    )
     volume_sampling: EnumProperty(
         name="Volume Sampling",
         description="Sampling method to use for volumes",
@@ -1300,6 +1353,11 @@ class CyclesLightSettings(bpy.types.PropertyGroup):
         "Lights, caster and receiver objects must have shadow caustics options set to enable this",
         default=False,
     )
+    photon_cast: BoolProperty(
+        name="Photon Caustics",
+        description="This light emits photons when Photon Caustics is enabled in Light Paths",
+        default=True,
+    )
 
     @classmethod
     def register(cls):
@@ -1322,6 +1380,11 @@ class CyclesWorldSettings(bpy.types.PropertyGroup):
         description="Generate approximate caustics in shadows of refractive surfaces. "
         "Lights, caster and receiver objects must have shadow caustics options set to enable this",
         default=False,
+    )
+    photon_cast: BoolProperty(
+        name="Photon Caustics",
+        description="World/background emits photons when Photon Caustics is enabled",
+        default=True,
     )
     sampling_method: EnumProperty(
         name="Sampling Method",
@@ -1588,6 +1651,12 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
     pass_render_time: BoolProperty(
         name="Render Time",
         description="Reports time per pixel in milliseconds. Supported only on CPU render devices",
+        default=False,
+        update=update_render_passes,
+    )
+    use_pass_caustics: BoolProperty(
+        name="Caustics",
+        description="Photon-mapped caustics (SPPM). Requires Photon Caustics in Light Paths",
         default=False,
         update=update_render_passes,
     )

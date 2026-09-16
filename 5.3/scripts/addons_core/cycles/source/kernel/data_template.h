@@ -153,7 +153,19 @@ KERNEL_STRUCT_MEMBER(film, int, use_approximate_shadow_catcher)
 KERNEL_STRUCT_MEMBER(film, int, pass_guiding_color)
 KERNEL_STRUCT_MEMBER(film, int, pass_guiding_probability)
 KERNEL_STRUCT_MEMBER(film, int, pass_guiding_avg_roughness)
-/* Padding. */
+#ifdef WITH_CYCLES_SPPM_CAUSTICS
+/* === BIKINI SPPM Begin === */
+KERNEL_STRUCT_MEMBER(film, int, pass_caustics)
+KERNEL_STRUCT_MEMBER(film, int, pass_photon_hitpoint)
+KERNEL_STRUCT_MEMBER(film, int, pass_photon_weight)
+KERNEL_STRUCT_MEMBER(film, int, pass_photon_tau)
+KERNEL_STRUCT_MEMBER(film, int, pass_photon_state)
+KERNEL_STRUCT_MEMBER(film, int, pass_caustics_lightgroup)
+KERNEL_STRUCT_MEMBER(film, int, pass_photon_tau_group)
+KERNEL_STRUCT_MEMBER(film, int, num_caustics_lightgroups)
+/* === BIKINI SPPM End === */
+#endif
+/* Padding. Keep this: precompiled CUDA cubins encode KernelData with this int. */
 KERNEL_STRUCT_MEMBER(film, int, pad1)
 KERNEL_STRUCT_END(KernelFilm)
 
@@ -237,6 +249,28 @@ KERNEL_STRUCT_MEMBER(integrator, int, use_volume_guiding)
 KERNEL_STRUCT_MEMBER(integrator, int, use_guiding_direct_light)
 KERNEL_STRUCT_MEMBER(integrator, int, use_guiding_mis_weights)
 KERNEL_STRUCT_MEMBER(integrator, int, pad1)
+#ifdef WITH_CYCLES_SPPM_CAUSTICS
+/* === BIKINI SPPM Begin === */
+KERNEL_STRUCT_MEMBER(integrator, int, use_photon_caustics)
+KERNEL_STRUCT_MEMBER(integrator, int, use_photon_volume_caustics)
+KERNEL_STRUCT_MEMBER(integrator, int, photon_casters_selected)
+KERNEL_STRUCT_MEMBER(integrator, int, photon_replace_pt)
+KERNEL_STRUCT_MEMBER(integrator, int, photon_partition_pt)
+KERNEL_STRUCT_MEMBER(integrator, int, photon_shader_count)
+KERNEL_STRUCT_MEMBER(integrator, int, photon_num)
+KERNEL_STRUCT_MEMBER(integrator, int, photon_table_size)
+KERNEL_STRUCT_MEMBER(integrator, int, photon_volume_beam_num)
+KERNEL_STRUCT_MEMBER(integrator, int, photon_volume_beam_node_num)
+KERNEL_STRUCT_MEMBER(integrator, float, photon_radius)
+KERNEL_STRUCT_MEMBER(integrator, float, photon_volume_beam_radius_scale)
+KERNEL_STRUCT_MEMBER(integrator, float, photon_inv_cell)
+KERNEL_STRUCT_MEMBER(integrator, int, photon_batch_steady)
+KERNEL_STRUCT_MEMBER(integrator, int, photon_writer_sample)
+KERNEL_STRUCT_MEMBER(integrator, int, photon_batch_weight)
+KERNEL_STRUCT_MEMBER(integrator, int, photon_heuristic_mask)
+KERNEL_STRUCT_MEMBER(integrator, float, photon_intensity)
+/* === BIKINI SPPM End === */
+#endif
 
 KERNEL_STRUCT_MEMBER(integrator, float2, pixel_jitter)
 KERNEL_STRUCT_END(KernelIntegrator)

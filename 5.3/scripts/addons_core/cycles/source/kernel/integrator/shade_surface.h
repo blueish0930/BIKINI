@@ -10,6 +10,12 @@
 #include "kernel/film/data_passes.h"
 #include "kernel/film/denoising_passes.h"
 #include "kernel/film/light_passes.h"
+#ifdef WITH_CYCLES_SPPM_CAUSTICS
+/* === BIKINI SPPM Begin === */
+#  include "kernel/film/photon_passes.h"
+#  include "kernel/svm/photon_caustics.h"
+/* === BIKINI SPPM End === */
+#endif
 
 #include "kernel/light/sample.h"
 
@@ -127,6 +133,14 @@ ccl_device_forceinline void integrate_surface_emission(KernelGlobals kg,
 {
   const PathRayVisibility path_visibility = INTEGRATOR_STATE(state, path, visibility);
   const uint32_t path_flag = INTEGRATOR_STATE(state, path, flag);
+
+#ifdef WITH_CYCLES_SPPM_CAUSTICS
+  /* === BIKINI SPPM Begin === */
+  if (photon_caustic_path_owned(kg, path_flag)) {
+    return;
+  }
+  /* === BIKINI SPPM End === */
+#endif
 
 #ifdef __LIGHT_LINKING__
   if (!(path_visibility & PATH_RAY_VISIBILITY_CAMERA) &&
@@ -313,7 +327,11 @@ integrate_direct_light_shadow_init_common(KernelGlobals kg,
 /* Path tracing: sample point on light and evaluate light shader, then
  * queue shadow ray to be traced. */
 template<uint64_t node_feature_mask>
-#if defined(__KERNEL_GPU__)
+#if defined(__KERNEL_HIP__)
+/* Inlining the function makes gfx1102 crash rendering principled_bsdf_bevel_emission_137420.blend
+ * using SDK 7.2.1. */
+ccl_device_noinline
+#elif defined(__KERNEL_GPU__)
 ccl_device_forceinline
 #else
 /* MSVC has very long compilation time (x20) if we force inline this function */
@@ -329,6 +347,18 @@ ccl_device
   if (!(kernel_data.integrator.use_direct_light && (sd->runtime_flag & SR_BSDF_HAS_EVAL))) {
     return SHADER_EVAL_EMPTY;
   }
+
+#ifdef WITH_CYCLES_SPPM_CAUSTICS
+  /* === BIKINI SPPM Begin === */
+  if ((kernel_data.integrator.photon_partition_pt & 2) != 0 &&
+      kernel_data.integrator.photon_num > 0 &&
+      (INTEGRATOR_STATE(state, path, flag) & PATH_RAY_DIFFUSE_ANCESTOR) &&
+      INTEGRATOR_STATE(state, path, diffuse_bounce) == 1 && photon_caustic_caster(kg, sd))
+  {
+    return SHADER_EVAL_EMPTY;
+  }
+  /* === BIKINI SPPM End === */
+#endif
 
   LightSample ls ccl_optional_struct_init;
   int mnee_vertex_count = 0;  // NOLINT
@@ -625,6 +655,28 @@ ccl_device_forceinline int integrate_surface_bsdf_bssrdf_bounce(
 
   path_state_next(kg, state, label, sd->runtime_flag);
 
+#ifdef WITH_CYCLES_SPPM_CAUSTICS
+  /* === BIKINI SPPM Begin === */
+  if (kernel_data.integrator.photon_partition_pt) {
+    uint32_t photon_flag = INTEGRATOR_STATE(state, path, flag);
+    if (label & LABEL_DIFFUSE) {
+      photon_flag &= ~PATH_RAY_PHOTON_CAUSTIC_CHAIN;
+    }
+    else if (label & (LABEL_GLOSSY | LABEL_SINGULAR)) {
+      if ((photon_flag & PATH_RAY_DIFFUSE_ANCESTOR) &&
+          INTEGRATOR_STATE(state, path, diffuse_bounce) == 1 && photon_caustic_caster(kg, sd))
+      {
+        photon_flag |= PATH_RAY_PHOTON_CAUSTIC_CHAIN;
+      }
+      else {
+        photon_flag &= ~PATH_RAY_PHOTON_CAUSTIC_CHAIN;
+      }
+    }
+    INTEGRATOR_STATE_WRITE(state, path, flag) = photon_flag;
+  }
+  /* === BIKINI SPPM End === */
+#endif
+
   guiding_record_surface_bounce(kg,
                                 state,
                                 bsdf_weight,
@@ -858,6 +910,22 @@ ccl_device int integrate_surface(KernelGlobals kg,
       surface_shader_prepare_guiding(kg, state, &sd, &rng_state);
       guiding_write_debug_passes(kg, state, &sd, render_buffer);
     }
+#endif
+#ifdef WITH_CYCLES_SPPM_CAUSTICS
+    /* === BIKINI SPPM Begin === */
+    if (kernel_data.integrator.use_photon_caustics &&
+        (INTEGRATOR_STATE(state, path, flag) & PATH_RAY_PHOTON_HITPOINT_WRITER) &&
+        (!(INTEGRATOR_STATE(state, path, flag) & PATH_RAY_DIFFUSE_ANCESTOR) ||
+         (path_flag & PATH_RAY_SUBSURFACE)))
+    {
+      const Spectrum diffuse_albedo = surface_shader_diffuse(kg, &sd);
+      if (!is_zero(diffuse_albedo)) {
+        const Spectrum weight = INTEGRATOR_STATE(state, path, throughput) * diffuse_albedo *
+                                M_1_PI_F;
+        film_write_photon_hitpoint(kg, state, sd.P, sd.Ng, weight, render_buffer);
+      }
+    }
+    /* === BIKINI SPPM End === */
 #endif
     /* Direct light. */
     PROFILING_EVENT(PROFILING_SHADE_SURFACE_DIRECT_LIGHT);

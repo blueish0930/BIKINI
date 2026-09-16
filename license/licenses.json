@@ -13,7 +13,7 @@
   },
   "Public Domain": {
     "name": "Public Domain",
-    "url": "https://spdx.org/licenses/CC0-1.0.html",
+    "url": "",
     "copyright_exemption": "Public domain projects have no specific license or requirements in regards to copyright enforcement."
   },
   "SPDX:0BSD": {
@@ -108,10 +108,5 @@
   "TOST-1.0": {
     "name": "Tomorrow Open Source Technology License 1.0",
     "url": "https://disneystreaming.github.io/TOST-1.0.txt"
-  },
-  "NVIDIA-RTX": {
-    "name": "NVIDIA RTX SDKs License (DLSS / NGX)",
-    "url": "https://github.com/NVIDIA/DLSS/blob/main/LICENSE.txt",
-    "copyright_exemption": "Proprietary. Redistributable object code only under NVIDIA terms; not open source and must not be subjected to GPL copyleft."
   }
 }
