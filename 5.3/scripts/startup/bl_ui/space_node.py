@@ -236,6 +236,31 @@ class NODE_HT_header(Header):
             layout.separator_spacer()
 
             layout.template_ID(snode, "selected_node_group", new="node.new_node_tree")
+        elif snode.tree_type == 'LuxCoreMaterialNodeTree':
+            # Same header as the shader editor: slot popover + one material ID.
+            # A second template_ID for the node tree looked like another material
+            # slot and crashed (snode.id was the tree, not the material).
+            NODE_MT_editor_menus.draw_collapsible(context, layout)
+
+            ob = context.object
+            layout.separator_spacer()
+            if ob:
+                types_that_support_material = {
+                    'MESH', 'CURVE', 'SURFACE', 'FONT', 'META', 'GPENCIL', 'VOLUME',
+                    'CURVES', 'POINTCLOUD',
+                }
+                has_material_slots = not snode.pin and ob.type in types_that_support_material
+                if ob.type != 'LIGHT':
+                    row = layout.row()
+                    row.enabled = has_material_slots
+                    row.ui_units_x = 4
+                    row.popover(panel="NODE_PT_material_slots")
+                row = layout.row()
+                row.enabled = has_material_slots
+                row.template_ID(ob, "active_material", new="material.new")
+                ma = ob.active_material
+                if ma and ma.luxcore_node_tree is None:
+                    row.operator("luxcore.new_material_node_tree", text="New", icon='ADD')
         else:
             # Custom node tree is edited as independent ID block
             NODE_MT_editor_menus.draw_collapsible(context, layout)
@@ -351,7 +376,8 @@ class NODE_MT_add(node_add_menu.AddNodeMenu):
         snode = context.space_data
         # Prefer the tree currently being edited (path depth), so Import Points nested
         # GeometryNodeTree still shows GN menus while the editor type stays Image Process.
-        tree_type = snode.edit_tree.bl_idname if snode.edit_tree else snode.tree_type
+        edit_tree = getattr(snode, "edit_tree", None)
+        tree_type = edit_tree.bl_idname if edit_tree else snode.tree_type
         if tree_type == 'GeometryNodeTree':
             layout.menu_contents("NODE_MT_geometry_node_add_all")
         elif tree_type == 'CompositorNodeTree':
@@ -366,6 +392,8 @@ class NODE_MT_add(node_add_menu.AddNodeMenu):
         # --- IMAGE_NODES_MVP end ---
         elif tree_type == 'ObjectNodeTree':
             layout.menu_contents("NODE_MT_object_node_add_all")
+        elif tree_type == 'LuxCoreMaterialNodeTree':
+            layout.menu_contents("NODE_MT_luxcore_node_add_all")
         elif nodeitems_utils.has_node_categories(context):
             # Actual node sub-menus are defined by draw functions from node categories.
             nodeitems_utils.draw_node_categories_menu(self, context)
@@ -388,7 +416,8 @@ class NODE_MT_swap(node_add_menu.SwapNodeMenu):
         layout.operator_context = 'INVOKE_REGION_WIN'
 
         snode = context.space_data
-        tree_type = snode.edit_tree.bl_idname if snode.edit_tree else snode.tree_type
+        edit_tree = getattr(snode, "edit_tree", None)
+        tree_type = edit_tree.bl_idname if edit_tree else snode.tree_type
         if tree_type == 'GeometryNodeTree':
             layout.menu_contents("NODE_MT_geometry_node_swap_all")
         elif tree_type == 'CompositorNodeTree':
@@ -403,6 +432,8 @@ class NODE_MT_swap(node_add_menu.SwapNodeMenu):
         # --- IMAGE_NODES_MVP end ---
         elif tree_type == 'ObjectNodeTree':
             layout.menu_contents("NODE_MT_object_node_swap_all")
+        elif tree_type == 'LuxCoreMaterialNodeTree':
+            layout.menu_contents("NODE_MT_luxcore_node_swap_all")
 
 
 class NODE_MT_view(Menu):

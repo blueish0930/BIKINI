@@ -6716,7 +6716,7 @@ class VIEW3D_PT_shading_lighting(Panel):
             return True
         if shading.type == 'RENDERED':
             engine = context.scene.render.engine
-            if engine == 'BLENDER_EEVEE':
+            if engine in {'BLENDER_EEVEE', 'LUXCORE'}:
                 return True
         return False
 

@@ -51,6 +51,15 @@ def eevee_shader_nodes_poll(context):
     return context.engine == 'BLENDER_EEVEE'
 
 
+def luxcore_shader_nodes_poll(context):
+    return context.engine == 'LUXCORE'
+
+
+def object_luxcore_shader_nodes_poll(context):
+    return (object_material_shader_nodes_poll(context) and
+            luxcore_shader_nodes_poll(context))
+
+
 def object_not_eevee_shader_nodes_poll(context):
     return (object_shader_nodes_poll(context) and
             not eevee_shader_nodes_poll(context))
@@ -356,6 +365,45 @@ class NODE_MT_shader_node_shader_base(node_add_menu.NodeMenu):
         )
 
         self.draw_assets_for_catalog(layout, self.bl_label)
+
+
+class NODE_MT_shader_node_luxcore_base(node_add_menu.NodeMenu):
+    bl_label = "LuxCore"
+    menu_path = "Shader/LuxCore"
+
+    @classmethod
+    def poll(cls, context):
+        return super().poll(context) and luxcore_shader_nodes_poll(context)
+
+    def draw(self, context):
+        layout = self.layout
+        poll = object_luxcore_shader_nodes_poll(context)
+        self.node_operator(layout, "ShaderNodeLuxDisney", poll=poll)
+        self.node_operator(layout, "ShaderNodeLuxMatte", poll=poll)
+        self.node_operator(layout, "ShaderNodeLuxGlossy", poll=poll)
+        self.node_operator(layout, "ShaderNodeLuxGlossyCoating", poll=poll)
+        self.node_operator(layout, "ShaderNodeLuxMetal", poll=poll)
+        self.node_operator(layout, "ShaderNodeLuxMirror", poll=poll)
+        self.node_operator(layout, "ShaderNodeLuxVelvet", poll=poll)
+        self.node_operator(layout, "ShaderNodeLuxCarpaint", poll=poll)
+        self.node_operator(layout, "ShaderNodeLuxCloth", poll=poll)
+        layout.separator()
+        self.node_operator(layout, "ShaderNodeLuxGlass", poll=poll)
+        self.node_operator(layout, "ShaderNodeLuxRoughGlass", poll=poll)
+        self.node_operator(layout, "ShaderNodeLuxArchGlass", poll=poll)
+        self.node_operator(layout, "ShaderNodeLuxGlossyTranslucent", poll=poll)
+        self.node_operator(layout, "ShaderNodeLuxMatteTranslucent", poll=poll)
+        self.node_operator(layout, "ShaderNodeLuxNull", poll=poll)
+        layout.separator()
+        self.node_operator(layout, "ShaderNodeLuxMix", poll=poll)
+        self.node_operator(layout, "ShaderNodeLuxTwoSided", poll=poll)
+        self.node_operator(layout, "ShaderNodeLuxFrontBackOpacity", poll=poll)
+        self.node_operator(layout, "ShaderNodeLuxEmission", poll=poll)
+        layout.separator()
+        self.node_operator(layout, "ShaderNodeLuxVolumeClear", poll=poll)
+        self.node_operator(layout, "ShaderNodeLuxVolumeHomogeneous", poll=poll)
+        self.node_operator(layout, "ShaderNodeLuxVolumeHeterogeneous", poll=poll)
+        self.draw_assets_for_catalog(layout, self.menu_path)
 
 
 class NODE_MT_shader_node_color_base(node_add_menu.NodeMenu):

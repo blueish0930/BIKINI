@@ -56,6 +56,7 @@ class RENDER_PT_format(RenderOutputButtonsPanel, Panel):
         'BLENDER_RENDER',
         'BLENDER_EEVEE',
         'BLENDER_WORKBENCH',
+        'LUXCORE',
     }
 
     _frame_rate_args_prev = None
@@ -138,6 +139,7 @@ class RENDER_PT_frame_range(RenderOutputButtonsPanel, Panel):
         'BLENDER_RENDER',
         'BLENDER_EEVEE',
         'BLENDER_WORKBENCH',
+        'LUXCORE',
     }
 
     def draw(self, context):
@@ -161,6 +163,7 @@ class RENDER_PT_time_stretching(RenderOutputButtonsPanel, Panel):
         'BLENDER_RENDER',
         'BLENDER_EEVEE',
         'BLENDER_WORKBENCH',
+        'LUXCORE',
     }
 
     def draw(self, context):
@@ -182,6 +185,7 @@ class RENDER_PT_post_processing(RenderOutputButtonsPanel, Panel):
         'BLENDER_RENDER',
         'BLENDER_EEVEE',
         'BLENDER_WORKBENCH',
+        'LUXCORE',
     }
 
     def draw(self, context):
@@ -204,6 +208,7 @@ class RENDER_PT_stamp(RenderOutputButtonsPanel, Panel):
         'BLENDER_RENDER',
         'BLENDER_EEVEE',
         'BLENDER_WORKBENCH',
+        'LUXCORE',
     }
 
     def draw(self, context):
@@ -242,6 +247,7 @@ class RENDER_PT_stamp_note(RenderOutputButtonsPanel, Panel):
         'BLENDER_RENDER',
         'BLENDER_EEVEE',
         'BLENDER_WORKBENCH',
+        'LUXCORE',
     }
 
     def draw_header(self, context):
@@ -266,6 +272,7 @@ class RENDER_PT_stamp_burn(RenderOutputButtonsPanel, Panel):
         'BLENDER_RENDER',
         'BLENDER_EEVEE',
         'BLENDER_WORKBENCH',
+        'LUXCORE',
     }
 
     def draw_header(self, context):
@@ -294,6 +301,7 @@ class RENDER_PT_output(RenderOutputButtonsPanel, Panel):
         'BLENDER_RENDER',
         'BLENDER_EEVEE',
         'BLENDER_WORKBENCH',
+        'LUXCORE',
     }
 
     def draw_header(self, context):
@@ -332,6 +340,7 @@ class RENDER_PT_output_views(RenderOutputButtonsPanel, Panel):
         'BLENDER_RENDER',
         'BLENDER_EEVEE',
         'BLENDER_WORKBENCH',
+        'LUXCORE',
     }
 
     @classmethod
@@ -356,6 +365,7 @@ class RENDER_PT_output_color_management(RenderOutputButtonsPanel, Panel):
         'BLENDER_RENDER',
         'BLENDER_EEVEE',
         'BLENDER_WORKBENCH',
+        'LUXCORE',
     }
 
     def draw(self, context):
@@ -402,6 +412,7 @@ class RENDER_PT_output_pixel_density(RenderOutputButtonsPanel, Panel):
         'BLENDER_RENDER',
         'BLENDER_EEVEE',
         'BLENDER_WORKBENCH',
+        'LUXCORE',
     }
 
     _pixel_density_args_prev = None
@@ -478,6 +489,7 @@ class RENDER_PT_encoding(RenderOutputButtonsPanel, Panel):
         'BLENDER_RENDER',
         'BLENDER_EEVEE',
         'BLENDER_WORKBENCH',
+        'LUXCORE',
     }
 
     def draw_header_preset(self, _context):
@@ -507,6 +519,7 @@ class RENDER_PT_encoding_video(RenderOutputButtonsPanel, Panel):
         'BLENDER_RENDER',
         'BLENDER_EEVEE',
         'BLENDER_WORKBENCH',
+        'LUXCORE',
     }
 
     @classmethod
@@ -637,6 +650,7 @@ class RENDER_PT_encoding_audio(RenderOutputButtonsPanel, Panel):
         'BLENDER_RENDER',
         'BLENDER_EEVEE',
         'BLENDER_WORKBENCH',
+        'LUXCORE',
     }
 
     @classmethod
@@ -679,6 +693,7 @@ class RENDER_PT_stereoscopy(RenderOutputButtonsPanel, Panel):
         'BLENDER_RENDER',
         'BLENDER_EEVEE',
         'BLENDER_WORKBENCH',
+        'LUXCORE',
     }
     bl_options = {'DEFAULT_CLOSED'}
 

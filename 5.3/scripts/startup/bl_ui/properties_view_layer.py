@@ -55,6 +55,7 @@ class VIEWLAYER_PT_context_layer(ViewLayerButtonsPanel, Panel):
         'BLENDER_RENDER',
         'BLENDER_EEVEE',
         'BLENDER_WORKBENCH',
+        'LUXCORE',
     }
 
     @classmethod
@@ -81,6 +82,7 @@ class VIEWLAYER_PT_layer(ViewLayerButtonsPanel, Panel):
         'BLENDER_RENDER',
         'BLENDER_EEVEE',
         'BLENDER_WORKBENCH',
+        'LUXCORE',
     }
 
     def draw(self, context):
@@ -102,6 +104,7 @@ class VIEWLAYER_PT_layer_passes(ViewLayerButtonsPanel, Panel):
     COMPAT_ENGINES = {
         'BLENDER_EEVEE',
         'BLENDER_WORKBENCH',
+        'LUXCORE',
     }
 
     def draw(self, context):

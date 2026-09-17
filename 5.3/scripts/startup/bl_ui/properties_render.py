@@ -56,6 +56,7 @@ class RENDER_PT_color_management(RenderButtonsPanel, Panel):
         'BLENDER_RENDER',
         'BLENDER_EEVEE',
         'BLENDER_WORKBENCH',
+        'LUXCORE',
     }
 
     def draw(self, context):
@@ -1182,6 +1183,155 @@ class RENDER_PT_hydra_debug(RenderButtonsPanel, Panel):
         layout.prop(hydra, "export_method")
 
 
+class RENDER_PT_luxcore_engine(RenderButtonsPanel, Panel):
+    bl_label = "LuxCore"
+    bl_order = 1
+    COMPAT_ENGINES = {'LUXCORE'}
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+        lux = context.scene.luxcore
+        col = layout.column()
+        col.prop(lux, "engine_type")
+        if lux.engine_type in {'PATHOCL', 'TILEPATHOCL'}:
+            col.prop(lux, "use_cpu_opencl")
+        col.prop(lux, "threads")
+        col.prop(lux, "seed")
+        col.prop(lux, "tonemap_scale")
+
+
+class RENDER_PT_luxcore_sampling(RenderButtonsPanel, Panel):
+    bl_label = "Sampling"
+    bl_options = {'DEFAULT_CLOSED'}
+    COMPAT_ENGINES = {'LUXCORE'}
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+        lux = context.scene.luxcore
+        col = layout.column()
+        col.prop(lux, "sampler_type")
+        if lux.sampler_type in {'SOBOL', 'RANDOM'}:
+            col.prop(lux, "sobol_adaptive")
+        if lux.sampler_type == 'METROPOLIS':
+            col.prop(lux, "metropolis_largestep")
+            if lux.use_photongi:
+                col.label(text="Metropolis is forced to Sobol while PhotonGI is on")
+        col.separator()
+        col.prop(lux, "halt_samples")
+        col.prop(lux, "halt_preview_samples")
+        col.prop(lux, "halt_time")
+        if lux.engine_type in {'TILEPATHCPU', 'TILEPATHOCL'}:
+            col.separator()
+            col.prop(lux, "tile_size")
+            col.prop(lux, "tile_aa")
+
+
+class RENDER_PT_luxcore_light_paths(RenderButtonsPanel, Panel):
+    bl_label = "Light Paths"
+    bl_options = {'DEFAULT_CLOSED'}
+    COMPAT_ENGINES = {'LUXCORE'}
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+        lux = context.scene.luxcore
+        col = layout.column()
+        if lux.engine_type == 'BIDIRCPU':
+            col.prop(lux, "bidir_eye_depth")
+            col.prop(lux, "bidir_light_depth")
+        else:
+            col.prop(lux, "path_depth")
+            col.prop(lux, "path_depth_diffuse")
+            col.prop(lux, "path_depth_glossy")
+            col.prop(lux, "path_depth_specular")
+        col.separator()
+        col.prop(lux, "light_strategy")
+        if lux.engine_type != 'BIDIRCPU':
+            col.prop(lux, "use_hybrid_backforward")
+            sub = col.column()
+            sub.active = lux.use_hybrid_backforward
+            sub.prop(lux, "hybrid_partition")
+            sub.prop(lux, "hybrid_glossiness")
+            if lux.use_hybrid_backforward and lux.use_photongi and lux.use_photongi_caustic:
+                col.label(text="PhotonGI caustics override light tracing on final render")
+        col.prop(lux, "use_viewport_light_tracing")
+
+
+class RENDER_PT_luxcore_clamping(RenderButtonsPanel, Panel):
+    bl_label = "Clamping"
+    bl_parent_id = "RENDER_PT_luxcore_light_paths"
+    bl_options = {'DEFAULT_CLOSED'}
+    COMPAT_ENGINES = {'LUXCORE'}
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+        lux = context.scene.luxcore
+        col = layout.column()
+        col.prop(lux, "use_clamping")
+        sub = col.column()
+        sub.active = lux.use_clamping
+        sub.prop(lux, "clamp_direct")
+        sub.prop(lux, "clamp_indirect")
+
+
+class RENDER_PT_luxcore_photongi(RenderButtonsPanel, Panel):
+    bl_label = "PhotonGI Cache"
+    bl_options = {'DEFAULT_CLOSED'}
+    COMPAT_ENGINES = {'LUXCORE'}
+
+    @classmethod
+    def poll(cls, context):
+        return (context.engine in cls.COMPAT_ENGINES and
+                context.scene.luxcore.engine_type != 'BIDIRCPU')
+
+    def draw_header(self, context):
+        self.layout.prop(context.scene.luxcore, "use_photongi", text="")
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+        lux = context.scene.luxcore
+        layout.active = lux.use_photongi
+        col = layout.column()
+        col.prop(lux, "use_photongi_caustic")
+        col.prop(lux, "use_photongi_indirect")
+        col.prop(lux, "photongi_photon_millions")
+        col.prop(lux, "photongi_photon_depth")
+        col.prop(lux, "photongi_glossiness")
+        sub = col.column()
+        sub.active = lux.use_photongi_caustic
+        sub.prop(lux, "photongi_caustic_millions")
+        sub.prop(lux, "photongi_caustic_radius")
+        sub.prop(lux, "photongi_caustic_updatespp")
+
+
+class RENDER_PT_luxcore_filter(RenderButtonsPanel, Panel):
+    bl_label = "Pixel Filter"
+    bl_options = {'DEFAULT_CLOSED'}
+    COMPAT_ENGINES = {'LUXCORE'}
+
+    def draw_header(self, context):
+        self.layout.prop(context.scene.luxcore, "use_filter", text="")
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+        lux = context.scene.luxcore
+        layout.active = lux.use_filter
+        col = layout.column()
+        col.prop(lux, "filter_type")
+        col.prop(lux, "filter_width")
+
+
 classes = (
     RENDER_PT_context,
     RENDER_PT_eevee_sampling,
@@ -1226,6 +1376,12 @@ classes = (
     RENDER_PT_opengl_options,
     RENDER_PT_opengl_film,
     RENDER_PT_hydra_debug,
+    RENDER_PT_luxcore_engine,
+    RENDER_PT_luxcore_sampling,
+    RENDER_PT_luxcore_light_paths,
+    RENDER_PT_luxcore_clamping,
+    RENDER_PT_luxcore_photongi,
+    RENDER_PT_luxcore_filter,
     RENDER_PT_color_management,
     RENDER_PT_color_management_curves,
     RENDER_PT_color_management_white_balance_presets,

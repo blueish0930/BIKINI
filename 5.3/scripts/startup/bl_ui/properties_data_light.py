@@ -27,6 +27,7 @@ class DATA_PT_context_light(DataButtonsPanel, Panel):
         'BLENDER_RENDER',
         'BLENDER_EEVEE',
         'BLENDER_WORKBENCH',
+        'LUXCORE',
     }
 
     def draw(self, context):
@@ -48,6 +49,7 @@ class DATA_PT_preview(DataButtonsPanel, Panel):
     COMPAT_ENGINES = {
         'BLENDER_RENDER',
         'BLENDER_EEVEE',
+        'LUXCORE',
     }
 
     def draw(self, context):
@@ -74,7 +76,7 @@ class DATA_PT_light(DataButtonsPanel, Panel):
 
 class DATA_PT_EEVEE_light(DataButtonsPanel, Panel):
     bl_label = "Light"
-    COMPAT_ENGINES = {'BLENDER_EEVEE'}
+    COMPAT_ENGINES = {'BLENDER_EEVEE', 'LUXCORE'}
 
     def draw(self, context):
         layout = self.layout
@@ -143,7 +145,7 @@ class DATA_PT_EEVEE_light_distance(DataButtonsPanel, Panel):
     bl_label = "Custom Distance"
     bl_parent_id = "DATA_PT_EEVEE_light"
     bl_options = {'DEFAULT_CLOSED'}
-    COMPAT_ENGINES = {'BLENDER_EEVEE'}
+    COMPAT_ENGINES = {'BLENDER_EEVEE', 'LUXCORE'}
 
     @classmethod
     def poll(cls, context):
@@ -171,7 +173,7 @@ class DATA_PT_EEVEE_light_shadow(DataButtonsPanel, Panel):
     bl_label = "Shadow"
     bl_parent_id = "DATA_PT_EEVEE_light"
     bl_options = {'DEFAULT_CLOSED'}
-    COMPAT_ENGINES = {'BLENDER_EEVEE'}
+    COMPAT_ENGINES = {'BLENDER_EEVEE', 'LUXCORE'}
 
     def draw_header(self, context):
         light = context.light
@@ -205,7 +207,7 @@ class DATA_PT_EEVEE_light_influence(DataButtonsPanel, Panel):
     bl_label = "Influence"
     bl_parent_id = "DATA_PT_EEVEE_light"
     bl_options = {'DEFAULT_CLOSED'}
-    COMPAT_ENGINES = {'BLENDER_EEVEE'}
+    COMPAT_ENGINES = {'BLENDER_EEVEE', 'LUXCORE'}
 
     def draw(self, context):
         layout = self.layout
@@ -239,6 +241,7 @@ class DATA_PT_spot(DataButtonsPanel, Panel):
         'BLENDER_RENDER',
         'BLENDER_EEVEE',
         'BLENDER_WORKBENCH',
+        'LUXCORE',
     }
 
     @classmethod
@@ -266,6 +269,7 @@ class DATA_PT_light_animation(DataButtonsPanel, PropertiesAnimationMixin, Proper
         'BLENDER_RENDER',
         'BLENDER_EEVEE',
         'BLENDER_WORKBENCH',
+        'LUXCORE',
     }
 
     def draw(self, context):
@@ -291,6 +295,7 @@ class DATA_PT_custom_props_light(DataButtonsPanel, PropertyPanel, Panel):
         'BLENDER_RENDER',
         'BLENDER_EEVEE',
         'BLENDER_WORKBENCH',
+        'LUXCORE',
     }
     _context_path = "object.data"
     _property_type = bpy.types.Light

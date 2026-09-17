@@ -53,10 +53,24 @@ class MaterialButtonsPanel:
         return mat and (context.engine in cls.COMPAT_ENGINES) and not mat.grease_pencil
 
 
+class LUXCORE_MATERIAL_PT_nodes(MaterialButtonsPanel, Panel):
+    bl_label = "LuxCore Material Nodes"
+    COMPAT_ENGINES = {'LUXCORE'}
+
+    def draw(self, context):
+        layout = self.layout
+        mat = context.material
+        if mat.luxcore_node_tree:
+            layout.label(text=mat.luxcore_node_tree.name, icon='NODETREE')
+        else:
+            layout.operator("luxcore.new_material_node_tree", icon='ADD')
+        layout.label(text="Edit in the LuxCore Node Editor")
+
+
 class MATERIAL_PT_preview(MaterialButtonsPanel, Panel):
     bl_label = "Preview"
     bl_options = {'DEFAULT_CLOSED'}
-    COMPAT_ENGINES = {'BLENDER_EEVEE'}
+    COMPAT_ENGINES = {'BLENDER_EEVEE', 'LUXCORE'}
 
     def draw(self, context):
         self.layout.template_preview(context.material)
@@ -67,6 +81,7 @@ class MATERIAL_PT_custom_props(MaterialButtonsPanel, PropertyPanel, Panel):
         'BLENDER_RENDER',
         'BLENDER_EEVEE',
         'BLENDER_WORKBENCH',
+        'LUXCORE',
     }
     _context_path = "material"
     _property_type = bpy.types.Material
@@ -79,6 +94,7 @@ class EEVEE_MATERIAL_PT_context_material(MaterialButtonsPanel, Panel):
     COMPAT_ENGINES = {
         'BLENDER_EEVEE',
         'BLENDER_WORKBENCH',
+        'LUXCORE',
     }
 
     @classmethod
@@ -149,6 +165,8 @@ class EEVEE_MATERIAL_PT_context_material(MaterialButtonsPanel, Panel):
 
 def panel_node_draw(layout, ntree, _output_type, input_name):
     node = ntree.get_output_node('EEVEE')
+    if node is None and ntree is not None:
+        node = ntree.get_output_node('ALL')
 
     if node:
         input = find_node_input(node, input_name)
@@ -163,7 +181,7 @@ def panel_node_draw(layout, ntree, _output_type, input_name):
 class EEVEE_MATERIAL_PT_surface(MaterialButtonsPanel, Panel):
     bl_label = "Surface"
     bl_context = "material"
-    COMPAT_ENGINES = {'BLENDER_EEVEE'}
+    COMPAT_ENGINES = {'BLENDER_EEVEE', 'LUXCORE'}
 
     def draw(self, context):
         layout = self.layout
@@ -417,6 +435,7 @@ class MATERIAL_PT_animation(MaterialButtonsPanel, Panel, PropertiesAnimationMixi
         'BLENDER_RENDER',
         'BLENDER_EEVEE',
         'BLENDER_WORKBENCH',
+        'LUXCORE',
     }
 
     def draw(self, context):
@@ -440,6 +459,7 @@ class MATERIAL_PT_animation(MaterialButtonsPanel, Panel, PropertiesAnimationMixi
 classes = (
     MATERIAL_MT_context_menu,
     MATERIAL_UL_matslots,
+    LUXCORE_MATERIAL_PT_nodes,
     MATERIAL_PT_preview,
     EEVEE_MATERIAL_PT_context_material,
     EEVEE_MATERIAL_PT_surface,

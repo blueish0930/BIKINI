@@ -17,6 +17,7 @@ _modules = [
     "node_add_menu_compositor",
     "node_add_menu_geometry",
     "node_add_menu_shader",
+    "node_add_menu_luxcore",
     "node_add_menu_texture",
     "node_add_menu_image",  # IMAGE_NODES_MVP
     "node_add_menu_object",
