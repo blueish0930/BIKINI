@@ -7,6 +7,7 @@ from bpy.props import StringProperty, EnumProperty
 from bpy_extras.io_utils import ExportHelper
 from bpy.app.translations import pgettext_rpt as rpt_
 
+from ..utils.constants import NW_COMPOSITOR_LIKE_TREE_TYPES
 from ..utils.nodes import (
     nw_check,
     nw_check_space_type,
@@ -48,7 +49,7 @@ class NODE_OT_save_viewer_image(Operator, ExportHelper):
     @classmethod
     def poll(cls, context):
         return (nw_check(cls, context)
-                and nw_check_space_type(cls, context, {'CompositorNodeTree'})
+                and nw_check_space_type(cls, context, NW_COMPOSITOR_LIKE_TREE_TYPES)
                 and nw_check_viewer_node(cls))
 
     def execute(self, context):

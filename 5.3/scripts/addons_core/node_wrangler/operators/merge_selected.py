@@ -12,6 +12,7 @@ from ..utils.constants import (
     blend_types,
     geo_combine_operations,
     operations,
+    NW_TREE_TYPES,
 )
 from ..utils.nodes import (
     NWBase,
@@ -127,8 +128,7 @@ class NODE_OT_merge_selected(Operator, NWBase):
     @classmethod
     def poll(cls, context):
         return (nw_check(cls, context)
-                and nw_check_space_type(cls, context, {'ShaderNodeTree', 'CompositorNodeTree',
-                                        'TextureNodeTree', 'GeometryNodeTree'})
+                and nw_check_space_type(cls, context, NW_TREE_TYPES)
                 and nw_check_selected(cls, context))
 
     def execute(self, context):
@@ -145,14 +145,17 @@ class NODE_OT_merge_selected(Operator, NWBase):
             do_hide = True
 
         tree_type = context.space_data.node_tree.type
+        compositor_like = tree_type in {'COMPOSITING', 'IMAGE'}
         if tree_type == 'GEOMETRY':
             node_type = 'GeometryNode'
-        if tree_type == 'COMPOSITING':
+        elif compositor_like:
             node_type = 'CompositorNode'
         elif tree_type == 'SHADER':
             node_type = 'ShaderNode'
         elif tree_type == 'TEXTURE':
             node_type = 'TextureNode'
+        else:
+            node_type = 'ShaderNode'
 
         tree = context.space_data.edit_tree
         nodes = tree.nodes
@@ -162,7 +165,7 @@ class NODE_OT_merge_selected(Operator, NWBase):
         # Prevent trying to add Depth Combine in not 'COMPOSITING' node tree.
         # 'DEPTH_COMBINE' works only if mode == 'MIX'
         # Setting mode to None prevents trying to add 'DEPTH_COMBINE' node.
-        if (merge_type == 'DEPTH_COMBINE' or merge_type == 'ALPHAOVER') and tree_type != 'COMPOSITING':
+        if (merge_type == 'DEPTH_COMBINE' or merge_type == 'ALPHAOVER') and not compositor_like:
             merge_type = 'MIX'
             mode = 'MIX'
         if (merge_type != 'MATH' and merge_type != 'GEOMETRY') and tree_type == 'GEOMETRY':

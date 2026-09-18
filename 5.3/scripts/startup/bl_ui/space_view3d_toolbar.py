@@ -437,11 +437,21 @@ class SelectPaintSlotHelper:
         match getattr(mode_settings, self.canvas_source_attr_name):
             case 'MATERIAL':
                 if len(ob.material_slots) > 1:
-                    layout.template_list(
-                        "MATERIAL_UL_matslots", "layers",
-                        ob, "material_slots",
-                        ob, "active_material_index", rows=2,
-                    )
+                    # Avoid MATERIAL_UL_matslots here: that UIList asks for ID preview
+                    # icons, which starts a material preview job during layout and
+                    # abort()s on this branch (Image sockets / paint-layer canvases).
+                    matcol = layout.column(align=True)
+                    for i, slot in enumerate(ob.material_slots):
+                        ma = slot.material
+                        op = matcol.operator(
+                            "wm.context_set_int",
+                            text=ma.name if ma else "Material",
+                            icon='MATERIAL',
+                            depress=(i == ob.active_material_index),
+                            translate=False,
+                        )
+                        op.data_path = "object.active_material_index"
+                        op.value = i
                 mat = ob.active_material
                 if mat and mat.texture_paint_images:
                     row = layout.row()
@@ -544,6 +554,8 @@ def draw_paint_layers(layout, ima):
     if not hasattr(ima, "paint_layers"):
         layout.label(text="Rebuild Blender (paint layers RNA missing)")
         return
+    if hasattr(ima.paint_layers, "ensure_default"):
+        ima.paint_layers.ensure_default()
 
     row = layout.row()
     col = row.column(align=True)

@@ -10,6 +10,7 @@ from ..utils.constants import (
     blend_types,
     operations,
     navs,
+    NW_TREE_TYPES,
 )
 from ..utils.nodes import (
     NWBase,
@@ -41,8 +42,7 @@ class NODE_OT_batch_change(Operator, NWBase):
     @classmethod
     def poll(cls, context):
         return (nw_check(cls, context)
-                and nw_check_space_type(cls, context, {'ShaderNodeTree', 'CompositorNodeTree',
-                                        'TextureNodeTree', 'GeometryNodeTree'})
+                and nw_check_space_type(cls, context, NW_TREE_TYPES)
                 and nw_check_selected(cls, context))
 
     def execute(self, context):

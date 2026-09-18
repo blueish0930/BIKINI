@@ -6,6 +6,7 @@ import bpy
 from bpy.types import Operator
 from bpy_extras.node_utils import connect_sockets
 
+from ..utils.constants import NW_TREE_TYPES
 from ..utils.nodes import (
     nw_check,
     nw_check_active,
@@ -28,8 +29,7 @@ class NODE_OT_link_to_output(Operator):
     def poll(cls, context):
         """Disabled for custom nodes as we do not know which nodes are outputs."""
         return (nw_check(cls, context)
-                and nw_check_space_type(cls, context, {'ShaderNodeTree', 'CompositorNodeTree',
-                                        'TextureNodeTree', 'GeometryNodeTree'})
+                and nw_check_space_type(cls, context, NW_TREE_TYPES)
                 and nw_check_active(cls, context)
                 and nw_check_visible_outputs(cls, context))
 
@@ -47,6 +47,7 @@ class NODE_OT_link_to_output(Operator):
             'CompositorNodeTree': 'NodeGroupOutput',
             'TextureNodeTree': 'TextureNodeOutput',
             'GeometryNodeTree': 'NodeGroupOutput',
+            'ImageNodeTree': 'ImageNodeViewer',
         }[tree_type]
         for node in nodes:
             # check whether the node is an output node and,
@@ -82,6 +83,12 @@ class NODE_OT_link_to_output(Operator):
                 if active.outputs[output_index].type != 'GEOMETRY':
                     return {'CANCELLED'}
             connect_sockets(active.outputs[output_index], output_node.inputs[out_input_index])
+            if tree_type == 'ImageNodeTree' and output_node.bl_idname == 'ImageNodeViewer':
+                try:
+                    with context.temp_override(node=output_node):
+                        bpy.ops.node.activate_viewer()
+                except Exception:
+                    pass
 
         force_update(context)  # View-port render does not update.
 

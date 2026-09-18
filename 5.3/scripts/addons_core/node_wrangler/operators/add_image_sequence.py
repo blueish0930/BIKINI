@@ -11,6 +11,7 @@ from bpy.app.translations import pgettext_rpt as rpt_
 from os import path
 from glob import glob
 
+from ..utils.constants import NW_IMAGE_SEQUENCE_TREE_TYPES
 from ..utils.nodes import (
     NWBase,
     nw_check,
@@ -51,7 +52,7 @@ class NODE_OT_add_image_sequence(Operator, NWBase, ImportHelper):
     @classmethod
     def poll(cls, context):
         return (nw_check(cls, context)
-                and nw_check_space_type(cls, context, {'ShaderNodeTree', 'CompositorNodeTree'}))
+                and nw_check_space_type(cls, context, NW_IMAGE_SEQUENCE_TREE_TYPES))
 
     def draw(self, context):
         layout = self.layout
@@ -75,7 +76,7 @@ class NODE_OT_add_image_sequence(Operator, NWBase, ImportHelper):
 
         if tree.type == 'SHADER':
             node_type = "ShaderNodeTexImage"
-        elif tree.type == 'COMPOSITING':
+        elif tree.type in {'COMPOSITING', 'IMAGE'}:
             node_type = "CompositorNodeImage"
         else:
             self.report({'ERROR'}, "Unsupported node tree type")

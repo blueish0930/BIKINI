@@ -6,6 +6,7 @@ import bpy
 from bpy.types import Operator
 from bpy.app.translations import pgettext_rpt as rpt_
 
+from ..utils.constants import NW_TREE_TYPES
 from ..utils.nodes import (
     nw_check,
     nw_check_space_type,
@@ -22,8 +23,7 @@ class NODE_OT_reload_images(Operator):
     def poll(cls, context):
         """Disabled for custom node trees."""
         return (nw_check(cls, context)
-                and nw_check_space_type(cls, context, {'ShaderNodeTree', 'CompositorNodeTree',
-                                                       'TextureNodeTree', 'GeometryNodeTree'}))
+                and nw_check_space_type(cls, context, NW_TREE_TYPES))
 
     def execute(self, context):
         edit_tree = context.space_data.edit_tree

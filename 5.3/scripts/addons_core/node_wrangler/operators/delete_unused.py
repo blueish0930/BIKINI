@@ -7,6 +7,7 @@ from bpy.types import Operator
 from bpy.props import BoolProperty
 from bpy.app.translations import pgettext_rpt as rpt_
 
+from ..utils.constants import NW_TREE_TYPES
 from ..utils.nodes import (
     NWBase,
     nw_check,
@@ -39,6 +40,8 @@ class NODE_OT_delete_unused(Operator, NWBase):
                      'WARNING']
         if node.type in end_types:
             return False
+        if node.bl_idname in {'ImageNodeViewer', 'ImageNodeFileOutput', 'ImageNodeBakeImage'}:
+            return False
 
         for output_socket in node.outputs:
             if output_socket.links:
@@ -50,8 +53,7 @@ class NODE_OT_delete_unused(Operator, NWBase):
         """Disabled for custom nodes as we do not know which nodes are supported."""
         return (nw_check(cls, context)
                 and nw_check_not_empty(cls, context)
-                and nw_check_space_type(cls, context, {'ShaderNodeTree', 'CompositorNodeTree',
-                                        'TextureNodeTree', 'GeometryNodeTree'}))
+                and nw_check_space_type(cls, context, NW_TREE_TYPES))
 
     def execute(self, context):
         tree = context.space_data.edit_tree

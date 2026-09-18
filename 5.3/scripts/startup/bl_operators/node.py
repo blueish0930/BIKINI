@@ -1487,6 +1487,10 @@ class NODE_OT_interface_item_unlink_panel_toggle(NodeInterfaceOperator, Operator
         return {'FINISHED'}
 
 
+def _is_viewer_node(node):
+    return node.type == 'VIEWER' or getattr(node, "bl_idname", "") == "ImageNodeViewer"
+
+
 class NODE_OT_viewer_shortcut_set(Operator):
     """Create a viewer shortcut for the selected node by pressing ctrl+1,2,..9"""
     bl_idname = "node.viewer_shortcut_set"
@@ -1501,7 +1505,7 @@ class NODE_OT_viewer_shortcut_set(Operator):
         for out in node.outputs:
             for link in out.links:
                 nv = link.to_node
-                if nv.type == 'VIEWER':
+                if _is_viewer_node(nv):
                     return nv
         return None
 
@@ -1513,7 +1517,7 @@ class NODE_OT_viewer_shortcut_set(Operator):
             (space is not None) and
             space.type == 'NODE_EDITOR' and
             space.node_tree is not None and
-            space.tree_type in {'CompositorNodeTree', 'GeometryNodeTree'}
+            space.tree_type in {'CompositorNodeTree', 'GeometryNodeTree', 'ImageNodeTree'}
         )
 
     def execute(self, context):
@@ -1527,7 +1531,7 @@ class NODE_OT_viewer_shortcut_set(Operator):
 
         # Only viewer nodes can be set to favorites. However, the user can
         # create a new favorite viewer by selecting any node and pressing Control+1.
-        if fav_node.type == 'VIEWER':
+        if _is_viewer_node(fav_node):
             viewer_node = fav_node
         else:
             viewer_node = self.get_connected_viewer(fav_node)
@@ -1573,7 +1577,7 @@ class NODE_OT_viewer_shortcut_get(Operator):
             (space is not None) and
             space.type == 'NODE_EDITOR' and
             space.node_tree is not None and
-            space.tree_type in {'CompositorNodeTree', 'GeometryNodeTree'}
+            space.tree_type in {'CompositorNodeTree', 'GeometryNodeTree', 'ImageNodeTree'}
         )
 
     def execute(self, context):
@@ -1582,7 +1586,7 @@ class NODE_OT_viewer_shortcut_get(Operator):
         # Get viewer node with existing shortcut.
         viewer_node = None
         for n in nodes:
-            if n.type == 'VIEWER' and n.ui_shortcut == self.viewer_index:
+            if _is_viewer_node(n) and n.ui_shortcut == self.viewer_index:
                 viewer_node = n
 
         if not viewer_node:

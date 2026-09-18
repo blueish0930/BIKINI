@@ -63,7 +63,7 @@ def drawlayout(context, layout, mode='non-panel'):
     col.separator()
 
     col = layout.column(align=True)
-    if tree_type == 'CompositorNodeTree':
+    if tree_type in {'CompositorNodeTree', 'ImageNodeTree'}:
         col.operator("node.nw_bg_reset", icon='ZOOM_PREVIOUS')
     if tree_type != 'GeometryNodeTree':
         col.operator("node.nw_reload_images", icon='FILE_REFRESH')
@@ -399,12 +399,13 @@ def bgreset_menu_func(self, _context):
 def save_viewer_menu_func(self, context):
     space = context.space_data
     if (space.type == 'NODE_EDITOR'
-            and space.tree_type == 'CompositorNodeTree'
-            and space.node_tree_sub_type == 'SCENE'
+            and space.tree_type in {'CompositorNodeTree', 'ImageNodeTree'}
+            and (space.tree_type != 'CompositorNodeTree' or space.node_tree_sub_type == 'SCENE')
             and space.node_tree is not None
             and space.node_tree.library is None
             and space.edit_tree.nodes.active
-            and space.edit_tree.nodes.active.type == "VIEWER"):
+            and (space.edit_tree.nodes.active.type == "VIEWER"
+                 or space.edit_tree.nodes.active.bl_idname == "ImageNodeViewer")):
         self.layout.operator("node.nw_save_viewer", icon='FILE_IMAGE')
 
 
@@ -456,6 +457,8 @@ def register():
     bpy.types.NODE_PT_active_node_generic.append(save_viewer_menu_func)
     bpy.types.NODE_MT_category_shader_texture.prepend(multipleimages_menu_func)
     bpy.types.NODE_MT_category_compositor_input.prepend(multipleimages_menu_func)
+    if hasattr(bpy.types, "NODE_MT_category_image_input"):
+        bpy.types.NODE_MT_category_image_input.prepend(multipleimages_menu_func)
     bpy.types.NODE_PT_active_node_generic.prepend(reset_nodes_button)
     bpy.types.NODE_MT_node.prepend(reset_nodes_button)
 
@@ -469,6 +472,8 @@ def unregister():
     bpy.types.NODE_PT_active_node_generic.remove(save_viewer_menu_func)
     bpy.types.NODE_MT_category_shader_texture.remove(multipleimages_menu_func)
     bpy.types.NODE_MT_category_compositor_input.remove(multipleimages_menu_func)
+    if hasattr(bpy.types, "NODE_MT_category_image_input"):
+        bpy.types.NODE_MT_category_image_input.remove(multipleimages_menu_func)
     bpy.types.NODE_PT_active_node_generic.remove(reset_nodes_button)
     bpy.types.NODE_MT_node.remove(reset_nodes_button)
 

@@ -4,6 +4,7 @@
 
 from bpy.types import Operator
 
+from ..utils.constants import NW_COMPOSITOR_LIKE_TREE_TYPES
 from ..utils.nodes import (
     NWBase,
     nw_check,
@@ -21,7 +22,7 @@ class NODE_OT_reset_backdrop(Operator, NWBase):
 
     @classmethod
     def poll(cls, context):
-        return nw_check(cls, context) and nw_check_space_type(cls, context, {'CompositorNodeTree'})
+        return nw_check(cls, context) and nw_check_space_type(cls, context, NW_COMPOSITOR_LIKE_TREE_TYPES)
 
     def execute(self, context):
         context.space_data.backdrop_zoom = 1

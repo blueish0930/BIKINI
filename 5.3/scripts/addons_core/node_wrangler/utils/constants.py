@@ -5,6 +5,24 @@
 from collections import namedtuple
 from bpy.types import ShaderNodeMath, ShaderNodeMix
 
+# Built-in node trees Node Wrangler can operate on, including GPU Texture Editor.
+NW_TREE_TYPES = {
+    'ShaderNodeTree',
+    'CompositorNodeTree',
+    'TextureNodeTree',
+    'GeometryNodeTree',
+    'ImageNodeTree',
+}
+NW_COMPOSITOR_LIKE_TREE_TYPES = {
+    'CompositorNodeTree',
+    'ImageNodeTree',
+}
+NW_IMAGE_SEQUENCE_TREE_TYPES = {
+    'ShaderNodeTree',
+    'CompositorNodeTree',
+    'ImageNodeTree',
+}
+
 
 #################
 # rl_outputs:
