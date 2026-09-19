@@ -20,7 +20,7 @@ from gpu_extras.batch import batch_for_shader
 bl_info = {
     "name": "Angled Node Wires",
     "author": "Local",
-    "version": (1, 3, 26),
+    "version": (1, 3, 38),
     "blender": (3, 6, 0),
     "location": "Node Editor > Overlays",
     "description": "Orthogonal node links without touching the node tree",
@@ -35,11 +35,12 @@ INSERT_WIDTH = 5.0
 MAX_POLYLINE_WIDTH = 12.0
 MAX_VIEW_COORD = 1.0e6
 NODE_GRID_UNIT = 20.0
-# Overlay framebuffer has depth. Nodes write nearer Z so bodies cover full wires.
-OCCLUDE_Z = 0.0
-WIRE_Z = 0.35
+# Overlay framebuffer has depth. Smaller Z is nearer in view2d ortho (-100..100).
+OCCLUDE_Z = -12.0
+WIRE_Z = 8.0
+DEPTH_FAR_Z = 80.0
 PTR_SIZE = ctypes.sizeof(ctypes.c_void_p)
-FILLET_STEPS = 3
+FILLET_STEPS = 12
 _LINK_FLAG_OFF = 6 * PTR_SIZE
 NODE_LINK_INSERT_TARGET = 1 << 0
 NODE_LINK_INSERT_TARGET_INVALID = 1 << 5
@@ -64,6 +65,7 @@ _draw_handle_post = None
 _draw_handle_stroke = None
 _shader = None
 _fill_shader = None
+_smooth_fill = None
 _shader_has_line_width = True
 _theme_backup = None
 _runtime_off = None
@@ -74,8 +76,15 @@ _path_cache = {
     "stamp": None,
     "batch": None,
     "batch_outline": None,
+    "batch_under": None,
+    "batch_under_outline": None,
+    "batch_clip": None,
+    "batch_clip_outline": None,
     "batch_insert": None,
     "batch_occlude": None,
+    "batch_socks": None,
+    "batch_frame": None,
+    "batch_frame_outline": None,
 }
 _tree_runtime_off = None
 _links_vec_off = None
@@ -92,6 +101,7 @@ _pending_snap = False
 _pre_synced = False
 _force_wires = False
 _was_transform_modal = False
+_was_link_modal = False
 _sock_local = {}
 _wire_hide_ttl = 0
 _theme_wire_saved = None
@@ -314,8 +324,23 @@ def _u64_safe(addr):
 
 def _ui_scale():
     prefs = bpy.context.preferences.system
-    dpi = float(getattr(prefs, "dpi", 72) or 72)
-    return dpi / 72.0
+    try:
+        dpi = float(getattr(prefs, "dpi", 0) or 0)
+        if dpi > 1.0:
+            s = dpi / 72.0
+            if math.isfinite(s) and s > 0.05:
+                return s
+    except Exception:
+        pass
+    try:
+        ui = float(getattr(prefs, "ui_scale", 1.0) or 1.0)
+        px = float(getattr(prefs, "pixel_size", 1.0) or 1.0)
+        s = ui * px
+        if math.isfinite(s) and s > 0.05:
+            return s
+    except Exception:
+        pass
+    return 1.0
 
 
 _GTE_TREE_IDS = frozenset({
@@ -968,7 +993,7 @@ def _looks_like_drag_link_vector(addr):
     if end < begin or cap < end:
         return False
     size = end - begin
-    if size < 40 or size > 4096 or size % 8:
+    if size < 40 or size > 16384 or size % 8:
         return False
     if not _readable_range(begin, min(size, 48)):
         return False
@@ -992,24 +1017,95 @@ def _wm_operator_customdata(op):
     return None
 
 
+def _iter_nldrag_links(op, vec_addr=None):
+    """Read bNodeLinkDrag.links after POST restore. Each row is DNA bNodeLink."""
+    addr = vec_addr or _wm_operator_customdata(op)
+    if addr is None:
+        return []
+    begin = _u64_safe(addr)
+    end = _u64_safe(addr + 8)
+    if not begin or not end or end < begin:
+        return []
+    nbytes = end - begin
+    if nbytes < 40 or nbytes > 16384:
+        return []
+    for stride in (56, 64, 48, 72):
+        if nbytes % stride:
+            continue
+        tmp = []
+        bad = False
+        for off in range(0, nbytes, stride):
+            if not _readable_range(begin + off, min(stride, 48)):
+                bad = True
+                break
+            fromsock = _u64_safe(begin + off + 32)
+            tosock = _u64_safe(begin + off + 40)
+            if not fromsock and not tosock:
+                continue
+            tmp.append(
+                (
+                    _u64_safe(begin + off + 16),
+                    _u64_safe(begin + off + 24),
+                    fromsock,
+                    tosock,
+                )
+            )
+        if not bad and tmp:
+            return tmp
+    return []
+
+
+def _tree_socket_map(tree):
+    out = {}
+    try:
+        nodes = tree.nodes
+    except Exception:
+        return out
+    for node in nodes:
+        try:
+            socks = list(node.inputs) + list(node.outputs)
+        except Exception:
+            continue
+        for sock in socks:
+            try:
+                out[int(sock.as_pointer())] = (node, sock)
+            except Exception:
+                continue
+    return out
+
+
 class LinkDragHider:
     """Hide native rubber-band noodles (snode.runtime->linkdrag), not tree.links."""
 
     def __init__(self):
         self._end_addr = None
         self._saved_end = None
-        self._theme_hid = False
-        self._theme_saved = None
+        self._op_ptr = None
+        self._vec_addr = None
 
     def hide(self, context):
-        self.restore()
+        self.restore(context)
         op = _find_node_link_op(context)
         if op is None:
+            self._vec_addr = None
+            self._op_ptr = None
             return
+        try:
+            self._op_ptr = int(op.as_pointer())
+        except Exception:
+            self._op_ptr = None
         self._hide_vector(op)
 
     def _hide_vector(self, op):
-        addr = _wm_operator_customdata(op)
+        addr = None
+        try:
+            op_ptr = int(op.as_pointer())
+        except Exception:
+            op_ptr = None
+        if self._vec_addr and op_ptr is not None and op_ptr == self._op_ptr:
+            addr = self._vec_addr
+        if addr is None:
+            addr = _wm_operator_customdata(op)
         if addr is None:
             return False
         try:
@@ -1021,6 +1117,7 @@ class LinkDragHider:
             end = end_slot.value
             if not begin or end == begin:
                 return False
+            self._vec_addr = addr
             self._end_addr = addr + 8
             self._saved_end = end
             end_slot.value = begin
@@ -1028,16 +1125,38 @@ class LinkDragHider:
         except Exception:
             self._end_addr = None
             self._saved_end = None
+            self._vec_addr = None
+            self._op_ptr = None
             return False
 
-    def restore(self):
-        if self._end_addr is not None:
-            try:
-                ctypes.c_void_p.from_address(self._end_addr).value = self._saved_end
-            except Exception:
-                pass
+    def _op_still_modal(self, context):
+        if self._op_ptr is None:
+            return False
+        op = _find_node_link_op(context)
+        if op is None:
+            return False
+        try:
+            return int(op.as_pointer()) == self._op_ptr
+        except Exception:
+            return False
+
+    def restore(self, context=None):
+        ctx = context or bpy.context
+        if not self._op_still_modal(ctx):
             self._end_addr = None
             self._saved_end = None
+            self._op_ptr = None
+            self._vec_addr = None
+            return
+        if self._end_addr is None:
+            return
+        try:
+            ctypes.c_void_p.from_address(self._end_addr).value = self._saved_end
+        except Exception:
+            pass
+        # Keep _vec_addr so POST overlay can read nldrag.links after restore.
+        self._end_addr = None
+        self._saved_end = None
 
 
 _linkdrag_hider = LinkDragHider()
@@ -1144,12 +1263,29 @@ def _angled_waypoints(p0, p3, from_reroute, to_reroute, scale, curving, from_rec
     return double_corner()
 
 
-def _filleted_polyline(wps, scale, curving):
+def _view_zoom():
+    region = getattr(bpy.context, "region", None)
+    if region is None:
+        return 1.0
+    try:
+        return _view2d_scale_x(region)
+    except Exception:
+        return 1.0
+
+
+def _fillet_step_count(radius, zoom):
+    px = abs(float(radius)) * max(float(zoom), 0.2)
+    return max(FILLET_STEPS, min(28, int(px / 2.0) + 1))
+
+
+def _filleted_polyline(wps, scale, curving, zoom=None):
     if len(wps) <= 2:
         return list(wps)
     radius = 0.0 if curving <= 0 else float(curving) * 8.0 * scale
     keep = 8.0 * scale
     min_round = MIN_ROUND * scale
+    if zoom is None:
+        zoom = _view_zoom()
     n = len(wps)
     corner_r = [0.0] * n
     for i in range(1, n - 1):
@@ -1182,17 +1318,29 @@ def _filleted_polyline(wps, scale, curving):
         fs = (cur[0] - tinx * r, cur[1] - tiny * r)
         fe = (cur[0] + toutx * r, cur[1] + touty * r)
         pts.append(fs)
-        k = r * CIRCLE_K
-        c1 = (fs[0] + tinx * k, fs[1] + tiny * k)
-        c2 = (fe[0] - toutx * k, fe[1] - touty * k)
-        steps = FILLET_STEPS
+        cross = tinx * touty - tiny * toutx
+        if abs(cross) < 1.0e-4:
+            pts.append(fe)
+            continue
+        if cross > 0.0:
+            cx = fs[0] - tiny * r
+            cy = fs[1] + tinx * r
+        else:
+            cx = fs[0] + tiny * r
+            cy = fs[1] - tinx * r
+        a0 = math.atan2(fs[1] - cy, fs[0] - cx)
+        a1 = math.atan2(fe[1] - cy, fe[0] - cx)
+        da = a1 - a0
+        if cross > 0.0:
+            while da <= 1.0e-6:
+                da += 2.0 * math.pi
+        else:
+            while da >= -1.0e-6:
+                da -= 2.0 * math.pi
+        steps = _fillet_step_count(r, zoom)
         for s in range(1, steps):
-            t = s / steps
-            u = 1.0 - t
-            pts.append((
-                (u ** 3) * fs[0] + 3.0 * (u ** 2) * t * c1[0] + 3.0 * u * (t ** 2) * c2[0] + (t ** 3) * fe[0],
-                (u ** 3) * fs[1] + 3.0 * (u ** 2) * t * c1[1] + 3.0 * u * (t ** 2) * c2[1] + (t ** 3) * fe[1],
-            ))
+            ang = a0 + da * (s / float(steps))
+            pts.append((cx + math.cos(ang) * r, cy + math.sin(ang) * r))
         pts.append(fe)
     pts.append(wps[-1])
     return pts
@@ -1360,6 +1508,7 @@ def _drop_transient_interaction():
     _drag_op_key = None
     _nodes_are_dragging = False
     _prefer_layout_xy = False
+    _linkdrag_hider.restore()
 
 
 def _request_wire_refresh(redraw=True):
@@ -1573,7 +1722,7 @@ def _seg_outside_rect(a, b, rect):
     bx, by = b
     dx = bx - ax
     dy = by - ay
-    if dx * dx + dy * dy < 0.16:
+    if dx * dx + dy * dy < 1.0e-8:
         if x0 < ax < x1 and y0 < ay < y1:
             return []
         return [(a, b)]
@@ -1589,7 +1738,7 @@ def _seg_outside_rect(a, b, rect):
     out = []
     last_t = None
     for t in ts:
-        if last_t is not None and t - last_t < 1.0e-5:
+        if last_t is not None and t - last_t < 1.0e-6:
             continue
         if last_t is not None:
             tm = 0.5 * (last_t + t)
@@ -1598,7 +1747,7 @@ def _seg_outside_rect(a, b, rect):
             if not (x0 < mx < x1 and y0 < my < y1):
                 pa = (ax + dx * last_t, ay + dy * last_t)
                 pb = (ax + dx * t, ay + dy * t)
-                if math.hypot(pb[0] - pa[0], pb[1] - pa[1]) > 0.15:
+                if math.hypot(pb[0] - pa[0], pb[1] - pa[1]) > 1.0e-4:
                     out.append((pa, pb))
         last_t = t
     return out
@@ -1620,6 +1769,57 @@ def _clip_seg_outside_rects(a, b, rects):
         if not pieces:
             break
     return pieces
+
+
+def _seg_inside_rect(a, b, rect):
+    """Keep pieces of ab that sit inside the node body (drawn under nodes)."""
+    x0, y0, x1, y1 = rect
+    ax, ay = a
+    bx, by = b
+    dx = bx - ax
+    dy = by - ay
+    if dx * dx + dy * dy < 0.16:
+        if x0 <= ax <= x1 and y0 <= ay <= y1:
+            return [(a, b)]
+        return []
+    ts = [0.0, 1.0]
+    if abs(dx) > 1.0e-9:
+        ts.append((x0 - ax) / dx)
+        ts.append((x1 - ax) / dx)
+    if abs(dy) > 1.0e-9:
+        ts.append((y0 - ay) / dy)
+        ts.append((y1 - ay) / dy)
+    ts = [t for t in ts if 0.0 <= t <= 1.0]
+    ts.sort()
+    out = []
+    last_t = None
+    for t in ts:
+        if last_t is not None and t - last_t < 1.0e-5:
+            continue
+        if last_t is not None:
+            tm = 0.5 * (last_t + t)
+            mx = ax + dx * tm
+            my = ay + dy * tm
+            if x0 <= mx <= x1 and y0 <= my <= y1:
+                pa = (ax + dx * last_t, ay + dy * last_t)
+                pb = (ax + dx * t, ay + dy * t)
+                if math.hypot(pb[0] - pa[0], pb[1] - pa[1]) > 0.15:
+                    out.append((pa, pb))
+        last_t = t
+    return out
+
+
+def _clip_seg_inside_rects(a, b, rects):
+    if not (_finite_pt(a) and _finite_pt(b)) or not rects:
+        return ()
+    out = []
+    minx, maxx = (a[0], b[0]) if a[0] <= b[0] else (b[0], a[0])
+    miny, maxy = (a[1], b[1]) if a[1] <= b[1] else (b[1], a[1])
+    for rect in rects:
+        if rect[2] < minx or rect[0] > maxx or rect[3] < miny or rect[1] > maxy:
+            continue
+        out.extend(_seg_inside_rect(a, b, rect))
+    return out
 
 
 def _node_socket_view_points(node):
@@ -1743,6 +1943,201 @@ def _node_view_rect(node, scale, pad=0.0):
     return (x0, y0, x1, y1)
 
 
+def _node_socksize(scale):
+    # editors/space_node/node_intern.hh: NODE_SOCKSIZE = 0.25 * U.widget_unit
+    return 0.25 * NODE_GRID_UNIT * float(scale or 1.0)
+
+
+def _add_rect_tris(pos, x0, y0, x1, y1, z, cols=None, color=None):
+    tris = (
+        (x0, y0, z),
+        (x1, y0, z),
+        (x1, y1, z),
+        (x0, y0, z),
+        (x1, y1, z),
+        (x0, y1, z),
+    )
+    pos.extend(tris)
+    if cols is not None and color is not None:
+        cols.extend((color,) * 6)
+
+
+def _add_disc_tris(pos, cx, cy, r, z, cols=None, color=None, segments=18):
+    n = max(8, int(segments))
+    for i in range(n):
+        a0 = (i / n) * 2.0 * math.pi
+        a1 = ((i + 1) / n) * 2.0 * math.pi
+        tris = (
+            (cx, cy, z),
+            (cx + r * math.cos(a0), cy + r * math.sin(a0), z),
+            (cx + r * math.cos(a1), cy + r * math.sin(a1), z),
+        )
+        pos.extend(tris)
+        if cols is not None and color is not None:
+            cols.extend((color,) * 3)
+
+
+def _add_diamond_tris(pos, cx, cy, r, z, cols=None, color=None):
+    tris = (
+        (cx, cy + r, z),
+        (cx + r, cy, z),
+        (cx, cy - r, z),
+        (cx, cy + r, z),
+        (cx, cy - r, z),
+        (cx - r, cy, z),
+    )
+    pos.extend(tris)
+    if cols is not None and color is not None:
+        cols.extend((color,) * 6)
+
+
+def _add_socket_shape(pos, cx, cy, r, z, shape, cols=None, color=None):
+    key = str(shape or "CIRCLE").upper()
+    if "DIAMOND" in key:
+        _add_diamond_tris(pos, cx, cy, r, z, cols, color)
+    elif "SQUARE" in key or "BOX" in key:
+        _add_rect_tris(pos, cx - r, cy - r, cx + r, cy + r, z, cols, color)
+    else:
+        _add_disc_tris(pos, cx, cy, r, z, cols, color)
+
+
+def _node_depth_rect(node, scale):
+    """Visible node body in view space. Must not spill into the stacked gap."""
+    if node is None:
+        return None
+    bid = getattr(node, "bl_idname", "")
+    if bid in {"NodeFrame", "NodeReroute"}:
+        return None
+    locx, locy = _node_abs_loc(node)
+    tree = getattr(node, "id_data", None)
+    if _is_gte_tree(tree):
+        x0, y0, x1, y1 = _gte_node_rect_view(node, scale)
+        if x1 <= x0 + 2.0 or y1 <= y0 + 2.0:
+            return None
+        if not (_finite_pt((x0, y0)) and _finite_pt((x1, y1))):
+            return None
+        return (x0, y0, x1, y1)
+    in_xs, out_xs, ys = _node_socket_view_points(node)
+    width_nu = float(getattr(node, "width", 140.0) or 140.0)
+    implied = scale
+    if in_xs and out_xs and width_nu > 1.0:
+        span = max(out_xs) - min(in_xs)
+        if 8.0 < span < 4000.0:
+            implied = span / width_nu
+    if implied <= 0.0 or not math.isfinite(implied):
+        implied = scale
+    if in_xs:
+        x0 = min(in_xs)
+    else:
+        x0 = locx * implied
+    if out_xs:
+        x1 = max(out_xs)
+    else:
+        x1 = x0 + width_nu * implied
+    header = NODE_GRID_UNIT * implied
+    y1 = locy * implied
+    if ys:
+        y1 = max(y1, max(ys) + 0.55 * header)
+        y0 = min(ys) - 0.40 * header
+    else:
+        dim_h = 0.0
+        try:
+            dim_h = float(node.dimensions.y)
+        except Exception:
+            dim_h = 0.0
+        y0 = y1 - (dim_h if 4.0 < dim_h < 4000.0 else 80.0 * implied)
+    pad = max(0.75 * implied, 1.0)
+    x0 += pad
+    y0 += pad
+    x1 -= pad
+    y1 -= pad
+    if x1 <= x0 + 2.0 or y1 <= y0 + 2.0:
+        return None
+    if not (_finite_pt((x0, y0)) and _finite_pt((x1, y1))):
+        return None
+    if (x1 - x0) > 4000.0 or (y1 - y0) > 4000.0:
+        return None
+    return (x0, y0, x1, y1)
+
+
+def _iter_visible_sockets(node):
+    try:
+        socks = list(node.inputs) + list(node.outputs)
+    except Exception:
+        return
+    for sock in socks:
+        if not _socket_is_visible(sock):
+            continue
+        xy = socket_xy(sock)
+        if xy is None or not _finite_pt(xy):
+            continue
+        yield sock, xy
+
+
+def _collect_occlude_tris(tree, scale):
+    """Depth-only covering for node bodies and socket shapes."""
+    pos = []
+    z = OCCLUDE_Z
+    r = _node_socksize(scale)
+    for node in tree.nodes:
+        bid = getattr(node, "bl_idname", "")
+        if bid == "NodeFrame":
+            continue
+        if bid == "NodeReroute":
+            in_xs, out_xs, ys = _node_socket_view_points(node)
+            locx, locy = _node_abs_loc(node)
+            if ys:
+                cx = in_xs[0] if in_xs else (out_xs[0] if out_xs else locx * scale)
+                cy = ys[0]
+            else:
+                cx, cy = locx * scale, locy * scale
+            _add_disc_tris(pos, cx, cy, r, z)
+            continue
+        rect = _node_depth_rect(node, scale)
+        if rect is not None:
+            _add_rect_tris(pos, rect[0], rect[1], rect[2], rect[3], z)
+        for sock, xy in _iter_visible_sockets(node):
+            shape = getattr(sock, "display_shape", "CIRCLE")
+            if getattr(sock, "is_multi_input", False):
+                _add_rect_tris(pos, xy[0] - r, xy[1] - r * 2.2, xy[0] + r, xy[1] + r * 2.2, z)
+            _add_socket_shape(pos, xy[0], xy[1], r, z, shape)
+    return pos
+
+
+def _collect_cover_rects(tree, scale):
+    """Tight node+socket boxes. Used so POST_VIEW wires do not paint over nodes."""
+    rects = []
+    r = _node_socksize(scale)
+    for node in tree.nodes:
+        bid = getattr(node, "bl_idname", "")
+        if bid == "NodeFrame":
+            continue
+        if bid == "NodeReroute":
+            in_xs, out_xs, ys = _node_socket_view_points(node)
+            locx, locy = _node_abs_loc(node)
+            if ys:
+                cx = in_xs[0] if in_xs else (out_xs[0] if out_xs else locx * scale)
+                cy = ys[0]
+            else:
+                cx, cy = locx * scale, locy * scale
+            rects.append((cx - r, cy - r, cx + r, cy + r))
+            continue
+        rect = _node_depth_rect(node, scale)
+        if rect is not None:
+            rects.append(rect)
+        for sock, xy in _iter_visible_sockets(node):
+            if getattr(sock, "is_multi_input", False):
+                rects.append((xy[0] - r, xy[1] - r * 2.2, xy[0] + r, xy[1] + r * 2.2))
+            else:
+                rects.append((xy[0] - r, xy[1] - r, xy[0] + r, xy[1] + r))
+    return rects
+
+
+def _collect_socket_cap_geom(tree, scale):
+    """Sockets are drawn by Blender. This overlay never restyles them."""
+    return [], []
+
+
 def _node_occlude_rect(node, scale):
     """Conservative interior of a node. Too-large boxes punch empty holes in the gap."""
     if node is None:
@@ -1814,13 +2209,81 @@ def _node_occlude_rect(node, scale):
     return (x0, y0, x1, y1)
 
 
+def _node_mask_rect(node, scale):
+    """Tight visual body used to hide wires. Must not spill into the stacked gap."""
+    if node is None:
+        return None
+    bid = getattr(node, "bl_idname", "")
+    if bid == "NodeFrame":
+        return None
+    locx, locy = _node_abs_loc(node)
+    tree = getattr(node, "id_data", None)
+    if _is_gte_tree(tree) and bid != "NodeReroute":
+        x0, y0, x1, y1 = _gte_node_rect_view(node, scale)
+        inset = max(2.0 * scale, 2.0)
+        return (x0 + inset, y0 + inset, x1 - inset, y1 - inset) if x1 - x0 > 8.0 and y1 - y0 > 8.0 else None
+    in_xs, out_xs, ys = _node_socket_view_points(node)
+    if bid == "NodeReroute":
+        if ys:
+            cx = (in_xs[0] if in_xs else (out_xs[0] if out_xs else locx * scale))
+            cy = ys[0]
+        else:
+            cx, cy = locx * scale, locy * scale
+        radius = max(2.0 * scale, min(0.18 * NODE_GRID_UNIT * scale, 4.0 * scale))
+        return (cx - radius, cy - radius, cx + radius, cy + radius)
+    width_nu = float(getattr(node, "width", 140.0) or 140.0)
+    implied = scale
+    if in_xs and out_xs and width_nu > 1.0:
+        span = max(out_xs) - min(in_xs)
+        if 8.0 < span < 4000.0:
+            implied = span / width_nu
+    if implied <= 0.0 or not math.isfinite(implied):
+        implied = scale
+    # Tiny inset so socket nubs stay visible; do not use node.dimensions (it fills the gap).
+    inset = max(1.25 * implied, 1.5)
+    if in_xs:
+        x0 = min(in_xs) + inset
+    elif out_xs:
+        x0 = max(out_xs) - width_nu * implied + inset
+    else:
+        x0 = locx * implied + inset
+    if out_xs:
+        x1 = max(out_xs) - inset
+    else:
+        x1 = x0 + max(8.0, width_nu * implied - 2.0 * inset)
+    header = 0.70 * NODE_GRID_UNIT * implied
+    foot = 0.28 * NODE_GRID_UNIT * implied
+    if ys:
+        y1 = max(ys) + header
+        y0 = min(ys) - foot
+    else:
+        y1 = locy * implied
+        y0 = y1 - 36.0 * implied
+    if x1 <= x0 + 2.0 or y1 <= y0 + 2.0:
+        return None
+    if not (_finite_pt((x0, y0)) and _finite_pt((x1, y1))):
+        return None
+    if (x1 - x0) > 4000.0 or (y1 - y0) > 4000.0:
+        return None
+    return (x0, y0, x1, y1)
+
+
+def _collect_node_mask_rects(tree, scale):
+    rects = []
+    for node in tree.nodes:
+        rect = _node_mask_rect(node, scale)
+        if rect is not None:
+            rects.append(rect)
+    return rects
+
+
 def _collect_node_occlude_rects(tree, scale):
     rects = []
     for node in tree.nodes:
         rect = _node_occlude_rect(node, scale)
         if rect is not None:
             rects.append(rect)
-    return rects
+    return _separate_stacked_clip_rects(rects)
 
 
 def _occlude_tris(rects):
@@ -1941,6 +2404,7 @@ def _pick_ortho_insert(items, selected, scale):
 def _iter_link_polys(tree, scale, curving):
     multi_counts = {}
     links = tree.links
+    zoom = _view_zoom()
     for link in links:
         if not _link_is_drawable(link):
             continue
@@ -1970,7 +2434,7 @@ def _iter_link_polys(tree, scale, curving):
             _node_view_rect(fn, scale),
             _node_view_rect(tn, scale),
         )
-        yield link, _filleted_polyline(wps, scale, curving)
+        yield link, _filleted_polyline(wps, scale, curving, zoom)
 
 
 def _isect_seg(a, b, c, d):
@@ -2011,7 +2475,7 @@ def _region_stroke_to_view(view2d, stroke_region):
 
 
 # ---------------------------------------------------------------------------
-# Draw (POST_VIEW, view space — pan/zoom does not rebuild geometry)
+# Draw. Official node_draw_nodetree paints links, then node_draw (body + sockets).
 # ---------------------------------------------------------------------------
 
 def _get_shader():
@@ -2034,13 +2498,25 @@ def _get_shader():
 def _get_fill_shader():
     global _fill_shader
     if _fill_shader is None:
-        for name in ("UNIFORM_COLOR", "3D_UNIFORM_COLOR", "2D_UNIFORM_COLOR"):
+        for name in ("3D_UNIFORM_COLOR", "UNIFORM_COLOR", "2D_UNIFORM_COLOR"):
             try:
                 _fill_shader = gpu.shader.from_builtin(name)
                 break
             except Exception:
                 _fill_shader = None
     return _fill_shader
+
+
+def _get_smooth_fill():
+    global _smooth_fill
+    if _smooth_fill is None:
+        for name in ("3D_SMOOTH_COLOR", "SMOOTH_COLOR", "2D_SMOOTH_COLOR"):
+            try:
+                _smooth_fill = gpu.shader.from_builtin(name)
+                break
+            except Exception:
+                _smooth_fill = None
+    return _smooth_fill
 
 
 def _finite_pt(p):
@@ -2052,12 +2528,92 @@ def _finite_pt(p):
 
 
 def _emit_line(dst_pos, dst_cols, a, b, ca, cb):
-    if not _finite_pt(a) or not _finite_pt(b):
+    if not (_finite_pt(a) and _finite_pt(b)):
         return
-    if math.hypot(b[0] - a[0], b[1] - a[1]) < 0.4:
+    if math.hypot(b[0] - a[0], b[1] - a[1]) < 1.0e-4:
         return
     dst_pos.extend(((a[0], a[1], WIRE_Z), (b[0], b[1], WIRE_Z)))
     dst_cols.extend((ca, cb))
+
+
+def _collect_frame_rects(tree, scale):
+    """View-space Frame bodies. Official C++ draws these under links."""
+    rects = []
+    for node in tree.nodes:
+        if getattr(node, "bl_idname", "") != "NodeFrame":
+            continue
+        locx, locy = _node_abs_loc(node)
+        w = float(getattr(node, "width", 0.0) or 0.0)
+        h = float(getattr(node, "height", 0.0) or 0.0)
+        try:
+            dw = float(node.dimensions[0])
+            dh = float(node.dimensions[1])
+        except Exception:
+            dw = dh = 0.0
+        width = dw if dw > 4.0 else w * scale
+        height = dh if dh > 4.0 else h * scale
+        if width < 4.0 or height < 4.0:
+            continue
+        x0 = locx * scale
+        y1 = locy * scale
+        x1 = x0 + width
+        y0 = y1 - height
+        if not (_finite_pt((x0, y0)) and _finite_pt((x1, y1))):
+            continue
+        rects.append((x0, y0, x1, y1))
+    return rects
+
+
+def _collect_frame_hide_rects(tree, scale):
+    """Tight non-frame bodies so the Frame overlay does not paint over nodes."""
+    rects = []
+    r = _node_socksize(scale)
+    for node in tree.nodes:
+        if getattr(node, "bl_idname", "") == "NodeFrame":
+            continue
+        rect = _node_mask_rect(node, scale)
+        if rect is not None:
+            rects.append(rect)
+        for _sock, xy in _iter_visible_sockets(node):
+            rects.append((xy[0] - r, xy[1] - r, xy[0] + r, xy[1] + r))
+    return rects
+
+
+def _emit_on_frames(dst_pos, dst_cols, a, b, ca, cb, frames, hides):
+    if not frames:
+        return
+    for aa, bb in _clip_seg_inside_rects(a, b, frames):
+        if hides:
+            for cc, dd in _clip_seg_outside_rects(aa, bb, hides):
+                _emit_line(dst_pos, dst_cols, cc, dd, ca, cb)
+        else:
+            _emit_line(dst_pos, dst_cols, aa, bb, ca, cb)
+
+
+def _thick_half_view(pixel_w):
+    zoom = max(_view_zoom(), 0.08)
+    return max(0.2, float(pixel_w) * 0.5 / zoom)
+
+
+def _emit_thick_line(dst_pos, dst_cols, a, b, ca, cb, half_w, z=None):
+    if not (_finite_pt(a) and _finite_pt(b)):
+        return
+    ax, ay = float(a[0]), float(a[1])
+    bx, by = float(b[0]), float(b[1])
+    dx, dy = bx - ax, by - ay
+    length = math.hypot(dx, dy)
+    if length < 1.0e-4:
+        return
+    hw = float(half_w)
+    nx = -dy / length * hw
+    ny = dx / length * hw
+    zz = WIRE_Z if z is None else float(z)
+    p0 = (ax + nx, ay + ny, zz)
+    p1 = (ax - nx, ay - ny, zz)
+    p2 = (bx - nx, by - ny, zz)
+    p3 = (bx + nx, by + ny, zz)
+    dst_pos.extend((p0, p1, p2, p0, p2, p3))
+    dst_cols.extend((ca, ca, cb, ca, cb, cb))
 
 
 def _emit_line_clipped(dst_pos, dst_cols, a, b, ca, cb, rects):
@@ -2065,6 +2621,14 @@ def _emit_line_clipped(dst_pos, dst_cols, a, b, ca, cb, rects):
         _emit_line(dst_pos, dst_cols, a, b, ca, cb)
         return
     for pa, pb in _clip_seg_outside_rects(a, b, rects):
+        _emit_line(dst_pos, dst_cols, pa, pb, ca, cb)
+
+
+def _emit_line_under(dst_pos, dst_cols, a, b, ca, cb, rects):
+    """Pieces that cross a node body. Drawn PRE_VIEW so nodes cover them."""
+    if not rects:
+        return
+    for pa, pb in _clip_seg_inside_rects(a, b, rects):
         _emit_line(dst_pos, dst_cols, pa, pb, ca, cb)
 
 
@@ -2213,6 +2777,7 @@ def _path_stamp(context, tree, scale, curving, wire_color, dragging):
         len(tree.nodes),
         len(tree.links),
         round(scale, 4),
+        round(_view_zoom(), 2),
         curving,
         int(wire_color),
         int(dragging),
@@ -2228,8 +2793,15 @@ def _invalidate_draw_cache():
     _path_cache["stamp"] = None
     _path_cache["batch"] = None
     _path_cache["batch_outline"] = None
+    _path_cache["batch_under"] = None
+    _path_cache["batch_under_outline"] = None
+    _path_cache["batch_clip"] = None
+    _path_cache["batch_clip_outline"] = None
     _path_cache["batch_insert"] = None
     _path_cache["batch_occlude"] = None
+    _path_cache["batch_socks"] = None
+    _path_cache["batch_frame"] = None
+    _path_cache["batch_frame_outline"] = None
     _cache_node_locs = {}
     _cache_n_links = -1
 
@@ -2239,11 +2811,14 @@ def _rebuild_batches(tree, scale, curving, use_wire_color, select_col, insert_co
     cols = []
     ipos = []
     icols = []
+    fpos = []
+    fcols = []
     dash = 10.0 * scale
     gap = 7.0 * scale
     period = dash + gap
+    frames = _collect_frame_rects(tree, scale)
+    hides = _collect_frame_hide_rects(tree, scale) if frames else []
     items = list(_iter_link_polys(tree, scale, curving))
-    clip_rects = _collect_node_occlude_rects(tree, scale)
     selected = getattr(bpy.context, "selected_nodes", None) or ()
     armed = dragging
     if not armed:
@@ -2282,7 +2857,7 @@ def _rebuild_batches(tree, scale, curving, use_wire_color, select_col, insert_co
             pa, pb = poly[j], poly[j + 1]
             dx, dy = pb[0] - pa[0], pb[1] - pa[1]
             seg = math.hypot(dx, dy)
-            if seg < 0.4:
+            if seg < 1.0e-4:
                 continue
             tcol0 = _mix(c0, c1, j / n_pts)
             tcol1 = _mix(c0, c1, min(1.0, (j + 1) / n_pts))
@@ -2300,24 +2875,27 @@ def _rebuild_batches(tree, scale, curving, use_wire_color, select_col, insert_co
                         u1 = min(1.0, (t + step) / qseg)
                         aa = (pa[0] + qdx * u0, pa[1] + qdy * u0)
                         bb = (pa[0] + qdx * u1, pa[1] + qdy * u1)
-                        if insert_ok:
-                            _emit_line(dst_pos, dst_cols, aa, bb, tcol0, tcol1)
-                        else:
-                            _emit_line_clipped(dst_pos, dst_cols, aa, bb, tcol0, tcol1, clip_rects)
+                        _emit_line(dst_pos, dst_cols, aa, bb, tcol0, tcol1)
+                        _emit_on_frames(fpos, fcols, aa, bb, tcol0, tcol1, frames, hides)
                     t += max(step, 0.35)
                 acc += qseg
                 continue
-            if insert_ok:
-                _emit_line(dst_pos, dst_cols, pa, pb, tcol0, tcol1)
-            else:
-                _emit_line_clipped(dst_pos, dst_cols, pa, pb, tcol0, tcol1, clip_rects)
+            _emit_line(dst_pos, dst_cols, pa, pb, tcol0, tcol1)
+            _emit_on_frames(fpos, fcols, pa, pb, tcol0, tcol1, frames, hides)
             acc += seg
 
     shader = _get_shader()
     _path_cache["batch"] = None
     _path_cache["batch_outline"] = None
+    _path_cache["batch_under"] = None
+    _path_cache["batch_under_outline"] = None
+    _path_cache["batch_clip"] = None
+    _path_cache["batch_clip_outline"] = None
     _path_cache["batch_insert"] = None
     _path_cache["batch_occlude"] = None
+    _path_cache["batch_socks"] = None
+    _path_cache["batch_frame"] = None
+    _path_cache["batch_frame_outline"] = None
     if len(pos) >= 2:
         dark = [(0.0, 0.0, 0.0, 0.45)] * len(pos)
         try:
@@ -2330,27 +2908,35 @@ def _rebuild_batches(tree, scale, curving, use_wire_color, select_col, insert_co
             _path_cache["batch_insert"] = batch_for_shader(shader, "LINES", {"pos": ipos, "color": icols})
         except Exception:
             _path_cache["batch_insert"] = batch_for_shader(shader, "LINES", {"pos": ipos})
+    if len(fpos) >= 2:
+        fdark = [(0.0, 0.0, 0.0, 0.45)] * len(fpos)
+        try:
+            _path_cache["batch_frame_outline"] = batch_for_shader(
+                shader, "LINES", {"pos": fpos, "color": fdark}
+            )
+            _path_cache["batch_frame"] = batch_for_shader(shader, "LINES", {"pos": fpos, "color": fcols})
+        except Exception:
+            _path_cache["batch_frame"] = batch_for_shader(shader, "LINES", {"pos": fpos})
 
 
-def _draw_cached_main_wires(context):
-    """Painter's algorithm: full wires under nodes. Cache comes from the last POST_VIEW."""
+
+def _draw_wire_batches(context, outline, batch, keep_depth=False):
     region = getattr(context, "region", None)
     if region is None or region.type != "WINDOW":
         return
     if int(getattr(region, "width", 0) or 0) < 8 or int(getattr(region, "height", 0) or 0) < 8:
         return
-    batch = _path_cache.get("batch")
-    outline = _path_cache.get("batch_outline")
     if batch is None and outline is None:
         return
     shader = _get_shader()
     gpu.state.blend_set("ALPHA")
     try:
-        try:
-            gpu.state.depth_test_set("NONE")
-            gpu.state.depth_mask_set(False)
-        except Exception:
-            pass
+        if not keep_depth:
+            try:
+                gpu.state.depth_test_set("NONE")
+                gpu.state.depth_mask_set(False)
+            except Exception:
+                pass
         shader.bind()
         try:
             shader.uniform_bool("lineSmooth", True)
@@ -2382,9 +2968,100 @@ def _draw_cached_main_wires(context):
         gpu.state.blend_set("NONE")
 
 
+def _draw_tri_wires(context, batch, keep_depth=False):
+    region = getattr(context, "region", None)
+    if region is None or region.type != "WINDOW" or batch is None:
+        return
+    if int(getattr(region, "width", 0) or 0) < 8 or int(getattr(region, "height", 0) or 0) < 8:
+        return
+    shader = _get_smooth_fill() or _get_fill_shader()
+    if shader is None:
+        return
+    gpu.state.blend_set("ALPHA")
+    try:
+        if not keep_depth:
+            try:
+                gpu.state.depth_test_set("NONE")
+                gpu.state.depth_mask_set(False)
+            except Exception:
+                pass
+        shader.bind()
+        batch.draw(shader)
+    except Exception:
+        pass
+    finally:
+        gpu.state.blend_set("NONE")
+
+
+def _draw_cached_under_wires(context):
+    return
+
+
+def _draw_cached_main_wires(context, keep_depth=False):
+    """Full unclipped noodles under nodes (PRE_VIEW)."""
+    _draw_wire_batches(
+        context,
+        _path_cache.get("batch_outline"),
+        _path_cache.get("batch"),
+        keep_depth=False,
+    )
+
+
+def _draw_cached_insert_wires(context, keep_depth=False):
+    batch = _path_cache.get("batch_insert")
+    if batch is None:
+        return
+    region = getattr(context, "region", None)
+    if region is None or region.type != "WINDOW":
+        return
+    shader = _get_shader()
+    gpu.state.blend_set("ALPHA")
+    try:
+        try:
+            gpu.state.depth_test_set("NONE")
+            gpu.state.depth_mask_set(False)
+        except Exception:
+            pass
+        shader.bind()
+        try:
+            shader.uniform_bool("lineSmooth", True)
+        except Exception:
+            pass
+        try:
+            w, h = _viewport_size(region)
+            shader.uniform_float("viewportSize", (w, h))
+        except Exception:
+            pass
+        _outline_w, _main_w, insert_w = _link_draw_widths(region)
+        _set_line_width(shader, insert_w)
+        batch.draw(shader)
+    except Exception:
+        pass
+    finally:
+        try:
+            _set_line_width(shader, 1.0)
+        except Exception:
+            pass
+        gpu.state.blend_set("NONE")
+
+
+def _draw_frame_overlay_wires(context):
+    """Redraw noodles that cross Frames, after C++ has painted the Frame."""
+    _draw_wire_batches(
+        context,
+        _path_cache.get("batch_frame_outline"),
+        _path_cache.get("batch_frame"),
+        keep_depth=False,
+    )
+
+
+def _draw_socket_caps():
+    return
+
+
 def _pre_view():
     global _pending_snap, _pre_synced, _nodes_are_dragging, _force_wires, _was_transform_modal
-    global _wire_hide_ttl
+    global _was_link_modal, _wire_hide_ttl, _idle_link_snapshot
     context = bpy.context
     if not _enabled(context):
         _theme_hide_native_wires(False)
@@ -2400,24 +3077,32 @@ def _pre_view():
         except Exception:
             n_links = -1
         dragging = _transform_is_modal(context)
+        linking = _find_node_link_op(context) is not None
         links_changed = _cache_n_links >= 0 and n_links != _cache_n_links
         loc_changed = _max_loc_delta(tree) > 0.01
         modal_ended = _was_transform_modal and not dragging
-        if links_changed or _pending_snap:
+        link_ended = _was_link_modal and not linking
+        if links_changed or _pending_snap or link_ended:
             _wire_hide_ttl = 12
-        if modal_ended or _pending_snap or links_changed:
+        if modal_ended or _pending_snap or links_changed or link_ended:
             _drop_transient_interaction()
+            _idle_link_snapshot = _snapshot_links(tree)
             _force_wires = True
             _pending_snap = False
             _path_cache["stamp"] = None
             _kick_redraw(4)
         _was_transform_modal = dragging
+        _was_link_modal = linking
+        if not linking:
+            _idle_link_snapshot = _snapshot_links(tree)
         _nodes_are_dragging = dragging
         if not dragging and _wire_hide_ttl:
             _wire_hide_ttl -= 1
         need_force = bool(
             dragging
+            or linking
             or modal_ended
+            or link_ended
             or loc_changed
             or links_changed
             or _force_wires
@@ -2430,11 +3115,16 @@ def _pre_view():
         _pre_synced = True
         _force_wires = False
         vec_ok = _hider.hide(tree)
-        _linkdrag_hider.hide(context)
+        if linking:
+            _linkdrag_hider.hide(context)
+        else:
+            _linkdrag_hider.restore(context)
         if not vec_ok:
             _wire_hide_ttl = max(_wire_hide_ttl, 6)
-        need_theme = bool(_wire_hide_ttl > 0) and _find_node_link_op(context) is None
+        need_theme = bool(_wire_hide_ttl > 0) and not linking
         _theme_hide_native_wires(need_theme)
+        _draw_cached_main_wires(context)
+        _draw_cached_insert_wires(context)
     except Exception:
         pass
 
@@ -2448,7 +3138,6 @@ def _post_view():
         _hider.restore_listbase()
         global _steer_insert_ptr
         if _enabled(context) and tree is not None:
-            # After backdrop, zones, and nodes so sockets exist and wires are not wiped.
             _draw_links(context, space, tree)
             if _steer_insert_ptr:
                 selected = getattr(context, "selected_nodes", None) or ()
@@ -2521,20 +3210,33 @@ def _is_node_link_op(op):
     return compact == "node.link" or name in {"NODE_OT_link", "node.link"}
 
 
+def _iter_modal_ops(context):
+    wm = getattr(context, "window_manager", None) if context is not None else None
+    windows = []
+    if wm is not None:
+        try:
+            windows.extend(list(wm.windows))
+        except Exception:
+            pass
+    win = getattr(context, "window", None) if context is not None else None
+    if win is not None and win not in windows:
+        windows.insert(0, win)
+    for w in windows:
+        ops = getattr(w, "modal_operators", None)
+        if not ops:
+            continue
+        try:
+            for op in ops:
+                yield op
+        except Exception:
+            continue
+
+
 def _find_node_link_op(context):
-    win = getattr(context, "window", None)
-    if win is not None:
-        ops = getattr(win, "modal_operators", None)
-        if ops:
-            try:
-                for op in ops:
-                    if _is_node_link_op(op):
-                        return op
-            except Exception:
-                pass
-    op = getattr(context, "active_operator", None)
-    if op is not None and _is_node_link_op(op):
-        return op
+    """Only live modal NODE_OT_link. active_operator stays set after mouse-up."""
+    for op in _iter_modal_ops(context):
+        if _is_node_link_op(op):
+            return op
     return None
 
 
@@ -2582,7 +3284,7 @@ def _iter_pick_sockets(tree, outputs_first):
                 yield node, sock, xy, is_out
 
 
-def _nearest_socket(tree, pt, outputs_first, max_dist, skip_node=None):
+def _nearest_socket(tree, pt, outputs_first, max_dist, skip_node=None, side=None):
     best = None
     best_d = max_dist
     skip_ptr = None
@@ -2592,6 +3294,8 @@ def _nearest_socket(tree, pt, outputs_first, max_dist, skip_node=None):
         except Exception:
             skip_ptr = None
     for node, sock, xy, is_out in _iter_pick_sockets(tree, outputs_first):
+        if side is not None and bool(is_out) != bool(side):
+            continue
         if skip_ptr is not None:
             try:
                 if node.as_pointer() == skip_ptr:
@@ -2632,25 +3336,75 @@ def _socket_pick_dist(region, scale):
     return 0.25 * NODE_GRID_UNIT * scale + extra
 
 
+def _sock_ptr(sock):
+    if sock is None:
+        return None
+    try:
+        return int(sock.as_pointer())
+    except Exception:
+        return None
+
+
+def _op_is_detach(op):
+    try:
+        return bool(op.properties.detach)
+    except Exception:
+        return False
+
+
+def _snapshot_incoming(snapshot, sock):
+    ptr = _sock_ptr(sock)
+    if ptr is None:
+        return None
+    for fn, fs, tn, ts in snapshot:
+        try:
+            if int(ts.as_pointer()) == ptr:
+                return (fn, fs, tn, ts)
+        except Exception:
+            continue
+    return None
+
+
+def _snapshot_outgoing(snapshot, sock):
+    ptr = _sock_ptr(sock)
+    if ptr is None:
+        return []
+    out = []
+    for fn, fs, tn, ts in snapshot:
+        try:
+            if int(fs.as_pointer()) == ptr:
+                out.append((fn, fs, tn, ts))
+        except Exception:
+            continue
+    return out
+
+
+def _socket_link_limit(sock):
+    try:
+        v = int(getattr(sock, "link_limit", 0) or 0)
+        if v > 0:
+            return v
+    except Exception:
+        pass
+    return 0
+
+
 def _resolve_drag_anchor(tree, start_pt, max_dist, snapshot):
-    hit = _nearest_socket(tree, start_pt, True, max_dist)
+    # Closest socket of either side. Prefer the actual click, not outputs-first.
+    hit_in = _nearest_socket(tree, start_pt, False, max_dist, side=False)
+    hit_out = _nearest_socket(tree, start_pt, True, max_dist, side=True)
+    hit = None
+    if hit_in is None:
+        hit = hit_out
+    elif hit_out is None:
+        hit = hit_in
+    else:
+        d_in = math.hypot(hit_in[2][0] - start_pt[0], hit_in[2][1] - start_pt[1])
+        d_out = math.hypot(hit_out[2][0] - start_pt[0], hit_out[2][1] - start_pt[1])
+        hit = hit_in if d_in <= d_out else hit_out
     if hit is None:
         return None
-    node, sock, _xy, is_out = hit
-    if is_out:
-        return (node, sock, True)
-    try:
-        sock_ptr = sock.as_pointer()
-    except Exception:
-        sock_ptr = None
-    if sock_ptr is not None:
-        for fn, fs, _tn, ts in snapshot:
-            try:
-                if ts.as_pointer() == sock_ptr:
-                    return (fn, fs, True)
-            except Exception:
-                continue
-    return (node, sock, False)
+    return hit
 
 
 def _emit_circle(dst_pos, dst_cols, center, radius, col, steps=14):
@@ -2678,69 +3432,38 @@ def _draw_colored_lines(shader, pos, cols, width):
         batch_for_shader(shader, "LINES", {"pos": pos}).draw(shader)
 
 
-def _draw_drag_link(context, space, tree, region, shader, scale):
-    global _idle_link_snapshot, _drag_anchor, _drag_op_key
-    op = _find_node_link_op(context)
-    if op is None:
-        _drag_anchor = None
-        _drag_op_key = None
-        _idle_link_snapshot = _snapshot_links(tree)
-        return
+def _drag_socket_xy(node, sock, scale):
+    if sock is None or node is None:
+        return None
     try:
-        op_key = int(op.as_pointer())
+        xy = connection_xy(sock, node, None, 1, scale)
+        if xy is not None and _finite_pt(xy):
+            return xy
     except Exception:
-        op_key = id(op)
-    start_pt = _drag_start_view(op)
-    if start_pt is None:
-        return
-    pick = _socket_pick_dist(region, scale)
-    if getattr(tree, "bl_idname", "") == "GPUTextureEditorNodeTree":
-        pick *= 2.5
-    if _drag_anchor is None or _drag_op_key != op_key:
-        _drag_op_key = op_key
-        _drag_anchor = _resolve_drag_anchor(tree, start_pt, pick, _idle_link_snapshot)
-    anchor = _drag_anchor
-    if anchor is None:
-        return
-    from_node, from_sock, from_is_out = anchor
+        pass
     try:
-        p_from = connection_xy(from_sock, from_node, None, 1, scale)
-        if p_from is None or not _finite_pt(p_from):
-            p_from = socket_xy(from_sock)
+        xy = socket_xy(sock)
+        if xy is not None and _finite_pt(xy):
+            return xy
     except Exception:
+        pass
+    return None
+
+
+def _emit_drag_wire(shader, region, scale, p0, p3, fn, tn, fs, ts, from_sock):
+    if not _finite_pt(p0) or not _finite_pt(p3):
         return
-    if not _finite_pt(p_from):
+    if math.hypot(p3[0] - p0[0], p3[1] - p0[1]) < 0.5:
         return
-    cur = _cursor_view(space, scale)
-    if cur is None or not _finite_pt(cur):
-        cur = start_pt
-    hover = _nearest_socket(tree, cur, not from_is_out, pick, skip_node=from_node)
-    p_to = cur
-    to_node = None
-    to_sock = None
-    if hover is not None:
-        h_node, h_sock, h_xy, h_out = hover
-        if h_out != from_is_out:
-            to_node, to_sock, p_to = h_node, h_sock, h_xy
-    if from_is_out:
-        p0, p3 = p_from, p_to
-        fn, tn = from_node, to_node
-        fs, ts = from_sock, to_sock
-        fr = getattr(from_node, "bl_idname", "") == "NodeReroute"
-        tr = bool(to_node) and getattr(to_node, "bl_idname", "") == "NodeReroute"
-    else:
-        p0, p3 = p_to, p_from
-        fn, tn = to_node, from_node
-        fs, ts = to_sock, from_sock
-        fr = bool(to_node) and getattr(to_node, "bl_idname", "") == "NodeReroute"
-        tr = getattr(from_node, "bl_idname", "") == "NodeReroute"
     curving = _noodle_curving()
+    fr = bool(fn) and getattr(fn, "bl_idname", "") == "NodeReroute"
+    tr = bool(tn) and getattr(tn, "bl_idname", "") == "NodeReroute"
     from_rect = _node_view_rect(fn, scale) if fn is not None else None
     to_rect = _node_view_rect(tn, scale) if tn is not None else None
     wps = _angled_waypoints(p0, p3, fr, tr, scale, curving, from_rect, to_rect)
     poly = _filleted_polyline(wps, scale, curving)
     c0 = _socket_color_fast(fs if fs is not None else from_sock)
-    c1 = _socket_color_fast(ts if ts is not None else from_sock)
+    c1 = _socket_color_fast(ts if ts is not None else (fs if fs is not None else from_sock))
     pos = []
     cols = []
     n_pts = max(len(poly) - 1, 1)
@@ -2776,6 +3499,155 @@ def _draw_drag_link(context, space, tree, region, shader, scale):
         pass
 
 
+def _draw_drag_link(context, space, tree, region, shader, scale):
+    global _idle_link_snapshot, _drag_anchor, _drag_op_key
+    op = _find_node_link_op(context)
+    if op is None:
+        _drag_anchor = None
+        _drag_op_key = None
+        _idle_link_snapshot = _snapshot_links(tree)
+        return
+    try:
+        op_key = int(op.as_pointer())
+    except Exception:
+        op_key = id(op)
+    cur = _cursor_view(space, scale)
+    start_pt = _drag_start_view(op)
+    if cur is None or not _finite_pt(cur):
+        cur = start_pt
+    if cur is None or not _finite_pt(cur):
+        return
+
+    nldrag_rows = _iter_nldrag_links(op, getattr(_linkdrag_hider, "_vec_addr", None))
+    if nldrag_rows:
+        smap = _tree_socket_map(tree)
+        drawn = False
+        for _fn_ptr, _tn_ptr, fromsock, tosock in nldrag_rows:
+            fn, fs = smap.get(int(fromsock or 0), (None, None))
+            tn, ts = smap.get(int(tosock or 0), (None, None))
+            if fs is None and ts is None:
+                continue
+            p0 = _drag_socket_xy(fn, fs, scale) if fs is not None else cur
+            p3 = _drag_socket_xy(tn, ts, scale) if ts is not None else cur
+            if p0 is None:
+                p0 = cur
+            if p3 is None:
+                p3 = cur
+            _emit_drag_wire(shader, region, scale, p0, p3, fn, tn, fs, ts, fs or ts)
+            drawn = True
+        if drawn:
+            return
+
+    pick = _socket_pick_dist(region, scale)
+    if _is_gte_tree(tree):
+        pick *= 2.5
+    snap = _idle_link_snapshot or []
+    if _drag_anchor is None or _drag_op_key != op_key:
+        _drag_op_key = op_key
+        _drag_anchor = _resolve_drag_anchor(tree, start_pt or cur, pick, snap)
+    hit = _drag_anchor
+    if hit is None:
+        return
+    node, sock, _xy, is_out = hit
+
+    def _hover(want_out, skip):
+        h = _nearest_socket(tree, cur, want_out, pick, skip_node=skip, side=want_out)
+        if h is None:
+            return None, None, cur
+        return h[0], h[1], h[2]
+
+    if is_out:
+        outgoing = _snapshot_outgoing(snap, sock)
+        limit = _socket_link_limit(sock)
+        move_existing = bool(outgoing) and (
+            _op_is_detach(op) or (limit > 0 and len(outgoing) >= limit)
+        )
+        if move_existing:
+            # Ctrl / at-limit from output: inputs stay, output end follows cursor.
+            h_node, h_sock, h_xy = _hover(True, None)
+            for _fn, _fs, tn, ts in outgoing:
+                p0 = h_xy if h_sock is not None else cur
+                p3 = _drag_socket_xy(tn, ts, scale)
+                if p3 is None:
+                    continue
+                _emit_drag_wire(
+                    shader, region, scale, p0, p3,
+                    h_node, tn, h_sock, ts, h_sock or ts,
+                )
+            return
+        h_node, h_sock, h_xy = _hover(False, node)
+        p0 = _drag_socket_xy(node, sock, scale)
+        if p0 is None:
+            return
+        _emit_drag_wire(shader, region, scale, p0, h_xy, node, h_node, sock, h_sock, sock)
+        return
+
+    incoming = _snapshot_incoming(snap, sock)
+    if incoming is not None:
+        # Drag from an occupied input: move the existing link. Empty drop disconnects.
+        fn, fs, _tn, _ts = incoming
+        h_node, h_sock, h_xy = _hover(False, fn)
+        p0 = _drag_socket_xy(fn, fs, scale)
+        if p0 is None:
+            return
+        _emit_drag_wire(shader, region, scale, p0, h_xy, fn, h_node, fs, h_sock, fs)
+        return
+
+    # Empty input: new reverse drag from the input toward an output / cursor.
+    h_node, h_sock, h_xy = _hover(True, node)
+    p3 = _drag_socket_xy(node, sock, scale)
+    if p3 is None:
+        return
+    _emit_drag_wire(shader, region, scale, h_xy, p3, h_node, node, h_sock, sock, sock)
+
+
+def _region_view_bounds(region):
+    v2d = getattr(region, "view2d", None)
+    if v2d is None:
+        return None
+    try:
+        a = v2d.region_to_view(0, 0)
+        b = v2d.region_to_view(region.width, region.height)
+    except TypeError:
+        try:
+            a = v2d.region_to_view(0, 0, False)
+            b = v2d.region_to_view(region.width, region.height, False)
+        except Exception:
+            return None
+    except Exception:
+        return None
+    x0, x1 = (a[0], b[0]) if a[0] <= b[0] else (b[0], a[0])
+    y0, y1 = (a[1], b[1]) if a[1] <= b[1] else (b[1], a[1])
+    if not (_finite_pt((x0, y0)) and _finite_pt((x1, y1))):
+        return None
+    return (x0, y0, x1, y1)
+
+
+def _far_depth_batch(region, shader):
+    bounds = _region_view_bounds(region)
+    if bounds is None:
+        return None
+    x0, y0, x1, y1 = bounds
+    pad = 8.0
+    x0 -= pad
+    y0 -= pad
+    x1 += pad
+    y1 += pad
+    z = DEPTH_FAR_Z
+    pos = (
+        (x0, y0, z),
+        (x1, y0, z),
+        (x1, y1, z),
+        (x0, y0, z),
+        (x1, y1, z),
+        (x0, y1, z),
+    )
+    try:
+        return batch_for_shader(shader, "TRIS", {"pos": pos})
+    except Exception:
+        return None
+
+
 def _clear_overlay_depth():
     getter = getattr(gpu.state, "active_framebuffer_get", None)
     if getter is not None:
@@ -2795,21 +3667,52 @@ def _clear_overlay_depth():
         return False
 
 
-def _draw_node_occluders():
+def _begin_node_depth_mask(context):
+    """Depth-only node/socket cover. Frames are skipped so wires sit on them."""
+    if getattr(gpu.state, "color_mask_set", None) is None:
+        return False
     occ = _path_cache.get("batch_occlude")
     fill = _get_fill_shader()
-    if occ is None or fill is None:
+    region = getattr(context, "region", None)
+    if occ is None or fill is None or region is None:
         return False
     try:
+        gpu.state.blend_set("NONE")
+        gpu.state.depth_mask_set(True)
+        gpu.state.depth_test_set("ALWAYS")
+        gpu.state.color_mask_set(False, False, False, False)
         fill.bind()
         try:
-            fill.uniform_float("color", (0.0, 0.0, 0.0, 0.0))
+            fill.uniform_float("color", (0.0, 0.0, 0.0, 1.0))
         except Exception:
             pass
+        far = _far_depth_batch(region, fill)
+        if far is not None:
+            far.draw(fill)
         occ.draw(fill)
+        gpu.state.color_mask_set(True, True, True, True)
+        gpu.state.depth_mask_set(False)
+        gpu.state.depth_test_set("LESS_EQUAL")
         return True
     except Exception:
+        _end_node_depth_mask()
         return False
+
+
+def _end_node_depth_mask():
+    try:
+        gpu.state.color_mask_set(True, True, True, True)
+    except Exception:
+        pass
+    try:
+        gpu.state.depth_mask_set(False)
+        gpu.state.depth_test_set("NONE")
+    except Exception:
+        pass
+
+
+def _draw_node_occluders():
+    return False
 
 
 def _draw_links(context, space, tree):
@@ -2833,9 +3736,6 @@ def _draw_links(context, space, tree):
     if not dragging:
         _steer_insert_ptr = None
 
-    _draw_cached_main_wires(context)
-
-    insert = _path_cache.get("batch_insert")
     shader = _get_shader()
     gpu.state.blend_set("ALPHA")
     try:
@@ -2844,6 +3744,7 @@ def _draw_links(context, space, tree):
             gpu.state.depth_mask_set(False)
         except Exception:
             pass
+        _draw_frame_overlay_wires(context)
         shader.bind()
         try:
             shader.uniform_bool("lineSmooth", True)
@@ -2854,31 +3755,23 @@ def _draw_links(context, space, tree):
             shader.uniform_float("viewportSize", (w, h))
         except Exception:
             pass
-        _outline_w, main_w, insert_w = _link_draw_widths(region)
-        if insert is not None:
-            _set_line_width(shader, insert_w)
-            insert.draw(shader)
-    except Exception:
-        pass
-    try:
         _draw_drag_link(context, space, tree, region, shader, scale)
     except Exception:
         pass
-    finally:
-        try:
-            gpu.state.depth_test_set("NONE")
-            gpu.state.depth_mask_set(False)
-        except Exception:
-            pass
-        try:
-            _set_line_width(shader, 1.0)
-        except Exception:
-            pass
-        try:
-            gpu.state.line_width_set(1.0)
-        except Exception:
-            pass
-        gpu.state.blend_set("NONE")
+    try:
+        gpu.state.depth_test_set("NONE")
+        gpu.state.depth_mask_set(False)
+    except Exception:
+        pass
+    try:
+        _set_line_width(shader, 1.0)
+    except Exception:
+        pass
+    try:
+        gpu.state.line_width_set(1.0)
+    except Exception:
+        pass
+    gpu.state.blend_set("NONE")
 
 
 # ---------------------------------------------------------------------------
@@ -3185,7 +4078,7 @@ def _on_prop_update(self, context):
 def _reset_interaction_state():
     global _prev_sel_locs, _steer_insert_ptr, _idle_link_snapshot, _drag_anchor, _drag_op_key
     global _prefer_layout_xy, _nodes_are_dragging, _pending_snap, _pre_synced
-    global _force_wires, _was_transform_modal, _wire_hide_ttl
+    global _force_wires, _was_transform_modal, _was_link_modal, _wire_hide_ttl
     _restore_warped_sockets()
     _prev_sel_locs = {}
     _steer_insert_ptr = None
@@ -3198,6 +4091,7 @@ def _reset_interaction_state():
     _pre_synced = False
     _force_wires = False
     _was_transform_modal = False
+    _was_link_modal = False
     _wire_hide_ttl = 0
     _theme_hide_native_wires(False)
     _sock_local.clear()
