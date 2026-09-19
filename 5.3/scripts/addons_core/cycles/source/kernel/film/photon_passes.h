@@ -269,8 +269,11 @@ ccl_device_inline void film_write_photon_caustics_groups(KernelGlobals kg,
  * the estimate the same way sample averaging does.
  *
  * `num_samples` is the fallback when there is no per-pixel sample count
- * pass; it must match the value the pass accessor divides the combined pass
- * by. */
+ * pass; it must match the value the pass accessor / denoiser divides the
+ * combined pass by. Temporal DLSS zeros the film every work and passes 1
+ * here (get_num_samples_for_buffer): writing the growing rendered-sample
+ * count would bake N*E into a 1spp buffer and the NGX history would keep
+ * adding it. */
 ccl_device void film_photon_gather_pixel(KernelGlobals kg,
                                          ccl_global float *ccl_restrict render_buffer,
                                          const int x,
@@ -531,7 +534,9 @@ ccl_device void film_photon_gather_pixel(KernelGlobals kg,
                                 (max(gather_weight, 1.0f) * M_PI_F * r2);
   const float3 estimate = tau * tau_to_radiance;
 
-  /* Delta write so the film's running average displays the estimate. */
+  /* Delta write so the film's running average displays the estimate.
+   * `samples` is the count THIS buffer currently holds (1 after a temporal
+   * DLSS reset, N when Cycles is accumulating), not the session's total. */
   float samples = (float)num_samples;
   if (kernel_data.film.pass_sample_count != PASS_UNUSED) {
     samples = (float)__float_as_uint(buffer[kernel_data.film.pass_sample_count]);
@@ -651,8 +656,7 @@ ccl_device void film_photon_smooth_pixel(KernelGlobals kg,
   const bool split_groups = (num_groups > 0 &&
                              kernel_data.film.pass_photon_tau_group != PASS_UNUSED &&
                              kernel_data.film.pass_caustics_lightgroup != PASS_UNUSED);
-  /* Hoisted above the filter because the group writes happen inside it; the
-   * value and its use for the total below are unchanged. */
+  /* Same sample count as the gather delta (buffer spp, 1 under temporal DLSS). */
   float samples = (float)num_samples;
   if (kernel_data.film.pass_sample_count != PASS_UNUSED) {
     samples = (float)__float_as_uint(buffer[kernel_data.film.pass_sample_count]);

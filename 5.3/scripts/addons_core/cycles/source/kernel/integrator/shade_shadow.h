@@ -9,6 +9,7 @@
 #include "kernel/integrator/surface_shader.h"
 #include "kernel/integrator/volume_stack.h"
 
+#include "kernel/geom/object.h"
 #include "kernel/geom/shader_data.h"
 
 CCL_NAMESPACE_BEGIN
@@ -134,8 +135,15 @@ ccl_device_inline TransparentShadowEvalResult integrate_transparent_surface_shad
     return TRANSPARENT_SHADOW_EVAL_OPAQUE;
   }
 
-  /* Compute transparency from closures. */
-  const Spectrum transparency = surface_shader_transparency(shadow_sd);
+  /* Compute transparency from closures. Object Color A scales remaining
+   * opacity so viewport alpha matches official shadow behavior. */
+  Spectrum transparency = surface_shader_transparency(shadow_sd);
+  if (shadow_sd->object != OBJECT_NONE) {
+    const float obj_alpha = object_alpha(kg, shadow_sd->object);
+    if (obj_alpha < 1.0f) {
+      transparency = one_spectrum() - (one_spectrum() - transparency) * obj_alpha;
+    }
+  }
   const Spectrum throughput = INTEGRATOR_STATE(state, shadow_path, throughput) * transparency;
 
   if (is_zero(throughput)) {

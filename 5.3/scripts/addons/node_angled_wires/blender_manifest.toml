@@ -1,6 +1,6 @@
 schema_version = "1.0.0"
 id = "node_angled_wires"
-version = "1.3.38"
+version = "1.3.45"
 name = "Angled Node Wires"
 tagline = "Houdini-style orthogonal node links drawn from Python"
 maintainer = "Local"
