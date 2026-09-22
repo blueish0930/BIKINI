@@ -1083,6 +1083,7 @@ class VIEW3D_HT_header(Header):
             row.prop(tool_settings.image_paint, "use_screen_space", text="Screen Space", toggle=True)
             row.popover(panel="VIEW3D_PT_slots_projectpaint", icon=icon)
             row.popover(panel="VIEW3D_PT_paint_layers", text="Layers", icon='RENDERLAYERS')
+            row.operator("image.paint_layers_float", text="", icon='PINNED')
             row.popover(
                 panel="VIEW3D_PT_mask",
                 icon=VIEW3D_HT_header._texture_mask_icon(tool_settings.image_paint),
