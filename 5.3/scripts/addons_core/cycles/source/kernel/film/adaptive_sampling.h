@@ -4,11 +4,6 @@
 
 #pragma once
 
-#ifdef WITH_CYCLES_SPPM_CAUSTICS
-/* === BIKINI SPPM Begin === */
-#  include "kernel/film/photon_passes.h"
-/* === BIKINI SPPM End === */
-#endif
 #include "kernel/film/write.h"
 
 CCL_NAMESPACE_BEGIN
@@ -57,15 +52,6 @@ ccl_device bool film_adaptive_sampling_convergence_check(KernelGlobals kg,
      * TODO(sergey): On a GPU it might be better to keep thread alive for better coherency? */
     return true;
   }
-
-#ifdef WITH_CYCLES_SPPM_CAUSTICS
-  /* === BIKINI SPPM Begin === */
-  if (!film_photon_adaptive_can_retire(kg, buffer)) {
-    buffer[kernel_data.film.pass_adaptive_aux_buffer + 3] = 0.0f;
-    return false;
-  }
-  /* === BIKINI SPPM End === */
-#endif
 
   const float4 I = kernel_read_pass_float4(buffer + kernel_data.film.pass_combined);
 

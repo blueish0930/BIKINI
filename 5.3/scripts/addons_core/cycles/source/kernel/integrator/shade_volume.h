@@ -8,12 +8,6 @@
 
 #include "kernel/film/denoising_passes.h"
 #include "kernel/film/light_passes.h"
-#ifdef WITH_CYCLES_SPPM_CAUSTICS
-/* === BIKINI SPPM Begin === */
-#  include "kernel/integrator/photon_lookup.h"
-#  include "kernel/svm/photon_caustics.h"
-/* === BIKINI SPPM End === */
-#endif
 
 #include "kernel/integrator/guiding.h"
 #include "kernel/integrator/intersect_closest.h"
@@ -743,7 +737,7 @@ ccl_device void volume_shadow_null_scattering(KernelGlobals kg,
   }
 }
 
-/* Equi-angular sampling as in:
+/* Equiangular sampling as in:
  * "Importance Sampling Techniques for Path Tracing in Participating Media" */
 
 /* Below this pdf we ignore samples, as they tend to lead to very long distances.
@@ -1769,45 +1763,6 @@ ccl_device_forceinline void volume_integrate_homogeneous(KernelGlobals kg,
     guiding_record_volume_emission(kg, state, emission);
   }
 
-#ifdef WITH_CYCLES_SPPM_CAUSTICS
-  /* === BIKINI SPPM Begin === */
-  if (kernel_data.integrator.use_photon_volume_caustics &&
-      ((INTEGRATOR_STATE(state, path, visibility) &
-        (PATH_RAY_VISIBILITY_CAMERA | PATH_RAY_VISIBILITY_TRANSMIT)) ||
-       (INTEGRATOR_STATE(state, path, flag) & PATH_RAY_PHOTON_CAMERA_PATH)) &&
-      kernel_data.integrator.photon_num > 0 && ray_length > 0.0f && !is_zero(coeff.sigma_s))
-  {
-    ccl_global uint64_t *profile = photon_volume_profile_select(state);
-    photon_volume_profile_add(profile, PHOTON_PROFILE_HOMOGENEOUS_SEGMENTS);
-    const bool single_hg = sd->num_closure == 1 &&
-                           sd->closure[0].type == CLOSURE_VOLUME_HENYEY_GREENSTEIN_ID;
-    const float volume_g = single_hg ?
-                               volume_phase_get_g(
-                                   (const ccl_private ShaderVolumeClosure *)&sd->closure[0]) :
-                               0.0f;
-    const float3 inv_d = make_float3(
-        1.0f / (fabsf(ray->D.x) > 1e-20f ? ray->D.x : copysignf(1e-20f, ray->D.x)),
-        1.0f / (fabsf(ray->D.y) > 1e-20f ? ray->D.y : copysignf(1e-20f, ray->D.y)),
-        1.0f / (fabsf(ray->D.z) > 1e-20f ? ray->D.z : copysignf(1e-20f, ray->D.z)));
-    const float3 beam_radiance = photon_grid_beam_integral(
-        kg,
-        ray->P,
-        ray->D,
-        inv_d,
-        ray->tmin,
-        ray->tmax,
-        coeff.sigma_t,
-        coeff.sigma_s,
-        volume_g,
-        kernel_data.integrator.photon_radius * kernel_data.integrator.photon_radius,
-        single_hg ? nullptr : sd,
-        (INTEGRATOR_STATE(state, path, flag) & PATH_RAY_PHOTON_CAMERA_PATH) != 0,
-        profile);
-    vstate.emission += throughput * beam_radiance * kernel_data.integrator.photon_intensity;
-  }
-  /* === BIKINI SPPM End === */
-#endif
-
   /* Transmittance of the complete ray segment. */
   const Spectrum transmittance = volume_color_transmittance(coeff.sigma_t, ray_length);
   if ((INTEGRATOR_STATE(state, path, flag) & PATH_RAY_TERMINATE) || is_zero(coeff.sigma_s)) {
@@ -2148,123 +2103,6 @@ ccl_device_inline bool volume_ray_marching_advance(const int step,
 
   return step < vstep.max_steps;
 }
-
-/* === CyclesPlus: Volume Photon Beam Query Begin === */
-#ifdef WITH_CYCLES_SPPM_CAUSTICS
-/* Integrate the complete beam segment independently of the sampled path scatter.
- * Reuse Cycles' spatial shader evaluation and stepping for textured/mixed media. */
-ccl_device Spectrum volume_integrate_photon_beams(
-    KernelGlobals kg,
-    const IntegratorState state,
-    const ccl_private Ray *ray,
-    ccl_private ShaderData *sd,
-    const ccl_private RNGState *rng_state)
-{
-  if (!kernel_data.integrator.use_photon_volume_caustics ||
-      !((INTEGRATOR_STATE(state, path, visibility) &
-         (PATH_RAY_VISIBILITY_CAMERA | PATH_RAY_VISIBILITY_TRANSMIT)) ||
-        (INTEGRATOR_STATE(state, path, flag) & PATH_RAY_PHOTON_CAMERA_PATH)) ||
-      kernel_data.integrator.photon_volume_beam_num == 0 ||
-      kernel_data.integrator.photon_volume_beam_node_num == 0 || ray->tmax <= ray->tmin)
-  {
-    return zero_spectrum();
-  }
-
-  ccl_global uint64_t *profile = photon_volume_profile_select(state);
-  photon_volume_profile_add(profile, PHOTON_PROFILE_MARCH_SEGMENTS);
-  const bool photon_camera_path =
-      (INTEGRATOR_STATE(state, path, flag) & PATH_RAY_PHOTON_CAMERA_PATH) != 0;
-  const KernelPhotonBeamNode root = kernel_data_fetch(photon_volume_beam_nodes, 0);
-  Interval<float> beam_range = {ray->tmin, ray->tmax};
-  if (!photon_camera_path &&
-      !ray_aabb_intersect(root.bmin, root.bmax, ray->P, ray->D, &beam_range)) {
-    photon_volume_profile_add(profile, PHOTON_PROFILE_ROOT_REJECTS);
-    return zero_spectrum();
-  }
-
-  Ray beam_ray = *ray;
-  beam_ray.tmax = beam_range.max;
-  const float step_size = volume_stack_step_size<false>(kg, state);
-  /* Beam radiance is already spatially smoothed by the photon radius. Use a
-   * coarser dedicated march while keeping the camera volume path unchanged. */
-  const float beam_step_size = step_size == FLT_MAX ?
-                                   step_size :
-                                   min(step_size * 2.0f, beam_ray.tmax - ray->tmin);
-  const float3 inv_d = make_float3(
-      1.0f / (fabsf(ray->D.x) > 1e-20f ? ray->D.x : copysignf(1e-20f, ray->D.x)),
-      1.0f / (fabsf(ray->D.y) > 1e-20f ? ray->D.y : copysignf(1e-20f, ray->D.y)),
-      1.0f / (fabsf(ray->D.z) > 1e-20f ? ray->D.z : copysignf(1e-20f, ray->D.z)));
-  VolumeStep vstep;
-  volume_step_init<false>(kg, rng_state, beam_step_size, ray->tmin, beam_ray.tmax, &vstep);
-  Spectrum transmittance = one_spectrum();
-  Spectrum radiance = zero_spectrum();
-  const int object = sd->object;
-  const uint lcg_state = sd->lcg_state;
-
-  for (int step = 0; volume_ray_marching_advance(step, &beam_ray, &sd->P, vstep); step++) {
-    photon_volume_profile_add(profile, PHOTON_PROFILE_SHADER_SAMPLES);
-    /* The random first-step offset must not drop the final interval at the step limit. */
-    if (step + 1 == vstep.max_steps) {
-      photon_volume_profile_add(profile, PHOTON_PROFILE_STEP_LIMITS);
-      vstep.t.max = beam_ray.tmax;
-      sd->P = ray->P + ray->D * mix(vstep.t.min, vstep.t.max, vstep.shade_offset);
-    }
-    VolumeShaderCoefficients coeff ccl_optional_struct_init;
-    if (!volume_shader_sample(kg, state, sd, &coeff)) {
-      photon_volume_profile_add(profile, PHOTON_PROFILE_SHADER_EMPTY);
-      continue;
-    }
-    if (sd->runtime_flag & SR_CACHE_MISS) {
-      photon_volume_profile_add(profile, PHOTON_PROFILE_CACHE_MISSES);
-      break;
-    }
-    if (!is_zero(coeff.sigma_s) && vstep.t.max > beam_range.min) {
-      /* A single HG closure can use the same analytic path as homogeneous
-       * volumes. Keep the native closure loop for other phase functions and
-       * mixed media. */
-      const bool single_hg = sd->num_closure == 1 &&
-                             sd->closure[0].type == CLOSURE_VOLUME_HENYEY_GREENSTEIN_ID;
-      const float volume_g = single_hg ?
-                                 volume_phase_get_g(
-                                     (const ccl_private ShaderVolumeClosure *)&sd->closure[0]) :
-                                 0.0f;
-      radiance += transmittance * photon_grid_beam_integral(
-          kg,
-          ray->P,
-          ray->D,
-          inv_d,
-          vstep.t.min,
-          vstep.t.max,
-          coeff.sigma_t,
-          coeff.sigma_s,
-          volume_g,
-          kernel_data.integrator.photon_radius * kernel_data.integrator.photon_radius,
-          single_hg ? nullptr : sd,
-          photon_camera_path,
-          profile);
-    }
-    else {
-      photon_volume_profile_add(profile, PHOTON_PROFILE_NO_SCATTER_STEPS,
-                               is_zero(coeff.sigma_s));
-      photon_volume_profile_add(profile, PHOTON_PROFILE_PRE_BEAM_STEPS,
-                               vstep.t.max <= beam_range.min);
-    }
-    transmittance *= volume_color_transmittance(coeff.sigma_t, vstep.t.length());
-    if (reduce_max(transmittance) < VOLUME_THROUGHPUT_EPSILON) {
-      photon_volume_profile_add(profile, PHOTON_PROFILE_ATTENUATION_EXITS);
-      break;
-    }
-  }
-
-  const int cache_miss = sd->runtime_flag & SR_CACHE_MISS;
-  shader_setup_from_volume(sd, ray, object);
-  sd->lcg_state = lcg_state;
-  sd->runtime_flag |= cache_miss;
-  return INTEGRATOR_STATE(state, path, throughput) * radiance *
-         kernel_data.integrator.photon_intensity;
-}
-#endif  /* WITH_CYCLES_SPPM_CAUSTICS */
-/* === CyclesPlus: Volume Photon Beam Query End === */
 
 ccl_device void volume_shadow_ray_marching(KernelGlobals kg,
                                            IntegratorShadowState state,
@@ -2876,14 +2714,6 @@ ccl_device_forceinline bool integrate_volume_phase_scatter(
 #  endif
 
   path_state_next(kg, state, label, sd->runtime_flag);
-#ifdef WITH_CYCLES_SPPM_CAUSTICS
-  /* === BIKINI SPPM Begin === */
-  if (kernel_data.integrator.photon_partition_pt) {
-    INTEGRATOR_STATE_WRITE(state, path, flag) = INTEGRATOR_STATE(state, path, flag) &
-                                                ~PATH_RAY_PHOTON_CAUSTIC_CHAIN;
-  }
-  /* === BIKINI SPPM End === */
-#endif
   return true;
 }
 
@@ -2912,8 +2742,8 @@ volume_integrate_event(KernelGlobals kg,
   const uint32_t path_flag = INTEGRATOR_STATE(state, path, flag);
   const float continuation_probability = (path_flag & PATH_RAY_TERMINATE_IN_NEXT_VOLUME) ?
                                              0.0f :
-                                             INTEGRATOR_STATE(
-                                                 state, path, continuation_probability);
+                                             float(INTEGRATOR_STATE(
+                                                 state, path, continuation_probability));
   if (continuation_probability == 0.0f) {
     return VOLUME_PATH_MISSED;
   }
@@ -3062,32 +2892,12 @@ ccl_device VolumeIntegrateEvent volume_integrate(KernelGlobals kg,
 
   /* TODO: expensive to zero closures? */
   VolumeIntegrateResult result = {};
-#ifdef WITH_CYCLES_SPPM_CAUSTICS
-  /* === BIKINI SPPM Begin === */
-  const Spectrum beam_radiance = volume_is_homogeneous<false>(kg, state) ?
-                                     zero_spectrum() :
-                                     volume_integrate_photon_beams(kg, state, ray, &sd, &rng_state);
-  if (sd.runtime_flag & SR_CACHE_MISS) {
-    return VOLUME_PATH_CACHE_MISS;
-  }
-  /* === BIKINI SPPM End === */
-#endif
   volume_integrate_null_scattering(kg, state, ray, &sd, &rng_state, render_buffer, &ls, result);
 
   if (sd.runtime_flag & SR_CACHE_MISS) {
     return VOLUME_PATH_CACHE_MISS;
   }
 
-#ifdef WITH_CYCLES_SPPM_CAUSTICS
-  /* === BIKINI SPPM Begin === */
-  if (!is_zero(beam_radiance) &&
-      light_link_object_match(kg, light_link_receiver_forward(kg, state), sd.object))
-  {
-    film_write_volume_emission(
-        kg, state, beam_radiance, render_buffer, object_lightgroup(kg, sd.object));
-  }
-  /* === BIKINI SPPM End === */
-#endif
   return volume_integrate_event(kg, state, ray, &sd, &rng_state, ls, result);
 }
 
@@ -3122,14 +2932,6 @@ volume_integrate_ray_marching(KernelGlobals kg,
   VolumeIntegrateResult result = {};
 
   const float step_size = volume_stack_step_size<false>(kg, state);
-#ifdef WITH_CYCLES_SPPM_CAUSTICS
-  /* === BIKINI SPPM Begin === */
-  const Spectrum beam_radiance = volume_integrate_photon_beams(kg, state, ray, &sd, &rng_state);
-  if (sd.runtime_flag & SR_CACHE_MISS) {
-    return VOLUME_PATH_CACHE_MISS;
-  }
-  /* === BIKINI SPPM End === */
-#endif
   volume_integrate_ray_marching(
       kg, state, ray, &sd, &rng_state, render_buffer, step_size, &ls, result);
 
@@ -3137,16 +2939,6 @@ volume_integrate_ray_marching(KernelGlobals kg,
     return VOLUME_PATH_CACHE_MISS;
   }
 
-#ifdef WITH_CYCLES_SPPM_CAUSTICS
-  /* === BIKINI SPPM Begin === */
-  if (!is_zero(beam_radiance) &&
-      light_link_object_match(kg, light_link_receiver_forward(kg, state), sd.object))
-  {
-    film_write_volume_emission(
-        kg, state, beam_radiance, render_buffer, object_lightgroup(kg, sd.object));
-  }
-  /* === BIKINI SPPM End === */
-#endif
   return volume_integrate_event(kg, state, ray, &sd, &rng_state, ls, result);
 }
 

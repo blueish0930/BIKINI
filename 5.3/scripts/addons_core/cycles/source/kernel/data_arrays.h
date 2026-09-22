@@ -91,22 +91,6 @@ KERNEL_DATA_ARRAY(KernelOctreeRoot, volume_tree_roots)
 KERNEL_DATA_ARRAY(int, volume_tree_root_ids)
 KERNEL_DATA_ARRAY(float, volume_step_size)
 
-#ifdef WITH_CYCLES_SPPM_CAUSTICS
-/* === BIKINI SPPM Begin === */
-KERNEL_DATA_ARRAY(float4, photon_pos)
-KERNEL_DATA_ARRAY(float4, photon_beam_start)
-KERNEL_DATA_ARRAY(float4, photon_flux)
-KERNEL_DATA_ARRAY(float4, photon_beam_sigma)
-KERNEL_DATA_ARRAY(int, photon_cell_start)
-KERNEL_DATA_ARRAY(uint, photon_shader_caster)
-KERNEL_DATA_ARRAY(float4, photon_volume_beam_start)
-KERNEL_DATA_ARRAY(float4, photon_volume_beam_end)
-KERNEL_DATA_ARRAY(float4, photon_volume_beam_flux)
-KERNEL_DATA_ARRAY(float4, photon_volume_beam_sigma)
-KERNEL_DATA_ARRAY(KernelPhotonBeamNode, photon_volume_beam_nodes)
-/* === BIKINI SPPM End === */
-#endif
-
 /* image textures */
 KERNEL_DATA_ARRAY(KernelImageTexture, image_textures)
 KERNEL_DATA_ARRAY_WRITABLE(KernelTileDescriptor, image_texture_tile_descriptors)

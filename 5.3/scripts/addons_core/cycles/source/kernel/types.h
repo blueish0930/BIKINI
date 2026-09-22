@@ -27,17 +27,6 @@
 
 CCL_NAMESPACE_BEGIN
 
-#ifdef WITH_CYCLES_SPPM_CAUSTICS
-/* === BIKINI SPPM Begin === */
-struct KernelPhotonBeamNode {
-  packed_float3 bmin;
-  int left;
-  packed_float3 bmax;
-  int right;
-};
-/* === BIKINI SPPM End === */
-#endif
-
 // NOLINTBEGIN
 
 /* Constants */
@@ -53,9 +42,6 @@ struct KernelPhotonBeamNode {
 #define LOCAL_MAX_HITS 4
 
 #define VOLUME_BOUNDS_MAX 1024
-#ifdef WITH_CYCLES_SPPM_CAUSTICS
-#  define PHOTON_LIGHTGROUP_CHUNK 8
-#endif
 
 #define SHADER_NONE (~0)
 #define OBJECT_NONE (~0)
@@ -180,12 +166,16 @@ enum PathRayVisibilityFlag : uint32_t {
   PATH_RAY_VISIBILITY_SHADOW = (PATH_RAY_VISIBILITY_SHADOW_OPAQUE |
                                 PATH_RAY_VISIBILITY_SHADOW_TRANSPARENT),
 
+  /* Set of flags used for path ray visibility. */
+  PATH_RAY_VISIBILITY_ALL = ((1U << 7U) - 1U),
+
+  /* Raycast shader node rays, not part of the path. */
   PATH_RAY_VISIBILITY_RAYCAST = (1U << 7U),
 
-  /* Set of flags used for ray visibility for intersection.
+  /* Set of all flags an object can be visible to.
    *
    * NOTE: SHADOW_CATCHER and OSL macros below assume there are no more than 16 visibility bits. */
-  PATH_RAY_VISIBILITY_ALL = ((1U << 8U) - 1U),
+  PATH_RAY_VISIBILITY_OBJECT_ALL = (PATH_RAY_VISIBILITY_ALL | PATH_RAY_VISIBILITY_RAYCAST),
 
   /* Special flag to tag unaligned BVH nodes.
    * Only set and used in BVH nodes to distinguish how to interpret bounding box information stored
@@ -302,17 +292,6 @@ enum PathRayFlag : uint32_t {
 
   /* Path has associated wavelength. */
   PATH_RAY_SPECTRAL = (1U << 27U),
-
-#ifdef WITH_CYCLES_SPPM_CAUSTICS
-  /* === BIKINI SPPM Begin === */
-  /* One sample per pixel per work writes the SPPM measurement point. */
-  PATH_RAY_PHOTON_HITPOINT_WRITER = (1U << 28U),
-  /* Specular chain already carried by the photon map (partition PT). */
-  PATH_RAY_PHOTON_CAUSTIC_CHAIN = (1U << 29U),
-  /* Reserved for volume beams (P3). */
-  PATH_RAY_PHOTON_CAMERA_PATH = (1U << 30U),
-  /* === BIKINI SPPM End === */
-#endif
 };
 
 // 8bit enum, just in case we need to move more variables in it
@@ -333,7 +312,7 @@ enum PathRayMNEE {
  * On shadow catcher paths we want to ignore any intersections with non-catchers,
  * whereas on regular paths we want to intersect all objects. */
 
-static_assert(PATH_RAY_VISIBILITY_ALL <= 0xffff);
+static_assert(PATH_RAY_VISIBILITY_OBJECT_ALL <= 0xffff);
 
 #define SHADOW_CATCHER_VISIBILITY_SHIFT(visibility) (uint32_t(visibility) << 16)
 
@@ -352,7 +331,7 @@ static_assert(PATH_RAY_VISIBILITY_ALL <= 0xffff);
  * Note that while the entire PathRayVisibilityFlag flags are stored in the rayrtype, only part of
  * the PathRayFlag is stored. */
 
-static_assert(PATH_RAY_VISIBILITY_ALL <= 0xffff);
+static_assert(PATH_RAY_VISIBILITY_OBJECT_ALL <= 0xffff);
 
 #define OSL_RAYTYPE_PACK(visibility, path_flag) \
   (int((uint32_t((path_flag) & 0xffff) << 16) | uint32_t((visibility) & 0xffff)))
@@ -405,11 +384,6 @@ enum PassType {
   PASS_VOLUME_INDIRECT,
   PASS_VOLUME_SCATTER,
   PASS_VOLUME_TRANSMIT,
-#ifdef WITH_CYCLES_SPPM_CAUSTICS
-  /* === BIKINI SPPM Begin === */
-  PASS_CAUSTICS,
-  /* === BIKINI SPPM End === */
-#endif
   PASS_CATEGORY_LIGHT_END = 31,
 
   /* Data passes */
@@ -460,14 +434,6 @@ enum PassType {
    * When reading this pass, it is converted to majorant transmittance */
   PASS_VOLUME_MAJORANT,
   PASS_VOLUME_MAJORANT_SAMPLE_COUNT,
-#ifdef WITH_CYCLES_SPPM_CAUSTICS
-  /* === BIKINI SPPM Begin === */
-  PASS_PHOTON_HITPOINT,
-  PASS_PHOTON_WEIGHT,
-  PASS_PHOTON_TAU,
-  PASS_PHOTON_STATE,
-  /* === BIKINI SPPM End === */
-#endif
   PASS_CATEGORY_DATA_END = 63,
 
   /* Denoising passes */
@@ -741,20 +707,24 @@ enum PrimitiveType {
   PRIMITIVE_POINT = (1 << 3),
   PRIMITIVE_VOLUME = (1 << 4),
   PRIMITIVE_LAMP = (1 << 5),
+  PRIMITIVE_GSPLAT = (1 << 6),
 
-  PRIMITIVE_MOTION = (1 << 6),
+  PRIMITIVE_MOTION = (1 << 7),
   PRIMITIVE_MOTION_TRIANGLE = (PRIMITIVE_TRIANGLE | PRIMITIVE_MOTION),
   PRIMITIVE_MOTION_CURVE_THICK = (PRIMITIVE_CURVE_THICK | PRIMITIVE_MOTION),
   PRIMITIVE_MOTION_CURVE_RIBBON = (PRIMITIVE_CURVE_RIBBON | PRIMITIVE_MOTION),
   PRIMITIVE_MOTION_CURVE_THICK_LINEAR = (PRIMITIVE_CURVE_THICK_LINEAR | PRIMITIVE_MOTION),
   PRIMITIVE_MOTION_POINT = (PRIMITIVE_POINT | PRIMITIVE_MOTION),
+  PRIMITIVE_MOTION_GSPLAT = (PRIMITIVE_GSPLAT | PRIMITIVE_MOTION),
 
   PRIMITIVE_CURVE = (PRIMITIVE_CURVE_THICK | PRIMITIVE_CURVE_RIBBON),
 
   PRIMITIVE_ALL = (PRIMITIVE_TRIANGLE | PRIMITIVE_CURVE | PRIMITIVE_POINT | PRIMITIVE_VOLUME |
-                   PRIMITIVE_LAMP | PRIMITIVE_MOTION),
+                   PRIMITIVE_LAMP | PRIMITIVE_GSPLAT | PRIMITIVE_MOTION),
 
-  PRIMITIVE_NUM_SHAPES = 6,
+  PRIMITIVE_ANY_POINT = (PRIMITIVE_POINT | PRIMITIVE_GSPLAT),
+
+  PRIMITIVE_NUM_SHAPES = 7,
   PRIMITIVE_NUM_BITS = PRIMITIVE_NUM_SHAPES + 1, /* All shapes + motion bit. */
   PRIMITIVE_NUM = PRIMITIVE_NUM_SHAPES * 2,      /* With and without motion. */
 };
@@ -849,6 +819,12 @@ enum AttributeStandard : int {
   ATTR_STD_POINTINESS,
   ATTR_STD_RANDOM_PER_ISLAND,
   ATTR_STD_SHADOW_TRANSPARENCY,
+  ATTR_STD_GSPLAT_RADIANCE_BASE,
+  ATTR_STD_GSPLAT_RADIANCE_SPHERICAL_HARMONICS_REST,
+  ATTR_STD_GSPLAT_RADIANCE,
+  ATTR_STD_GSPLAT_ROTATION,
+  ATTR_STD_GSPLAT_SCALE,
+
   ATTR_STD_NUM,
 
   ATTR_STD_NOT_FOUND = -0x7fffffff
@@ -1055,14 +1031,6 @@ enum ShaderDataObjectFlag : uint {
   SD_OBJECT_HAS_VOLUME_MOTION = (1u << 11),
   /* Geometry has per-corner normals instead of per-vertex. */
   SD_OBJECT_HAS_CORNER_NORMALS = (1u << 12),
-#ifdef WITH_CYCLES_SPPM_CAUSTICS
-  /* === BIKINI SPPM Begin === */
-  SD_OBJECT_PHOTON_CASTER = (1u << 13),
-  SD_OBJECT_PHOTON_RECEIVER = (1u << 14),
-  SD_OBJECT_PHOTON_NO_CAST = (1u << 15),
-  SD_OBJECT_PHOTON_NO_RECEIVE = (1u << 16),
-  /* === BIKINI SPPM End === */
-#endif
 
   /* object is using caustics */
   SD_OBJECT_CAUSTICS = (SD_OBJECT_CAUSTICS_CASTER | SD_OBJECT_CAUSTICS_RECEIVER),
@@ -1071,12 +1039,7 @@ enum ShaderDataObjectFlag : uint {
                      SD_OBJECT_NEGATIVE_SCALE | SD_OBJECT_HAS_VOLUME |
                      SD_OBJECT_INTERSECTS_VOLUME | SD_OBJECT_SHADOW_CATCHER |
                      SD_OBJECT_HAS_VOLUME_ATTRIBUTES | SD_OBJECT_CAUSTICS |
-                     SD_OBJECT_HAS_VOLUME_MOTION | SD_OBJECT_HAS_CORNER_NORMALS
-#ifdef WITH_CYCLES_SPPM_CAUSTICS
-                     | SD_OBJECT_PHOTON_CASTER | SD_OBJECT_PHOTON_RECEIVER |
-                     SD_OBJECT_PHOTON_NO_CAST | SD_OBJECT_PHOTON_NO_RECEIVE
-#endif
-                     )
+                     SD_OBJECT_HAS_VOLUME_MOTION | SD_OBJECT_HAS_CORNER_NORMALS)
 };
 
 struct ccl_align(16) ShaderData {
@@ -1511,6 +1474,17 @@ struct KernelObject {
 
       int normal_offset;
     } mesh_volume;
+
+    /* Information about Gaussian splat objects. */
+    struct {
+      /* Offset for the attributes.
+       * The least significant bit denotes whether the attribute has motion. */
+      int scale_offset_and_flag;
+      int rotation_offset_and_flag;
+      int radiance_base_offset_and_flag;
+
+      int radiance_spherical_harmonics_rest_offset;
+    } gsplat;
   };
 
   float cryptomatte_object;
@@ -1742,14 +1716,7 @@ struct KernelShader {
   float cryptomatte_id;
   int flags;
   int pass_id;
-#ifdef WITH_CYCLES_SPPM_CAUSTICS
-  /* === BIKINI SPPM Begin === */
-  int photon_cast;
-  /* === BIKINI SPPM End === */
-#else
-  int pad2;
-#endif
-  int pad3;
+  int pad2, pad3;
 };
 static_assert_align(KernelShader, 16);
 
@@ -1903,17 +1870,6 @@ enum DeviceKernel : int {
   DEVICE_KERNEL_CRYPTOMATTE_POSTPROCESS,
 
   DEVICE_KERNEL_PREFIX_SUM,
-
-#ifdef WITH_CYCLES_SPPM_CAUSTICS
-  /* === BIKINI SPPM Begin === */
-  DEVICE_KERNEL_FILM_PHOTON_GATHER,
-  DEVICE_KERNEL_FILM_PHOTON_SMOOTH,
-  DEVICE_KERNEL_PHOTON_TRACE,
-  DEVICE_KERNEL_PHOTON_BIN_COUNT,
-  DEVICE_KERNEL_PHOTON_BIN_CURSOR_INIT,
-  DEVICE_KERNEL_PHOTON_BIN_SCATTER,
-  /* === BIKINI SPPM End === */
-#endif
 
   DEVICE_KERNEL_NUM,
 };

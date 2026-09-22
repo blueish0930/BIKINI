@@ -71,6 +71,18 @@ struct SVMNodeBooleanMath {
 static_assert(alignof(SVMNodeBooleanMath) <= alignof(uint));
 static_assert(sizeof(SVMNodeBooleanMath) % sizeof(uint) == 0);
 
+/* NODE_INTEGER_MATH */
+struct SVMNodeIntegerMath {
+  NodeIntegerMathType math_type;
+  SVMInputInt value1;
+  SVMInputInt value2;
+  SVMInputInt value3;
+  SVMStackOffset result_offset;
+  uint8_t _pad[3];
+};
+static_assert(alignof(SVMNodeIntegerMath) <= alignof(uint));
+static_assert(sizeof(SVMNodeIntegerMath) % sizeof(uint) == 0);
+
 /* NODE_CLAMP */
 struct SVMNodeClamp {
   NodeClampType clamp_type;
@@ -198,6 +210,8 @@ static_assert(sizeof(SVMNodeLightPath) % sizeof(uint) == 0);
 /* NODE_ATTR / NODE_ATTR_DERIVATIVE */
 struct SVMNodeAttr {
   int attr;
+  SVMInputFloat3 missing;
+  SVMInputFloat missing_alpha;
   SVMStackOffset out_offset;
   NodeAttributeOutputType output_type;
   NodeBumpOffset bump_offset;
@@ -628,9 +642,6 @@ struct SVMNodeTexVoronoi {
   SVMInputFloat smoothness;
   SVMInputFloat exponent;
   SVMInputFloat randomness;
-  SVMInputFloat3 period;
-  SVMInputFloat period_w;
-  uint8_t tiling;
   uint8_t normalize;
   SVMStackOffset coord;
   SVMStackOffset distance_offset;
@@ -638,7 +649,7 @@ struct SVMNodeTexVoronoi {
   SVMStackOffset position_offset;
   SVMStackOffset w_out_offset;
   SVMStackOffset radius_offset;
-  uint8_t _pad[4];
+  uint8_t _pad[1];
 };
 static_assert(alignof(SVMNodeTexVoronoi) <= alignof(uint));
 static_assert(sizeof(SVMNodeTexVoronoi) % sizeof(uint) == 0);
@@ -754,6 +765,8 @@ static_assert(sizeof(SVMNodeTexGradient) % sizeof(uint) == 0);
 struct SVMNodeTexImage {
   int id;
   uint projection; /* NodeImageProjection */
+  SVMInputFloat3 missing;
+  SVMInputFloat missing_alpha;
   uint8_t flags;
   SVMStackOffset co;
   SVMStackOffset out_offset;
@@ -766,6 +779,8 @@ static_assert(sizeof(SVMNodeTexImage) % sizeof(uint) == 0);
 struct SVMNodeTexImageBox {
   int id;
   float blend;
+  SVMInputFloat3 missing;
+  SVMInputFloat missing_alpha;
   uint8_t flags;
   SVMStackOffset co;
   SVMStackOffset out_offset;
@@ -778,6 +793,8 @@ static_assert(sizeof(SVMNodeTexImageBox) % sizeof(uint) == 0);
 struct SVMNodeTexEnvironment {
   int id;
   NodeEnvironmentProjection projection;
+  SVMInputFloat3 missing;
+  SVMInputFloat missing_alpha;
   uint8_t flags;
   SVMStackOffset co;
   SVMStackOffset out_offset;
@@ -1335,55 +1352,5 @@ struct SVMNodeSceneTime {
 };
 static_assert(alignof(SVMNodeSceneTime) <= alignof(uint));
 static_assert(sizeof(SVMNodeSceneTime) % sizeof(uint) == 0);
-
-/* NODE_PARALLAX_OCCLUSION */
-struct SVMNodeParallaxOcclusion {
-  int id;
-  uint8_t mode;
-  uint8_t channel;
-  uint8_t invert;
-  uint8_t clip;
-  SVMInputFloat3 vector;
-  SVMInputFloat scale;
-  SVMInputFloat midlevel;
-  SVMInputFloat samples;
-  SVMInputFloat refine;
-  SVMInputFloat3 normal;
-  SVMInputFloat3 incoming;
-  SVMInputFloat3 light;
-  int attr_a;
-  int attr_b;
-  int attr_c;
-  int attr_na;
-  int attr_nb;
-  int attr_nc;
-  int attr_uv0;
-  int attr_uv1;
-  int attr_uv2;
-  SVMStackOffset out_vector;
-  SVMStackOffset out_height;
-  SVMStackOffset out_shadow;
-  SVMStackOffset out_alpha;
-};
-static_assert(alignof(SVMNodeParallaxOcclusion) <= alignof(uint));
-static_assert(sizeof(SVMNodeParallaxOcclusion) % sizeof(uint) == 0);
-
-/* NODE_BILLBOARD_DISPLACEMENT */
-struct SVMNodeBillboardDisplacement {
-  uint8_t mode;
-  uint8_t axis;
-  SVMStackOffset position_offset;
-  SVMStackOffset pivot_offset;
-  SVMStackOffset displacement_offset;
-  SVMStackOffset position_out_offset;
-  SVMStackOffset rotation_offset;
-  SVMStackOffset normal_offset;
-  SVMStackOffset normal_out_offset;
-  uint8_t _pad[3];
-  SVMInputFloat3 up;
-  SVMInputFloat factor;
-};
-static_assert(alignof(SVMNodeBillboardDisplacement) <= alignof(uint));
-static_assert(sizeof(SVMNodeBillboardDisplacement) % sizeof(uint) == 0);
 
 CCL_NAMESPACE_END

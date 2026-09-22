@@ -17,11 +17,6 @@
 
 #include "kernel/svm/math_util.h"
 #include "kernel/svm/node_types.h"
-#ifdef WITH_CYCLES_SPPM_CAUSTICS
-/* === BIKINI SPPM Begin === */
-#  include "kernel/svm/photon_caustics.h"
-/* === BIKINI SPPM End === */
-#endif
 #include "kernel/svm/util.h"
 
 #include "kernel/util/colorspace.h"
@@ -84,6 +79,7 @@ ccl_device_inline int svm_node_closure_bsdf_skip(int offset, const uint type)
       break;
     case CLOSURE_BSSRDF_BURLEY_ID:
     case CLOSURE_BSSRDF_RANDOM_WALK_ID:
+    case CLOSURE_BSSRDF_RANDOM_WALK_LEGACY_ID:
     case CLOSURE_BSSRDF_RANDOM_WALK_SKIN_ID:
       offset += sizeof(SVMNodeBssrdfData) / sizeof(uint);
       break;
@@ -254,17 +250,10 @@ ccl_device
       }
 
 #ifdef __CAUSTICS_TRICKS__
-#  ifdef WITH_CYCLES_SPPM_CAUSTICS
-      const bool reflective_caustics = (photon_caustics_reflective(kg, sd) ||
-                                        (ray_visibility & PATH_RAY_VISIBILITY_DIFFUSE) == 0);
-      const bool refractive_caustics = (photon_caustics_refractive(kg, sd) ||
-                                        (ray_visibility & PATH_RAY_VISIBILITY_DIFFUSE) == 0);
-#  else
       const bool reflective_caustics = (kernel_data.integrator.caustics_reflective ||
                                         (ray_visibility & PATH_RAY_VISIBILITY_DIFFUSE) == 0);
       const bool refractive_caustics = (kernel_data.integrator.caustics_refractive ||
                                         (ray_visibility & PATH_RAY_VISIBILITY_DIFFUSE) == 0);
-#  endif
 #else
       const bool reflective_caustics = true;
       const bool refractive_caustics = true;
@@ -510,17 +499,11 @@ ccl_device
           kg, &offset);
 
 #ifdef __CAUSTICS_TRICKS__
-#  ifdef WITH_CYCLES_SPPM_CAUSTICS
-      if (!photon_caustics_reflective(kg, sd) && (ray_visibility & PATH_RAY_VISIBILITY_DIFFUSE)) {
-        break;
-      }
-#  else
       if (!kernel_data.integrator.caustics_reflective &&
           (ray_visibility & PATH_RAY_VISIBILITY_DIFFUSE))
       {
         break;
       }
-#  endif
 #endif
       ccl_private MicrofacetBsdf *bsdf = (ccl_private MicrofacetBsdf *)bsdf_alloc(
           sd, sizeof(MicrofacetBsdf), rgb_to_spectrum(make_float3(mix_weight)));
@@ -620,17 +603,11 @@ ccl_device
           kg, &offset);
 
 #ifdef __CAUSTICS_TRICKS__
-#  ifdef WITH_CYCLES_SPPM_CAUSTICS
-      if (!photon_caustics_reflective(kg, sd) && (ray_visibility & PATH_RAY_VISIBILITY_DIFFUSE)) {
-        break;
-      }
-#  else
       if (!kernel_data.integrator.caustics_reflective &&
           (ray_visibility & PATH_RAY_VISIBILITY_DIFFUSE))
       {
         break;
       }
-#  endif
 #endif
       float3 N = stack_load_float3_default(stack, bsdf_data.normal_offset, sd->N);
       N = safe_normalize_fallback(N, sd->N);
@@ -698,17 +675,11 @@ ccl_device
           svm_node_get<SVMNodeRefractionBsdfData>(kg, &offset);
 
 #ifdef __CAUSTICS_TRICKS__
-#  ifdef WITH_CYCLES_SPPM_CAUSTICS
-      if (!photon_caustics_refractive(kg, sd) && (ray_visibility & PATH_RAY_VISIBILITY_DIFFUSE)) {
-        break;
-      }
-#  else
       if (!kernel_data.integrator.caustics_refractive &&
           (ray_visibility & PATH_RAY_VISIBILITY_DIFFUSE))
       {
         break;
       }
-#  endif
 #endif
       float3 N = stack_load_float3_default(stack, bsdf_data.normal_offset, sd->N);
       N = safe_normalize_fallback(N, sd->N);
@@ -747,17 +718,10 @@ ccl_device
           kg, &offset);
 
 #ifdef __CAUSTICS_TRICKS__
-#  ifdef WITH_CYCLES_SPPM_CAUSTICS
-      const bool reflective_caustics = (photon_caustics_reflective(kg, sd) ||
-                                        (ray_visibility & PATH_RAY_VISIBILITY_DIFFUSE) == 0);
-      const bool refractive_caustics = (photon_caustics_refractive(kg, sd) ||
-                                        (ray_visibility & PATH_RAY_VISIBILITY_DIFFUSE) == 0);
-#  else
       const bool reflective_caustics = (kernel_data.integrator.caustics_reflective ||
                                         (ray_visibility & PATH_RAY_VISIBILITY_DIFFUSE) == 0);
       const bool refractive_caustics = (kernel_data.integrator.caustics_refractive ||
                                         (ray_visibility & PATH_RAY_VISIBILITY_DIFFUSE) == 0);
-#  endif
       if (!(reflective_caustics || refractive_caustics)) {
         break;
       }
@@ -865,19 +829,11 @@ ccl_device
                                                                                           &offset);
 
 #ifdef __CAUSTICS_TRICKS__
-#  ifdef WITH_CYCLES_SPPM_CAUSTICS
-      if (type == CLOSURE_BSDF_GLOSSY_TOON_ID && !photon_caustics_reflective(kg, sd) &&
-          (ray_visibility & PATH_RAY_VISIBILITY_DIFFUSE))
-      {
-        break;
-      }
-#  else
       if (type == CLOSURE_BSDF_GLOSSY_TOON_ID && !kernel_data.integrator.caustics_reflective &&
           (ray_visibility & PATH_RAY_VISIBILITY_DIFFUSE))
       {
         break;
       }
-#  endif
 #endif
       float3 N = stack_load_float3_default(stack, bsdf_data.normal_offset, sd->N);
       N = safe_normalize_fallback(N, sd->N);
@@ -900,13 +856,12 @@ ccl_device
       }
       break;
     }
-#ifdef __HAIR__
-#  ifdef __PRINCIPLED_HAIR__
     case CLOSURE_BSDF_HAIR_CHIANG_ID:
     case CLOSURE_BSDF_HAIR_HUANG_ID: {
       const ccl_global SVMNodePrincipledHairBsdfData &hdata =
           svm_node_get<SVMNodePrincipledHairBsdfData>(kg, &offset);
 
+#if defined(__HAIR__) && defined(__PRINCIPLED_HAIR__)
       const Spectrum weight = closure_weight * mix_weight;
 
       const float alpha = stack_load(stack, hdata.offset);
@@ -1053,14 +1008,17 @@ ccl_device
           sd->runtime_flag |= bsdf_hair_huang_setup(sd, bsdf, path_flag);
         }
       }
+#else
+      (void)hdata;
+#endif
       break;
     }
-#  endif /* __PRINCIPLED_HAIR__ */
     case CLOSURE_BSDF_HAIR_REFLECTION_ID:
     case CLOSURE_BSDF_HAIR_TRANSMISSION_ID: {
       const ccl_global SVMNodeHairBsdfData &bsdf_data = svm_node_get<SVMNodeHairBsdfData>(kg,
                                                                                           &offset);
 
+#ifdef __HAIR__
       const Spectrum weight = closure_weight * mix_weight;
 
       ccl_private HairBsdf *bsdf = (ccl_private HairBsdf *)bsdf_alloc(
@@ -1090,17 +1048,19 @@ ccl_device
           sd->runtime_flag |= bsdf_hair_transmission_setup(bsdf);
         }
       }
+#else
+      (void)bsdf_data;
+#endif /* __HAIR__ */
 
       break;
     }
-#endif /* __HAIR__ */
 
-#ifdef __SUBSURFACE__
     case CLOSURE_BSSRDF_BURLEY_ID:
     case CLOSURE_BSSRDF_RANDOM_WALK_ID:
     case CLOSURE_BSSRDF_RANDOM_WALK_LEGACY_ID:
     case CLOSURE_BSSRDF_RANDOM_WALK_SKIN_ID: {
       const ccl_global SVMNodeBssrdfData &bsdf_data = svm_node_get<SVMNodeBssrdfData>(kg, &offset);
+#ifdef __SUBSURFACE__
       float3 N = stack_load_float3_default(stack, bsdf_data.normal_offset, sd->N);
       N = safe_normalize_fallback(N, sd->N);
 
@@ -1118,10 +1078,12 @@ ccl_device
 
         sd->runtime_flag |= bssrdf_setup(sd, bssrdf, path_flag, type);
       }
+#else
+      (void)bsdf_data;
+#endif
 
       break;
     }
-#endif
     default:
       /* Unknown closure type, skip the minimum data payload. */
       svm_node_get<SVMNodeSimpleBsdfData>(kg, &offset);

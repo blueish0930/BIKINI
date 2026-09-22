@@ -927,6 +927,21 @@ class IMAGE_HT_header(Header):
 
         layout.separator_spacer()
 
+        if show_uvedit:
+            ob = context.edit_object
+            if ob is not None and ob.type == 'MESH':
+                row = layout.row(align=True)
+                sub = row.row(align=True)
+                sub.scale_x = 0.7
+                sub.prop(ob.data, "use_mirror_uv_u", text="U", toggle=True)
+                sub.prop(ob.data, "use_mirror_uv_v", text="V", toggle=True)
+                row.popover_group(
+                    space_type='IMAGE_EDITOR',
+                    region_type='UI',
+                    context=".uv_edit",
+                    category="Tool",
+                )
+
         # Gizmo toggle & popover.
         row = layout.row(align=True)
         row.prop(sima, "show_gizmo", icon='GIZMO', text="")
@@ -1595,6 +1610,58 @@ class IMAGE_PT_scope_sample(ImageScopesPanel, Panel):
         col.prop(sima.scopes, "accuracy")
 
 
+class IMAGE_PT_uv_mirror(Panel):
+    """Top-right UV editor popover. Same slot as the 3D view mesh options."""
+
+    bl_space_type = 'IMAGE_EDITOR'
+    bl_region_type = 'UI'
+    bl_category = "Tool"
+    bl_context = ".uv_edit"  # dot on purpose (access from the top bar)
+    bl_label = "UV Mirror"
+    bl_ui_units_x = 14
+
+    @classmethod
+    def poll(cls, context):
+        sima = context.space_data
+        ob = context.edit_object
+        return bool(sima and sima.show_uvedit and ob and ob.type == 'MESH')
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+
+        mesh = context.edit_object.data
+        overlay = context.space_data.overlay
+        tool_settings = context.tool_settings
+        mirrored = mesh.use_mirror_uv_u or mesh.use_mirror_uv_v
+
+        col = layout.column(align=True)
+        row = col.row(align=True)
+        row.prop(mesh, "use_mirror_uv_u", text="U", toggle=True)
+        row.prop(mesh, "use_mirror_uv_v", text="V", toggle=True)
+        col.prop(mesh, "use_mirror_uv_topology")
+
+        col = layout.column(align=True)
+        col.prop(mesh, "uv_mirror_center", text="Center")
+        row = col.row(align=True)
+        row.operator("uv.mirror_center_set", text="Cursor").target = 'CURSOR'
+        row.operator("uv.mirror_center_set", text="Tile Center").target = 'TILE'
+
+        sub = col.column(align=True)
+        sub.active = mirrored
+        sub.prop(overlay, "show_uv_mirror_highlight", text="Highlight Counterparts")
+        row = sub.row(align=True)
+        row.active = mirrored and overlay.show_uv_mirror_highlight
+        row.prop(overlay, "uv_mirror_highlight_color", text="Color")
+        if not mesh.use_mirror_uv_topology:
+            sub.prop(tool_settings, "uv_mirror_threshold", text="Pair Distance")
+        if mesh.use_mirror_uv_topology:
+            layout.label(text="Topology uses mesh X/Y/Z", icon='INFO')
+        if not mirrored:
+            layout.label(text="No UV mirror axis is enabled", icon='INFO')
+
+
 class IMAGE_PT_uv_cursor(Panel):
     bl_space_type = 'IMAGE_EDITOR'
     bl_region_type = 'UI'
@@ -1925,6 +1992,7 @@ classes = (
     IMAGE_PT_tools_imagepaint_symmetry,
     IMAGE_PT_uv_sculpt_options,
     IMAGE_PT_uv_sculpt_curve,
+    IMAGE_PT_uv_mirror,
     IMAGE_PT_view_histogram,
     IMAGE_PT_view_waveform,
     IMAGE_PT_view_vectorscope,

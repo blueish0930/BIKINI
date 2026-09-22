@@ -21,12 +21,6 @@
 
 #include "kernel/types.h"
 
-#ifdef WITH_CYCLES_SPPM_CAUSTICS
-/* === BIKINI SPPM Begin === */
-#  include "kernel/svm/photon_caustics.h"
-/* === BIKINI SPPM End === */
-#endif
-
 CCL_NAMESPACE_BEGIN
 
 ccl_device void integrator_shade_background_cache_miss_set_resume_offset(IntegratorState state,
@@ -53,20 +47,10 @@ ccl_device Spectrum integrator_eval_background_shader(KernelGlobals kg,
   const uint32_t path_flag = INTEGRATOR_STATE(state, path, flag);
 
   /* Use visibility flag to skip lights. */
-#ifdef WITH_CYCLES_SPPM_CAUSTICS
-  /* === BIKINI SPPM Begin === */
-  const bool photon_path_owned = photon_caustic_path_owned(kg, path_flag);
-  if (photon_path_owned || !is_light_shader_visible_to_path(shader, path_visibility, path_flag)) {
-    result = SHADER_EVAL_EMPTY;
-    return zero_spectrum();
-  }
-  /* === BIKINI SPPM End === */
-#else
   if (!is_light_shader_visible_to_path(shader, path_visibility, path_flag)) {
     result = SHADER_EVAL_EMPTY;
     return zero_spectrum();
   }
-#endif
 
   /* Use fast constant background color if available. */
   Spectrum L = zero_spectrum();
@@ -195,15 +179,6 @@ ccl_device_inline ShaderEvalResult integrate_sun_lights(
     if (klight->type != LIGHT_SUN || !(klight->shader_id & SHADER_USE_MIS)) {
       continue;
     }
-
-#ifdef WITH_CYCLES_SPPM_CAUSTICS
-    /* === BIKINI SPPM Begin === */
-    /* Sun-through-glass is the classic PT caustic; the photon map owns it. */
-    if (photon_caustic_path_owned(kg, INTEGRATOR_STATE(state, path, flag))) {
-      continue;
-    }
-    /* === BIKINI SPPM End === */
-#endif
 
     LightEval light_eval = sun_light_eval_from_intersection(klight, ray_D);
     if (light_eval.eval_fac == 0.0f) {

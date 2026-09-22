@@ -38,11 +38,6 @@
 #include "kernel/integrator/shade_light.h"
 #include "kernel/integrator/shade_shadow.h"
 #include "kernel/integrator/shade_surface.h"
-#ifdef WITH_CYCLES_SPPM_CAUSTICS
-#include "kernel/film/photon_passes.h"
-#include "kernel/integrator/photon_trace.h"
-#endif
-
 #include "kernel/integrator/shade_volume.h"
 
 #include "kernel/bake/bake.h"
@@ -535,7 +530,6 @@ ccl_gpu_kernel_threads(GPU_PARALLEL_SORT_BLOCK_SIZE)
                              const int kernel_index)
 #endif
 {
-#if defined(__KERNEL_LOCAL_ATOMIC_SORT__)
   ccl_global ushort *d_queued_kernel = (ccl_global ushort *)
                                            kernel_integrator_state.path.queued_kernel;
   ccl_global uint *d_shader_sort_key = (ccl_global uint *)
@@ -543,35 +537,20 @@ ccl_gpu_kernel_threads(GPU_PARALLEL_SORT_BLOCK_SIZE)
   ccl_global int *key_offsets = (ccl_global int *)
                                     kernel_integrator_state.sort_partition_key_offsets;
 
-#  ifdef __KERNEL_METAL__
-  int max_shaders = context.launch_params_metal.data.max_shaders;
-#  endif
-
-#  ifdef __KERNEL_ONEAPI__
-  /* Metal backend doesn't have these particular ccl_gpu_* defines and current kernel code
-   * uses metal_*, we need the below to be compatible with these kernels. */
-  int max_shaders = ((ONEAPIKernelContext *)kg)->__data->max_shaders;
-  int metal_local_id = ccl_gpu_thread_idx_x;
-  int metal_local_size = ccl_gpu_block_dim_x;
-  int metal_grid_id = ccl_gpu_block_idx_x;
+#ifdef __KERNEL_ONEAPI__
   /* There is no difference here between different access decorations, as we are requesting
    * a raw pointer immediately, so the simplest decoration option is used (no decoration). */
   ccl_gpu_shared int *threadgroup_array =
       local_mem.get_multi_ptr<sycl::access::decorated::no>().get();
-#  endif
+#endif
 
   gpu_parallel_sort_bucket_pass(num_states,
                                 partition_size,
-                                max_shaders,
+                                kernel_data.max_shaders,
                                 kernel_index,
                                 d_queued_kernel,
                                 d_shader_sort_key,
-                                key_offsets,
-                                (ccl_gpu_shared int *)threadgroup_array,
-                                metal_local_id,
-                                metal_local_size,
-                                metal_grid_id);
-#endif
+                                key_offsets);
 }
 ccl_gpu_kernel_postfix
 
@@ -596,7 +575,6 @@ ccl_gpu_kernel_threads(GPU_PARALLEL_SORT_BLOCK_SIZE)
 #endif
 
 {
-#if defined(__KERNEL_LOCAL_ATOMIC_SORT__)
   ccl_global ushort *d_queued_kernel = (ccl_global ushort *)
                                            kernel_integrator_state.path.queued_kernel;
   ccl_global uint *d_shader_sort_key = (ccl_global uint *)
@@ -604,37 +582,22 @@ ccl_gpu_kernel_threads(GPU_PARALLEL_SORT_BLOCK_SIZE)
   ccl_global int *key_offsets = (ccl_global int *)
                                     kernel_integrator_state.sort_partition_key_offsets;
 
-#  ifdef __KERNEL_METAL__
-  int max_shaders = context.launch_params_metal.data.max_shaders;
-#  endif
-
-#  ifdef __KERNEL_ONEAPI__
-  /* Metal backend doesn't have these particular ccl_gpu_* defines and current kernel code
-   * uses metal_*, we need the below to be compatible with these kernels. */
-  int max_shaders = ((ONEAPIKernelContext *)kg)->__data->max_shaders;
-  int metal_local_id = ccl_gpu_thread_idx_x;
-  int metal_local_size = ccl_gpu_block_dim_x;
-  int metal_grid_id = ccl_gpu_block_idx_x;
+#ifdef __KERNEL_ONEAPI__
   /* There is no difference here between different access decorations, as we are requesting
    * a raw pointer immediately, so the simplest decoration option is used (no decoration). */
   ccl_gpu_shared int *threadgroup_array =
       local_mem.get_multi_ptr<sycl::access::decorated::no>().get();
-#  endif
+#endif
 
   gpu_parallel_sort_write_pass(num_states,
                                partition_size,
-                               max_shaders,
-                               kernel_index,
                                num_states_limit,
                                indices,
+                               kernel_data.max_shaders,
+                               kernel_index,
                                d_queued_kernel,
                                d_shader_sort_key,
-                               key_offsets,
-                               (ccl_gpu_shared int *)threadgroup_array,
-                               metal_local_id,
-                               metal_local_size,
-                               metal_grid_id);
-#endif
+                               key_offsets);
 }
 ccl_gpu_kernel_postfix
 
@@ -796,186 +759,6 @@ ccl_gpu_kernel(GPU_KERNEL_BLOCK_NUM_THREADS, GPU_KERNEL_MAX_REGISTERS)
   }
 }
 ccl_gpu_kernel_postfix
-
-/* === CyclesPlus: Photon GPU Kernels Begin === */
-#if defined(WITH_CYCLES_SPPM_CAUSTICS) && !defined(__KERNEL_ONEAPI__)
-/* --------------------------------------------------------------------
- * Photon caustics SPPM gather (CyclesPlus).
- */
-
-ccl_gpu_kernel(GPU_KERNEL_BLOCK_NUM_THREADS, GPU_KERNEL_MAX_REGISTERS)
-    ccl_gpu_kernel_signature(film_photon_gather,
-                             ccl_global float *render_buffer,
-                             const int sx,
-                             const int sy,
-                             const int sw,
-                             const int sh,
-                             const int offset,
-                             const int stride,
-                             const int num_samples,
-                             const int consume)
-{
-  const int work_index = ccl_gpu_global_id_x();
-  const int y = work_index / sw;
-  const int x = work_index - y * sw;
-
-  if (x < sw && y < sh) {
-    ccl_gpu_kernel_call(film_photon_gather_pixel(
-        nullptr, render_buffer, sx + x, sy + y, offset, stride, num_samples, consume));
-  }
-}
-ccl_gpu_kernel_postfix
-
-ccl_gpu_kernel(GPU_KERNEL_BLOCK_NUM_THREADS, GPU_KERNEL_MAX_REGISTERS)
-    ccl_gpu_kernel_signature(film_photon_smooth,
-                             ccl_global float *render_buffer,
-                             const int sx,
-                             const int sy,
-                             const int sw,
-                             const int sh,
-                             const int offset,
-                             const int stride,
-                             const int num_samples)
-{
-  const int work_index = ccl_gpu_global_id_x();
-  const int y = work_index / sw;
-  const int x = work_index - y * sw;
-
-  if (x < sw && y < sh) {
-    ccl_gpu_kernel_call(film_photon_smooth_pixel(
-        nullptr, render_buffer, sx + x, sy + y, sx, sy, sw, sh, offset, stride, num_samples));
-  }
-}
-ccl_gpu_kernel_postfix
-
-/* --------------------------------------------------------------------
- * Photon caustics tracing (CyclesPlus): one thread = one photon.
- */
-
-ccl_gpu_kernel(GPU_KERNEL_BLOCK_NUM_THREADS, GPU_KERNEL_MAX_REGISTERS)
-    ccl_gpu_kernel_signature(photon_trace,
-                             ccl_global float4 *out_pos,
-                             ccl_global float4 *out_beam_start,
-                             ccl_global float4 *out_flux,
-                             ccl_global float4 *out_beam_sigma,
-                             ccl_global uint *out_counter,
-                             const ccl_global PhotonTraceLight *lights,
-                             const int num_lights,
-                             const ccl_global PhotonTraceTarget *targets,
-                             const int num_targets,
-                             const ccl_global PhotonTraceMaterial *materials,
-                             const int batch_k,
-                             const int photon_offset,
-                             const int max_bounces,
-                             const int debug_mode,
-                             const int out_capacity,
-                             const int work_size,
-                             ccl_global float *target_yield)
-{
-  const int i = ccl_gpu_global_id_x();
-  if (i < work_size) {
-    ccl_gpu_kernel_call(photon_trace_single(nullptr,
-                                            photon_offset + i,
-                                            photon_trace_batch_seed((uint64_t)batch_k),
-                                            max_bounces,
-                                            debug_mode,
-                                            lights,
-                                            num_lights,
-                                            targets,
-                                            num_targets,
-                                             materials,
-                                             out_beam_start,
-                                             out_pos,
-                                            out_flux,
-                                            out_beam_sigma,
-                                            out_counter,
-                                            out_capacity,
-                                            target_yield));
-  }
-}
-ccl_gpu_kernel_postfix
-
-/* --------------------------------------------------------------------
- * Photon caustics device-resident binning (CyclesPlus). The deposits stay in
- * VRAM; the host only sees the per-cell counts (it computes the prefix sums,
- * which come back as `cell_start`). Cell assignment must match the host
- * binner bin_packed_deposits() exactly: same hash, same floor(p * inv_cell).
- */
-
-ccl_gpu_kernel(GPU_KERNEL_BLOCK_NUM_THREADS, GPU_KERNEL_MAX_REGISTERS)
-    ccl_gpu_kernel_signature(photon_bin_count,
-                             const ccl_global float4 *dep_pos,
-                             ccl_global uint *cell_count,
-                             const int table_size,
-                             const float inv_cell,
-                             const int num_deposits)
-{
-  const int i = ccl_gpu_global_id_x();
-  if (i < num_deposits) {
-    const float4 p = dep_pos[i];
-    const uint b = photon_grid_hash((int)floorf(p.x * inv_cell),
-                                    (int)floorf(p.y * inv_cell),
-                                    (int)floorf(p.z * inv_cell),
-                                    (uint)table_size);
-    atomic_fetch_and_add_uint32(&cell_count[b], 1);
-  }
-}
-ccl_gpu_kernel_postfix
-
-ccl_gpu_kernel(GPU_KERNEL_BLOCK_NUM_THREADS, GPU_KERNEL_MAX_REGISTERS)
-    ccl_gpu_kernel_signature(photon_bin_cursor_init,
-                             const ccl_global int *cell_start,
-                             ccl_global uint *cursor,
-                             const int table_size)
-{
-  const int i = ccl_gpu_global_id_x();
-  if (i < table_size) {
-    cursor[i] = (uint)cell_start[i];
-  }
-}
-ccl_gpu_kernel_postfix
-
-ccl_gpu_kernel(GPU_KERNEL_BLOCK_NUM_THREADS, GPU_KERNEL_MAX_REGISTERS)
-    ccl_gpu_kernel_signature(photon_bin_scatter,
-                              const ccl_global float4 *dep_pos,
-                              const ccl_global float4 *dep_beam_start,
-                              const ccl_global float4 *dep_flux,
-                              const ccl_global float4 *dep_beam_sigma,
-                              ccl_global uint *cursor,
-                              ccl_global float4 *out_pos,
-                              ccl_global float4 *out_beam_start,
-                              ccl_global float4 *out_flux,
-                              ccl_global float4 *out_beam_sigma,
-                             const int table_size,
-                             const float inv_cell,
-                             const int num_deposits)
-{
-  const int i = ccl_gpu_global_id_x();
-  if (i < num_deposits) {
-    const float4 p = dep_pos[i];
-    const uint b = photon_grid_hash((int)floorf(p.x * inv_cell),
-                                    (int)floorf(p.y * inv_cell),
-                                    (int)floorf(p.z * inv_cell),
-                                    (uint)table_size);
-    const uint at = atomic_fetch_and_add_uint32(&cursor[b], 1);
-    /* Bounded write: `at` comes from the host-built prefix table agreeing
-     * with this kernel's count pass. That invariant spans four separately
-     * managed pieces of state - if it ever breaks (dropped cursor_init,
-     * stale table, failed target alloc), this was the ONLY unguarded write
-     * in the photon layer, and millions of threads scribbling 16 bytes into
-     * arbitrary VRAM is the canonical driver-death profile. The deposit
-     * writer applies the same discipline (photon_deposit_write). */
-    if (at < (uint)num_deposits) {
-      out_pos[at] = p;
-      out_beam_start[at] = dep_beam_start[i];
-      out_flux[at] = dep_flux[i];
-      out_beam_sigma[at] = dep_beam_sigma[i];
-    }
-  }
-}
-ccl_gpu_kernel_postfix
-#endif  /* WITH_CYCLES_SPPM_CAUSTICS && !__KERNEL_ONEAPI__ */
-/* === CyclesPlus: Photon GPU Kernels End === */
 
 /* --------------------------------------------------------------------
  * Cryptomatte.

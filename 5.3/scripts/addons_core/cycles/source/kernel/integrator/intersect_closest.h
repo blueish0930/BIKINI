@@ -118,11 +118,6 @@ ccl_device_forceinline void integrator_split_shadow_catcher(
   /* Mark current state so that it will only track contribution of shadow catcher objects ignoring
    * non-catcher objects. */
   INTEGRATOR_STATE_WRITE(state, path, flag) |= PATH_RAY_SHADOW_CATCHER_PASS;
-#ifdef WITH_CYCLES_SPPM_CAUSTICS
-  /* === BIKINI SPPM Begin === */
-  INTEGRATOR_STATE_WRITE(state, path, flag) &= ~PATH_RAY_PHOTON_HITPOINT_WRITER;
-  /* === BIKINI SPPM End === */
-#endif
 
   /* Shadow catcher path does not use guiding.
    * Clear the path_segment to ensure we do not reference possibly stale data from the main path.

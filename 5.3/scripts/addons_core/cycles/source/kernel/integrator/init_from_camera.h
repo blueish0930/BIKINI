@@ -8,11 +8,6 @@
 
 #include "kernel/film/adaptive_sampling.h"
 #include "kernel/film/light_passes.h"
-#ifdef WITH_CYCLES_SPPM_CAUSTICS
-/* === BIKINI SPPM Begin === */
-#  include "kernel/film/photon_passes.h"
-/* === BIKINI SPPM End === */
-#endif
 
 #include "kernel/integrator/path_state.h"
 
@@ -70,12 +65,6 @@ ccl_device bool integrator_init_from_camera(KernelGlobals kg,
   PROFILING_INIT(kg, PROFILING_RAY_SETUP);
 
   int x, y, sample;
-#ifdef WITH_CYCLES_SPPM_CAUSTICS
-  /* === BIKINI SPPM Begin === */
-  bool photon_writer = false;
-  bool photon_camera_path = true;
-  /* === BIKINI SPPM End === */
-#endif
 
   if (tile == nullptr) {
     /* Restart from miss. Reconstruct x, y, sample from state. */
@@ -83,12 +72,6 @@ ccl_device bool integrator_init_from_camera(KernelGlobals kg,
     x = pixel_index % (int)kernel_data.cam.width;
     y = pixel_index / (int)kernel_data.cam.width;
     sample = INTEGRATOR_STATE(state, path, sample);
-#ifdef WITH_CYCLES_SPPM_CAUSTICS
-    /* === BIKINI SPPM Begin === */
-    photon_writer = (INTEGRATOR_STATE(state, path, flag) & PATH_RAY_PHOTON_HITPOINT_WRITER) != 0;
-    photon_camera_path = (INTEGRATOR_STATE(state, path, flag) & PATH_RAY_PHOTON_CAMERA_PATH) != 0;
-    /* === BIKINI SPPM End === */
-#endif
   }
   else {
     x = x_;
@@ -104,20 +87,6 @@ ccl_device bool integrator_init_from_camera(KernelGlobals kg,
 
     /* Count the sample and get an effective sample for this pixel. */
     sample = film_write_sample(kg, state, render_buffer, scheduled_sample, tile->sample_offset);
-#ifdef WITH_CYCLES_SPPM_CAUSTICS
-    /* === BIKINI SPPM Begin === */
-    if (kernel_data.integrator.use_photon_caustics) {
-#ifdef __KERNEL_GPU__
-      photon_writer = (scheduled_sample == kernel_data.integrator.photon_writer_sample);
-#else
-      photon_writer = (scheduled_sample == tile->start_sample + tile->num_samples - 1);
-#endif
-      if (photon_writer) {
-        film_clear_photon_hitpoint(kg, state, render_buffer);
-      }
-    }
-    /* === BIKINI SPPM End === */
-#endif
   }
 
   /* Initialize random number seed for path. */
@@ -131,14 +100,6 @@ ccl_device bool integrator_init_from_camera(KernelGlobals kg,
     if (tile != nullptr) {
       integrator_path_init(state, DEVICE_KERNEL_INTEGRATOR_INIT_FROM_CAMERA);
       INTEGRATOR_STATE_WRITE(state, path, sample) = sample;
-#ifdef WITH_CYCLES_SPPM_CAUSTICS
-      if (photon_writer) {
-        INTEGRATOR_STATE_WRITE(state, path, flag) |= PATH_RAY_PHOTON_HITPOINT_WRITER;
-      }
-      if (photon_camera_path) {
-        INTEGRATOR_STATE_WRITE(state, path, flag) |= PATH_RAY_PHOTON_CAMERA_PATH;
-      }
-#endif
     }
     integrator_path_cache_miss(state, DEVICE_KERNEL_INTEGRATOR_INIT_FROM_CAMERA);
     return true;
@@ -177,17 +138,6 @@ ccl_device bool integrator_init_from_camera(KernelGlobals kg,
       integrator_path_init(state, DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST);
     }
   }
-
-#ifdef WITH_CYCLES_SPPM_CAUSTICS
-  /* === BIKINI SPPM Begin === */
-  if (photon_writer) {
-    INTEGRATOR_STATE_WRITE(state, path, flag) |= PATH_RAY_PHOTON_HITPOINT_WRITER;
-  }
-  if (photon_camera_path) {
-    INTEGRATOR_STATE_WRITE(state, path, flag) |= PATH_RAY_PHOTON_CAMERA_PATH;
-  }
-  /* === BIKINI SPPM End === */
-#endif
 
   return true;
 }

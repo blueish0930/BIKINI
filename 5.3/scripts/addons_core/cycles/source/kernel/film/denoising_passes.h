@@ -133,11 +133,6 @@ ccl_device_forceinline void film_write_denoising_features_surface(KernelGlobals 
                                    DENOISING_PASS_FOLLOW_REFLECTIONS) != 0;
   if (!follow_reflections) {
     feature_weight = 1.0f;
-    /* Fully transparent first hits have no opaque closures, so the loop left
-     * `normal` at zero. DLSS still needs a stable first-hit normal. */
-    if (sum_weight <= 0.0f) {
-      normal = sd->N;
-    }
   }
 
   const bool is_first_bounce = INTEGRATOR_STATE(state, path, bounce) == 0;
@@ -156,12 +151,7 @@ ccl_device_forceinline void film_write_denoising_features_surface(KernelGlobals 
       /* Transform normal into camera space. */
       const Transform worldtocamera = kernel_data.cam.worldtocamera;
       float3 denoising_normal = transform_direction(&worldtocamera, normal);
-      /* First-hit (no follow) keeps the surface normal even when most of the
-       * closure weight is Transparent BSDF, otherwise DLSS sees a zero normal. */
-      const float opaque_fraction = follow_reflections ?
-                                        ((total_weight > 0.0f) ? (sum_weight / total_weight) :
-                                                                 1.0f) :
-                                        1.0f;
+      const float opaque_fraction = (total_weight > 0.0f) ? (sum_weight / total_weight) : 1.0f;
 
       denoising_normal = ensure_finite(denoising_normal * opaque_fraction * feature_weight *
                                        average(denoising_feature_throughput));
@@ -210,30 +200,25 @@ ccl_device_forceinline void film_write_denoising_features_surface(KernelGlobals 
     }
   }
 
-  if (!follow_reflections) {
-    /* Keep first-hit G-buffer. Transparent continuation would otherwise write
-     * the surface behind (bounce stays 0), which DLSS cannot match to the
-     * noisy first-hit color of the alpha surface. */
-    const bool keep_for_specular_motion =
-        (kernel_data.film.pass_denoising_specular_motion != PASS_UNUSED) && is_first_bounce &&
-        (transparent_weight <= 0.0f);
-    if (keep_for_specular_motion) {
-      INTEGRATOR_STATE_WRITE(state, path, denoising_feature_throughput) = zero_spectrum();
+  /* Portion deferred to the next bounce. Specularity uses the feature weight, transparent
+   * always passes through. */
+  Spectrum deferred_albedo = specular_albedo * deferred_feature_weight + transparent_albedo;
+
+  /* When not following reflections, but the specular motion pass is enabled, still need to
+   * continue to the first bounce, but with no weight for the albedo pass. */
+  if (!follow_reflections && kernel_data.film.pass_denoising_specular_motion == PASS_UNUSED) {
+    deferred_albedo = transparent_albedo;
+  }
+  if (reduce_max(fabs(deferred_albedo)) > 1e-4f) {
+    if (!follow_reflections) {
+      deferred_albedo = transparent_albedo;
     }
-    else {
-      INTEGRATOR_STATE_WRITE(state, path, flag) &= ~PATH_RAY_DENOISING_FEATURES;
-    }
+    const Spectrum throughput = INTEGRATOR_STATE(state, path, denoising_feature_throughput);
+    INTEGRATOR_STATE_WRITE(state, path, denoising_feature_throughput) = throughput *
+                                                                        deferred_albedo;
   }
   else {
-    /* Portion deferred to the next bounce. Specularity uses the feature weight, transparent
-     * always passes through. */
-    const Spectrum deferred_albedo = specular_albedo * deferred_feature_weight + transparent_albedo;
-    if (reduce_max(fabs(deferred_albedo)) > 1e-4f) {
-      INTEGRATOR_STATE_WRITE(state, path, denoising_feature_throughput) *= deferred_albedo;
-    }
-    else {
-      INTEGRATOR_STATE_WRITE(state, path, flag) &= ~PATH_RAY_DENOISING_FEATURES;
-    }
+    INTEGRATOR_STATE_WRITE(state, path, flag) &= ~PATH_RAY_DENOISING_FEATURES;
   }
 }
 

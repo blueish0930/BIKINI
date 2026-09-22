@@ -21,7 +21,6 @@
 #pragma once
 
 #include "kernel/bvh/util.h"
-#include "kernel/geom/object.h"
 #include "kernel/globals.h"
 #include "kernel/integrator/state.h"
 #include "kernel/integrator/state_util.h"
@@ -170,14 +169,9 @@ ccl_device_forceinline bool bvh_shadow_all_anyhit_filter(
    * shadow shader? */
   const int shader_flags = intersection_get_shader_flags(kg, isect.prim, isect.type);
   if ((shader_flags & SD_HAS_TRANSPARENT_SHADOW) == 0) {
-    /* Object Color A still lets light through even when the shader itself is
-     * opaque. Skip the early-out so shade_shadow can scale throughput. */
-    const float obj_alpha = (isect.object != OBJECT_NONE) ? object_alpha(kg, isect.object) : 1.0f;
-    if (obj_alpha >= 1.0f) {
-      /* No transparent shadows for the shader, all light is blocked, and we can stop immediately. */
-      payload.throughput = zero_float3();
-      return false;
-    }
+    /* No transparent shadows for the shader, all light is blocked, and we can stop immediately. */
+    payload.throughput = zero_float3();
+    return false;
   }
 
   /* Fetch commonly accessed payload data, ensuring that it is used from either register to a
