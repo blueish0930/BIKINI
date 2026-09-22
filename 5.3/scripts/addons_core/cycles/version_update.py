@@ -89,6 +89,19 @@ def do_versions(self):
         if prop.is_property_set("compute_device_type") and prop['compute_device_type'] == 4:
             prop.compute_device_type = 'NONE'
 
+    # Stored OptiX (enum 3) is invalid when this build has no OptiX; RNA then
+    # treats the device as empty and Cycles falls back to CPU, so DLSS never runs.
+    try:
+        import _cycles
+        has_cuda, has_optix, _has_hip, _has_metal, _has_oneapi, _has_hiprt = _cycles.get_device_types()
+        prop = bpy.context.preferences.addons[__package__].preferences
+        if prop.is_property_set("compute_device_type") and prop.get("compute_device_type") == 3:
+            if not has_optix:
+                prop.compute_device_type = 'CUDA' if has_cuda else 'NONE'
+                prop.get_devices(prop.compute_device_type)
+    except Exception:
+        pass
+
     # We don't modify startup file because it assumes to
     # have all the default values only.
     if not bpy.data.is_saved:

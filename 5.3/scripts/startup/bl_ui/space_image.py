@@ -1646,7 +1646,7 @@ class IMAGE_PT_uv_mirror(Panel):
         col.prop(mesh, "uv_mirror_center", text="Center")
         row = col.row(align=True)
         row.operator("uv.mirror_center_set", text="Cursor").target = 'CURSOR'
-        row.operator("uv.mirror_center_set", text="Tile Center").target = 'TILE'
+        row.operator("uv.mirror_center_set", text="Selection Center").target = 'SELECTION'
 
         sub = col.column(align=True)
         sub.active = mirrored
