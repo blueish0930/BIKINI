@@ -1287,25 +1287,6 @@ class IMAGE_PT_paint_layers(Panel, ImagePaintPanel):
         draw_paint_layers(self.layout, ima)
 
 
-class IMAGE_PT_paint_layers_window(Panel):
-    bl_space_type = 'IMAGE_EDITOR'
-    bl_region_type = 'WINDOW'
-    bl_label = "Paint Layers"
-    bl_context = ".paint_layers_window"
-
-    @classmethod
-    def poll(cls, context):
-        sima = context.space_data
-        return bool(sima and getattr(sima, "show_paint_layers_window", False))
-
-    def draw(self, context):
-        layout = self.layout
-        row = layout.row(align=True)
-        row.prop(context.window, "stay_on_top", text="Pin on Top", icon='PINNED', toggle=True)
-        from bl_ui.space_view3d_toolbar import draw_paint_layers
-        draw_paint_layers(layout, context.space_data.image)
-
-
 class IMAGE_PT_paint_select(Panel, ImagePaintPanel, BrushSelectPanel):
     bl_label = "Brush Asset"
     bl_context = ".paint_common_2d"
@@ -1995,7 +1976,6 @@ classes = (
     IMAGE_PT_udim_tiles,
     IMAGE_UL_paint_layers,
     IMAGE_PT_paint_layers,
-    IMAGE_PT_paint_layers_window,
     IMAGE_PT_view_display,
     IMAGE_PT_paint_select,
     IMAGE_PT_paint_settings,

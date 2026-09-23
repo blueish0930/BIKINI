@@ -61,4 +61,5 @@
     <file name="ur_loader.dll"/>
     <file name="ur_win_proxy_loader.dll"/>
     <file name="usd_ms.dll"/>
+    <file name="hiprt0200564.dll"/>
 </assembly>

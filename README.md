@@ -20,56 +20,47 @@
 
 ## 更新（新 → 旧）
 
-### 2026-09 · Cycles 光子焦散（SPPM）
-
-Cycles 增加 **Photon Caustics**（随机渐进光子映射）。路径：渲染属性 → Light Paths → Caustics。默认关闭；打开后由光子图提供锐利焦散，可与 DLSS 一起用。
-
-**来源（请保留署名）**
-
-本功能移植自 **CyclesPlus / Caustica**，不是 BIKINI 从零实现的求解器。
-
-| 项 | 说明 |
-|----|------|
-| 上游仓库 | [Caustica_Blender](https://github.com/geiniyiquan250/Caustica_Blender)（水梦 / Shuimeng，GitHub `geiniyiquan250`；Blender 5.2.0 LTS 个人定制版） |
-| 功能标记 | 源码 `SPDX-FileCopyrightText: 2026 CyclesPlus`，文件内 `CyclesPlus Begin/End` |
-| 许可证 | **Apache-2.0**（与官方 Cycles 相同；可与 GPL-3 整包并存，见下方许可证） |
-| 算法 | Stochastic Progressive Photon Mapping — Hachisuka & Jensen, *SIGGRAPH Asia 2009* |
-
-BIKINI 侧只做了 5.3 API 适配、与时序 DLSS 的 1 spp 缓冲对齐，以及路径追踪 / 光子图的分区（避免同一条焦散被加两遍）。体积焦散、OptiX 独立光子管线未整包并入。
-
-使用时请在 About / 文档中保留对 CyclesPlus / Caustica 与上述论文的致谢。不要把本功能写成 BIKINI 原创焦散求解器。
-
 ### v3
 
-相对 v2 的下一批。
-
-**渲染**
-
-- Cycles 合并 **DLSS 4.5** 降噪（需 NVIDIA GPU；二进制闭源，见下方协议）
-- 合成器 Denoise 节点增加 DLSS 4.5
+相对 v2。
 
 **几何节点**
 
-- Curvature 增加 Total Curvature 输出
-- Wrangle 节点（VEX、数组属性）
-- 补上 SDF Shape、Fractal
-- Modal Tool 模态工具
+- Curvature 新增 Total Curvature 输出
+- Wrangle，VEX，数组属性，高效编译
+- SDF Shape、Fractal
+- Modal Tool
 - Flip Solver（WIP）
 
 **着色器**
 
-- Parallax Occlusion、Billboard
-- Wrangle、ddx / ddy（Derivative）
+- Parallax Occlusion
+- Billboard
+- Wrangle
+- DDX、DDY
 
-**界面**
+**合成器**
 
-- 节点编辑器缩略图
-- 叠加层显示节点原名称
+- Denoise 新增 DLSS 4.5
+- DLSS 5 滤镜
+
+**渲染**
+
+- 合并 DLSS 4.5 视口降噪，并支持渲染降噪 DLSS 4.5
+- 合并 LuxCore 渲染引擎
+
+**杂项**
+
+- 节点编辑器叠加层显示节点原名称
+- Noise、Voronoi 增加 Tiling
 - 节点组 Lock
-- 折线连线样式（angled links）
+- Angled node link style
 - 节点编辑器 Coordinate 背景
-- Noise / Voronoi 增加 tiling
-- Layered texture painting、GTE refresh
+- 节点编辑器缩略图
+- 网格编辑模式镜像编辑，支持镜像修改拓扑；UV 编辑器镜像修改
+- 修改模拟区后面的节点不会丢失 cache
+- 支持集合 K 帧
+- 纹理绘制支持图层
 
 ### v2
 
@@ -86,7 +77,6 @@ BIKINI 侧只做了 5.3 API 适配、与时序 DLSS 的 1 spp 缓冲对齐，以
 - Camera View、Island UV、Island Padding
 - Portal、FFT、Import Geo、Geo SDF
 - Render Material、ShaderToy
-- Terrain / Erosion（盖亚风格：山体图元、水力/热力侵蚀、雪/河/海、阶地、坡度遮罩、卫星着色）
 
 **着色器**
 
@@ -163,7 +153,6 @@ BIKINI 侧只做了 5.3 API 适配、与时序 DLSS 的 1 spp 缓冲对齐，以
 
 | 库 / 作品 | 版本 / 说明 | 许可证 | 用在 | 出处 |
 |-----------|-------------|--------|------|------|
-| **CyclesPlus / Caustica 光子焦散** | SPPM，移植自 5.2 下游 | **Apache-2.0** · © 2026 CyclesPlus | Cycles Photon Caustics | [Caustica_Blender](https://github.com/geiniyiquan250/Caustica_Blender) · 水梦 / `geiniyiquan250` |
 | [CGAL](https://www.cgal.org) | 6.2 | GPL-3.0-or-later / LGPL | 几何节点 CGAL | [cgal.org](https://www.cgal.org) · [GitHub](https://github.com/CGAL/cgal) |
 | [Box2D](https://box2d.org) | 3 | MIT · Erin Catto | Box Engine 2D | [GitHub](https://github.com/erincatto/box2d) |
 | [Box3D](https://github.com/erincatto/box3d) | — | MIT · Erin Catto | Box Engine 3D | [GitHub](https://github.com/erincatto/box3d) |
@@ -181,22 +170,21 @@ BIKINI 侧只做了 5.3 API 适配、与时序 DLSS 的 1 spp 缓冲对齐，以
 
 论文 / 方法引用（实现参考，不是整库拷贝）：
 
-- Hachisuka, T., Jensen, H. W. *Stochastic Progressive Photon Mapping.* ACM SIGGRAPH Asia 2009.
 - Macklin / Müller / Bender, XPBD（PBD Solver 的方法来源；本树是独立精简实现，不是 PositionBasedDynamics 整仓）
 - Jiang / Hu et al., MLS-MPM（MPM Solver 的方法来源）
 
-源码目录（开源部分）：`extern/cgal`、`extern/box2d`、`extern/box3d`、`extern/jolt`、`extern/instant-meshes`、`extern/pmp-library`、`extern/quadriflow`、`extern/voro++`、`extern/jet`、`intern/cycles`（含 CyclesPlus 焦散，Apache-2.0）。DLSS 仅以二进制 DLL 形式附带，**无对应开源树**。
+源码目录（开源部分）：`extern/cgal`、`extern/box2d`、`extern/box3d`、`extern/jolt`、`extern/instant-meshes`、`extern/pmp-library`、`extern/quadriflow`、`extern/voro++`、`extern/jet`、`intern/cycles`（Apache-2.0）。DLSS 仅以二进制 DLL 形式附带，**无对应开源树**。
 
 ## 许可证
 
 这是 **GPL 衍生作品**，不是 MIT 小工具。
 
 - Blender 应用程序按 **GPL-3.0-or-later** 分发（官方说明；个别源文件 SPDX 仍为 GPL-2.0-or-later）。
-- **Cycles** 本身是 **Apache-2.0**。CyclesPlus 焦散文件同为 Apache-2.0，留在 `intern/cycles`，没有改成 GPL。
+- **Cycles** 本身是 **Apache-2.0**，留在 `intern/cycles`，没有改成 GPL。
 - Apache-2.0 **可以**放进 GPL-3 发行包，**不能**放进纯 GPL-2 包。本构建因 CGAL、QRemeshify 等已按 GPL-3 分发，兼容。
 - CGAL、QRemeshify/QuadWild 是 **GPL-3**，链进 exe 后整包按 GPL-3 分发。
 - Instant Meshes 是 **BSD-3-Clause**（不是 GPL）。Box2D / Box3D / Jolt / PMP / QuadriFlow / JET 是 MIT，保留版权声明即可。
-- 分发时请保留整个 `license/` 目录，**不要**声称这是官方 Blender，也**不要**把光子焦散写成 BIKINI 原创。
+- 分发时请保留整个 `license/` 目录，**不要**声称这是官方 Blender。
 
 ### 特别说明：NVIDIA DLSS 4.5（专有组件）
 

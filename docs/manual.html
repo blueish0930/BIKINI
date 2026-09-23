@@ -450,6 +450,19 @@ footer.page-footer{
   margin-left:auto;font-size:var(--font-size--small--2);font-weight:400;
   color:var(--color-foreground-muted);
 }
+.nav-search{
+  display:block;width:calc(100% - .8rem);margin:0 .4rem .65rem;
+  box-sizing:border-box;
+  position:sticky;top:0;z-index:2;
+  padding:.38rem .55rem;
+  border:1px solid var(--color-sidebar-background-border);
+  border-radius:.35rem;
+  background:var(--color-sidebar-background);
+  color:var(--color-foreground-primary);
+  font:inherit;font-size:.8rem;
+}
+.nav-search:focus{outline:2px solid hsla(204,100%,50%,.35);outline-offset:1px}
+.sidebar .nav-miss{display:none !important}
 
 </style>
 </head>
@@ -468,6 +481,7 @@ footer.page-footer{
 <div class="layout">
 <aside class="sidebar">
 <div class="nav-title">Manual</div>
+<input class="nav-search" id="nav-search" type="search" autocomplete="off" placeholder="搜索 / Search" aria-label="Search manual">
 <ul class="nav-list">
 <li><a class="nav-link is-active" href="#intro" data-page="intro"><span class="zh">简介</span><span class="en">Intro</span></a></li>
 <li><a class="nav-link" href="#achieve" data-page="achieve">Achieve List</a></li>
@@ -10314,6 +10328,28 @@ Result = float4(lerp(Color.rgb, Color.rgb * Fac, saturate(Fac)), Color.a);
   }catch(e){ setLang("zh"); }
   // Initial load: show page, do not force scroll fight with browser hash restore
   showPage(hash(), false, false);
+  var navSearch=document.getElementById("nav-search");
+  if(navSearch){
+    navSearch.addEventListener("input", function(){
+      var q=navSearch.value.trim().toLowerCase();
+      document.querySelectorAll(".sidebar a.nav-link").forEach(function(a){
+        var li=a.parentElement;
+        if(!li||li.tagName!=="LI") return;
+        var hit=!q||(a.textContent||"").toLowerCase().indexOf(q)>=0;
+        li.classList.toggle("nav-miss", !hit);
+      });
+      Array.prototype.slice.call(document.querySelectorAll(".sidebar details")).reverse().forEach(function(d){
+        if(!q){ d.classList.remove("nav-miss"); return; }
+        var vis=false;
+        d.querySelectorAll("a.nav-link").forEach(function(a){
+          var li=a.parentElement;
+          if(li&&!li.classList.contains("nav-miss")) vis=true;
+        });
+        d.classList.toggle("nav-miss", !vis);
+        if(vis) d.open=true;
+      });
+    });
+  }
 })();
 </script>
 </body></html>

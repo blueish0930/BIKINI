@@ -1,0 +1,177 @@
+# SPDX-FileCopyrightText: 2011-2026 Blender Foundation
+#
+# SPDX-License-Identifier: Apache-2.0
+
+set(INC
+  ../../..
+)
+
+set(INC_SYS
+
+)
+
+set(SRC_KERNEL_DEVICE_OPTIX
+  kernel.cu
+  kernel_mnee.cu
+  kernel_shader_raytrace.cu
+)
+
+if(WITH_CYCLES_OSL)
+  math(EXPR OSL_LIBRARY_VERSION_CODE "${OSL_VERSION_MAJOR} * 10000 + ${OSL_VERSION_MINOR} * 100 + ${OSL_VERSION_PATCH}")
+  math(EXPR OIIO_VERSION "${OpenImageIO_VERSION_MAJOR} * 10000 + ${OpenImageIO_VERSION_MINOR} * 100 + ${OpenImageIO_VERSION_PATCH}")
+
+  set(SRC_KERNEL_DEVICE_OPTIX
+    ${SRC_KERNEL_DEVICE_OPTIX}
+    ../../osl/services_optix.cu
+    kernel_osl.cu
+    kernel_osl_camera.cu
+    kernel_osl_mnee.cu
+    kernel_osl_shader_raytrace.cu
+    kernel_osl_shadow.cu
+    kernel_osl_shadow_curve.cu
+    kernel_osl_volume.cu
+  )
+endif()
+
+set(SRC_KERNEL_DEVICE_OPTIX_HEADERS
+  bvh.h
+  compat.h
+  globals.h
+)
+
+set(LIB
+
+)
+
+if(WITH_CYCLES_CUDA_BINARIES AND WITH_CYCLES_DEVICE_OPTIX)
+  foreach(_arch compute_50 compute_75)
+    cuda_get_toolkit_for_arch("${_arch}" cuda_toolkit_root_dir cuda_nvcc_executable cuda_version)
+    if(DEFINED cuda_nvcc_executable)
+      set(arch "${_arch}")
+      break()
+    endif()
+  endforeach()
+  if(NOT DEFINED cuda_nvcc_executable)
+    message(FATAL_ERROR "Could not find suitable combination of compute architecture and nvcc compiler")
+  endif()
+  message(STATUS "Cycles OptiX: Using CUDA toolkit ${cuda_toolkit_root_dir} (version ${cuda_version}) for ${arch}")
+
+  # Modifies in parent scope:
+  # - `optix_ptx`: appended with compressed ptx output.
+  function(cycles_optix_kernel_add name cuda_nvcc_executable cuda_version input flags)
+    set(output "${CMAKE_CURRENT_BINARY_DIR}/${name}.ptx")
+    set(output_compressed "${output}.zst")
+
+    set(cuda_flags ${flags}
+      -I "${OPTIX_INCLUDE_DIR}"
+      -I "${CMAKE_CURRENT_SOURCE_DIR}/../../.."
+      -o ${output})
+
+    if(WITH_CYCLES_OSL)
+      set(cuda_flags ${cuda_flags}
+        -D OSL_LIBRARY_VERSION_CODE=${OSL_LIBRARY_VERSION_CODE}
+        -D OIIO_VERSION=${OIIO_VERSION})
+    endif()
+
+    cuda_add_common_flags(${cuda_version} ${arch} "${cuda_flags}" cuda_flags)
+
+    add_custom_command(
+      OUTPUT
+        ${output}
+      DEPENDS
+        ${input}
+        ${SRC_KERNEL_DEVICE_OPTIX_HEADERS}
+        $<TARGET_PROPERTY:cycles_kernel,INTERFACE_SOURCES>
+      COMMAND
+        ${cuda_nvcc_executable}
+        --ptx
+        -arch=${arch}
+        ${cuda_flags}
+        ${input}
+      WORKING_DIRECTORY
+        "${CMAKE_CURRENT_SOURCE_DIR}"
+    )
+
+    add_custom_command(
+      OUTPUT ${output_compressed}
+      COMMAND "$<TARGET_FILE:zstd_compress>" ${output} ${output_compressed}
+      DEPENDS ${output})
+
+    list(APPEND optix_ptx ${output_compressed})
+    set(optix_ptx "${optix_ptx}" PARENT_SCOPE)
+
+    delayed_install("${CMAKE_CURRENT_BINARY_DIR}" "${output_compressed}" ${CYCLES_INSTALL_PATH}/lib)
+  endfunction()
+
+  cycles_optix_kernel_add(
+    kernel_optix
+    "${cuda_nvcc_executable}" "${cuda_version}"
+    "kernel.cu"
+    "")
+  cycles_optix_kernel_add(
+    kernel_optix_mnee
+    "${cuda_nvcc_executable}" "${cuda_version}"
+    "kernel_mnee.cu"
+    "")
+  cycles_optix_kernel_add(
+    kernel_optix_shader_raytrace
+    "${cuda_nvcc_executable}" "${cuda_version}"
+    "kernel_shader_raytrace.cu"
+    "--keep-device-functions")
+  if(WITH_CYCLES_OSL)
+    cycles_optix_kernel_add(
+      kernel_optix_osl
+      "${cuda_nvcc_executable}" "${cuda_version}"
+      "kernel_osl.cu"
+      "--relocatable-device-code=true")
+    cycles_optix_kernel_add(
+      kernel_optix_osl_shader_raytrace
+      "${cuda_nvcc_executable}" "${cuda_version}"
+      "kernel_osl_shader_raytrace.cu"
+      "--relocatable-device-code=true")
+    cycles_optix_kernel_add(
+      kernel_optix_osl_mnee
+      "${cuda_nvcc_executable}" "${cuda_version}"
+      "kernel_osl_mnee.cu"
+      "--relocatable-device-code=true")
+    cycles_optix_kernel_add(
+      kernel_optix_osl_shadow
+      "${cuda_nvcc_executable}" "${cuda_version}"
+      "kernel_osl_shadow.cu"
+      "--relocatable-device-code=true")
+    cycles_optix_kernel_add(
+      kernel_optix_osl_shadow_curve
+      "${cuda_nvcc_executable}" "${cuda_version}"
+      "kernel_osl_shadow_curve.cu"
+      "--relocatable-device-code=true")
+    cycles_optix_kernel_add(
+      kernel_optix_osl_volume
+      "${cuda_nvcc_executable}" "${cuda_version}"
+      "kernel_osl_volume.cu"
+      "--relocatable-device-code=true")
+    cycles_optix_kernel_add(
+      kernel_optix_osl_camera
+      "${cuda_nvcc_executable}" "${cuda_version}"
+      "kernel_osl_camera.cu"
+      "--relocatable-device-code=true")
+    cycles_optix_kernel_add(
+      kernel_optix_osl_services
+      "${cuda_nvcc_executable}" "${cuda_version}"
+      "../../osl/services_optix.cu"
+      "--relocatable-device-code=true")
+  endif()
+
+  add_custom_target(cycles_kernel_optix
+    ALL
+    DEPENDS ${optix_ptx}
+    SOURCES ${SRC_KERNEL_DEVICE_OPTIX} ${SRC_KERNEL_DEVICE_OPTIX_HEADERS}
+  )
+  cycles_set_solution_folder(cycles_kernel_optix)
+
+  source_group("device\\optix" FILES ${SRC_KERNEL_DEVICE_OPTIX} ${SRC_KERNEL_DEVICE_OPTIX_HEADERS})
+
+  add_dependencies(cycles_kernel cycles_kernel_optix)
+endif()
+
+delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_KERNEL_DEVICE_OPTIX}" ${CYCLES_INSTALL_PATH}/source/kernel/device/optix)
+delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_KERNEL_DEVICE_OPTIX_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/device/optix)

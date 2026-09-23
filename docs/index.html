@@ -507,8 +507,121 @@
       fill: hsl(352, 80%, 58%);
     }
 
+    /* Manual map — same groups as manual.html sidebar */
+    .catalog {
+      margin-top: 2.25rem;
+      background: var(--surface);
+      border: 1px solid rgba(0, 0, 0, 0.04);
+      border-radius: var(--border-radius);
+      box-shadow: var(--box-shadow-card);
+      padding: 1.4rem 1.45rem 1.2rem;
+    }
+    .catalog h2 {
+      margin: 0;
+      font-size: 1.25rem;
+      letter-spacing: -0.015em;
+    }
+    .catalog .lead {
+      margin: 0.35rem 0 0.9rem;
+      color: var(--color-text-secondary);
+      font-size: 0.92rem;
+    }
+    .doc-search {
+      width: 100%;
+      max-width: 36rem;
+      font: inherit;
+      font-size: 0.92rem;
+      padding: 0.55rem 0.75rem;
+      border-radius: 0.6rem;
+      border: 1px solid hsla(214, 30%, 50%, 0.28);
+      background: #f8fafc;
+      color: var(--color-text);
+    }
+    .doc-search:focus {
+      outline: 2px solid hsla(204, 100%, 50%, 0.35);
+      outline-offset: 1px;
+      background: #fff;
+    }
+    .doc-hits {
+      list-style: none;
+      margin: 0.55rem 0 0;
+      padding: 0;
+      max-width: 36rem;
+      border: 1px solid hsla(214, 30%, 50%, 0.18);
+      border-radius: 0.6rem;
+      overflow: hidden;
+      background: #fff;
+    }
+    .doc-hits a {
+      display: flex;
+      gap: 0.75rem;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 0.45rem 0.7rem;
+      color: var(--color-text);
+      text-decoration: none !important;
+      font-size: 0.88rem;
+    }
+    .doc-hits a:hover { background: var(--color-accent-bg); }
+    .doc-hits .where {
+      color: var(--color-text-muted);
+      font-size: 0.75rem;
+      white-space: nowrap;
+    }
+    .doc-hits .empty {
+      padding: 0.55rem 0.7rem;
+      color: var(--color-text-muted);
+      font-size: 0.85rem;
+    }
+    .ver-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.25rem 1.75rem;
+      margin-top: 1.15rem;
+    }
+    .ver-block h3 {
+      margin: 0 0 0.55rem;
+      font-size: 0.95rem;
+      display: flex;
+      align-items: baseline;
+      gap: 0.45rem;
+    }
+    .ver-block h3 span {
+      font-weight: 500;
+      color: var(--color-text-muted);
+      font-size: 0.78rem;
+    }
+    .ver-block.wide { grid-column: 1 / -1; }
+    .mod-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+    }
+    .mod-list a {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.28rem 0.6rem;
+      border-radius: 999px;
+      background: var(--color-accent-bg);
+      color: var(--color-text) !important;
+      text-decoration: none !important;
+      font-size: 0.82rem;
+      font-weight: 500;
+    }
+    .mod-list a:hover { background: var(--color-accent-bg-hover); }
+    .mod-list .n {
+      color: var(--color-text-muted);
+      font-weight: 500;
+      font-size: 0.75rem;
+    }
+
     @media (max-width: 960px) {
       .cards { grid-template-columns: 1fr; margin-top: -1.4rem; }
+      .ver-grid { grid-template-columns: 1fr; }
       .footer-grid { grid-template-columns: 1fr; gap: 1.75rem; }
       .nav-links .hide-sm { display: none; }
       .hero { min-height: 220px; }
@@ -543,8 +656,8 @@
         <span class="en">Documentation</span>
         <span class="zh">文档</span>
       </h1>
-      <p class="en">User Manual, Developer Docs, and VEX Wrangle for the BIKINI custom Blender build.</p>
-      <p class="zh">BIKINI 自定义 Blender 构建的用户手册、开发者文档与 VEX Wrangle。</p>
+      <p class="en">Node manual for v1 and v2, v3 release notes, and VEX Wrangle.</p>
+      <p class="zh">节点手册是 v1 / v2，v3 在更新说明里，另有 VEX Wrangle。</p>
     </div>
     <div class="hero-credits">
       <a href="https://www.youtube.com/watch?v=_cMxraX_5RE" target="_blank" rel="noopener">Sprite Fright · Blender Studio</a>
@@ -561,12 +674,12 @@
               <span class="zh">用户手册</span>
             </a></h2>
             <p class="en">
-              How to use BIKINI features — node parameters, workflows, and practical examples.
-              Structured like the official Blender Manual.
+              Inputs, outputs, and menus for the nodes in this build.
+              v1 is 62 pages; v2 is 200, including 142 CGAL nodes.
             </p>
             <p class="zh">
-              如何使用 BIKINI 功能：节点参数、工作流与示例说明。
-              结构参考官方 Blender User Manual。
+              本构建节点的输入、输出与菜单。
+              v1 共 62 页；v2 共 200 页，其中 CGAL 142 个。
             </p>
             <a class="btn btn-primary" href="manual.html">
               <span class="en">Browse Manual</span>
@@ -581,14 +694,9 @@
               <span class="en">Developer Docs</span>
               <span class="zh">开发者文档</span>
             </a></h2>
-            <p class="en">
-              Release notes and technical summaries for each module — Geometry Nodes,
-              Image Process, UI, and more.
-            </p>
-            <p class="zh">
-              各模块更新说明与技术摘要：Geometry Nodes、Image Process、界面等。
-            </p>
-            <a class="btn btn-primary" href="changelog.html">
+            <p class="en">Release notes for v1, v2, and v3.</p>
+            <p class="zh">v1、v2、v3 更新说明。</p>
+            <a class="btn btn-primary" href="changelog.html#v3-overview">
               <span class="en">Browse Developer Docs</span>
               <span class="zh">浏览开发者文档</span>
             </a>
@@ -634,6 +742,53 @@
           </div>
         </article>
       </div>
+
+      <section class="catalog" aria-label="Manual">
+        <h2>
+          <span class="en">From the manual</span>
+          <span class="zh">按当前手册</span>
+        </h2>
+        <p class="lead en">Same groups as the manual sidebar. Search jumps to that page.</p>
+        <p class="lead zh">分组与手册侧栏一致。搜索后直接打开对应页。</p>
+        <input class="doc-search" id="doc-search" type="search" autocomplete="off"
+          placeholder="Search nodes">
+        <ul class="doc-hits" id="doc-hits" hidden></ul>
+        <div class="ver-grid">
+          <div class="ver-block">
+            <h3>v1 <span>62</span></h3>
+            <ul class="mod-list">
+              <li><a href="manual.html#GeometryNodeNamedPortal"><span class="en">Geometry Nodes</span><span class="zh">几何节点</span> <span class="n">30</span></a></li>
+              <li><a href="manual.html#ui-viewport-overlay-attr"><span class="en">UI</span><span class="zh">界面</span> <span class="n">10</span></a></li>
+              <li><a href="manual.html#ImageNodeImportPoints"><span class="en">GPU Texture Editor</span><span class="zh">GPU 纹理编辑器</span> <span class="n">17</span></a></li>
+              <li><a href="manual.html#CompositorNodeImageProcess"><span class="en">Compositor</span><span class="zh">合成器</span> <span class="n">1</span></a></li>
+              <li><a href="manual.html#shader-image-socket"><span class="en">Shaders</span><span class="zh">着色器</span> <span class="n">4</span></a></li>
+            </ul>
+          </div>
+          <div class="ver-block">
+            <h3>v2 <span>200</span></h3>
+            <ul class="mod-list">
+              <li><a href="manual.html#GeometryNodeSetGroupInputDefault"><span class="en">Geometry</span><span class="zh">几何</span> <span class="n">9</span></a></li>
+              <li><a href="manual.html#v2-cgal-index">CGAL <span class="n">142</span></a></li>
+              <li><a href="manual.html#GeometryNodeBoxEngineSetRigidBody">Box2D <span class="n">3</span></a></li>
+              <li><a href="manual.html#GeometryNodeJoltSetRigidBody">Jolt <span class="n">3</span></a></li>
+              <li><a href="manual.html#ImageNodeCameraView"><span class="en">Texture / GTE</span><span class="zh">纹理 / GTE</span> <span class="n">10</span></a></li>
+              <li><a href="manual.html#ShaderNodeNamedPortal"><span class="en">Shaders</span><span class="zh">着色器</span> <span class="n">15</span></a></li>
+              <li><a href="manual.html#ObjectNodeObject"><span class="en">Object Editor</span><span class="zh">物体编辑器</span> <span class="n">10</span></a></li>
+              <li><a href="manual.html#ui-v2-g-move"><span class="en">UI</span><span class="zh">界面</span> <span class="n">8</span></a></li>
+            </ul>
+          </div>
+          <div class="ver-block wide">
+            <h3>v3 <span class="en">release notes</span><span class="zh">更新说明</span></h3>
+            <ul class="mod-list">
+              <li><a href="changelog.html#v3-geometry-nodes"><span class="en">Geometry Nodes</span><span class="zh">几何节点</span></a></li>
+              <li><a href="changelog.html#v3-shaders"><span class="en">Shaders</span><span class="zh">着色器</span></a></li>
+              <li><a href="changelog.html#v3-render"><span class="en">Render</span><span class="zh">渲染</span></a></li>
+              <li><a href="changelog.html#v3-interface"><span class="en">Interface</span><span class="zh">界面</span></a></li>
+              <li><a href="vex.html">VEX</a></li>
+            </ul>
+          </div>
+        </div>
+      </section>
     </div>
   </div>
 
@@ -694,6 +849,7 @@
     <a href="https://github.com/blueish0930/BIKINI" target="_blank" rel="noopener">github.com/blueish0930/BIKINI</a>
   </div>
 
+  <script src="manual-index.js"></script>
   <script>
     (function () {
       var KEYS = ["bikini-docs-lang", "bikini-changelog-lang"];
@@ -708,6 +864,47 @@
       }
       document.getElementById("lang-zh").addEventListener("click", function () { setLang("zh"); });
       document.getElementById("lang-en").addEventListener("click", function () { setLang("en"); });
+      var search = document.getElementById("doc-search");
+      var hits = document.getElementById("doc-hits");
+      function searchPh() {
+        var zh = document.documentElement.getAttribute("data-lang") === "zh";
+        search.placeholder = zh ? "搜索节点、界面或 id" : "Search nodes, UI, or id";
+      }
+      function renderHits() {
+        var q = search.value.trim().toLowerCase();
+        var zh = document.documentElement.getAttribute("data-lang") === "zh";
+        hits.innerHTML = "";
+        if (!q) { hits.hidden = true; return; }
+        var found = (window.BIKINI_MANUAL || []).filter(function (p) {
+          return (p.zh + " " + p.en + " " + p.id + " " + p.gz + " " + p.ge).toLowerCase().indexOf(q) >= 0;
+        }).slice(0, 14);
+        hits.hidden = false;
+        if (!found.length) {
+          var li = document.createElement("li");
+          li.className = "empty";
+          li.textContent = zh ? "手册里没有这项。" : "Nothing in the manual.";
+          hits.appendChild(li);
+          return;
+        }
+        found.forEach(function (p) {
+          var li = document.createElement("li");
+          var a = document.createElement("a");
+          a.href = "manual.html#" + p.id;
+          var label = document.createElement("span");
+          label.textContent = zh ? (p.zh || p.en) : (p.en || p.zh);
+          var where = document.createElement("span");
+          where.className = "where";
+          where.textContent = zh ? p.gz : p.ge;
+          a.appendChild(label);
+          a.appendChild(where);
+          li.appendChild(a);
+          hits.appendChild(li);
+        });
+      }
+      var _setLang = setLang;
+      setLang = function (l) { _setLang(l); searchPh(); renderHits(); };
+      searchPh();
+      search.addEventListener("input", renderHits);
       try {
         var s = localStorage.getItem(KEYS[0]) || localStorage.getItem(KEYS[1]);
         if (s === "en" || s === "zh") setLang(s);

@@ -515,6 +515,33 @@ footer.page-footer{
             </div>
             <ul class="md-nav__list">
               <li class="md-nav__item">
+                <details class="nav-version" open>
+                  <summary>
+                    v3
+                    <span class="tag">Alpha</span>
+                  </summary>
+                  <ul class="md-nav__list">
+                    <li class="md-nav__item">
+                      <a class="md-nav__link md-nav__link--active" href="#v3-overview" data-page="v3-overview">
+                        <span class="en">Overview</span><span class="zh">概览</span>
+                      </a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#v3-geometry-nodes" data-page="v3-geometry-nodes"><span class="zh">几何节点</span><span class="en">Geometry Nodes</span></a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#v3-shaders" data-page="v3-shaders"><span class="en">Shaders</span><span class="zh">着色器</span></a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#v3-render" data-page="v3-render"><span class="en">Render</span><span class="zh">渲染</span></a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#v3-interface" data-page="v3-interface"><span class="en">Interface</span><span class="zh">界面</span></a>
+                    </li>
+                  </ul>
+                </details>
+              </li>
+              <li class="md-nav__item">
                 <details class="nav-version">
                   <summary>
                     v1
@@ -522,7 +549,7 @@ footer.page-footer{
                   </summary>
                   <ul class="md-nav__list">
                     <li class="md-nav__item">
-                      <a class="md-nav__link md-nav__link--active" href="#overview" data-page="overview">
+                      <a class="md-nav__link" href="#overview" data-page="overview">
                         <span class="en">Overview</span><span class="zh">概览</span>
                       </a>
                     </li>
@@ -564,7 +591,7 @@ footer.page-footer{
                 </details>
               </li>
               <li class="md-nav__item">
-                <details class="nav-version" open>
+                <details class="nav-version">
                   <summary>
                     v2
                     <span class="tag">Alpha</span>
@@ -629,7 +656,7 @@ footer.page-footer{
           <div class="md-content__inner md-typeset">
 
             <!-- Overview -->
-            <article class="page is-active" id="page-overview" data-page="overview">
+            <article class="page" id="page-overview" data-page="overview">
               <h1>
                 <span class="en">BIKINI 5.3 Release Notes</span>
                 <span class="zh">BIKINI 5.3 更新说明</span>
@@ -926,24 +953,14 @@ footer.page-footer{
                 <li>
                   <strong>Expression</strong> — evaluate a typed expression string on field / socket inputs,
                   with <strong>autocomplete</strong> for identifiers, functions, and syntax.
-                </li>
-                <li>
-                  <strong>Wrangle</strong> <code>addprim</code> — create an edge / face / curve on geo 0
-                  from an <code>int[]</code> of point indices. Types: <code>edge</code> (<code>polyline</code>),
-                  <code>face</code> (<code>poly</code>), <code>curve</code> (<code>spline</code>).
-                  See <a href="vex-functions.html#addprim">VEX functions</a>.
+                  See <a href="manual.html#NodeExpression">Expression</a>.
                 </li>
               </ul>
               <ul class="zh">
                 <li>
                   <strong>Expression</strong> — 对场 / 接口输入求值类型化表达式，
                   支持标识符、函数与语法的<strong>自动补全</strong>。
-                </li>
-                <li>
-                  <strong>Wrangle</strong> <code>addprim</code> — 在 geo 0 上用点编号数组建边 / 面 / 曲线。
-                  type：<code>edge</code>（<code>polyline</code>）、<code>face</code>（<code>poly</code>）、
-                  <code>curve</code>（<code>spline</code>）。
-                  见 <a href="vex-functions.html#addprim">VEX 函数清单</a>。
+                  见 <a href="manual.html#NodeExpression">表达式</a>。
                 </li>
               </ul>
 
@@ -954,11 +971,13 @@ footer.page-footer{
               <p class="en">
                 Geometry Nodes path for sparse linear algebra on meshes.
                 Backend: <strong>Eigen</strong> + <strong>Spectra</strong>.
-                (A dedicated Solver / physics category will come later when true physics solvers land.)
+                Rigid-body solvers are in <a href="#v2-geometry-nodes" data-page="v2-geometry-nodes">v2</a>
+                (Box Engine, Jolt), not in this block.
               </p>
               <p class="zh">
                 几何节点内的稀疏线性代数路径。后端：<strong>Eigen</strong> + <strong>Spectra</strong>。
-                （真正的物理 Solver 分类会在后续物理求解器落地后再单独开栏。）
+                刚体求解在 <a href="#v2-geometry-nodes" data-page="v2-geometry-nodes">v2</a>
+                （Box 引擎、Jolt），不在这一节。
               </p>
               <p><code>Mesh → Mesh Laplacian → [Sparse Matrix Math] → Linear Solver</code></p>
               <ul class="en">
@@ -1073,20 +1092,7 @@ footer.page-footer{
                   (Float / Int / Boolean / Vector / Color), translated to GLSL and linked via
                   <code>GPU_stack_link</code>. Menu: Add → Utilities → HLSL.
                   Default: Color + Fac → Result. Cycles has no OSL/SVM path for this node.
-                </li>
-                <li>
-                  <strong>DDX / DDY</strong> (<code>ShaderNodeDerivative</code>) — screen-space
-                  partial derivatives for EEVEE (HLSL <code>ddx</code>/<code>ddy</code>,
-                  GLSL <code>dFdx</code>/<code>dFdy</code>, plus Filter Width =
-                  <code>abs(DDX)+abs(DDY)</code>). Float / Vector / Color.
-                  Add → Utilities → Math, or search DDX / DDY.
-                  Cycles outputs 0 (no raster 2×2 quads).
-                </li>
-                <li>
-                  <strong>Shader Wrangle</strong> <code>ddx</code> / <code>ddy</code> /
-                  <code>fwidth</code> — same screen-space derivatives in VEX
-                  (<code>vector N = normalize(cross(ddx(v@P), ddy(v@P)));</code>).
-                  Aliases: <code>dFdx</code>, <code>dFdy</code>. Geometry wrangle / CPU → 0.
+                  See <a href="manual.html#ShaderNodeHLSL">HLSL</a>.
                 </li>
               </ul>
               <ul class="zh">
@@ -1100,20 +1106,7 @@ footer.page-footer{
                   翻译为 GLSL 后经 <code>GPU_stack_link</code> 接入材质。
                   菜单：Add → Utilities → HLSL。默认 Color + Fac → Result。
                   Cycles 无 OSL/SVM 路径，不执行 HLSL 主体。
-                </li>
-                <li>
-                  <strong>DDX / DDY</strong>（<code>ShaderNodeDerivative</code>）—
-                  EEVEE 屏幕空间偏导（HLSL <code>ddx</code>/<code>ddy</code>，GLSL
-                  <code>dFdx</code>/<code>dFdy</code>，另有 Filter Width =
-                  <code>abs(DDX)+abs(DDY)</code>）。Float / Vector / Color。
-                  菜单：Add → Utilities → Math，或搜索 DDX / DDY。
-                  Cycles 输出 0（没有光栅 2×2 quad）。
-                </li>
-                <li>
-                  <strong>Shader Wrangle</strong> <code>ddx</code> / <code>ddy</code> /
-                  <code>fwidth</code> — VEX 里同样的屏幕空间导数
-                  （<code>vector N = normalize(cross(ddx(v@P), ddy(v@P)));</code>）。
-                  别名：<code>dFdx</code>、<code>dFdy</code>。几何 Wrangle / CPU → 0。
+                  见 <a href="manual.html#ShaderNodeHLSL">HLSL</a>。
                 </li>
               </ul>
             </article>
@@ -1123,36 +1116,40 @@ footer.page-footer{
               <h1>BIKINI 5.3: Image Process</h1>
               <p class="en">
                 Dedicated image node tree (<code>ImageNodeTree</code>), also referred to as the
-                <strong>GPU Texture Editor</strong>.
+                <strong>GPU Texture Editor</strong>. The 17 nodes below are the manual sidebar;
+                socket pages live in the user manual.
               </p>
               <p class="zh">
                 专用图像节点树（<code>ImageNodeTree</code>），亦称 <strong>GPU Texture Editor</strong>。
+                下面 17 个与手册侧栏一致，接口说明在用户手册。
               </p>
 
               <h2>
                 <span class="en">Nodes</span><span class="zh">节点</span>
               </h2>
               <ul class="en">
-                <li><strong>Point Stamp</strong> — stamp points into an image.</li>
-                <li><strong>Normal to Height</strong> — convert normal maps to height maps.</li>
-                <li><strong>Simulation</strong> — image-space simulation workflows in the graph.</li>
-                <li><strong>Rasterize Geometry</strong> — bring geometry samples into image space.</li>
-                <li><strong>Fluid Sim</strong> — fluid simulation zone in Image Process.</li>
-                <li><strong>Sample at Pixel</strong> / <strong>Write at Pixel</strong> — read or write by pixel coordinate.</li>
-                <li><strong>Paint</strong> — interactive paint into the image graph.</li>
-                <li><strong>Histogram</strong> — channel / intensity distribution.</li>
-                <li><strong>SDF Shape</strong> / <strong>Fractal</strong> — Image Process path (not the shader variants).</li>
+                <li><a href="manual.html#ImageNodeImportPoints"><strong>Import Points</strong></a></li>
+                <li><a href="manual.html#ImageNodePointStamp"><strong>Point Stamp</strong></a></li>
+                <li><a href="manual.html#ImageNodeNormalToHeight"><strong>Normal to Height</strong></a> / <a href="manual.html#ImageNodeHeightToNormal"><strong>Height to Normal</strong></a></li>
+                <li><a href="manual.html#ImageNodeBakeImage"><strong>Bake Image</strong></a> / <a href="manual.html#ImageNodeFileOutput"><strong>Image Output</strong></a></li>
+                <li><a href="manual.html#ImageNodeGradient"><strong>Gradient</strong></a> / <a href="manual.html#ImageNodeDivergence"><strong>Divergence</strong></a></li>
+                <li><a href="manual.html#ImageNodeFluidSimInput"><strong>Fluid Simulation Input</strong></a> / <a href="manual.html#ImageNodeFluidSimOutput"><strong>Fluid Simulation Output</strong></a></li>
+                <li><a href="manual.html#ImageNodeRasterizeGeometry"><strong>Rasterize Geometry</strong></a></li>
+                <li><a href="manual.html#ImageNodeSampleAtPixel"><strong>Sample at Pixel</strong></a> / <a href="manual.html#ImageNodeWriteAtPixel"><strong>Write at Pixel</strong></a></li>
+                <li><a href="manual.html#ImageNodePaint"><strong>Paint</strong></a> / <a href="manual.html#ImageNodeHistogram"><strong>Histogram</strong></a></li>
+                <li><a href="manual.html#ImageNodeSDFShape"><strong>SDF Shape</strong></a> / <a href="manual.html#ImageNodeFractalPrimitive"><strong>Fractal Primitive</strong></a> — Image Process path, not the shader nodes.</li>
               </ul>
               <ul class="zh">
-                <li><strong>Point Stamp</strong> — 点盖章到图像。</li>
-                <li><strong>Normal to Height</strong> — 法线转高度。</li>
-                <li><strong>Simulation</strong> — 图像空间模拟工作流。</li>
-                <li><strong>Rasterize Geometry</strong> — 几何采样栅格化到图像。</li>
-                <li><strong>Fluid Sim</strong> — Image Process 流体模拟区域。</li>
-                <li><strong>Sample at Pixel</strong> / <strong>Write at Pixel</strong> — 按像素坐标读写。</li>
-                <li><strong>Paint</strong> — 在图像节点图中绘制。</li>
-                <li><strong>Histogram</strong> — 通道 / 强度分布。</li>
-                <li><strong>SDF Shape</strong> / <strong>Fractal</strong> — Image Process 路径（非着色器变体）。</li>
+                <li><a href="manual.html#ImageNodeImportPoints"><strong>导入点</strong></a></li>
+                <li><a href="manual.html#ImageNodePointStamp"><strong>点图章</strong></a></li>
+                <li><a href="manual.html#ImageNodeNormalToHeight"><strong>法线转高度</strong></a> / <a href="manual.html#ImageNodeHeightToNormal"><strong>高度转法线</strong></a></li>
+                <li><a href="manual.html#ImageNodeBakeImage"><strong>烘焙图像</strong></a> / <a href="manual.html#ImageNodeFileOutput"><strong>图像输出</strong></a></li>
+                <li><a href="manual.html#ImageNodeGradient"><strong>梯度渐变</strong></a> / <a href="manual.html#ImageNodeDivergence"><strong>散度</strong></a></li>
+                <li><a href="manual.html#ImageNodeFluidSimInput"><strong>流体模拟输入</strong></a> / <a href="manual.html#ImageNodeFluidSimOutput"><strong>流体模拟输出</strong></a></li>
+                <li><a href="manual.html#ImageNodeRasterizeGeometry"><strong>栅格化几何</strong></a></li>
+                <li><a href="manual.html#ImageNodeSampleAtPixel"><strong>按像素采样</strong></a> / <a href="manual.html#ImageNodeWriteAtPixel"><strong>按像素写入</strong></a></li>
+                <li><a href="manual.html#ImageNodePaint"><strong>绘制</strong></a> / <a href="manual.html#ImageNodeHistogram"><strong>直方图</strong></a></li>
+                <li><a href="manual.html#ImageNodeSDFShape"><strong>SDF 形状</strong></a> / <a href="manual.html#ImageNodeFractalPrimitive"><strong>分形图元</strong></a> — 图像节点，不是着色器那两个。</li>
               </ul>
 
               <h2>
@@ -1275,6 +1272,104 @@ footer.page-footer{
             </article>
 
 
+            <article class="page is-active" id="page-v3-overview" data-page="v3-overview">
+              <h1><span class="en">BIKINI v3 Release Notes</span><span class="zh">BIKINI v3 更新说明</span></h1>
+              <p class="meta">Blender 5.3 · Windows x64</p>
+              <p class="zh">相对 v2。</p>
+              <p class="en">After v2.</p>
+              <h2><span class="en">Modules</span><span class="zh">模块</span></h2>
+              <ul class="module-index">
+                <li><a href="#v3-geometry-nodes" data-page="v3-geometry-nodes"><span class="en">Geometry Nodes</span><span class="zh">几何节点</span></a></li>
+                <li><a href="#v3-shaders" data-page="v3-shaders"><span class="en">Shaders</span><span class="zh">着色器</span></a></li>
+                <li><a href="#v3-render" data-page="v3-render"><span class="en">Render &amp; Compositor</span><span class="zh">渲染与合成器</span></a></li>
+                <li><a href="#v3-interface" data-page="v3-interface"><span class="en">Interface</span><span class="zh">界面</span></a></li>
+              </ul>
+            </article>
+
+            <article class="page" id="page-v3-geometry-nodes" data-page="v3-geometry-nodes">
+              <h1><span class="en">v3: Geometry Nodes</span><span class="zh">v3：几何节点</span></h1>
+              <ul class="en">
+                <li><strong>Curvature</strong> — Total Curvature output.</li>
+                <li><strong>Wrangle</strong> — VEX, array attributes, fast compile.</li>
+                <li><strong>SDF Shape</strong>, <strong>Fractal</strong>.</li>
+                <li><strong>Modal Tool</strong>.</li>
+                <li><strong>Flip Solver</strong> — WIP.</li>
+              </ul>
+              <ul class="zh">
+                <li><strong>Curvature</strong> — 新增 Total Curvature 输出。</li>
+                <li><strong>Wrangle</strong> — VEX，数组属性，高效编译。</li>
+                <li><strong>SDF Shape</strong>、<strong>Fractal</strong>。</li>
+                <li><strong>Modal Tool</strong>。</li>
+                <li><strong>Flip Solver</strong> — WIP。</li>
+              </ul>
+            </article>
+
+            <article class="page" id="page-v3-shaders" data-page="v3-shaders">
+              <h1><span class="en">v3: Shaders</span><span class="zh">v3：着色器</span></h1>
+              <ul class="en">
+                <li><strong>Parallax Occlusion</strong>.</li>
+                <li><strong>Billboard</strong>.</li>
+                <li><strong>Wrangle</strong>.</li>
+                <li><strong>DDX</strong>, <strong>DDY</strong>.</li>
+              </ul>
+              <ul class="zh">
+                <li><strong>Parallax Occlusion</strong>。</li>
+                <li><strong>Billboard</strong>。</li>
+                <li><strong>Wrangle</strong>。</li>
+                <li><strong>DDX</strong>、<strong>DDY</strong>。</li>
+              </ul>
+            </article>
+
+            <article class="page" id="page-v3-render" data-page="v3-render">
+              <h1><span class="en">v3: Render &amp; Compositor</span><span class="zh">v3：渲染与合成器</span></h1>
+              <h2><span class="en">Compositor</span><span class="zh">合成器</span></h2>
+              <ul class="en">
+                <li><strong>Denoise</strong> — DLSS 4.5 type.</li>
+                <li><strong>DLSS 5</strong> filter.</li>
+              </ul>
+              <ul class="zh">
+                <li><strong>Denoise</strong> — 新增 DLSS 4.5 类型。</li>
+                <li><strong>DLSS 5</strong> 滤镜。</li>
+              </ul>
+              <h2><span class="en">Render</span><span class="zh">渲染</span></h2>
+              <ul class="en">
+                <li><strong>DLSS 4.5</strong> — viewport denoise and render denoise.</li>
+                <li><strong>LuxCore</strong>.</li>
+              </ul>
+              <ul class="zh">
+                <li><strong>DLSS 4.5</strong> — 视口降噪，以及渲染降噪。</li>
+                <li><strong>LuxCore</strong>。</li>
+              </ul>
+            </article>
+
+            <article class="page" id="page-v3-interface" data-page="v3-interface">
+              <h1><span class="en">v3: Interface</span><span class="zh">v3：界面</span></h1>
+              <ul class="en">
+                <li>Node editor overlay shows the original node name.</li>
+                <li>Noise, Voronoi: Tiling.</li>
+                <li>Node group Lock.</li>
+                <li>Angled node links.</li>
+                <li>Node editor Coordinate background.</li>
+                <li>Node editor thumbnails.</li>
+                <li>Mesh Edit Mode mirror, including topology. UV editor mirror.</li>
+                <li>Editing nodes after a Simulation Zone keeps the cache.</li>
+                <li>Collection keyframes.</li>
+                <li>Texture paint layers.</li>
+              </ul>
+              <ul class="zh">
+                <li>节点编辑器叠加层显示节点原名称。</li>
+                <li>Noise、Voronoi 增加 Tiling。</li>
+                <li>节点组 Lock。</li>
+                <li>Angled node link style。</li>
+                <li>节点编辑器 Coordinate 背景。</li>
+                <li>节点编辑器缩略图。</li>
+                <li>网格编辑模式镜像编辑，支持镜像修改拓扑。UV 编辑器镜像修改。</li>
+                <li>修改模拟区后面的节点不会丢失 cache。</li>
+                <li>支持集合 K 帧。</li>
+                <li>纹理绘制支持图层。</li>
+              </ul>
+            </article>
+
             <article class="page" id="page-v2-overview" data-page="v2-overview">
               <h1><span class="en">BIKINI v2 Release Notes</span><span class="zh">BIKINI v2 更新说明</span></h1>
               <p class="meta">Blender 5.3.0 Alpha · Windows x64 · 2026-08-24 · this EXE</p>
@@ -1321,8 +1416,10 @@ footer.page-footer{
 
             <article class="page" id="page-v2-texture" data-page="v2-texture">
               <h1><span class="en">v2: Texture / GPU Texture Editor</span><span class="zh">v2：纹理 / GPU 纹理编辑器</span></h1>
-              <ul class="en"><li><strong>Camera View</strong> (<code>ImageNodeCameraView</code>) — Viewport-style preview from a camera (Wireframe/Solid/Material/Rendered). Updates every frame when used; does not re-evaluate unrelated node branches</li><li><strong>Island UV</strong> (<code>ImageNodeIslandUV</code>) — Each same-color connected island gets its own UV from that island's OBB. Origin: OBB center (0 at center) or bottom-left (0 at min). Fit 0-1 normalizes the island; Real Size keeps its size in the texture 0-1 UV</li><li><strong>Island Padding</strong> (<code>ImageNodeIslandPadding</code>) — Expand island colors into empty pixels by sampling the nearest seed, clipped by Distance</li><li><strong>Named Portal</strong> (<code>CompositorNodeNamedPortal</code>) — Read a value from a Store Named Portal in the current node tree</li><li><strong>Store Named Portal</strong> (<code>CompositorNodeStoreNamedPortal</code>) — Publish a value under a unique name in the current node tree</li><li><strong>FFT</strong> (<code>ImageNodeFFT</code>) — 2D FFT of a complex field packed as R = real, G = imaginary (row then column 1D FFTs)</li><li><strong>Import Geo</strong> (<code>ImageNodeImportGeo</code>) — Nested Geometry Nodes under GPU Texture Editor (groups named COP-Import Geo[.N]; switchable among those groups only; no Group Input). Group Output: Geometry. Double-click to edit in-place. Connect to Rasterize Geometry</li><li><strong>Geo SDF</strong> (<code>ImageNodeGeoSDF</code>) — Compute a per-pixel SDF on the 0–1 XY texture grid. 3D solids are sliced at z=0; closed contours are filled (signed), open curves and points are unsigned</li><li><strong>Render Material</strong> (<code>ImageNodeRenderMaterial</code>) — Temporarily assign a material to a UV plane and render it to a color texture</li><li><strong>ShaderToy</strong> (<code>ImageNodeShaderToy</code>) — Paste ShaderToy GLSL (Image / Common / Buffer A–D) in the sidebar, Compile, output Color</li><li><strong>Terrain Primitive</strong> (<code>ImageNodeTerrainPrimitive</code>) — Gaea-style generators: Mountain, Mountainous, Range, Ridge, Canyon, Crater, Dunes, Island, Volcano, Slump, Plates, Cracks, Rugged (gradient noise / ridged MF; radial types honor Offset)</li><li><strong>Terrain Erosion</strong> (<code>ImageNodeTerrainErosion</code>) — Hydraulic + thermal (Erosion / Erosion2 / Thermal / Easy / Wizard). HydroFix is drainage prep. Inside Simulation/Repeat, Iterations is forced to 1. Outputs Height, Flow, Sediment, Wear, Water</li><li><strong>Terrain Simulate</strong> (<code>ImageNodeTerrainSimulate</code>) — Snow, Snowfield, Dusting, Rivers, Sea, Lake, Sediments, Crumble, Glacier, Anastomosis</li><li><strong>Terrain Modify</strong> (<code>ImageNodeTerrainModify</code>) — Terrace, Stratify, Warp, Fold, Thermal Shaper, Steps, Sandstone, Clamp, Recurve</li><li><strong>Terrain Derive</strong> (<code>ImageNodeTerrainDerive</code>) — Slope, Curvature, Flow, Height, Peaks, Occlusion, Angle, Soil</li><li><strong>Terrain Color</strong> (<code>ImageNodeTerrainColor</code>) — SatMap / Weathering / Super Color / Water Color</li><li><strong>Terrain Combine</strong> (<code>ImageNodeTerrainCombine</code>) — Mix / Add / Max / Min / Screen / Overlay / Hypot</li></ul>
-              <ul class="zh"><li><strong>摄像机视图</strong>（<code>ImageNodeCameraView</code>）— 摄像机视口风格预览（线框 / 实体 / 材质 / 渲染）。被使用时每帧更新；不会重算无关节点分支</li><li><strong>岛 UV</strong>（<code>ImageNodeIslandUV</code>）— 每个同色连通岛用该岛 OBB 得到自己的 UV。原点：OBB 中心（中心为 0）或左下（最小为 0）。适配 0-1 归一化该岛；真实尺寸保持它在纹理 0-1 UV 中的大小</li><li><strong>岛填充</strong>（<code>ImageNodeIslandPadding</code>）— 按最近种子把岛颜色扩展到空像素，受距离裁剪</li><li><strong>命名传送门</strong>（<code>CompositorNodeNamedPortal</code>）— 从当前节点树中的存储命名传送门读取值</li><li><strong>存储命名传送门</strong>（<code>CompositorNodeStoreNamedPortal</code>）— 在当前节点树中以唯一名称发布值</li><li><strong>FFT</strong>（<code>ImageNodeFFT</code>）— 把复数场打成 R = 实部、G = 虚部后做二维 FFT（先按行再按列的一维 FFT）</li><li><strong>导入几何</strong>（<code>ImageNodeImportGeo</code>）— GPU 纹理编辑器下的嵌套几何节点（组名 COP-Import Geo[.N]；仅在这些组之间切换；无组输入）。组输出：几何。双击就地编辑。接到栅格化几何</li><li><strong>几何 SDF</strong>（<code>ImageNodeGeoSDF</code>）— 在 0–1 XY 纹理网格上逐像素计算 SDF。三维实体在 z=0 切片；闭合轮廓填充（有符号），开放曲线和点为无符号</li><li><strong>渲染材质</strong>（<code>ImageNodeRenderMaterial</code>）— 临时把材质赋给 UV 平面并渲染成颜色纹理</li><li><strong>ShaderToy</strong>（<code>ImageNodeShaderToy</code>）— 在侧栏粘贴 ShaderToy GLSL（Image / Common / Buffer A–D），编译，输出颜色</li><li><strong>地形图元</strong>（<code>ImageNodeTerrainPrimitive</code>）— 盖亚风格：山、群山、山脉、脊、峡谷、陨石坑、沙丘、岛、火山、滑坡、板块、裂缝、崎岖（梯度噪声 / 脊状多重分形；径向类型吃 Offset）</li><li><strong>地形侵蚀</strong>（<code>ImageNodeTerrainErosion</code>）— 水力+热力侵蚀（Erosion / Erosion2 / Thermal / Easy / Wizard）。HydroFix 是水系预处理。模拟/重复区内 Iterations 强制为 1。输出高度、流向、沉积、磨损、水</li><li><strong>地形模拟</strong>（<code>ImageNodeTerrainSimulate</code>）— 雪、雪原、薄雪、河流、海、湖、沉积、崩塌、冰川、网状水系</li><li><strong>地形修改</strong>（<code>ImageNodeTerrainModify</code>）— 阶地、地层、扭曲、褶皱、热蚀塑形、台阶、砂岩、钳制、曲率膨胀</li><li><strong>地形导出</strong>（<code>ImageNodeTerrainDerive</code>）— 坡度、曲率、流向、高度、峰、遮蔽、朝向、土壤</li><li><strong>地形着色</strong>（<code>ImageNodeTerrainColor</code>）— 卫星色 / 风化 / 超级着色 / 水色</li><li><strong>地形合并</strong>（<code>ImageNodeTerrainCombine</code>）— 混合 / 相加 / 最大 / 最小 / 滤色 / 叠加 / 斜边</li></ul>
+              <p class="en">These ten nodes are the manual’s v2 Texture / GTE list. Socket pages are in the <a href="manual.html#ImageNodeCameraView">user manual</a>.</p>
+              <p class="zh">下面十个就是手册 v2「纹理 / GTE」。接口页在<a href="manual.html#ImageNodeCameraView">用户手册</a>。</p>
+              <ul class="en"><li><strong>Camera View</strong> (<code>ImageNodeCameraView</code>) — Viewport-style preview from a camera (Wireframe/Solid/Material/Rendered). Updates every frame when used; does not re-evaluate unrelated node branches</li><li><strong>Island UV</strong> (<code>ImageNodeIslandUV</code>) — Each same-color connected island gets its own UV from that island's OBB. Origin: OBB center (0 at center) or bottom-left (0 at min). Fit 0-1 normalizes the island; Real Size keeps its size in the texture 0-1 UV</li><li><strong>Island Padding</strong> (<code>ImageNodeIslandPadding</code>) — Expand island colors into empty pixels by sampling the nearest seed, clipped by Distance</li><li><strong>Named Portal</strong> (<code>CompositorNodeNamedPortal</code>) — Read a value from a Store Named Portal in the current node tree</li><li><strong>Store Named Portal</strong> (<code>CompositorNodeStoreNamedPortal</code>) — Publish a value under a unique name in the current node tree</li><li><strong>FFT</strong> (<code>ImageNodeFFT</code>) — 2D FFT of a complex field packed as R = real, G = imaginary (row then column 1D FFTs)</li><li><strong>Import Geo</strong> (<code>ImageNodeImportGeo</code>) — Nested Geometry Nodes under GPU Texture Editor (groups named COP-Import Geo[.N]; switchable among those groups only; no Group Input). Group Output: Geometry. Double-click to edit in-place. Connect to Rasterize Geometry</li><li><strong>Geo SDF</strong> (<code>ImageNodeGeoSDF</code>) — Compute a per-pixel SDF on the 0–1 XY texture grid. 3D solids are sliced at z=0; closed contours are filled (signed), open curves and points are unsigned</li><li><strong>Render Material</strong> (<code>ImageNodeRenderMaterial</code>) — Temporarily assign a material to a UV plane and render it to a color texture</li><li><strong>ShaderToy</strong> (<code>ImageNodeShaderToy</code>) — Paste ShaderToy GLSL (Image / Common / Buffer A–D) in the sidebar, Compile, output Color</li></ul>
+              <ul class="zh"><li><strong>摄像机视图</strong>（<code>ImageNodeCameraView</code>）— 摄像机视口风格预览（线框 / 实体 / 材质 / 渲染）。被使用时每帧更新；不会重算无关节点分支</li><li><strong>岛 UV</strong>（<code>ImageNodeIslandUV</code>）— 每个同色连通岛用该岛 OBB 得到自己的 UV。原点：OBB 中心（中心为 0）或左下（最小为 0）。适配 0-1 归一化该岛；真实尺寸保持它在纹理 0-1 UV 中的大小</li><li><strong>岛填充</strong>（<code>ImageNodeIslandPadding</code>）— 按最近种子把岛颜色扩展到空像素，受距离裁剪</li><li><strong>命名传送门</strong>（<code>CompositorNodeNamedPortal</code>）— 从当前节点树中的存储命名传送门读取值</li><li><strong>存储命名传送门</strong>（<code>CompositorNodeStoreNamedPortal</code>）— 在当前节点树中以唯一名称发布值</li><li><strong>FFT</strong>（<code>ImageNodeFFT</code>）— 把复数场打成 R = 实部、G = 虚部后做二维 FFT（先按行再按列的一维 FFT）</li><li><strong>导入几何</strong>（<code>ImageNodeImportGeo</code>）— GPU 纹理编辑器下的嵌套几何节点（组名 COP-Import Geo[.N]；仅在这些组之间切换；无组输入）。组输出：几何。双击就地编辑。接到栅格化几何</li><li><strong>几何 SDF</strong>（<code>ImageNodeGeoSDF</code>）— 在 0–1 XY 纹理网格上逐像素计算 SDF。三维实体在 z=0 切片；闭合轮廓填充（有符号），开放曲线和点为无符号</li><li><strong>渲染材质</strong>（<code>ImageNodeRenderMaterial</code>）— 临时把材质赋给 UV 平面并渲染成颜色纹理</li><li><strong>ShaderToy</strong>（<code>ImageNodeShaderToy</code>）— 在侧栏粘贴 ShaderToy GLSL（Image / Common / Buffer A–D），编译，输出颜色</li></ul>
             </article>
 
             <article class="page" id="page-v2-shaders" data-page="v2-shaders">
@@ -1393,7 +1490,9 @@ footer.page-footer{
     (function () {
       var KEYS = ["bikini-changelog-lang", "bikini-docs-lang"];
       var pages = document.querySelectorAll(".page");
-      var links = document.querySelectorAll("[data-page]");
+      /* Anchors only. Article nodes also have data-page; listening on them
+         swallows clicks on links out to the manual. */
+      var links = document.querySelectorAll("a[data-page]");
       var titles = {
         en: {
           overview: "BIKINI · Developer Docs",
@@ -1411,7 +1510,12 @@ footer.page-footer{
           "v2-texture": "v2 Texture - BIKINI Developer Docs",
           "v2-shaders": "v2 Shaders - BIKINI Developer Docs",
           "v2-object-editor": "v2 Object Editor - BIKINI Developer Docs",
-          "v2-user-interface": "v2 User Interface - BIKINI Developer Docs"
+          "v2-user-interface": "v2 User Interface - BIKINI Developer Docs",
+          "v3-overview": "v3 Overview - BIKINI Developer Docs",
+          "v3-geometry-nodes": "v3 Geometry Nodes - BIKINI Developer Docs",
+          "v3-shaders": "v3 Shaders - BIKINI Developer Docs",
+          "v3-render": "v3 Render - BIKINI Developer Docs",
+          "v3-interface": "v3 Interface - BIKINI Developer Docs"
         },
         zh: {
           overview: "BIKINI · 开发者文档",
@@ -1429,7 +1533,12 @@ footer.page-footer{
           "v2-texture": "v2 纹理 - BIKINI 开发者文档",
           "v2-shaders": "v2 着色器 - BIKINI 开发者文档",
           "v2-object-editor": "v2 物体编辑器 - BIKINI 开发者文档",
-          "v2-user-interface": "v2 用户界面 - BIKINI 开发者文档"
+          "v2-user-interface": "v2 用户界面 - BIKINI 开发者文档",
+          "v3-overview": "v3 概览 - BIKINI 开发者文档",
+          "v3-geometry-nodes": "v3 几何节点 - BIKINI 开发者文档",
+          "v3-shaders": "v3 着色器 - BIKINI 开发者文档",
+          "v3-render": "v3 渲染 - BIKINI 开发者文档",
+          "v3-interface": "v3 界面 - BIKINI 开发者文档"
         }
       };
 
@@ -1454,7 +1563,7 @@ footer.page-footer{
       }
 
       function showPage(id, push) {
-        if (!id) id = "overview";
+        if (!id) id = "v3-overview";
         var found = false;
         pages.forEach(function (p) {
           var on = p.getAttribute("data-page") === id;
@@ -1462,7 +1571,7 @@ footer.page-footer{
           if (on) found = true;
         });
         if (!found) {
-          id = "overview";
+          id = "v3-overview";
           pages.forEach(function (p) {
             p.classList.toggle("is-active", p.getAttribute("data-page") === id);
           });
@@ -1477,7 +1586,7 @@ footer.page-footer{
       }
 
       function pageFromHash() {
-        var h = (location.hash || "#overview").replace(/^#/, "") || "overview";
+        var h = (location.hash || "#v3-overview").replace(/^#/, "") || "v3-overview";
         /* Legacy: math-solver merged into Geometry Nodes */
         if (h === "math-solver") return "geometry-nodes";
         var pageIds = {};
@@ -1488,7 +1597,7 @@ footer.page-footer{
           var art = el.closest(".page");
           if (art) return art.getAttribute("data-page");
         }
-        return "overview";
+        return "v3-overview";
       }
 
       links.forEach(function (a) {

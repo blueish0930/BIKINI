@@ -1,0 +1,467 @@
+OpenShadingLanguage 1.00
+# Compiled by oslc 1.15.3.0
+# options: -q -O2 -IE:/Blender_Source/intern/cycles/kernel/osl/shaders -IE:/Blender_Source/lib/windows_x64/osl/share/OSL/shaders -o E:/build_windows_Full_x64_vc17_Release/intern/cycles/kernel/osl/shaders/node_integer_math.oso
+shader node_integer_math
+param	string	math_type	"add"		%read{0,179} %write{2147483647,-1}
+param	int	Value1	0		%read{2,183} %write{2147483647,-1}
+param	int	Value2	0		%read{2,183} %write{2147483647,-1}
+param	int	Value3	0		%read{18,18} %write{2147483647,-1}
+oparam	int	Value	0		%read{2147483647,-1} %write{2,185}
+local	int	___371_d	%read{128,147} %write{120,138}
+local	int	___371_r	%read{122,140} %write{121,139}
+local	int	___372_a	%read{81,98} %write{78,97}
+local	int	___372_b	%read{81,97} %write{79,97}
+local	int	___373_t	%read{81,97} %write{81,97}
+local	int	___374_base	%read{26,55} %write{22,55}
+local	int	___374_exponent	%read{24,55} %write{23,55}
+local	int	___374_result	%read{48,56} %write{46,55}
+local	int	___379_gcd	%read{99,101} %write{98,98}
+local	int	___380_abs_b	%read{161,174} %write{153,153}
+local	int	___380_sign_b	%read{168,178} %write{158,158}
+const	string	$const1	"add"		%read{0,0} %write{2147483647,-1}
+temp	int	$tmp1	%read{1,1} %write{0,0}
+const	string	$const2	"subtract"		%read{3,3} %write{2147483647,-1}
+temp	int	$tmp2	%read{4,4} %write{3,3}
+const	string	$const3	"multiply"		%read{6,6} %write{2147483647,-1}
+temp	int	$tmp3	%read{7,7} %write{6,6}
+const	string	$const4	"divide"		%read{9,9} %write{2147483647,-1}
+temp	int	$tmp4	%read{10,10} %write{9,9}
+const	int	$const5	0		%read{11,185} %write{2147483647,-1}
+temp	int	$tmp5	%read{12,12} %write{11,11}
+const	string	$const6	"multiply_add"		%read{15,15} %write{2147483647,-1}
+temp	int	$tmp6	%read{16,16} %write{15,15}
+temp	int	$tmp7	%read{18,18} %write{17,17}
+const	string	$const7	"power"		%read{19,19} %write{2147483647,-1}
+temp	int	$tmp8	%read{20,20} %write{19,19}
+const	string	$const8	"integer_math_power"		%read{21,21} %write{2147483647,-1}
+temp	int	$tmp9	%read{25,25} %write{24,24}
+const	int	$const9	1		%read{26,54} %write{2147483647,-1}
+temp	int	$tmp10	%read{27,27} %write{26,26}
+temp	int	$tmp11	%read{28,32} %write{27,31}
+const	int	$const10	-1		%read{29,41} %write{2147483647,-1}
+temp	int	$tmp12	%read{30,30} %write{29,29}
+temp	int	$tmp13	%read{31,31} %write{30,30}
+temp	int	$tmp14	%read{34,34} %write{33,33}
+temp	int	$tmp15	%read{35,40} %write{34,39}
+temp	int	$tmp16	%read{37,37} %write{36,36}
+temp	int	$tmp17	%read{38,38} %write{37,37}
+temp	int	$tmp18	%read{39,39} %write{38,38}
+temp	int	$tmp19	%read{48,55} %write{48,55}
+temp	int	$tmp20	%read{47,55} %write{48,55}
+temp	int	$tmp21	%read{48,55} %write{48,55}
+temp	int	$tmp22	%read{48,55} %write{48,55}
+const	string	$const11	"floored_modulo"		%read{58,58} %write{2147483647,-1}
+temp	int	$tmp23	%read{59,59} %write{58,58}
+temp	int	$tmp24	%read{61,61} %write{60,60}
+temp	int	$tmp25	%read{63,63} %write{62,62}
+temp	int	$tmp26	%read{64,64} %write{63,63}
+const	string	$const12	"absolute"		%read{66,66} %write{2147483647,-1}
+temp	int	$tmp27	%read{67,67} %write{66,66}
+const	string	$const13	"minimum"		%read{69,69} %write{2147483647,-1}
+temp	int	$tmp28	%read{70,70} %write{69,69}
+const	string	$const14	"maximum"		%read{72,72} %write{2147483647,-1}
+temp	int	$tmp29	%read{73,73} %write{72,72}
+const	string	$const15	"gcd"		%read{75,75} %write{2147483647,-1}
+temp	int	$tmp30	%read{76,76} %write{75,75}
+const	string	$const16	"integer_math_gcd"		%read{77,89} %write{2147483647,-1}
+temp	int	$tmp31	%read{81,85} %write{81,85}
+temp	int	$tmp32	%read{80,85} %write{81,85}
+const	string	$const17	"lcm"		%read{87,87} %write{2147483647,-1}
+temp	int	$tmp33	%read{88,88} %write{87,87}
+temp	int	$tmp34	%read{93,97} %write{93,97}
+temp	int	$tmp35	%read{92,97} %write{93,97}
+temp	int	$tmp36	%read{100,100} %write{99,99}
+temp	int	$tmp37	%read{102,102} %write{101,101}
+temp	int	$tmp38	%read{103,103} %write{102,102}
+const	string	$const18	"negate"		%read{105,105} %write{2147483647,-1}
+temp	int	$tmp39	%read{106,106} %write{105,105}
+const	string	$const19	"sign"		%read{108,108} %write{2147483647,-1}
+temp	int	$tmp40	%read{109,109} %write{108,108}
+temp	int	$tmp41	%read{114,114} %write{111,111}
+temp	int	$tmp42	%read{111,111} %write{110,110}
+temp	int	$tmp43	%read{114,114} %write{113,113}
+temp	int	$tmp44	%read{113,113} %write{112,112}
+const	string	$const20	"divide_floor"		%read{115,115} %write{2147483647,-1}
+temp	int	$tmp45	%read{116,116} %write{115,115}
+temp	int	$tmp46	%read{118,118} %write{117,117}
+const	string	$const21	"integer_math_divide_floor"		%read{119,137} %write{2147483647,-1}
+temp	int	$tmp47	%read{123,123} %write{122,122}
+temp	int	$tmp48	%read{128,128} %write{127,127}
+temp	int	$tmp49	%read{126,126} %write{124,124}
+temp	int	$tmp50	%read{126,126} %write{125,125}
+temp	int	$tmp51	%read{127,127} %write{126,126}
+const	string	$const22	"divide_ceil"		%read{132,132} %write{2147483647,-1}
+temp	int	$tmp52	%read{133,133} %write{132,132}
+temp	int	$tmp53	%read{135,135} %write{134,134}
+temp	int	$tmp54	%read{149,149} %write{146,147}
+temp	int	$tmp55	%read{138,143} %write{136,136}
+temp	int	$tmp56	%read{141,141} %write{140,140}
+temp	int	$tmp57	%read{146,146} %write{145,145}
+temp	int	$tmp58	%read{144,144} %write{142,142}
+temp	int	$tmp59	%read{144,144} %write{143,143}
+temp	int	$tmp60	%read{145,145} %write{144,144}
+const	string	$const23	"divide_round"		%read{151,151} %write{2147483647,-1}
+temp	int	$tmp61	%read{152,152} %write{151,151}
+temp	int	$tmp62	%read{158,158} %write{155,155}
+temp	int	$tmp63	%read{155,155} %write{154,154}
+temp	int	$tmp64	%read{158,158} %write{157,157}
+temp	int	$tmp65	%read{157,157} %write{156,156}
+temp	int	$tmp66	%read{160,160} %write{159,159}
+temp	int	$tmp67	%read{168,168} %write{166,167}
+temp	int	$tmp68	%read{162,162} %write{161,161}
+const	int	$const24	2		%read{163,174} %write{2147483647,-1}
+temp	int	$tmp69	%read{164,164} %write{163,163}
+temp	int	$tmp70	%read{166,166} %write{164,164}
+temp	int	$tmp71	%read{166,166} %write{165,165}
+temp	int	$tmp72	%read{177,177} %write{175,176}
+temp	int	$tmp73	%read{170,170} %write{169,169}
+temp	int	$tmp74	%read{172,172} %write{171,171}
+temp	int	$tmp75	%read{173,173} %write{172,172}
+temp	int	$tmp76	%read{175,175} %write{173,173}
+temp	int	$tmp77	%read{175,175} %write{174,174}
+temp	int	$tmp78	%read{178,178} %write{177,177}
+const	string	$const25	"modulo"		%read{179,179} %write{2147483647,-1}
+temp	int	$tmp79	%read{180,180} %write{179,179}
+temp	int	$tmp80	%read{182,182} %write{181,181}
+code ___main___
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:50
+#   if (math_type == "add")
+	eq		$tmp1 math_type $const1 	%filename{"E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl"} %line{50} %argrw{"wrr"}
+	if		$tmp1 3 186 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:51
+#     Value = Value1 + Value2;
+	add		Value Value1 Value2 	%line{51} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:52
+#   else if (math_type == "subtract")
+	eq		$tmp2 math_type $const2 	%line{52} %argrw{"wrr"}
+	if		$tmp2 6 186 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:53
+#     Value = Value1 - Value2;
+	sub		Value Value1 Value2 	%line{53} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:54
+#   else if (math_type == "multiply")
+	eq		$tmp3 math_type $const3 	%line{54} %argrw{"wrr"}
+	if		$tmp3 9 186 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:55
+#     Value = Value1 * Value2;
+	mul		Value Value1 Value2 	%line{55} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:56
+#   else if (math_type == "divide")
+	eq		$tmp4 math_type $const4 	%line{56} %argrw{"wrr"}
+	if		$tmp4 15 186 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:57
+#     Value = (Value2 != 0) ? (Value1 / Value2) : 0;
+	neq		$tmp5 Value2 $const5 	%line{57} %argrw{"wrr"}
+	if		$tmp5 14 15 	%argrw{"r"}
+	div		Value Value1 Value2 	%argrw{"wrr"}
+	assign		Value $const5 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:58
+#   else if (math_type == "multiply_add")
+	eq		$tmp6 math_type $const6 	%line{58} %argrw{"wrr"}
+	if		$tmp6 19 186 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:59
+#     Value = Value1 * Value2 + Value3;
+	mul		$tmp7 Value1 Value2 	%line{59} %argrw{"wrr"}
+	add		Value $tmp7 Value3 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:60
+#   else if (math_type == "power")
+	eq		$tmp8 math_type $const7 	%line{60} %argrw{"wrr"}
+	if		$tmp8 58 186 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:61
+#     Value = integer_math_power(Value1, Value2);
+	functioncall	$const8 58 	%line{61} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:28
+#   int base = base_in;
+	assign		___374_base Value1 	%line{28} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:29
+#   int exponent = exponent_in;
+	assign		___374_exponent Value2 	%line{29} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:30
+#   if (exponent < 0) {
+	lt		$tmp9 ___374_exponent $const5 	%line{30} %argrw{"wrr"}
+	if		$tmp9 46 46 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:31
+#     if (base == 1 || base == -1) {
+	eq		$tmp10 ___374_base $const9 	%line{31} %argrw{"wrr"}
+	neq		$tmp11 $tmp10 $const5 	%argrw{"wrr"}
+	if		$tmp11 29 32 	%argrw{"r"}
+	eq		$tmp12 ___374_base $const10 	%argrw{"wrr"}
+	neq		$tmp13 $tmp12 $const5 	%argrw{"wrr"}
+	assign		$tmp11 $tmp13 	%argrw{"wr"}
+	if		$tmp11 44 44 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:32
+#       return (base < 0 && (exponent & 1) != 0) ? -1 : 1;
+	lt		$tmp14 ___374_base $const5 	%line{32} %argrw{"wrr"}
+	neq		$tmp15 $tmp14 $const5 	%argrw{"wrr"}
+	if		$tmp15 40 40 	%argrw{"r"}
+	bitand		$tmp16 ___374_exponent $const9 	%argrw{"wrr"}
+	neq		$tmp17 $tmp16 $const5 	%argrw{"wrr"}
+	neq		$tmp18 $tmp17 $const5 	%argrw{"wrr"}
+	assign		$tmp15 $tmp18 	%argrw{"wr"}
+	if		$tmp15 42 43 	%argrw{"r"}
+	assign		Value $const10 	%argrw{"wr"}
+	assign		Value $const9 	%argrw{"wr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:34
+#     return 0;
+	assign		Value $const5 	%line{34} %argrw{"wr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:36
+#   int result = 1;
+	assign		___374_result $const9 	%line{36} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:37
+#   while (exponent != 0) {
+	while		$tmp20 48 50 56 56 	%line{37} %argrw{"r"}
+	neq		$tmp19 ___374_exponent $const5 	%argrw{"wrr"}
+	neq		$tmp20 $tmp19 $const5 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:38
+#     if ((exponent & 1) != 0) {
+	bitand		$tmp21 ___374_exponent $const9 	%line{38} %argrw{"wrr"}
+	neq		$tmp22 $tmp21 $const5 	%argrw{"wrr"}
+	if		$tmp22 54 54 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:39
+#       result *= base;
+	mul		___374_result ___374_result ___374_base 	%line{39} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:41
+#     exponent = exponent >> 1;
+	shr		___374_exponent ___374_exponent $const9 	%line{41} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:42
+#     base = base * base;
+	mul		___374_base ___374_base ___374_base 	%line{42} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:44
+#   return result;
+	assign		Value ___374_result 	%line{44} %argrw{"wr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:62
+#   else if (math_type == "floored_modulo")
+	eq		$tmp23 math_type $const11 	%line{62} %argrw{"wrr"}
+	if		$tmp23 66 186 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:63
+#     Value = (Value2 != 0) ? (((Value1 % Value2) + Value2) % Value2) : 0;
+	neq		$tmp24 Value2 $const5 	%line{63} %argrw{"wrr"}
+	if		$tmp24 65 66 	%argrw{"r"}
+	mod		$tmp25 Value1 Value2 	%argrw{"wrr"}
+	add		$tmp26 $tmp25 Value2 	%argrw{"wrr"}
+	mod		Value $tmp26 Value2 	%argrw{"wrr"}
+	assign		Value $const5 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:64
+#   else if (math_type == "absolute")
+	eq		$tmp27 math_type $const12 	%line{64} %argrw{"wrr"}
+	if		$tmp27 69 186 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:65
+#     Value = abs(Value1);
+	abs		Value Value1 	%line{65} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:66
+#   else if (math_type == "minimum")
+	eq		$tmp28 math_type $const13 	%line{66} %argrw{"wrr"}
+	if		$tmp28 72 186 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:67
+#     Value = min(Value1, Value2);
+	min		Value Value1 Value2 	%line{67} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:68
+#   else if (math_type == "maximum")
+	eq		$tmp29 math_type $const14 	%line{68} %argrw{"wrr"}
+	if		$tmp29 75 186 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:69
+#     Value = max(Value1, Value2);
+	max		Value Value1 Value2 	%line{69} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:70
+#   else if (math_type == "gcd")
+	eq		$tmp30 math_type $const15 	%line{70} %argrw{"wrr"}
+	if		$tmp30 87 186 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:71
+#     Value = integer_math_gcd(Value1, Value2);
+	functioncall	$const16 87 	%line{71} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:16
+#   int a = abs(a_in);
+	abs		___372_a Value1 	%line{16} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:17
+#   int b = abs(b_in);
+	abs		___372_b Value2 	%line{17} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:18
+#   while (b != 0) {
+	while		$tmp32 81 83 86 86 	%line{18} %argrw{"r"}
+	neq		$tmp31 ___372_b $const5 	%argrw{"wrr"}
+	neq		$tmp32 $tmp31 $const5 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:19
+#     int t = b;
+	assign		___373_t ___372_b 	%line{19} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:20
+#     b = a % b;
+	mod		___372_b ___372_a ___372_b 	%line{20} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:21
+#     a = t;
+	assign		___372_a ___373_t 	%line{21} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:23
+#   return a;
+	assign		Value ___372_a 	%line{23} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:72
+#   else if (math_type == "lcm") {
+	eq		$tmp33 math_type $const17 	%line{72} %argrw{"wrr"}
+	if		$tmp33 105 186 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:73
+#     int gcd = integer_math_gcd(Value1, Value2);
+	functioncall	$const16 99 	%line{73} %argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:16
+#   int a = abs(a_in);
+	abs		___372_a Value1 	%line{16} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:17
+#   int b = abs(b_in);
+	abs		___372_b Value2 	%line{17} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:18
+#   while (b != 0) {
+	while		$tmp35 93 95 98 98 	%line{18} %argrw{"r"}
+	neq		$tmp34 ___372_b $const5 	%argrw{"wrr"}
+	neq		$tmp35 $tmp34 $const5 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:19
+#     int t = b;
+	assign		___373_t ___372_b 	%line{19} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:20
+#     b = a % b;
+	mod		___372_b ___372_a ___372_b 	%line{20} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:21
+#     a = t;
+	assign		___372_a ___373_t 	%line{21} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:23
+#   return a;
+	assign		___379_gcd ___372_a 	%line{23} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:74
+#     Value = (gcd != 0) ? abs(Value1 / gcd * Value2) : 0;
+	neq		$tmp36 ___379_gcd $const5 	%line{74} %argrw{"wrr"}
+	if		$tmp36 104 105 	%argrw{"r"}
+	div		$tmp37 Value1 ___379_gcd 	%argrw{"wrr"}
+	mul		$tmp38 $tmp37 Value2 	%argrw{"wrr"}
+	abs		Value $tmp38 	%argrw{"wr"}
+	assign		Value $const5 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:76
+#   else if (math_type == "negate")
+	eq		$tmp39 math_type $const18 	%line{76} %argrw{"wrr"}
+	if		$tmp39 108 186 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:77
+#     Value = -Value1;
+	neg		Value Value1 	%line{77} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:78
+#   else if (math_type == "sign")
+	eq		$tmp40 math_type $const19 	%line{78} %argrw{"wrr"}
+	if		$tmp40 115 186 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:79
+#     Value = int(0 < Value1) - int(Value1 < 0);
+	lt		$tmp42 $const5 Value1 	%line{79} %argrw{"wrr"}
+	assign		$tmp41 $tmp42 	%argrw{"wr"}
+	lt		$tmp44 Value1 $const5 	%argrw{"wrr"}
+	assign		$tmp43 $tmp44 	%argrw{"wr"}
+	sub		Value $tmp41 $tmp43 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:80
+#   else if (math_type == "divide_floor")
+	eq		$tmp45 math_type $const20 	%line{80} %argrw{"wrr"}
+	if		$tmp45 132 186 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:81
+#     Value = (Value2 != 0) ? integer_math_divide_floor(Value1, Value2) : 0;
+	neq		$tmp46 Value2 $const5 	%line{81} %argrw{"wrr"}
+	if		$tmp46 131 132 	%argrw{"r"}
+	functioncall	$const21 131 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:9
+#   int d = a / b;
+	div		___371_d Value1 Value2 	%line{9} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:10
+#   int r = a % b;
+	mod		___371_r Value1 Value2 	%line{10} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:11
+#   return (r != 0) ? (d - int((a < 0) != (b < 0))) : d;
+	neq		$tmp47 ___371_r $const5 	%line{11} %argrw{"wrr"}
+	if		$tmp47 129 130 	%argrw{"r"}
+	lt		$tmp49 Value1 $const5 	%argrw{"wrr"}
+	lt		$tmp50 Value2 $const5 	%argrw{"wrr"}
+	neq		$tmp51 $tmp49 $tmp50 	%argrw{"wrr"}
+	assign		$tmp48 $tmp51 	%argrw{"wr"}
+	sub		Value ___371_d $tmp48 	%argrw{"wrr"}
+	assign		Value ___371_d 	%argrw{"wr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:81
+#     Value = (Value2 != 0) ? integer_math_divide_floor(Value1, Value2) : 0;
+	assign		Value $const5 	%line{81} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:82
+#   else if (math_type == "divide_ceil")
+	eq		$tmp52 math_type $const22 	%line{82} %argrw{"wrr"}
+	if		$tmp52 151 186 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:83
+#     Value = (Value2 != 0) ? -integer_math_divide_floor(Value1, -Value2) : 0;
+	neq		$tmp53 Value2 $const5 	%line{83} %argrw{"wrr"}
+	if		$tmp53 150 151 	%argrw{"r"}
+	neg		$tmp55 Value2 	%argrw{"wr"}
+	functioncall	$const21 149 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:9
+#   int d = a / b;
+	div		___371_d Value1 $tmp55 	%line{9} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:10
+#   int r = a % b;
+	mod		___371_r Value1 $tmp55 	%line{10} %argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:11
+#   return (r != 0) ? (d - int((a < 0) != (b < 0))) : d;
+	neq		$tmp56 ___371_r $const5 	%line{11} %argrw{"wrr"}
+	if		$tmp56 147 148 	%argrw{"r"}
+	lt		$tmp58 Value1 $const5 	%argrw{"wrr"}
+	lt		$tmp59 $tmp55 $const5 	%argrw{"wrr"}
+	neq		$tmp60 $tmp58 $tmp59 	%argrw{"wrr"}
+	assign		$tmp57 $tmp60 	%argrw{"wr"}
+	sub		$tmp54 ___371_d $tmp57 	%argrw{"wrr"}
+	assign		$tmp54 ___371_d 	%argrw{"wr"}
+	return
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:83
+#     Value = (Value2 != 0) ? -integer_math_divide_floor(Value1, -Value2) : 0;
+	neg		Value $tmp54 	%line{83} %argrw{"wr"}
+	assign		Value $const5 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:84
+#   else if (math_type == "divide_round") {
+	eq		$tmp61 math_type $const23 	%line{84} %argrw{"wrr"}
+	if		$tmp61 179 186 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:85
+#     int abs_b = abs(Value2);
+	abs		___380_abs_b Value2 	%line{85} %argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:86
+#     int sign_b = int(0 < Value2) - int(Value2 < 0);
+	lt		$tmp63 $const5 Value2 	%line{86} %argrw{"wrr"}
+	assign		$tmp62 $tmp63 	%argrw{"wr"}
+	lt		$tmp65 Value2 $const5 	%argrw{"wrr"}
+	assign		$tmp64 $tmp65 	%argrw{"wr"}
+	sub		___380_sign_b $tmp62 $tmp64 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:87
+#     if (Value1 >= 0)
+	ge		$tmp66 Value1 $const5 	%line{87} %argrw{"wrr"}
+	if		$tmp66 169 179 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:88
+#       Value = ((abs_b != 0) ? ((2 * Value1 + abs_b) / (2 * abs_b)) : 0) * sign_b;
+	neq		$tmp68 ___380_abs_b $const5 	%line{88} %argrw{"wrr"}
+	if		$tmp68 167 168 	%argrw{"r"}
+	mul		$tmp69 $const24 Value1 	%argrw{"wrr"}
+	add		$tmp70 $tmp69 ___380_abs_b 	%argrw{"wrr"}
+	mul		$tmp71 $const24 ___380_abs_b 	%argrw{"wrr"}
+	div		$tmp67 $tmp70 $tmp71 	%argrw{"wrr"}
+	assign		$tmp67 $const5 	%argrw{"wr"}
+	mul		Value $tmp67 ___380_sign_b 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:90
+#       Value = -((abs_b != 0) ? ((2 * -Value1 + abs_b) / (2 * abs_b)) : 0) * sign_b;
+	neq		$tmp73 ___380_abs_b $const5 	%line{90} %argrw{"wrr"}
+	if		$tmp73 176 177 	%argrw{"r"}
+	neg		$tmp74 Value1 	%argrw{"wr"}
+	mul		$tmp75 $const24 $tmp74 	%argrw{"wrr"}
+	add		$tmp76 $tmp75 ___380_abs_b 	%argrw{"wrr"}
+	mul		$tmp77 $const24 ___380_abs_b 	%argrw{"wrr"}
+	div		$tmp72 $tmp76 $tmp77 	%argrw{"wrr"}
+	assign		$tmp72 $const5 	%argrw{"wr"}
+	neg		$tmp78 $tmp72 	%argrw{"wr"}
+	mul		Value $tmp78 ___380_sign_b 	%argrw{"wrr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:92
+#   else if (math_type == "modulo")
+	eq		$tmp79 math_type $const25 	%line{92} %argrw{"wrr"}
+	if		$tmp79 185 186 	%argrw{"r"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:93
+#     Value = (Value2 != 0) ? (Value1 % Value2) : 0;
+	neq		$tmp80 Value2 $const5 	%line{93} %argrw{"wrr"}
+	if		$tmp80 184 185 	%argrw{"r"}
+	mod		Value Value1 Value2 	%argrw{"wrr"}
+	assign		Value $const5 	%argrw{"wr"}
+# E:/Blender_Source/intern/cycles/kernel/osl/shaders/node_integer_math.osl:95
+#     Value = 0;
+	assign		Value $const5 	%line{95} %argrw{"wr"}
+	end

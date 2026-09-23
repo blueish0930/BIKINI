@@ -666,7 +666,6 @@ def draw_paint_layers(layout, ima):
                 sub.label(text="Painting mask", icon='MOD_MASK')
 
     tools = row.column(align=True)
-    tools.operator("image.paint_layers_float", icon='PINNED', text="")
     tools.operator("image.paint_layer_add", icon='ADD', text="")
     tools.operator("image.paint_layer_remove", icon='REMOVE', text="")
     tools.separator()
@@ -683,9 +682,6 @@ class VIEW3D_PT_paint_layers(Panel, View3DPaintPanel):
     bl_label = "Paint Layers"
     bl_order = -20
     bl_ui_units_x = 14
-
-    def draw_header(self, context):
-        self.layout.operator("image.paint_layers_float", text="", icon='PINNED')
 
     @classmethod
     def poll(cls, context):
