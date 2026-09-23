@@ -553,11 +553,6 @@ class SelectPaintSlotHelper:
         elif have_image:
             layout.separator()
             layout.operator("image.save_all_modified", text="Save All Images", icon='FILE_TICK')
-            ima = _texture_paint_image(context)
-            if ima is not None:
-                layout.separator()
-                layout.label(text="Paint Layers")
-                draw_paint_layers(layout, ima)
 
 
 def _texture_paint_image(context):
