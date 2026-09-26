@@ -1138,6 +1138,7 @@ footer.page-footer{
                 <li><a href="manual.html#ImageNodeSampleAtPixel"><strong>Sample at Pixel</strong></a> / <a href="manual.html#ImageNodeWriteAtPixel"><strong>Write at Pixel</strong></a></li>
                 <li><a href="manual.html#ImageNodePaint"><strong>Paint</strong></a> / <a href="manual.html#ImageNodeHistogram"><strong>Histogram</strong></a></li>
                 <li><a href="manual.html#ImageNodeSDFShape"><strong>SDF Shape</strong></a> / <a href="manual.html#ImageNodeFractalPrimitive"><strong>Fractal Primitive</strong></a> — Image Process path, not the shader nodes.</li>
+                <li><strong>Simulation</strong> and <strong>Repeat</strong> zones are in the Add menu, same idea as Geometry Nodes. They are zones, not extra node types.</li>
               </ul>
               <ul class="zh">
                 <li><a href="manual.html#ImageNodeImportPoints"><strong>导入点</strong></a></li>
@@ -1150,6 +1151,7 @@ footer.page-footer{
                 <li><a href="manual.html#ImageNodeSampleAtPixel"><strong>按像素采样</strong></a> / <a href="manual.html#ImageNodeWriteAtPixel"><strong>按像素写入</strong></a></li>
                 <li><a href="manual.html#ImageNodePaint"><strong>绘制</strong></a> / <a href="manual.html#ImageNodeHistogram"><strong>直方图</strong></a></li>
                 <li><a href="manual.html#ImageNodeSDFShape"><strong>SDF 形状</strong></a> / <a href="manual.html#ImageNodeFractalPrimitive"><strong>分形图元</strong></a> — 图像节点，不是着色器那两个。</li>
+                <li>Add 菜单里有<strong>模拟区</strong>和<strong>重复区</strong>，用法和几何节点一样。它们是区域，不是另外的节点类型。</li>
               </ul>
 
               <h2>
@@ -1275,8 +1277,8 @@ footer.page-footer{
             <article class="page is-active" id="page-v3-overview" data-page="v3-overview">
               <h1><span class="en">BIKINI v3 Release Notes</span><span class="zh">BIKINI v3 更新说明</span></h1>
               <p class="meta">Blender 5.3 · Windows x64</p>
-              <p class="zh">相对 v2。</p>
-              <p class="en">After v2.</p>
+              <p class="zh">本版对应清单中的 V3。以下说明各项的作用与范围；接口与操作见<a href="manual.html#v3-curvature">用户手册 · v3</a>。</p>
+              <p class="en">This drop is the V3 section of the list. The notes below say what each piece is for. Sockets and steps are in the <a href="manual.html#v3-curvature">user manual · v3</a>.</p>
               <h2><span class="en">Modules</span><span class="zh">模块</span></h2>
               <ul class="module-index">
                 <li><a href="#v3-geometry-nodes" data-page="v3-geometry-nodes"><span class="en">Geometry Nodes</span><span class="zh">几何节点</span></a></li>
@@ -1288,85 +1290,83 @@ footer.page-footer{
 
             <article class="page" id="page-v3-geometry-nodes" data-page="v3-geometry-nodes">
               <h1><span class="en">v3: Geometry Nodes</span><span class="zh">v3：几何节点</span></h1>
-              <ul class="en">
-                <li><strong>Curvature</strong> — Total Curvature output.</li>
-                <li><strong>Wrangle</strong> — VEX, array attributes, fast compile.</li>
-                <li><strong>SDF Shape</strong>, <strong>Fractal</strong>.</li>
-                <li><strong>Modal Tool</strong>.</li>
-                <li><strong>Flip Solver</strong> — WIP.</li>
-              </ul>
               <ul class="zh">
-                <li><strong>Curvature</strong> — 新增 Total Curvature 输出。</li>
-                <li><strong>Wrangle</strong> — VEX，数组属性，高效编译。</li>
-                <li><strong>SDF Shape</strong>、<strong>Fractal</strong>。</li>
-                <li><strong>Modal Tool</strong>。</li>
-                <li><strong>Flip Solver</strong> — WIP。</li>
+                <li><strong>曲率</strong>新增总曲率输出，即两主曲率的平方和 κ₁² + κ₂²。见<a href="manual.html#v3-curvature">手册</a>。</li>
+                <li><strong>Wrangle</strong>在点、边、面等域上执行 VEX。文本在 <code>Ctrl+Enter</code> 后编译。数组属性仅存在于脚本内，不写入 Blender 原生属性。语言见 <a href="vex.html">VEX</a>。</li>
+                <li>几何节点 Texture 菜单新增 <strong>SDF 形状</strong>与<strong>分形</strong>，与着色器为同一对节点。</li>
+                <li><strong>模态工具</strong>可使节点工具在首次激活后继续运行。Modal Event 等待后续事件，Modal Timer 按计时器重复求值。仅提供于工具节点树。</li>
+                <li><strong>FLIP 求解器</strong>将点云作为流体粒子，在域内推进一个时间步。功能仍在开发中，宜置于模拟区。接口见<a href="manual.html#GeometryNodeFlipSolver">手册</a>。</li>
+              </ul>
+              <ul class="en">
+                <li><strong>Curvature</strong> gained Total Curvature: the two principal curvatures, each squared and added. See the <a href="manual.html#v3-curvature">manual</a>.</li>
+                <li><strong>Wrangle</strong> runs VEX per point, edge, face, and so on. Typing is a draft; <code>Ctrl+Enter</code> compiles. Array attributes stay inside the script. Language: <a href="vex.html">VEX</a>.</li>
+                <li>The Geometry Nodes texture menu now includes <strong>SDF Shape</strong> and <strong>Fractal</strong>, the same nodes as in shaders.</li>
+                <li><strong>Modal tools</strong> can stay open. Modal Event waits for another key. Modal Timer runs again on a timer. Tool trees only.</li>
+                <li><strong>FLIP Solver</strong> steps a point-cloud fluid inside a box. Still in progress. Use it in a Simulation Zone. Sockets: <a href="manual.html#GeometryNodeFlipSolver">manual</a>.</li>
               </ul>
             </article>
 
             <article class="page" id="page-v3-shaders" data-page="v3-shaders">
               <h1><span class="en">v3: Shaders</span><span class="zh">v3：着色器</span></h1>
-              <ul class="en">
-                <li><strong>Parallax Occlusion</strong>.</li>
-                <li><strong>Billboard</strong>.</li>
-                <li><strong>Wrangle</strong>.</li>
-                <li><strong>DDX</strong>, <strong>DDY</strong>.</li>
-              </ul>
               <ul class="zh">
-                <li><strong>Parallax Occlusion</strong>。</li>
-                <li><strong>Billboard</strong>。</li>
-                <li><strong>Wrangle</strong>。</li>
-                <li><strong>DDX</strong>、<strong>DDY</strong>。</li>
+                <li><strong>视差遮挡</strong>沿视线以高度图偏移 UV，使平面呈现深度并产生遮挡。EEVEE 与 Cycles 均可求值。</li>
+                <li><strong>广告牌置换</strong>使卡片朝向摄像机。Displacement 须接到材质输出，置换方式设为 Displacement 或 Both。</li>
+                <li><strong>着色器 Wrangle</strong>在材质中编写 VEX，并编译为 EEVEE 函数。字段接口写为 <code>@名称</code>。</li>
+                <li><strong>DDX / DDY</strong>计算屏幕空间导数。仅 EEVEE 求值，Cycles 忽略该节点。</li>
+              </ul>
+              <ul class="en">
+                <li><strong>Parallax Occlusion</strong> pushes UVs with a height map so a flat surface reads as depth, including occlusion. EEVEE and Cycles.</li>
+                <li><strong>Billboard Displacement</strong> turns a card to face the camera. Plug Displacement into the material output and set displacement to Displacement or Both.</li>
+                <li><strong>Shader Wrangle</strong> is VEX in a material, compiled for EEVEE. Fields are <code>@name</code>.</li>
+                <li><strong>DDX / DDY</strong> is how fast a value changes across the screen. EEVEE only. Cycles ignores the node.</li>
               </ul>
             </article>
 
             <article class="page" id="page-v3-render" data-page="v3-render">
               <h1><span class="en">v3: Render &amp; Compositor</span><span class="zh">v3：渲染与合成器</span></h1>
               <h2><span class="en">Compositor</span><span class="zh">合成器</span></h2>
-              <ul class="en">
-                <li><strong>Denoise</strong> — DLSS 4.5 type.</li>
-                <li><strong>DLSS 5</strong> filter.</li>
-              </ul>
               <ul class="zh">
-                <li><strong>Denoise</strong> — 新增 DLSS 4.5 类型。</li>
-                <li><strong>DLSS 5</strong> 滤镜。</li>
+                <li>合成器 <strong>Denoise</strong> 的降噪器新增 DLSS 4.5，使用 NVIDIA Ray Reconstruction 去除路径追踪噪声。需要 NVIDIA GPU。</li>
+                <li><strong>DLSS 5</strong> 为独立滤镜（节点标签 DLSS Neural）。依据深度、运动矢量、反照率与法线再处理画面。将 <code>nvngx_dlssnr.dll</code> 置于 <code>blender/dlss5/</code>。</li>
+              </ul>
+              <ul class="en">
+                <li>The compositor <strong>Denoise</strong> node can use DLSS 4.5, NVIDIA ray reconstruction for path-traced noise. NVIDIA GPU required.</li>
+                <li><strong>DLSS 5</strong> is a separate filter (node label DLSS Neural). It restyles a frame from depth, motion, albedo, and normals. Put <code>nvngx_dlssnr.dll</code> in <code>blender/dlss5/</code>.</li>
               </ul>
               <h2><span class="en">Render</span><span class="zh">渲染</span></h2>
-              <ul class="en">
-                <li><strong>DLSS 4.5</strong> — viewport denoise and render denoise.</li>
-                <li><strong>LuxCore</strong>.</li>
-              </ul>
               <ul class="zh">
-                <li><strong>DLSS 4.5</strong> — 视口降噪，以及渲染降噪。</li>
-                <li><strong>LuxCore</strong>。</li>
+                <li>Cycles 的视口降噪与最终渲染降噪均可选择 DLSS 4.5。放大质量自 None 至 Ultra Performance。若需合成其他通道，放大质量宜选 None。本包需包含 <code>nvngx_dlssd.dll</code>。</li>
+                <li><strong>LuxCore</strong> 已列入渲染引擎。选中后使用其自身的采样、光路与材质节点树，不使用 Cycles 面板。</li>
+              </ul>
+              <ul class="en">
+                <li>Cycles viewport denoise and final-render denoise can both use DLSS 4.5. Upscale quality runs from None to Ultra Performance. Prefer None if other passes will be composited. The build needs <code>nvngx_dlssd.dll</code>.</li>
+                <li><strong>LuxCore</strong> is a render engine. It has its own sampling, light paths, and material node tree, not the Cycles panels.</li>
               </ul>
             </article>
 
             <article class="page" id="page-v3-interface" data-page="v3-interface">
               <h1><span class="en">v3: Interface</span><span class="zh">v3：界面</span></h1>
-              <ul class="en">
-                <li>Node editor overlay shows the original node name.</li>
-                <li>Noise, Voronoi: Tiling.</li>
-                <li>Node group Lock.</li>
-                <li>Angled node links.</li>
-                <li>Node editor Coordinate background.</li>
-                <li>Node editor thumbnails.</li>
-                <li>Mesh Edit Mode mirror, including topology. UV editor mirror.</li>
-                <li>Editing nodes after a Simulation Zone keeps the cache.</li>
-                <li>Collection keyframes.</li>
-                <li>Texture paint layers.</li>
-              </ul>
               <ul class="zh">
-                <li>节点编辑器叠加层显示节点原名称。</li>
-                <li>Noise、Voronoi 增加 Tiling。</li>
-                <li>节点组 Lock。</li>
-                <li>Angled node link style。</li>
-                <li>节点编辑器 Coordinate 背景。</li>
-                <li>节点编辑器缩略图。</li>
-                <li>网格编辑模式镜像编辑，支持镜像修改拓扑。UV 编辑器镜像修改。</li>
-                <li>修改模拟区后面的节点不会丢失 cache。</li>
-                <li>支持集合 K 帧。</li>
-                <li>纹理绘制支持图层。</li>
+                <li>节点使用自定义标签时，叠加层仍可显示其<strong>原始类型名</strong>。</li>
+                <li>Noise 与 Voronoi 支持<strong>无缝平铺</strong>。Size 为乘以 Scale 之后的整数周期，最小为 2。</li>
+                <li>作者可在节点组侧栏以<strong>密码上锁</strong>。锁定后他人无法打开该组查看内部节点；解锁须输入同一密码。</li>
+                <li>连线可改为<strong>正交折线</strong>（Angled）。折角半径由 Noodle Curving 控制。</li>
+                <li>节点图背景可显示<strong>坐标格</strong>，标注随缩放更新；角落可显示节点树<strong>缩略图</strong>。</li>
+                <li>网格镜像可按<strong>拓扑</strong>配对，挤出与删除一并镜像。UV 编辑器提供对应的 U / V 镜像。</li>
+                <li>编辑模拟区<strong>之后</strong>的节点不再使已计算的缓存失效。编辑模拟区内部的节点或其输入时，缓存仍然失效。</li>
+                <li><strong>集合</strong>的视口隐藏、渲染隐藏与颜色可插入关键帧。</li>
+                <li>纹理绘制提供<strong>图层</strong>与遮罩，支持混合、排序与合并。此为视口绘制，不是 GPU 纹理编辑器的 Paint 节点。</li>
+              </ul>
+              <ul class="en">
+                <li>After you rename a node, overlays can still show its <strong>original type name</strong>.</li>
+                <li>Noise and Voronoi can <strong>tile without a seam</strong>. Size is an integer period of the coordinate after Scale, minimum 2.</li>
+                <li>The author can <strong>password-lock</strong> a node group from the Group sidebar. While locked, others cannot open it and inspect the nodes inside. The same password unlocks it.</li>
+                <li>Links can be <strong>orthogonal</strong> (Angled). Noodle Curving sets the corner radius.</li>
+                <li>The node graph can show a <strong>coordinate grid</strong> whose labels follow zoom, and a corner <strong>thumbnail</strong> of the tree.</li>
+                <li>Mesh mirror can pair by <strong>topology</strong>, so extrude and delete mirror too. The UV editor has the same U/V mirror.</li>
+                <li>Editing nodes <strong>after</strong> a Simulation Zone keeps the cache. Editing inside the zone, or its inputs, still clears it.</li>
+                <li><strong>Collections</strong> can keyframe viewport hide, render hide, and color.</li>
+                <li>Texture paint has <strong>layers</strong> and masks, with blend, reorder, and merge. This is viewport paint, not the GPU Texture Editor Paint node.</li>
               </ul>
             </article>
 
