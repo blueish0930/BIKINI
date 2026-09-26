@@ -1,12 +1,25 @@
 # BIKINI
 
-非官方 Blender **5.3** 便携包（Windows x64），跟踪官方每日版并叠加自用功能。
+非官方 Blender **5.3** 便携包（Windows x64）。跟踪官方每日版，在节点系统上补计算几何、求解器和纹理/着色能力。与 Blender Foundation 无关，未做官方签名。**不是**官方 Blender。
 
 - 文档：[主页](https://blueish0930.github.io/BIKINI/) · [手册](https://blueish0930.github.io/BIKINI/manual.html) · [更新日志](https://blueish0930.github.io/BIKINI/changelog.html) · 本地 `docs/index.html`
 - 源码：[projects.blender.org/blueish/BIKINI](https://projects.blender.org/blueish/BIKINI)
 - 站点 / 发布：[github.com/blueish0930/BIKINI](https://github.com/blueish0930/BIKINI)
 
-与 Blender Foundation 无关，未做官方签名。**不是**官方 Blender。
+节点参数、各版改动写在 `docs/`（手册与更新日志）。本文件只说明项目目标和引用的资源。
+
+## 目标
+
+1. 跟官方 Blender 5.3 每日版走，维护一份 Windows x64 便携构建，整包解压即可用。
+2. 在几何节点、着色器、合成器和 GPU 纹理编辑器里，接入官方构建没有带上的计算几何、物理求解、重网格和图像处理能力。
+3. 这些能力尽量接已有库，或按公开论文里的方法做精简实现；出处和许可证留在本文件与 `license/`。
+
+## 在做什么
+
+- 源码跟 Blender 5.3 主干。便携包、文档站和议题在 GitHub。
+- 改动集中在节点图：几何节点、着色器、合成器、GPU 纹理编辑器，以及和它们配套的视口、渲染与编辑器行为。
+- 几何与物理侧使用下面列出的计算几何、刚体、流体和重网格库。降噪可选附带 NVIDIA DLSS / NGX 运行库。
+- 某个节点的输入、输出和版本差异以手册、更新日志为准，不在这里逐条列举。
 
 ## 使用
 
@@ -14,140 +27,9 @@
 2. 运行同目录的 `blender.exe`。
 3. 下列内容必须留在 exe 旁边：`5.3/`、`blender.crt/`、`blender.shared/`、`license/`、`bf_intern_*.dll`、`python3.dll` / `python313.dll`；若启用 DLSS，还需保留 `nvngx_dlssd.dll`（根目录与 `5.3/scripts/addons_core/cycles/` 各有一份）。
 
-详见 `BIKINI_BUILD_INFO.txt`。节点参数见手册。
+构建日期与提交见 `BIKINI_BUILD_INFO.txt`。
 
----
-
-## 更新（新 → 旧）
-
-### v3
-
-相对 v2。
-
-**几何节点**
-
-- Curvature 新增 Total Curvature 输出
-- Wrangle，VEX，数组属性，高效编译
-- SDF Shape、Fractal
-- Modal Tool
-- Flip Solver（WIP）
-
-**着色器**
-
-- Parallax Occlusion
-- Billboard
-- Wrangle
-- DDX、DDY
-
-**合成器**
-
-- Denoise 新增 DLSS 4.5
-- DLSS 5 滤镜
-
-**渲染**
-
-- 合并 DLSS 4.5 视口降噪，并支持渲染降噪 DLSS 4.5
-- 合并 LuxCore 渲染引擎
-
-**杂项**
-
-- 节点编辑器叠加层显示节点原名称
-- Noise、Voronoi 增加 Tiling
-- 节点组 Lock
-- Angled node link style
-- 节点编辑器 Coordinate 背景
-- 节点编辑器缩略图
-- 网格编辑模式镜像编辑，支持镜像修改拓扑；UV 编辑器镜像修改
-- 修改模拟区后面的节点不会丢失 cache
-- 支持集合 K 帧
-- 纹理绘制支持图层
-
-### v2
-
-**几何节点**
-
-- CGAL 计算几何（Add → Bikini → Lib → CGAL）
-- Box Engine（Box2D 二维、Box3D 三维）、Jolt 三维刚体
-- Set Group Input Default、Guide Geometry、Attribute Transfer
-- Get / Set Vector Component、Get / Set Matrix Component
-- Make It Stand、Optimal Transport
-
-**GPU Texture Editor**
-
-- Camera View、Island UV、Island Padding
-- Portal、FFT、Import Geo、Geo SDF
-- Render Material、ShaderToy
-
-**着色器**
-
-- Portal、字符串节点
-
-**物体编辑器**
-
-- 用节点创建 / 引用物体，改变换、可见性、材质槽、修改器、父级、删除
-
-**界面**
-
-- G 只移动，不插入连线
-- 改名高亮
-- Shift+LMB 改接口数据类型（替代 v1 的 Ctrl+LMB）
-- 不同编辑器之间复制粘贴节点组
-- Dirty 评估（不再整树重煮）；Ctrl 点击预览
-- 电子表格 Group / Attribute Filter
-- Drag Search 建组不再整树重评估
-- 3D 视口纹理绘制模式可画 8K（不是 GTE）
-
-### v1
-
-相对官方 5.3 第一批改动。
-
-**几何节点**
-
-- String 属性、Portal、几何 Clip、设置默认闭包
-- Loop 细分、Nearest Neighbours、Debug、Time Shift
-- 模拟区 Cache Limit；Repeat Zone Break
-- Sparse Matrix Math、Linear Solver、Mesh Laplace
-- Object Info Seed
-- Select / Edit Element
-- Heat Geodesic、切向场、Gradient / Divergence
-- Instant Meshes、QuadWild、Triangle Remesh
-- Voronoi 破碎、Delaunay 3D、图染色
-- 曲线求交、Write at Index、RBF Interpolate
-- Expression（自动补全）
-- 组接口 enable 优化
-
-**界面**
-
-- 视口叠加层属性预览
-- 节点组 Separator / Message；参数换行；Ctrl+LMB 改名
-- 抖动拆线、一次插入多个节点
-- 按住 U 拖动对齐
-- 电子表格属性排序
-- 组 Menu 多选，输出 List
-- Ctrl+LMB 改接口数据类型，Alt+LMB 改接口形状（v2 改为 Shift+LMB 改类型）
-
-**着色器**
-
-- Image Socket、SDF Shape、Fractal、Expression、HLSL
-
-**编辑器**
-
-- Data-Block Graph
-- 合成器里的 GPU Texture Editor 组节点
-
-**GPU Texture Editor**
-
-- Import Points、Point Stamp
-- Normal ↔ Height
-- Simulation / Repeat、流体输入输出
-- Rasterize Geometry
-- Sample / Write at Pixel、Paint、Histogram
-- SDF Shape、Fractal
-- Bake Image、Image Output
-
----
-
-## 第三方库与署名
+## 引用的资源
 
 完整许可证文本在 `license/`（`license/license.md`、`license/spdx/`、`license/others/`）。下表只列 **BIKINI 额外引入或需要单独致谢** 的部分；官方 Blender 自带的依赖仍以 `license/license.md` 为准。
 

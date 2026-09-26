@@ -935,12 +935,7 @@ class IMAGE_HT_header(Header):
                 sub.scale_x = 0.7
                 sub.prop(ob.data, "use_mirror_uv_u", text="U", toggle=True)
                 sub.prop(ob.data, "use_mirror_uv_v", text="V", toggle=True)
-                row.popover_group(
-                    space_type='IMAGE_EDITOR',
-                    region_type='UI',
-                    context=".uv_edit",
-                    category="Tool",
-                )
+                row.popover(panel="IMAGE_PT_uv_mirror", text="Topology Mirror")
 
         # Gizmo toggle & popover.
         row = layout.row(align=True)
@@ -1617,7 +1612,7 @@ class IMAGE_PT_uv_mirror(Panel):
     bl_region_type = 'UI'
     bl_category = "Tool"
     bl_context = ".uv_edit"  # dot on purpose (access from the top bar)
-    bl_label = "UV Mirror"
+    bl_label = "Topology Mirror"
     bl_ui_units_x = 14
 
     @classmethod
