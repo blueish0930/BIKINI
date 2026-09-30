@@ -1,0 +1,37 @@
+# pmp-library (Blender vendoring)
+
+**Upstream:** https://github.com/pmp-library/pmp-library  
+**License:** MIT (`LICENSE.txt`)  
+**Purpose:** Isotropic / adaptive triangle remeshing (Botsch & Kobbelt 2004 style),
+matching the classic Houdini-style Remesh SOP behaviour.
+
+## What is included
+
+Only the core `SurfaceMesh` data structure and algorithms required for remeshing:
+
+- `src/pmp/surface_mesh.*`, `types.h`, `mat_vec.h`, `properties.h`, `exceptions.h`, `bounding_box.h`
+- `src/pmp/algorithms/remeshing.*` — uniform + adaptive remesh
+- `normals`, `differential_geometry`, `distance_point_triangle`, `barycentric_coordinates`
+- `curvature`, `laplace`, `numerics` — adaptive sizing field
+- `features` — dihedral crease / boundary feature locks
+
+## What is excluded
+
+- Viewers / OpenGL
+- File I/O (obj/off/stl/pmp)
+- Decimation, subdivision, parameterization, hole filling, etc.
+- Examples and tests
+
+## Blender integration
+
+- CMake target: `extern_pmp`
+- C API wrapper: `intern/pmp_remesh`
+- Geometry Nodes: `GeometryNodeTriangleRemesh` (`GEO_NODE_TRIANGLE_REMESH`)
+- Option: `WITH_PMP_REMESH` (default ON)
+
+## Updating
+
+1. Pull upstream (or clone a tagged release).
+2. Copy only the files listed above into this tree.
+3. Keep Blender `CMakeLists.txt` / warning suppressions.
+4. Rebuild `extern_pmp` → `bf_intern_pmp_remesh` → `bf_geometry` → `bf_nodes_geometry` → `blender`.

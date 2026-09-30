@@ -1,0 +1,679 @@
+/* SPDX-FileCopyrightText: 2001-2002 NaN Holding BV. All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later */
+
+/** \file
+ * \ingroup edsculpt
+ */
+
+#include <cmath>
+
+#include "DNA_brush_types.h"
+#include "DNA_mesh_types.h"
+#include "DNA_object_types.h"
+#include "DNA_scene_types.h"
+
+#include "BLI_listbase.hh"
+#include "BLI_math_color_c.hh"
+#include "BLI_math_matrix.hh"
+#include "BLI_math_matrix_c.hh"
+#include "BLI_rect.hh"
+
+#include "BLT_translation.hh"
+
+#include "BKE_brush.hh"
+#include "BKE_bvhutils.hh"
+#include "BKE_colortools.hh"
+#include "BKE_context.hh"
+#include "BKE_curves.hh"
+#include "BKE_layer.hh"
+#include "BKE_mesh.hh"
+#include "BKE_mesh_sample.hh"
+#include "BKE_object.hh"
+#include "BKE_paint.hh"
+#include "BKE_paint_types.hh"
+#include "BKE_report.hh"
+#include "DNA_curves_types.h"
+#include "DNA_grease_pencil_types.h"
+
+#include "RNA_access.hh"
+#include "RNA_define.hh"
+#include "RNA_prototypes.hh"
+
+#include "RE_texture.h"
+
+#include "ED_mesh.hh" /* for face mask functions */
+#include "ED_screen.hh"
+#include "ED_select_utils.hh"
+#include "ED_view3d.hh"
+
+#include "WM_api.hh"
+#include "WM_types.hh"
+
+#include "paint_intern.hh"
+
+namespace blender {
+
+static float3 paint_init_pivot_mesh(Object *ob)
+{
+  const Mesh *mesh_eval = BKE_object_get_evaluated_mesh(ob);
+  if (!mesh_eval) {
+    mesh_eval = id_cast<const Mesh *>(ob->data);
+  }
+
+  const std::optional<Bounds<float3>> bounds = mesh_eval->bounds_min_max();
+  if (!bounds) {
+    return float3(0.0f);
+  }
+
+  return math::midpoint(bounds->min, bounds->max);
+}
+
+static float3 paint_init_pivot_curves(Object *ob)
+{
+  const Curves &curves = *id_cast<const Curves *>(ob->data);
+  const std::optional<Bounds<float3>> bounds = curves.geometry.wrap().bounds_min_max();
+  if (bounds.has_value()) {
+    return math::midpoint(bounds->min, bounds->max);
+  }
+  return float3(0);
+}
+
+static float3 paint_init_pivot_grease_pencil(Object *ob, const int frame)
+{
+  const GreasePencil &grease_pencil = *id_cast<const GreasePencil *>(ob->data);
+  const std::optional<Bounds<float3>> bounds = grease_pencil.bounds_min_max(frame);
+  if (bounds.has_value()) {
+    return math::midpoint(bounds->min, bounds->max);
+  }
+  return float3(0.0f);
+}
+
+void paint_init_pivot(Object *ob, Scene *scene, Paint *paint)
+{
+  bke::PaintRuntime &paint_runtime = *paint->runtime;
+
+  float3 location;
+  switch (ob->type) {
+    case OB_MESH:
+      location = paint_init_pivot_mesh(ob);
+      break;
+    case OB_CURVES:
+      location = paint_init_pivot_curves(ob);
+      break;
+    case OB_GREASE_PENCIL:
+      location = paint_init_pivot_grease_pencil(ob, scene->r.cfra);
+      break;
+    default:
+      BLI_assert_unreachable();
+      paint_runtime.last_stroke_valid = false;
+      return;
+  }
+
+  mul_m4_v3(ob->object_to_world().ptr(), location);
+
+  bke::paint::stroke_set_location(*paint, location);
+}
+
+float paint_calc_object_space_radius(const ViewContext &vc,
+                                     const float3 &center,
+                                     const float pixel_radius)
+{
+  Object *ob = vc.obact;
+  float delta[3], scale, loc[3];
+  const float xy_delta[2] = {pixel_radius, 0.0f};
+
+  mul_v3_m4v3(loc, ob->object_to_world().ptr(), center);
+
+  const float zfac = ED_view3d_calc_zfac(vc.rv3d, loc);
+  ED_view3d_win_to_delta(vc.region, xy_delta, zfac, delta);
+
+  scale = fabsf(mat4_to_scale(ob->object_to_world().ptr()));
+  scale = (scale == 0.0f) ? 1.0f : scale;
+
+  return len_v3(delta) / scale;
+}
+
+bool paint_get_tex_pixel(const MTex *mtex,
+                         float u,
+                         float v,
+                         ImagePool *pool,
+                         int thread,
+                         /* Return arguments. */
+                         float *r_intensity,
+                         float r_rgba[4])
+{
+  const float co[3] = {u, v, 0.0f};
+  float intensity;
+  const bool has_rgb = RE_texture_evaluate(
+      mtex, co, thread, pool, false, false, &intensity, r_rgba);
+  *r_intensity = intensity;
+
+  if (!has_rgb) {
+    r_rgba[0] = intensity;
+    r_rgba[1] = intensity;
+    r_rgba[2] = intensity;
+    r_rgba[3] = 1.0f;
+  }
+
+  return has_rgb;
+}
+
+void paint_stroke_operator_properties(wmOperatorType *ot)
+{
+  static const EnumPropertyItem stroke_mode_items[] = {
+      {int(BrushStrokeMode::Normal), "NORMAL", 0, "Regular", "Apply brush normally"},
+      {int(BrushStrokeMode::Invert),
+       "INVERT",
+       0,
+       "Invert",
+       "Invert action of brush for duration of stroke"},
+      {0},
+  };
+
+  static const EnumPropertyItem temporary_brush_toggle_items[] = {
+      {int(BrushSwitchMode::None), "None", 0, "None", "Apply brush normally"},
+      {int(BrushSwitchMode::Smooth),
+       "SMOOTH",
+       0,
+       "Smooth",
+       "Switch to smooth brush for duration of stroke"},
+      {int(BrushSwitchMode::Erase),
+       "ERASE",
+       0,
+       "Erase",
+       "Switch to erase brush for duration of stroke"},
+      {int(BrushSwitchMode::Mask),
+       "MASK",
+       0,
+       "Mask",
+       "Switch to mask brush for duration of stroke"},
+      {0},
+  };
+
+  PropertyRNA *prop;
+
+  prop = RNA_def_collection_runtime(ot->srna, "stroke", RNA_OperatorStrokeElement, "Stroke", "");
+  RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
+
+  prop = RNA_def_enum(ot->srna,
+                      "mode",
+                      stroke_mode_items,
+                      int(BrushStrokeMode::Normal),
+                      "Stroke Mode",
+                      "Action taken when a paint stroke is made");
+  RNA_def_property_translation_context(prop, BLT_I18NCONTEXT_OPERATOR_DEFAULT);
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+
+  prop = RNA_def_enum(ot->srna,
+                      "brush_toggle",
+                      temporary_brush_toggle_items,
+                      int(BrushSwitchMode::None),
+                      "Temporary Brush Toggle Type",
+                      "Brush to use for duration of stroke");
+  RNA_def_property_translation_context(prop, BLT_I18NCONTEXT_OPERATOR_DEFAULT);
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+
+  /* TODO: Pen flip logic should likely be combined into the stroke mode logic instead of being
+   * an entirely separate concept. */
+  prop = RNA_def_boolean(
+      ot->srna, "pen_flip", false, "Pen Flip", "Whether a tablet's eraser mode is being used");
+  RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
+}
+
+/* face-select ops */
+static wmOperatorStatus paint_select_linked_exec(bContext *C, wmOperator * /*op*/)
+{
+  paintface_select_linked(C, CTX_data_active_object(C), nullptr, true);
+  ED_region_tag_redraw(CTX_wm_region(C));
+  return OPERATOR_FINISHED;
+}
+
+void PAINT_OT_face_select_linked(wmOperatorType *ot)
+{
+  ot->name = "Select Linked";
+  ot->description = "Select linked faces";
+  ot->idname = "PAINT_OT_face_select_linked";
+
+  ot->exec = paint_select_linked_exec;
+  ot->poll = facemask_paint_poll;
+
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+}
+
+static wmOperatorStatus paint_select_linked_pick_invoke(bContext *C,
+                                                        wmOperator *op,
+                                                        const wmEvent *event)
+{
+  const bool select = !RNA_boolean_get(op->ptr, "deselect");
+  view3d_operator_needs_gpu(C);
+  paintface_select_linked(C, CTX_data_active_object(C), event->mval, select);
+  ED_region_tag_redraw(CTX_wm_region(C));
+  return OPERATOR_FINISHED;
+}
+
+void PAINT_OT_face_select_linked_pick(wmOperatorType *ot)
+{
+  ot->name = "Select Linked Pick";
+  ot->description = "Select linked faces under the cursor";
+  ot->idname = "PAINT_OT_face_select_linked_pick";
+
+  ot->invoke = paint_select_linked_pick_invoke;
+  ot->poll = facemask_paint_poll;
+
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+  RNA_def_boolean(ot->srna, "deselect", false, "Deselect", "Deselect rather than select items");
+}
+
+static wmOperatorStatus face_select_all_exec(bContext *C, wmOperator *op)
+{
+  Object *ob = CTX_data_active_object(C);
+  if (paintface_deselect_all_visible(C, ob, RNA_enum_get(op->ptr, "action"), true)) {
+    ED_region_tag_redraw(CTX_wm_region(C));
+    return OPERATOR_FINISHED;
+  }
+  return OPERATOR_CANCELLED;
+}
+
+void PAINT_OT_face_select_all(wmOperatorType *ot)
+{
+  ot->name = "(De)select All";
+  ot->description = "Change selection for all faces";
+  ot->idname = "PAINT_OT_face_select_all";
+
+  ot->exec = face_select_all_exec;
+  ot->poll = facemask_paint_poll;
+
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+  WM_operator_properties_select_all(ot);
+}
+
+static wmOperatorStatus paint_select_more_exec(bContext *C, wmOperator *op)
+{
+  Object *ob = CTX_data_active_object(C);
+  Mesh *mesh = BKE_mesh_from_object(ob);
+  if (mesh == nullptr || mesh->faces_num == 0) {
+    return OPERATOR_CANCELLED;
+  }
+
+  const bool face_step = RNA_boolean_get(op->ptr, "face_step");
+  paintface_select_more(mesh, face_step);
+  paintface_flush_flags(C, ob, true, false);
+
+  ED_region_tag_redraw(CTX_wm_region(C));
+  return OPERATOR_FINISHED;
+}
+
+void PAINT_OT_face_select_more(wmOperatorType *ot)
+{
+  ot->name = "Select More";
+  ot->description = "Select Faces connected to existing selection";
+  ot->idname = "PAINT_OT_face_select_more";
+
+  ot->exec = paint_select_more_exec;
+  ot->poll = facemask_paint_poll;
+
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+  RNA_def_boolean(
+      ot->srna, "face_step", true, "Face Step", "Also select faces that only touch on a corner");
+}
+
+static wmOperatorStatus paint_select_less_exec(bContext *C, wmOperator *op)
+{
+  Object *ob = CTX_data_active_object(C);
+  Mesh *mesh = BKE_mesh_from_object(ob);
+  if (mesh == nullptr || mesh->faces_num == 0) {
+    return OPERATOR_CANCELLED;
+  }
+
+  const bool face_step = RNA_boolean_get(op->ptr, "face_step");
+  paintface_select_less(mesh, face_step);
+  paintface_flush_flags(C, ob, true, false);
+
+  ED_region_tag_redraw(CTX_wm_region(C));
+  return OPERATOR_FINISHED;
+}
+
+void PAINT_OT_face_select_less(wmOperatorType *ot)
+{
+  ot->name = "Select Less";
+  ot->description = "Deselect Faces connected to existing selection";
+  ot->idname = "PAINT_OT_face_select_less";
+
+  ot->exec = paint_select_less_exec;
+  ot->poll = facemask_paint_poll;
+
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+  RNA_def_boolean(
+      ot->srna, "face_step", true, "Face Step", "Also deselect faces that only touch on a corner");
+}
+
+static wmOperatorStatus paintface_select_loop_invoke(bContext *C,
+                                                     wmOperator *op,
+                                                     const wmEvent *event)
+{
+  const bool select = RNA_boolean_get(op->ptr, "select");
+  const bool extend = RNA_boolean_get(op->ptr, "extend");
+  if (!extend) {
+    paintface_deselect_all_visible(C, CTX_data_active_object(C), SEL_DESELECT, false);
+  }
+  view3d_operator_needs_gpu(C);
+  paintface_select_loop(C, CTX_data_active_object(C), event->mval, select);
+  ED_region_tag_redraw(CTX_wm_region(C));
+  return OPERATOR_FINISHED;
+}
+
+void PAINT_OT_face_select_loop(wmOperatorType *ot)
+{
+  ot->name = "Select Loop";
+  ot->description = "Select face loop under the cursor";
+  ot->idname = "PAINT_OT_face_select_loop";
+
+  ot->invoke = paintface_select_loop_invoke;
+  ot->poll = facemask_paint_poll;
+
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+  RNA_def_boolean(ot->srna, "select", true, "Select", "If false, faces will be deselected");
+  RNA_def_boolean(ot->srna, "extend", false, "Extend", "Extend the selection");
+}
+
+static wmOperatorStatus paintvert_select_loop_invoke(bContext *C,
+                                                     wmOperator *op,
+                                                     const wmEvent *event)
+{
+  const bool select = RNA_boolean_get(op->ptr, "select");
+  const bool extend = RNA_boolean_get(op->ptr, "extend");
+  if (!extend) {
+    paintvert_deselect_all_visible(CTX_data_active_object(C), SEL_DESELECT, false);
+  }
+  view3d_operator_needs_gpu(C);
+  paintvert_select_loop(C, CTX_data_active_object(C), event->mval, select);
+  ED_region_tag_redraw(CTX_wm_region(C));
+  return OPERATOR_FINISHED;
+}
+
+void PAINT_OT_vert_select_loop(wmOperatorType *ot)
+{
+  ot->name = "Select Loop";
+  ot->description = "Select vertex loop under the cursor";
+  ot->idname = "PAINT_OT_vert_select_loop";
+
+  ot->invoke = paintvert_select_loop_invoke;
+  ot->poll = vert_paint_poll;
+
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+  RNA_def_boolean(ot->srna, "select", true, "Select", "If false, vertices will be deselected");
+  RNA_def_boolean(ot->srna, "extend", false, "Extend", "Extend the selection");
+}
+
+static wmOperatorStatus vert_select_all_exec(bContext *C, wmOperator *op)
+{
+  Object *ob = CTX_data_active_object(C);
+  paintvert_deselect_all_visible(ob, RNA_enum_get(op->ptr, "action"), true);
+  paintvert_tag_select_update(C, ob);
+  ED_region_tag_redraw(CTX_wm_region(C));
+  return OPERATOR_FINISHED;
+}
+
+void PAINT_OT_vert_select_all(wmOperatorType *ot)
+{
+  ot->name = "(De)select All";
+  ot->description = "Change selection for all vertices";
+  ot->idname = "PAINT_OT_vert_select_all";
+
+  ot->exec = vert_select_all_exec;
+  ot->poll = vert_paint_poll;
+
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+  WM_operator_properties_select_all(ot);
+}
+
+static wmOperatorStatus vert_select_ungrouped_exec(bContext *C, wmOperator *op)
+{
+  Object *ob = CTX_data_active_object(C);
+  Mesh *mesh = id_cast<Mesh *>(ob->data);
+
+  if (mesh->vertex_group_names.is_empty() || mesh->deform_verts().is_empty()) {
+    BKE_report(op->reports, RPT_ERROR, "No weights/vertex groups on object");
+    return OPERATOR_CANCELLED;
+  }
+
+  paintvert_select_ungrouped(ob, RNA_boolean_get(op->ptr, "extend"), true);
+  paintvert_tag_select_update(C, ob);
+  ED_region_tag_redraw(CTX_wm_region(C));
+  return OPERATOR_FINISHED;
+}
+
+void PAINT_OT_vert_select_ungrouped(wmOperatorType *ot)
+{
+  /* identifiers */
+  ot->name = "Select Ungrouped";
+  ot->idname = "PAINT_OT_vert_select_ungrouped";
+  ot->description = "Select vertices without a group";
+
+  /* API callbacks. */
+  ot->exec = vert_select_ungrouped_exec;
+  ot->poll = vert_paint_poll;
+
+  /* flags */
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+  RNA_def_boolean(ot->srna, "extend", false, "Extend", "Extend the selection");
+}
+
+static wmOperatorStatus paintvert_select_linked_exec(bContext *C, wmOperator * /*op*/)
+{
+  paintvert_select_linked(C, CTX_data_active_object(C));
+  ED_region_tag_redraw(CTX_wm_region(C));
+  return OPERATOR_FINISHED;
+}
+
+void PAINT_OT_vert_select_linked(wmOperatorType *ot)
+{
+  ot->name = "Select Linked Vertices";
+  ot->description = "Select linked vertices";
+  ot->idname = "PAINT_OT_vert_select_linked";
+
+  ot->exec = paintvert_select_linked_exec;
+  ot->poll = vert_paint_poll;
+
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+}
+
+static wmOperatorStatus paintvert_select_linked_pick_invoke(bContext *C,
+                                                            wmOperator *op,
+                                                            const wmEvent *event)
+{
+  const bool select = RNA_boolean_get(op->ptr, "select");
+  view3d_operator_needs_gpu(C);
+
+  paintvert_select_linked_pick(C, CTX_data_active_object(C), event->mval, select);
+  ED_region_tag_redraw(CTX_wm_region(C));
+  return OPERATOR_FINISHED;
+}
+
+void PAINT_OT_vert_select_linked_pick(wmOperatorType *ot)
+{
+  ot->name = "Select Linked Vertices Pick";
+  ot->description = "Select linked vertices under the cursor";
+  ot->idname = "PAINT_OT_vert_select_linked_pick";
+
+  ot->invoke = paintvert_select_linked_pick_invoke;
+  ot->poll = vert_paint_poll;
+
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+  RNA_def_boolean(ot->srna,
+                  "select",
+                  true,
+                  "Select",
+                  "Whether to select or deselect linked vertices under the cursor");
+}
+
+static wmOperatorStatus paintvert_select_more_exec(bContext *C, wmOperator *op)
+{
+  Object *ob = CTX_data_active_object(C);
+  Mesh *mesh = BKE_mesh_from_object(ob);
+  if (mesh == nullptr || mesh->faces_num == 0) {
+    return OPERATOR_CANCELLED;
+  }
+
+  const bool face_step = RNA_boolean_get(op->ptr, "face_step");
+  paintvert_select_more(mesh, face_step);
+
+  paintvert_flush_flags(ob);
+  paintvert_tag_select_update(C, ob);
+  ED_region_tag_redraw(CTX_wm_region(C));
+
+  return OPERATOR_FINISHED;
+}
+
+void PAINT_OT_vert_select_more(wmOperatorType *ot)
+{
+  ot->name = "Select More";
+  ot->description = "Select Vertices connected to existing selection";
+  ot->idname = "PAINT_OT_vert_select_more";
+
+  ot->exec = paintvert_select_more_exec;
+  ot->poll = vert_paint_poll;
+
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+  RNA_def_boolean(
+      ot->srna, "face_step", true, "Face Step", "Also select faces that only touch on a corner");
+}
+
+static wmOperatorStatus paintvert_select_less_exec(bContext *C, wmOperator *op)
+{
+  Object *ob = CTX_data_active_object(C);
+  Mesh *mesh = BKE_mesh_from_object(ob);
+  if (mesh == nullptr || mesh->faces_num == 0) {
+    return OPERATOR_CANCELLED;
+  }
+
+  const bool face_step = RNA_boolean_get(op->ptr, "face_step");
+  paintvert_select_less(mesh, face_step);
+
+  paintvert_flush_flags(ob);
+  paintvert_tag_select_update(C, ob);
+  ED_region_tag_redraw(CTX_wm_region(C));
+
+  return OPERATOR_FINISHED;
+}
+
+void PAINT_OT_vert_select_less(wmOperatorType *ot)
+{
+  ot->name = "Select Less";
+  ot->description = "Deselect Vertices connected to existing selection";
+  ot->idname = "PAINT_OT_vert_select_less";
+
+  ot->exec = paintvert_select_less_exec;
+  ot->poll = vert_paint_poll;
+
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+  RNA_def_boolean(
+      ot->srna, "face_step", true, "Face Step", "Also deselect faces that only touch on a corner");
+}
+
+static wmOperatorStatus face_select_hide_exec(bContext *C, wmOperator *op)
+{
+  const bool unselected = RNA_boolean_get(op->ptr, "unselected");
+  Object *ob = CTX_data_active_object(C);
+  paintface_hide(C, ob, unselected);
+  ED_region_tag_redraw(CTX_wm_region(C));
+  return OPERATOR_FINISHED;
+}
+
+void PAINT_OT_face_select_hide(wmOperatorType *ot)
+{
+  ot->name = "Face Select Hide";
+  ot->description = "Hide selected faces";
+  ot->idname = "PAINT_OT_face_select_hide";
+
+  ot->exec = face_select_hide_exec;
+  ot->poll = facemask_paint_poll;
+
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+  RNA_def_boolean(
+      ot->srna, "unselected", false, "Unselected", "Hide unselected rather than selected objects");
+}
+
+static wmOperatorStatus vert_select_hide_exec(bContext *C, wmOperator *op)
+{
+  const bool unselected = RNA_boolean_get(op->ptr, "unselected");
+  Object *ob = CTX_data_active_object(C);
+  paintvert_hide(C, ob, unselected);
+  ED_region_tag_redraw(CTX_wm_region(C));
+  return OPERATOR_FINISHED;
+}
+
+void PAINT_OT_vert_select_hide(wmOperatorType *ot)
+{
+  ot->name = "Vertex Select Hide";
+  ot->description = "Hide selected vertices";
+  ot->idname = "PAINT_OT_vert_select_hide";
+
+  ot->exec = vert_select_hide_exec;
+  ot->poll = vert_paint_poll;
+
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+  RNA_def_boolean(ot->srna,
+                  "unselected",
+                  false,
+                  "Unselected",
+                  "Hide unselected rather than selected vertices");
+}
+
+static wmOperatorStatus face_vert_reveal_exec(bContext *C, wmOperator *op)
+{
+  const bool select = RNA_boolean_get(op->ptr, "select");
+  Object *ob = CTX_data_active_object(C);
+
+  if (BKE_paint_select_vert_test(ob)) {
+    paintvert_reveal(C, ob, select);
+  }
+  else {
+    paintface_reveal(C, ob, select);
+  }
+
+  ED_region_tag_redraw(CTX_wm_region(C));
+  return OPERATOR_FINISHED;
+}
+
+static bool face_vert_reveal_poll(bContext *C)
+{
+  Object *ob = CTX_data_active_object(C);
+
+  /* Allow using this operator when no selection is enabled but hiding is applied. */
+  return BKE_paint_select_elem_test(ob) || BKE_paint_always_hide_test(ob);
+}
+
+void PAINT_OT_face_vert_reveal(wmOperatorType *ot)
+{
+  ot->name = "Reveal Faces/Vertices";
+  ot->description = "Reveal hidden faces and vertices";
+  ot->idname = "PAINT_OT_face_vert_reveal";
+
+  ot->exec = face_vert_reveal_exec;
+  ot->poll = face_vert_reveal_poll;
+
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+  RNA_def_boolean(ot->srna,
+                  "select",
+                  true,
+                  "Select",
+                  "Specifies whether the newly revealed geometry should be selected");
+}
+
+}  // namespace blender

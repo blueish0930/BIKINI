@@ -1,0 +1,614 @@
+/* SPDX-FileCopyrightText: 2005 Blender Authors
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later */
+
+#include "node_geometry_util.hh"
+
+#include "BKE_context.hh"
+#include "BKE_image.hh"
+#include "BKE_node.hh"
+
+#include "BLI_math_vector_types.hh"
+#include "BLI_string_utf8.hh"
+#include "BLI_threads.hh"
+
+#include "BLT_translation.hh"
+
+#include "DEG_depsgraph_query.hh"
+
+#include "DNA_image_types.h"
+#include "DNA_scene_types.h"
+
+#include "NOD_geometry_nodes_lazy_function.hh"
+
+#include "IMB_colormanagement.hh"
+#include "IMB_imbuf.hh"
+#include "IMB_imbuf_types.hh"
+
+#include "RNA_access.hh"
+#include "RNA_prototypes.hh"
+
+#include "UI_interface.hh"
+#include "UI_interface_layout.hh"
+#include "UI_resources.hh"
+
+namespace blender::nodes::node_geo_image_texture_cc {
+
+NODE_STORAGE_FUNCS(NodeGeometryImageTexture)
+
+static void node_declare(NodeDeclarationBuilder &b)
+{
+  b.add_input<decl::Image>("Image"_ustr).optional_label();
+  b.add_input<decl::Vector>("Vector"_ustr)
+      .structure_type(StructureType::Dynamic)
+      .default_input_type(NODE_DEFAULT_INPUT_POSITION_FIELD)
+      .description("Texture coordinates from 0 to 1");
+  /* No Frame socket — matches classic Shader Image Texture. Movie/Sequence use ImageUser
+   * (Frames / Start / Offset / Cyclic) only when Source is Sequence or Movie. */
+  b.add_output<decl::Color>("Color"_ustr)
+      .no_muted_links()
+      .inferred_structure_type()
+      .propagate_references();
+  b.add_output<decl::Float>("Alpha"_ustr)
+      .no_muted_links()
+      .inferred_structure_type()
+      .propagate_references();
+}
+
+/** Image from the Image socket default (or linked single value) for node-body UI. */
+static Image *image_from_socket_ui(bNode &node)
+{
+  bNodeSocket *sock = bke::node_find_enabled_input_socket(node, "Image");
+  if (!sock || sock->type != SOCK_IMAGE) {
+    return nullptr;
+  }
+  if (sock->is_logically_linked()) {
+    const Span<const bNodeSocket *> from = sock->logically_linked_sockets();
+    if (!from.is_empty() && from[0]->type == SOCK_IMAGE) {
+      if (const auto *val = from[0]->default_value_typed<bNodeSocketValueImage>()) {
+        return val->value;
+      }
+    }
+  }
+  if (const auto *val = sock->default_value_typed<bNodeSocketValueImage>()) {
+    return val->value;
+  }
+  return nullptr;
+}
+
+/**
+ * Classic Shader Image Texture body UI (Source / movie frames / Color Space / Alpha)
+ * plus Interpolation / Projection / Extension. Image itself is only the socket.
+ */
+static void node_layout(ui::Layout &layout, bContext *C, PointerRNA *ptr)
+{
+  bNode *node = static_cast<bNode *>(ptr->data);
+  NodeGeometryImageTexture &storage = node_storage(*node);
+
+  layout.prop(ptr, "interpolation", ui::ITEM_R_SPLIT_EMPTY_NAME, "", ICON_NONE);
+  layout.prop(ptr, "projection", ui::ITEM_R_SPLIT_EMPTY_NAME, "", ICON_NONE);
+  if (RNA_enum_get(ptr, "projection") == SHD_PROJ_BOX) {
+    layout.prop(ptr, "projection_blend", ui::ITEM_R_SPLIT_EMPTY_NAME, IFACE_("Blend"), ICON_NONE);
+  }
+  layout.prop(ptr, "extension", ui::ITEM_R_SPLIT_EMPTY_NAME, "", ICON_NONE);
+
+  Image *image = image_from_socket_ui(*node);
+  if (!image || !C) {
+    return;
+  }
+
+  PointerRNA imaptr = RNA_id_pointer_create(&image->id);
+  PointerRNA iuserptr = RNA_pointer_create_discrete(ptr->owner_id, RNA_ImageUser, &storage.iuser);
+  layout.context_ptr_set("image_user", &iuserptr);
+
+  /* Source: Single Image / Image Sequence / Movie / Generated / UDIM Tiles. */
+  ui::Layout &source_col = layout.column(false);
+  source_col.prop(&imaptr, "source", ui::ITEM_R_SPLIT_EMPTY_NAME, "", ICON_NONE);
+
+  const int source = RNA_enum_get(&imaptr, "source");
+  if (source == IMA_SRC_SEQUENCE) {
+    Scene *scene = CTX_data_scene(C);
+    char numstr[32];
+    const int framenr = BKE_image_user_frame_get(&storage.iuser, scene->r.cfra, nullptr);
+    SNPRINTF_UTF8(numstr, IFACE_("Frame: %d"), framenr);
+    layout.label(numstr, ICON_NONE);
+  }
+
+  if (ELEM(source, IMA_SRC_SEQUENCE, IMA_SRC_MOVIE)) {
+    ui::Layout &col = layout.column(true);
+    col.prop(&iuserptr, "frame_duration", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+    col.prop(&iuserptr, "frame_start", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+    col.prop(&iuserptr, "frame_offset", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+    col.prop(&iuserptr, "use_cyclic", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+    col.prop(&iuserptr, "use_auto_refresh", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+  }
+
+  if (RNA_enum_get(&imaptr, "type") == IMA_TYPE_MULTILAYER) {
+    ui::Layout &col = layout.column(false);
+    col.prop(&iuserptr, "layer", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+  }
+
+  /* Color Space + Alpha (classic Image Texture). */
+  {
+    ui::Layout &split = layout.split(0.33f, true);
+    PointerRNA colorspace_settings_ptr = RNA_pointer_get(&imaptr, "colorspace_settings");
+    split.label(IFACE_("Color Space"), ICON_NONE);
+    split.prop_with_menu(&colorspace_settings_ptr,
+                         "name",
+                         UI_ITEM_NONE,
+                         "",
+                         ICON_NONE,
+                         "UI_MT_color_space_select");
+
+    if (image->source != IMA_SRC_GENERATED) {
+      ui::Layout &split_2 = layout.split(0.33f, true);
+      split_2.label(IFACE_("Alpha"), ICON_NONE);
+      split_2.prop(&imaptr, "alpha_mode", UI_ITEM_NONE, "", ICON_NONE);
+      const bool is_data = IMB_colormanagement_space_name_is_data(image->colorspace_settings.name);
+      split_2.active_set(!is_data);
+    }
+
+    if (BKE_image_is_dirty(image)) {
+      split.enabled_set(false);
+    }
+  }
+}
+
+static void node_layout_ex(ui::Layout &layout, bContext *C, PointerRNA *ptr)
+{
+  /* Sidebar: same full classic Image Texture options as the node body. */
+  node_layout(layout, C, ptr);
+}
+
+static void node_init(bNodeTree * /*tree*/, bNode *node)
+{
+  NodeGeometryImageTexture *tex = MEM_new<NodeGeometryImageTexture>(__func__);
+  tex->interpolation = SHD_INTERP_LINEAR;
+  tex->extension = SHD_IMAGE_EXTENSION_REPEAT;
+  tex->projection = SHD_PROJ_FLAT;
+  tex->projection_blend = 0.0f;
+  BKE_imageuser_default(&tex->iuser);
+  node->storage = tex;
+}
+
+class ImageFieldsFunction : public mf::MultiFunction {
+ private:
+  const int8_t interpolation_;
+  const int8_t extension_;
+  Image &image_;
+  ImageUser image_user_;
+  void *image_lock_;
+  ImBuf *image_buffer_;
+
+ public:
+  ImageFieldsFunction(const int8_t interpolation,
+                      const int8_t extension,
+                      Image &image,
+                      ImageUser image_user)
+      : interpolation_(interpolation),
+        extension_(extension),
+        image_(image),
+        image_user_(image_user)
+  {
+    static const mf::Signature signature = []() {
+      mf::Signature signature;
+      mf::SignatureBuilder builder{"ImageFunction", signature};
+      builder.single_input<float3>("Vector");
+      builder.single_output<ColorGeometry4f>("Color");
+      builder.single_output<float>("Alpha", mf::ParamFlag::SupportsUnusedOutput);
+      return signature;
+    }();
+    this->set_signature(&signature);
+
+    image_buffer_ = BKE_image_acquire_ibuf(&image_, &image_user_, &image_lock_);
+    if (image_buffer_ == nullptr) {
+      throw std::runtime_error("cannot acquire image buffer");
+    }
+  }
+
+  ~ImageFieldsFunction() override
+  {
+    BKE_image_release_ibuf(&image_, image_buffer_, image_lock_);
+  }
+
+  static int wrap_periodic(int x, const int width)
+  {
+    x %= width;
+    if (x < 0) {
+      x += width;
+    }
+    return x;
+  }
+
+  static int wrap_clamp(const int x, const int width)
+  {
+    return std::clamp(x, 0, width - 1);
+  }
+
+  static int wrap_mirror(const int x, const int width)
+  {
+    const int m = std::abs(x + (x < 0)) % (2 * width);
+    if (m >= width) {
+      return 2 * width - m - 1;
+    }
+    return m;
+  }
+
+  static float4 image_pixel_lookup(
+      const float *buffer, const int width, const int height, const int px, const int py)
+  {
+    if (px < 0 || py < 0 || px >= width || py >= height) {
+      return float4(0.0f, 0.0f, 0.0f, 0.0f);
+    }
+    return ((const float4 *)buffer)[size_t(px) + size_t(py) * size_t(width)];
+  }
+
+  static float4 image_pixel_lookup(
+      const uint8_t *buffer, const int width, const int height, const int px, const int py)
+  {
+    if (px < 0 || py < 0 || px >= width || py >= height) {
+      return float4(0.0f, 0.0f, 0.0f, 0.0f);
+    }
+    float4 float_array;
+    const uint8_t *pixel_start = &buffer[(size_t(px) + size_t(py) * size_t(width)) * 4];
+    rgba_uchar_to_float(float_array, pixel_start);
+    return float_array;
+  }
+
+  static float frac(const float x, int *ix)
+  {
+    const int i = int(x) - ((x < 0.0f) ? 1 : 0);
+    *ix = i;
+    return x - float(i);
+  }
+
+  template<typename BufferT>
+  static float4 image_cubic_texture_lookup(const BufferT *buffer,
+                                           const int width,
+                                           const int height,
+                                           const float2 coord,
+                                           const int extension)
+  {
+    int pix, piy, nix, niy;
+    const float tx = frac(coord.x * float(width) - 0.5f, &pix);
+    const float ty = frac(coord.y * float(height) - 0.5f, &piy);
+    int ppix, ppiy, nnix, nniy;
+
+    switch (extension) {
+      case SHD_IMAGE_EXTENSION_REPEAT: {
+        pix = wrap_periodic(pix, width);
+        piy = wrap_periodic(piy, height);
+        ppix = wrap_periodic(pix - 1, width);
+        ppiy = wrap_periodic(piy - 1, height);
+        nix = wrap_periodic(pix + 1, width);
+        niy = wrap_periodic(piy + 1, height);
+        nnix = wrap_periodic(pix + 2, width);
+        nniy = wrap_periodic(piy + 2, height);
+        break;
+      }
+      case SHD_IMAGE_EXTENSION_CLIP: {
+        ppix = pix - 1;
+        ppiy = piy - 1;
+        nix = pix + 1;
+        niy = piy + 1;
+        nnix = pix + 2;
+        nniy = piy + 2;
+        break;
+      }
+      case SHD_IMAGE_EXTENSION_EXTEND: {
+        ppix = wrap_clamp(pix - 1, width);
+        ppiy = wrap_clamp(piy - 1, height);
+        nix = wrap_clamp(pix + 1, width);
+        niy = wrap_clamp(piy + 1, height);
+        nnix = wrap_clamp(pix + 2, width);
+        nniy = wrap_clamp(piy + 2, height);
+        pix = wrap_clamp(pix, width);
+        piy = wrap_clamp(piy, height);
+        break;
+      }
+      case SHD_IMAGE_EXTENSION_MIRROR: {
+        ppix = wrap_mirror(pix - 1, width);
+        ppiy = wrap_mirror(piy - 1, height);
+        nix = wrap_mirror(pix + 1, width);
+        niy = wrap_mirror(piy + 1, height);
+        nnix = wrap_mirror(pix + 2, width);
+        nniy = wrap_mirror(piy + 2, height);
+        pix = wrap_mirror(pix, width);
+        piy = wrap_mirror(piy, height);
+        break;
+      }
+      default:
+        return float4(0.0f, 0.0f, 0.0f, 0.0f);
+    }
+
+    const int xc[4] = {ppix, pix, nix, nnix};
+    const int yc[4] = {ppiy, piy, niy, nniy};
+    float u[4], v[4];
+
+    u[0] = (((-1.0f / 6.0f) * tx + 0.5f) * tx - 0.5f) * tx + (1.0f / 6.0f);
+    u[1] = ((0.5f * tx - 1.0f) * tx) * tx + (2.0f / 3.0f);
+    u[2] = ((-0.5f * tx + 0.5f) * tx + 0.5f) * tx + (1.0f / 6.0f);
+    u[3] = (1.0f / 6.0f) * tx * tx * tx;
+
+    v[0] = (((-1.0f / 6.0f) * ty + 0.5f) * ty - 0.5f) * ty + (1.0f / 6.0f);
+    v[1] = ((0.5f * ty - 1.0f) * ty) * ty + (2.0f / 3.0f);
+    v[2] = ((-0.5f * ty + 0.5f) * ty + 0.5f) * ty + (1.0f / 6.0f);
+    v[3] = (1.0f / 6.0f) * ty * ty * ty;
+
+    return (v[0] * (u[0] * image_pixel_lookup(buffer, width, height, xc[0], yc[0]) +
+                    u[1] * image_pixel_lookup(buffer, width, height, xc[1], yc[0]) +
+                    u[2] * image_pixel_lookup(buffer, width, height, xc[2], yc[0]) +
+                    u[3] * image_pixel_lookup(buffer, width, height, xc[3], yc[0]))) +
+           (v[1] * (u[0] * image_pixel_lookup(buffer, width, height, xc[0], yc[1]) +
+                    u[1] * image_pixel_lookup(buffer, width, height, xc[1], yc[1]) +
+                    u[2] * image_pixel_lookup(buffer, width, height, xc[2], yc[1]) +
+                    u[3] * image_pixel_lookup(buffer, width, height, xc[3], yc[1]))) +
+           (v[2] * (u[0] * image_pixel_lookup(buffer, width, height, xc[0], yc[2]) +
+                    u[1] * image_pixel_lookup(buffer, width, height, xc[1], yc[2]) +
+                    u[2] * image_pixel_lookup(buffer, width, height, xc[2], yc[2]) +
+                    u[3] * image_pixel_lookup(buffer, width, height, xc[3], yc[2]))) +
+           (v[3] * (u[0] * image_pixel_lookup(buffer, width, height, xc[0], yc[3]) +
+                    u[1] * image_pixel_lookup(buffer, width, height, xc[1], yc[3]) +
+                    u[2] * image_pixel_lookup(buffer, width, height, xc[2], yc[3]) +
+                    u[3] * image_pixel_lookup(buffer, width, height, xc[3], yc[3])));
+  }
+
+  template<typename BufferT>
+  static float4 image_linear_texture_lookup(const BufferT *buffer,
+                                            const int width,
+                                            const int height,
+                                            const float2 coord,
+                                            const int8_t extension)
+  {
+    int pix, piy, nix, niy;
+    const float nfx = frac(coord.x * float(width) - 0.5f, &pix);
+    const float nfy = frac(coord.y * float(height) - 0.5f, &piy);
+
+    switch (extension) {
+      case SHD_IMAGE_EXTENSION_CLIP: {
+        nix = pix + 1;
+        niy = piy + 1;
+        break;
+      }
+      case SHD_IMAGE_EXTENSION_EXTEND: {
+        nix = wrap_clamp(pix + 1, width);
+        niy = wrap_clamp(piy + 1, height);
+        pix = wrap_clamp(pix, width);
+        piy = wrap_clamp(piy, height);
+        break;
+      }
+      case SHD_IMAGE_EXTENSION_MIRROR:
+        nix = wrap_mirror(pix + 1, width);
+        niy = wrap_mirror(piy + 1, height);
+        pix = wrap_mirror(pix, width);
+        piy = wrap_mirror(piy, height);
+        break;
+      default:
+      case SHD_IMAGE_EXTENSION_REPEAT:
+        pix = wrap_periodic(pix, width);
+        piy = wrap_periodic(piy, height);
+        nix = wrap_periodic(pix + 1, width);
+        niy = wrap_periodic(piy + 1, height);
+        break;
+    }
+
+    const float ptx = 1.0f - nfx;
+    const float pty = 1.0f - nfy;
+
+    return image_pixel_lookup(buffer, width, height, pix, piy) * ptx * pty +
+           image_pixel_lookup(buffer, width, height, nix, piy) * nfx * pty +
+           image_pixel_lookup(buffer, width, height, pix, niy) * ptx * nfy +
+           image_pixel_lookup(buffer, width, height, nix, niy) * nfx * nfy;
+  }
+
+  template<typename BufferT>
+  static float4 image_closest_texture_lookup(const BufferT *buffer,
+                                             const int width,
+                                             const int height,
+                                             const float2 coord,
+                                             const int extension)
+  {
+    int ix, iy;
+    const float tx = frac(coord.x * float(width), &ix);
+    const float ty = frac(coord.y * float(height), &iy);
+
+    switch (extension) {
+      case SHD_IMAGE_EXTENSION_REPEAT: {
+        ix = wrap_periodic(ix, width);
+        iy = wrap_periodic(iy, height);
+        return image_pixel_lookup(buffer, width, height, ix, iy);
+      }
+      case SHD_IMAGE_EXTENSION_CLIP: {
+        if (tx < 0.0f || ty < 0.0f || tx > 1.0f || ty > 1.0f) {
+          return float4(0.0f, 0.0f, 0.0f, 0.0f);
+        }
+        if (ix < 0 || iy < 0 || ix > width || iy > height) {
+          return float4(0.0f, 0.0f, 0.0f, 0.0f);
+        }
+        ATTR_FALLTHROUGH;
+      }
+      case SHD_IMAGE_EXTENSION_EXTEND: {
+        ix = wrap_clamp(ix, width);
+        iy = wrap_clamp(iy, height);
+        return image_pixel_lookup(buffer, width, height, ix, iy);
+      }
+      case SHD_IMAGE_EXTENSION_MIRROR: {
+        ix = wrap_mirror(ix, width);
+        iy = wrap_mirror(iy, height);
+        return image_pixel_lookup(buffer, width, height, ix, iy);
+      }
+      default:
+        return float4(0.0f, 0.0f, 0.0f, 0.0f);
+    }
+  }
+
+  template<typename BufferT>
+  void sample_buffer(const BufferT *buffer,
+                     const IndexMask &mask,
+                     const VArray<float3> &vectors,
+                     int width,
+                     int height,
+                     MutableSpan<float4> &color_data) const
+  {
+    /* Sample image texture. */
+    switch (interpolation_) {
+      case SHD_INTERP_LINEAR:
+        mask.foreach_index([&](const int64_t i) {
+          const float3 p = vectors[i];
+          color_data[i] = image_linear_texture_lookup(buffer, width, height, p.xy(), extension_);
+        });
+        break;
+      case SHD_INTERP_CLOSEST:
+        mask.foreach_index([&](const int64_t i) {
+          const float3 p = vectors[i];
+          color_data[i] = image_closest_texture_lookup(buffer, width, height, p.xy(), extension_);
+        });
+        break;
+      case SHD_INTERP_CUBIC:
+      case SHD_INTERP_SMART:
+        mask.foreach_index([&](const int64_t i) {
+          const float3 p = vectors[i];
+          color_data[i] = image_cubic_texture_lookup(buffer, width, height, p.xy(), extension_);
+        });
+        break;
+    }
+  }
+
+  void call(const IndexMask &mask, mf::Params params, mf::Context /*context*/) const override
+  {
+    const VArray<float3> &vectors = params.readonly_single_input<float3>(0, "Vector");
+    MutableSpan<ColorGeometry4f> r_color = params.uninitialized_single_output<ColorGeometry4f>(
+        1, "Color");
+    MutableSpan<float> r_alpha = params.uninitialized_single_output_if_required<float>(2, "Alpha");
+
+    MutableSpan<float4> color_data{reinterpret_cast<float4 *>(r_color.data()), r_color.size()};
+
+    const int width = image_buffer_->x;
+    const int height = image_buffer_->y;
+
+    if (image_buffer_->float_data()) {
+      sample_buffer(image_buffer_->float_data(), mask, vectors, width, height, color_data);
+    }
+    else if (image_buffer_->byte_data()) {
+      sample_buffer(image_buffer_->byte_data(), mask, vectors, width, height, color_data);
+    }
+    else {
+      BLI_assert_unreachable();
+    }
+
+    int alpha_mode = image_.alpha_mode;
+    if (IMB_colormanagement_space_name_is_data(image_.colorspace_settings.name)) {
+      alpha_mode = IMA_ALPHA_CHANNEL_PACKED;
+    }
+
+    switch (alpha_mode) {
+      case IMA_ALPHA_STRAIGHT: {
+        /* #ColorGeometry expects premultiplied alpha, so convert from straight to that. */
+        mask.foreach_index([&](const int64_t i) { straight_to_premul_v4(color_data[i]); });
+        break;
+      }
+      case IMA_ALPHA_PREMUL: {
+        /* Alpha is premultiplied already, nothing to do. */
+        break;
+      }
+      case IMA_ALPHA_CHANNEL_PACKED: {
+        /* Color and alpha channels shouldn't interact with each other, nothing to do. */
+        break;
+      }
+      case IMA_ALPHA_IGNORE: {
+        /* The image should be treated as being opaque. */
+        mask.foreach_index_optimized<int64_t>([&](const int64_t i) { color_data[i].w = 1.0f; });
+        break;
+      }
+    }
+
+    if (!r_alpha.is_empty()) {
+      mask.foreach_index_optimized<int64_t>([&](const int64_t i) { r_alpha[i] = r_color[i].a; });
+    }
+  }
+};
+
+static void node_geo_exec(GeoNodeExecParams params)
+{
+  Image *image = params.extract_input<Image *>("Image"_ustr);
+  if (image == nullptr) {
+    params.set_default_remaining_outputs();
+    return;
+  }
+
+  const NodeGeometryImageTexture &storage = node_storage(params.node());
+
+  /* Classic path: ImageUser only (no Frame socket). Scene frame + offset/duration. */
+  ImageUser image_user = storage.iuser;
+  image_user.scene = nullptr;
+  if (image_user.frames < 1) {
+    image_user.frames = INT_MAX;
+  }
+  int cfra = 0;
+  if (GeoNodesUserData *ud = params.user_data()) {
+    if (ud->call_data) {
+      if (ud->call_data->modifier_data && ud->call_data->modifier_data->depsgraph) {
+        if (const Scene *scene = DEG_get_evaluated_scene(ud->call_data->modifier_data->depsgraph))
+        {
+          cfra = scene->r.cfra;
+        }
+      }
+      else if (ud->call_data->operator_data && ud->call_data->operator_data->scene_orig) {
+        cfra = ud->call_data->operator_data->scene_orig->r.cfra;
+      }
+    }
+  }
+  if (BKE_image_is_animated(image)) {
+    BKE_image_user_frame_calc(image, &image_user, cfra);
+  }
+
+  std::unique_ptr<ImageFieldsFunction> image_fn;
+  try {
+    image_fn = std::make_unique<ImageFieldsFunction>(
+        storage.interpolation, storage.extension, *image, image_user);
+  }
+  catch (const std::runtime_error &) {
+    params.set_default_remaining_outputs();
+    return;
+  }
+
+  auto sample_uv = params.extract_input<bke::SocketValueVariant>("Vector"_ustr);
+
+  std::string error_message;
+  bke::SocketValueVariant color;
+  bke::SocketValueVariant alpha;
+  if (!execute_multi_function_on_value_variant(
+          std::move(image_fn), {&sample_uv}, {&color, &alpha}, params.user_data(), error_message))
+  {
+    params.set_default_remaining_outputs();
+    params.error_message_add(NodeWarningType::Error, std::move(error_message));
+    return;
+  }
+
+  params.set_output("Color"_ustr, std::move(color));
+  params.set_output("Alpha"_ustr, std::move(alpha));
+}
+
+static void node_register()
+{
+  static bke::bNodeType ntype;
+
+  geo_node_type_base(&ntype, "GeometryNodeImageTexture"_ustr, GEO_NODE_IMAGE_TEXTURE);
+  ntype.ui_name = "Image Texture";
+  ntype.ui_description = "Sample an image as a texture";
+  ntype.enum_name_legacy = "IMAGE_TEXTURE";
+  ntype.nclass = NODE_CLASS_TEXTURE;
+  ntype.declare = node_declare;
+  ntype.draw_buttons = node_layout;
+  ntype.draw_buttons_ex = node_layout_ex;
+  ntype.initfunc = node_init;
+  bke::node_type_storage(
+      ntype, "NodeGeometryImageTexture", node_free_standard_storage, node_copy_standard_storage);
+  ntype.default_width = bke::NodeWidth::_240;
+  ntype.geometry_node_execute = node_geo_exec;
+
+  bke::node_register_type(ntype);
+}
+NOD_REGISTER_NODE(node_register)
+
+}  // namespace blender::nodes::node_geo_image_texture_cc

@@ -1,0 +1,7 @@
+# MLS-MPM in Blender
+
+Compact MLS-MPM core for Geometry Nodes **MPM Solver**.
+
+- Method: Jiang / Hu et al. MLS-MPM. Elastic (fixed corotated) and fluid (J-based).
+- Inspired by Matter / taichi MLS-MPM, not a git-subtree of those repos.
+- License: MIT (see LICENSE)

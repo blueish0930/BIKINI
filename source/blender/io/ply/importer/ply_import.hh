@@ -1,0 +1,45 @@
+/* SPDX-FileCopyrightText: 2023 Blender Authors
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later */
+
+/** \file
+ * \ingroup ply
+ */
+
+#pragma once
+
+#include "IO_ply.hh"
+#include "ply_data.hh"
+
+#include "BKE_geometry_set.hh"
+
+namespace blender {
+
+struct bContext;
+struct Mesh;
+struct Main;
+struct PointCloud;
+struct Scene;
+struct ViewLayer;
+
+namespace io::ply {
+
+class PlyReadBuffer;
+
+Mesh *import_mesh(const PLYImportParams &import_params);
+PointCloud *import_point_cloud(const PLYImportParams &import_params);
+bke::GeometrySet import_geometry_set(const PLYImportParams &import_params);
+
+/* Main import function used from within Blender. */
+void importer_main(bContext *C, const PLYImportParams &import_params);
+
+/* Used from tests, where full bContext does not exist. */
+void importer_main(Main *bmain,
+                   Scene *scene,
+                   ViewLayer *view_layer,
+                   const PLYImportParams &import_params);
+
+const char *read_header(PlyReadBuffer &file, PlyHeader &r_header);
+
+}  // namespace io::ply
+}  // namespace blender

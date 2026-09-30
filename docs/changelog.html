@@ -1,0 +1,1641 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-lang="zh" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="BIKINI Release Notes — Blender 5.3 custom build">
+  <title>Geometry Nodes - BIKINI Release Notes</title>
+<style>
+/* Synced with manual.html */
+
+/* Match docs.blender.org Furo theme (light) — official color tokens */
+:root{
+  --font-stack:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji";
+  --font-stack--monospace:"SFMono-Regular",Menlo,Consolas,Monaco,"Liberation Mono","Lucida Console",monospace;
+  --color-foreground-primary:#000;
+  --color-foreground-secondary:#5a5c63;
+  --color-foreground-muted:#6b6f76;
+  --color-foreground-border:#878787;
+  --color-background-primary:#fff;
+  --color-background-secondary:#f8f9fb;
+  --color-background-hover:#efeff4;
+  --color-background-border:#eeebee;
+  --color-brand-primary:#0a4bff;
+  --color-brand-content:#2757dd;
+  --color-inline-code-background:var(--color-background-secondary);
+  --color-header-background:var(--color-background-primary);
+  --color-header-border:var(--color-background-border);
+  --color-sidebar-background:var(--color-background-secondary);
+  --color-sidebar-background-border:var(--color-background-border);
+  --color-sidebar-link-text:var(--color-foreground-secondary);
+  --color-sidebar-caption-text:var(--color-foreground-muted);
+  --color-sidebar-section-text:var(--color-foreground-primary);
+  --color-link:var(--color-brand-content);
+  --color-table-header-background:var(--color-background-secondary);
+  --color-table-border:var(--color-background-border);
+  --sidebar-width:15.5rem;
+  --header-height:2.5rem;
+  --font-size--normal:100%;
+  --font-size--small:92%;
+  --font-size--small--2:87.5%;
+  --sidebar-item-font-size:var(--font-size--small);
+  --sidebar-item-line-height:1.35rem;
+  --sidebar-item-spacing-vertical:.45rem;
+  --sidebar-item-spacing-horizontal:1rem;
+  --sidebar-left-inset:.4rem;
+  font-size:18px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;
+  font-family:var(--font-stack);
+  color:var(--color-foreground-primary);
+  background:var(--color-background-primary);
+  line-height:1.5;
+  font-size:inherit;
+  -webkit-font-smoothing:antialiased;
+}
+/* Wide screens: continuous sidebar gray from viewport left through the nav column */
+@media(min-width:72.01rem){
+  body{
+    background-image:linear-gradient(
+      to right,
+      var(--color-sidebar-background) 0,
+      var(--color-sidebar-background) calc((100vw - 72rem) / 2 + var(--sidebar-left-inset) + var(--sidebar-width)),
+      var(--color-background-primary) calc((100vw - 72rem) / 2 + var(--sidebar-left-inset) + var(--sidebar-width))
+    );
+    background-attachment:fixed;
+  }
+}
+html[data-lang="en"] .zh{display:none!important}
+html[data-lang="zh"] .en{display:none!important}
+
+/* Header — plain white like Furo */
+.md-header{
+  position:sticky;top:0;z-index:40;
+  background:var(--color-header-background);
+  border-bottom:1px solid var(--color-header-border);
+}
+.md-header__inner{
+  max-width:72rem;margin:0 auto;padding:0 1.25rem 0 var(--sidebar-left-inset);
+  height:var(--header-height);
+  display:flex;align-items:center;gap:1rem;
+}
+.md-header__title{
+  font-weight:700;font-size:1.1rem;
+  color:var(--color-foreground-primary);
+}
+.md-header__title .sub{
+  font-weight:400;color:var(--color-foreground-secondary);
+  margin-left:.35rem;font-size:.95rem;
+}
+.md-header a{
+  color:var(--color-foreground-secondary);
+  text-decoration:none;font-size:var(--font-size--small);
+  font-weight:400;
+}
+.md-header a:hover{color:var(--color-foreground-primary)}
+.lang-switch{
+  margin-left:auto;display:inline-flex;gap:0;
+  border:1px solid var(--color-background-border);
+  border-radius:.2rem;overflow:hidden;
+  background:var(--color-background-secondary);
+}
+.lang-switch button{
+  appearance:none;border:0;background:transparent;
+  font:inherit;font-size:var(--font-size--small--2);
+  color:var(--color-foreground-secondary);
+  padding:.3rem .65rem;cursor:pointer;
+}
+.lang-switch button[aria-pressed="true"]{
+  color:var(--color-foreground-primary);
+  background:var(--color-background-primary);
+  font-weight:600;
+}
+.nav-toggle{
+  display:none;appearance:none;border:0;background:transparent;
+  color:var(--color-foreground-primary);font-size:1.15rem;cursor:pointer;
+}
+
+/* Layout: smaller left inset; continuous sidebar bg */
+.md-main__inner{
+  display:flex;
+  min-height:calc(100vh - var(--header-height));
+  max-width:72rem;
+  margin:0 auto;
+  padding:0 1.25rem 0 0;
+  gap:0;
+  background:linear-gradient(
+    to right,
+    var(--color-sidebar-background) 0,
+    var(--color-sidebar-background) calc(var(--sidebar-left-inset) + var(--sidebar-width)),
+    var(--color-background-primary) calc(var(--sidebar-left-inset) + var(--sidebar-width))
+  );
+}
+.md-sidebar{
+  width:var(--sidebar-width);min-width:var(--sidebar-width);
+  background:var(--color-sidebar-background);
+  border-right:1px solid var(--color-sidebar-background-border);
+  position:sticky;top:var(--header-height);align-self:flex-start;
+  height:calc(100vh - var(--header-height));
+  overflow:auto;
+  padding:1rem .4rem 2.5rem var(--sidebar-left-inset);
+  margin:0;
+}
+.md-nav__title{
+  padding:.25rem var(--sidebar-item-spacing-horizontal) .5rem;
+  font-size:var(--font-size--small--2);
+  font-weight:700;
+  color:var(--color-sidebar-caption-text);
+  text-transform:uppercase;
+  letter-spacing:.04em;
+}
+.md-nav__list{list-style:none;margin:0;padding:0}
+
+/* Intro / Achieve — gray like official secondary links (not blue) */
+.md-nav__list > .md-nav__item > .md-nav__link{
+  display:block;
+  padding:var(--sidebar-item-spacing-vertical) var(--sidebar-item-spacing-horizontal);
+  color:var(--color-sidebar-link-text);
+  text-decoration:none;
+  font-size:var(--sidebar-item-font-size);
+  font-weight:500;
+  line-height:var(--sidebar-item-line-height);
+  background:transparent;
+  border:0;border-radius:0;box-shadow:none;
+}
+.md-nav__list > .md-nav__item > .md-nav__link:hover{
+  color:var(--color-foreground-primary);
+  background:var(--color-background-hover);
+}
+.md-nav__list > .md-nav__item > .md-nav__link.is-active{
+  color:var(--color-foreground-primary);
+  font-weight:600;
+  background:transparent;
+  box-shadow:none;
+}
+
+/* Categories (parent) — black/gray, never brand blue */
+.nav-version{
+  margin:0;border:0;border-radius:0;
+  background:transparent;overflow:visible;
+}
+.nav-version > summary{
+  list-style:none;cursor:pointer;user-select:none;
+  display:flex;align-items:center;gap:.4rem;
+  padding:var(--sidebar-item-spacing-vertical) var(--sidebar-item-spacing-horizontal);
+  font-size:var(--sidebar-item-font-size);
+  font-weight:600;
+  color:var(--color-sidebar-section-text);
+  background:transparent;
+  text-transform:none;letter-spacing:normal;
+  border:0;
+}
+.nav-version[open] > summary{
+  border:0;background:transparent;
+}
+.nav-version > summary::-webkit-details-marker{display:none}
+.nav-version > summary::before{
+  content:"";
+  width:.35em;height:.35em;
+  border-right:1.5px solid var(--color-foreground-muted);
+  border-bottom:1.5px solid var(--color-foreground-muted);
+  transform:rotate(-45deg);
+  margin-right:.15rem;
+  flex-shrink:0;
+  transition:transform .15s ease;
+  opacity:.75;
+}
+.nav-version[open] > summary::before{
+  transform:rotate(45deg);
+  margin-top:-.1em;
+}
+.nav-version > summary:hover{
+  color:var(--color-foreground-primary);
+  background:var(--color-background-hover);
+}
+.nav-version > summary .count{
+  margin-left:auto;
+  font-size:var(--font-size--small--2);
+  font-weight:400;
+  color:var(--color-foreground-muted);
+  background:transparent;
+  padding:0;
+  border-radius:0;
+}
+/* Child list: vertical nest line */
+.nav-version > ul{
+  margin:0 0 .4rem .9rem;
+  padding:.1rem 0 .35rem .7rem;
+  border-left:1px solid #d0d2d8;
+  background:transparent;
+}
+.nav-version > ul .md-nav__link{
+  display:block;
+  position:relative;
+  padding:calc(var(--sidebar-item-spacing-vertical) * .85)
+          var(--sidebar-item-spacing-horizontal)
+          calc(var(--sidebar-item-spacing-vertical) * .85)
+          .55rem;
+  font-size:var(--sidebar-item-font-size);
+  font-weight:400;
+  line-height:var(--sidebar-item-line-height);
+  color:var(--color-sidebar-link-text);
+  text-decoration:none;
+  border-radius:0;margin:0;
+  background:transparent;box-shadow:none;border:0;
+}
+.nav-version > ul .md-nav__link::before{
+  content:"";
+  position:absolute;
+  left:-.7rem;
+  top:50%;
+  width:.45rem;
+  height:0;
+  border-top:1px solid #d0d2d8;
+}
+.nav-version > ul .md-nav__link:hover{
+  color:var(--color-foreground-primary);
+  background:var(--color-background-hover);
+}
+.nav-version > ul .md-nav__link.is-active{
+  color:var(--color-foreground-primary);
+  font-weight:600;
+  background:transparent;
+  box-shadow:none;
+}
+
+/* Content */
+.md-content{flex:1;min-width:0;background:var(--color-background-primary)}
+.md-content__inner{
+  max-width:48rem;
+  padding:1.5rem 2rem 3rem 1.75rem;
+  font-size:1.05rem;
+}
+.page{display:none}.page.is-active{display:block}
+h1{
+  margin:0 0 .75rem;
+  font-size:2.05em;font-weight:700;line-height:1.25;
+  color:var(--color-foreground-primary);
+  border:0;
+}
+h2{
+  margin:1.75rem 0 1rem;
+  font-size:1.45em;font-weight:700;
+  color:var(--color-foreground-primary);
+  border-bottom:1px solid var(--color-background-border);
+  padding-bottom:.35em;
+}
+h3{
+  margin:1.25rem 0 .75rem;
+  font-size:1.2em;font-weight:700;
+  color:var(--color-foreground-primary);
+}
+p{margin:0 0 1em;max-width:none}
+.lead{color:var(--color-foreground-secondary)}
+ul,ol{margin:0 0 1em;padding-left:1.4em;color:var(--color-foreground-primary)}
+li{margin:.25em 0}
+a{color:var(--color-link);text-decoration:none}
+a:hover{text-decoration:underline}
+code{
+  font-family:var(--font-stack--monospace);
+  font-size:var(--font-size--small--2);
+  background:var(--color-inline-code-background);
+  padding:.1em .3em;border-radius:.2rem;
+  color:var(--color-foreground-primary);
+}
+
+/* Tables — Furo-like simple */
+.io-table{
+  width:100%;max-width:46rem;
+  border-collapse:collapse;
+  margin:0 0 1.25em;
+  font-size:var(--font-size--normal);
+}
+.io-table th,.io-table td{
+  text-align:left;vertical-align:top;
+  padding:.5rem .65rem;
+  border-bottom:1px solid var(--color-table-border);
+}
+.io-table thead th{
+  background:var(--color-table-header-background);
+  font-weight:700;
+  color:var(--color-foreground-primary);
+}
+.io-table th{font-weight:700;color:var(--color-foreground-primary)}
+.io-table td{color:var(--color-foreground-primary)}
+.io-table .type{
+  display:inline;margin-left:.35rem;
+  font-size:var(--font-size--small--2);
+  font-weight:400;
+  color:var(--color-foreground-muted);
+  background:transparent;padding:0;border-radius:0;
+}
+.io-table .when{
+  margin-top:.35rem;padding:0;
+  background:transparent;border-radius:0;
+  font-size:var(--font-size--small);
+  color:var(--color-foreground-secondary);
+}
+.io-table .when code{
+  background:var(--color-inline-code-background);
+  color:var(--color-foreground-primary);
+}
+.io-table .desc{margin:0 0 .35rem;color:var(--color-foreground-primary);line-height:1.5}
+.io-table .menu-line{margin:.2rem 0;color:var(--color-foreground-secondary);font-size:var(--font-size--small)}
+.io-table .def{margin-top:.2rem;font-size:var(--font-size--small);color:var(--color-foreground-secondary)}
+.io-table tr.mode-row{background:var(--color-background-secondary)}
+.io-table tr.mode-row th,.io-table tr.mode-row td{background:transparent}
+
+.note-inline{font-size:var(--font-size--small);color:var(--color-foreground-secondary)}
+.muted{color:var(--color-foreground-muted)}
+
+/* Admonition tip — Furo important/tip style, no blue box */
+.admonition{
+  margin:1em 0;max-width:46rem;
+  border-left:.2rem solid #00bfa5;
+  background:transparent;
+  border-radius:0;
+  padding:.5rem 0 .5rem 1rem;
+}
+.admonition .title{
+  font-weight:700;margin:0 0 .35em;
+  color:var(--color-foreground-primary);
+  font-size:var(--font-size--normal);
+}
+.admonition p{margin:0 0 .4em}
+.admonition p:last-child{margin-bottom:0}
+
+.node-badge{
+  display:block;
+  font-size:var(--font-size--small);
+  font-weight:400;
+  color:var(--color-foreground-muted);
+  background:transparent;
+  padding:0;margin:0 0 .75rem;
+  border-radius:0;
+}
+.node-badge code{
+  background:var(--color-inline-code-background);
+  font-weight:400;
+}
+.src{color:var(--color-foreground-secondary);font-size:var(--font-size--small);margin-top:1.5rem}
+
+/* Status chips — muted, not bright blue */
+.st{
+  display:inline-block;padding:.05em .4em;border-radius:.15rem;
+  font-size:var(--font-size--small--2);font-weight:600;
+  background:var(--color-background-secondary);
+  color:var(--color-foreground-secondary);
+  border:1px solid var(--color-background-border);
+}
+.st.ok{color:#21632c;border-color:#38a84d55;background:transparent}
+.st.wf{color:var(--color-foreground-secondary);background:transparent}
+.st.miss{color:#b30000;border-color:#ff5c5c55;background:transparent}
+.st.off{color:var(--color-foreground-muted);background:transparent}
+
+footer.page-footer{
+  margin-top:2.5em;padding-top:1em;
+  border-top:1px solid var(--color-background-border);
+  color:var(--color-foreground-secondary);
+  font-size:var(--font-size--small);
+}
+
+@media(max-width:960px){
+  .md-main__inner{
+    flex-direction:column;padding:0 1rem;max-width:none;
+    background:var(--color-background-primary);
+  }
+  .md-sidebar{
+    position:fixed;left:0;top:var(--header-height);z-index:35;
+    width:min(16rem,90vw);margin-left:0;padding-left:.75rem;
+    transform:translateX(-105%);transition:transform .18s;
+    box-shadow:none;
+  }
+  .nav-open .md-sidebar{transform:none;box-shadow:2px 0 12px rgba(0,0,0,.08)}
+  .nav-toggle{display:inline-flex}
+  .md-header__inner{padding:0 1rem;max-width:none}
+}
+
+
+/* Changelog HTML wrappers */
+.md-container{display:flex;flex-direction:column;min-height:calc(100vh - var(--header-height))}
+.md-main{flex:1;display:block}
+.md-main__inner{display:flex}
+.md-nav{font-size:inherit}
+.md-nav__item{margin:0}
+.md-nav__section{margin-top:.5rem;padding-top:.35rem;border-top:1px solid var(--color-background-border)}
+.md-nav__section .md-nav__title{padding-top:.35rem}
+.md-nav__link{
+  display:block;margin:0;
+  padding:var(--sidebar-item-spacing-vertical) var(--sidebar-item-spacing-horizontal);
+  color:var(--color-sidebar-link-text);text-decoration:none;
+  font-size:var(--sidebar-item-font-size);font-weight:400;
+  line-height:var(--sidebar-item-line-height);
+  background:transparent!important;box-shadow:none!important;border-radius:0;
+}
+.md-nav__link:hover{color:var(--color-foreground-primary);background:var(--color-background-hover)!important}
+.md-nav__link--active,.md-nav__link.is-active{
+  color:var(--color-foreground-primary)!important;font-weight:600;
+  background:transparent!important;box-shadow:none!important;
+}
+.nav-version .tag{
+  margin-left:auto;font-size:var(--font-size--small--2);font-weight:400;
+  color:var(--color-foreground-muted);background:transparent;padding:0;
+}
+.md-header__links{display:flex;align-items:center;gap:.75rem;margin-left:.35rem}
+.md-typeset h1{margin:0 0 .75rem;font-size:2.05em;font-weight:700;line-height:1.25;color:var(--color-foreground-primary);border:0}
+.md-typeset h2{margin:1.75rem 0 1rem;font-size:1.45em;font-weight:700;color:var(--color-foreground-primary);border-bottom:1px solid var(--color-background-border);padding-bottom:.35em;scroll-margin-top:calc(var(--header-height) + .5rem)}
+.md-typeset h3{margin:1.25rem 0 .75rem;font-size:1.2em;font-weight:700;color:var(--color-foreground-primary);scroll-margin-top:calc(var(--header-height) + .5rem)}
+.md-typeset p{margin:0 0 1em}
+.md-typeset a{color:var(--color-link);text-decoration:none}
+.md-typeset a:hover{text-decoration:underline}
+.md-typeset ul,.md-typeset ol{margin:0 0 1em;padding-left:1.4em}
+.md-typeset li{margin:.25em 0}
+.md-typeset li + li{margin-top:.15em}
+.md-typeset strong{font-weight:700;color:var(--color-foreground-primary)}
+.md-typeset code{font-family:var(--font-stack--monospace);font-size:var(--font-size--small--2);background:var(--color-inline-code-background);padding:.1em .3em;border-radius:.2rem;color:var(--color-foreground-primary);word-break:break-word}
+.md-typeset .meta{color:var(--color-foreground-secondary);font-size:var(--font-size--small);margin:-.3em 0 1.2em}
+.md-typeset .admonition,.admonition{
+  margin:1em 0;max-width:48rem;border-left:.2rem solid #00bfa5;background:transparent;border-radius:0;padding:.5rem 0 .5rem 1rem
+}
+.md-typeset .admonition.warning,.admonition.warning{border-left-color:#ff9100}
+.md-typeset .admonition-title,.admonition .admonition-title,.admonition .title{
+  font-weight:700;margin:0 0 .35em;padding:0;background:transparent;color:var(--color-foreground-primary)
+}
+.md-typeset .admonition.warning .admonition-title,.admonition.warning .admonition-title{background:transparent}
+.module-index{columns:2;column-gap:2rem;max-width:36rem;list-style:none;padding-left:0;margin:.5em 0 1.2em}
+.module-index li{break-inside:avoid;margin:.15em 0}
+.module-index a{display:inline-block;padding:.08em 0}
+.md-footer-meta{margin-top:2.5em;padding-top:1em;border-top:1px solid var(--color-background-border);color:var(--color-foreground-secondary);font-size:var(--font-size--small);line-height:1.5}
+/* nest line for changelog children */
+.nav-version > ul{margin:0 0 .4rem .9rem;padding:.1rem 0 .35rem .7rem;border-left:1px solid #d0d2d8}
+.nav-version > ul .md-nav__link{position:relative;padding-left:.55rem}
+.nav-version > ul .md-nav__link::before{
+  content:"";position:absolute;left:-.7rem;top:50%;width:.45rem;height:0;border-top:1px solid #d0d2d8
+}
+.nav-version > summary{font-weight:600;color:var(--color-sidebar-section-text)}
+.nav-version > summary:hover{color:var(--color-foreground-primary);background:var(--color-background-hover)}
+
+  </style>
+</head>
+<body>
+  <header class="md-header">
+    <div class="md-header__inner">
+      <button type="button" class="nav-toggle" id="nav-toggle" aria-label="Menu">☰</button>
+      <div class="md-header__title">
+        BIKINI
+        <span class="sub en">Developer Docs</span>
+        <span class="sub zh">开发者文档</span>
+      </div>
+      <nav class="md-header__links">
+        <a href="index.html"><span class="en">Docs</span><span class="zh">文档</span></a>
+        <a href="manual.html"><span class="en">Manual</span><span class="zh">手册</span></a>
+        <a href="vex.html">VEX</a>
+        <a href="https://github.com/blueish0930/BIKINI" target="_blank" rel="noopener">GitHub</a>
+      </nav>
+      <div class="lang-switch" role="group" aria-label="Language">
+        <button type="button" id="lang-zh" data-lang="zh" aria-pressed="true">中文</button>
+        <button type="button" id="lang-en" data-lang="en" aria-pressed="false">EN</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="md-container">
+    <div class="md-main">
+      <div class="md-main__inner">
+
+        <!-- Primary navigation -->
+        <aside class="md-sidebar" id="sidebar" aria-label="Navigation">
+          <nav class="md-nav">
+            <div class="md-nav__title">
+              <span class="en">Developer Docs</span>
+              <span class="zh">开发者文档</span>
+            </div>
+            <ul class="md-nav__list">
+              <li class="md-nav__item">
+                <details class="nav-version" open>
+                  <summary>
+                    v3
+                    <span class="tag">Alpha</span>
+                  </summary>
+                  <ul class="md-nav__list">
+                    <li class="md-nav__item">
+                      <a class="md-nav__link md-nav__link--active" href="#v3-overview" data-page="v3-overview">
+                        <span class="en">Overview</span><span class="zh">概览</span>
+                      </a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#v3-geometry-nodes" data-page="v3-geometry-nodes"><span class="zh">几何节点</span><span class="en">Geometry Nodes</span></a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#v3-shaders" data-page="v3-shaders"><span class="en">Shaders</span><span class="zh">着色器</span></a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#v3-render" data-page="v3-render"><span class="en">Render</span><span class="zh">渲染</span></a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#v3-interface" data-page="v3-interface"><span class="en">Interface</span><span class="zh">界面</span></a>
+                    </li>
+                  </ul>
+                </details>
+              </li>
+              <li class="md-nav__item">
+                <details class="nav-version">
+                  <summary>
+                    v1
+                    <span class="tag">Alpha</span>
+                  </summary>
+                  <ul class="md-nav__list">
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#overview" data-page="overview">
+                        <span class="en">Overview</span><span class="zh">概览</span>
+                      </a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#geometry-nodes" data-page="geometry-nodes"><span class="zh">几何节点</span><span class="en">Geometry Nodes</span></a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#user-interface" data-page="user-interface">
+                        <span class="en">User Interface</span><span class="zh">用户界面</span>
+                      </a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#shaders" data-page="shaders">
+                        <span class="en">Shaders</span><span class="zh">着色器</span>
+                      </a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#image-process" data-page="image-process">
+                        Image Process
+                      </a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#editors" data-page="editors">
+                        <span class="en">Editors</span><span class="zh">编辑器</span>
+                      </a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#eevee" data-page="eevee">EEVEE &amp; Viewport</a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#zones" data-page="zones">Zones</a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#known-issues" data-page="known-issues">
+                        <span class="en">Known Issues</span><span class="zh">已知问题</span>
+                      </a>
+                    </li>
+                  </ul>
+                </details>
+              </li>
+              <li class="md-nav__item">
+                <details class="nav-version">
+                  <summary>
+                    v2
+                    <span class="tag">Alpha</span>
+                  </summary>
+                  <ul class="md-nav__list">
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#v2-overview" data-page="v2-overview">
+                        <span class="en">Overview</span><span class="zh">概览</span>
+                      </a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#v2-geometry-nodes" data-page="v2-geometry-nodes"><span class="zh">几何节点</span><span class="en">Geometry Nodes</span></a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#v2-cgal" data-page="v2-cgal">CGAL</a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#v2-texture" data-page="v2-texture"><span class="zh">纹理 / GTE</span><span class="en">Texture / GTE</span></a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#v2-shaders" data-page="v2-shaders">
+                        <span class="en">Shaders</span><span class="zh">着色器</span>
+                      </a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#v2-object-editor" data-page="v2-object-editor">
+                        <span class="en">Object Editor</span><span class="zh">物体编辑器</span>
+                      </a>
+                    </li>
+                    <li class="md-nav__item">
+                      <a class="md-nav__link" href="#v2-user-interface" data-page="v2-user-interface">
+                        <span class="en">User Interface</span><span class="zh">用户界面</span>
+                      </a>
+                    </li>
+                  </ul>
+                </details>
+              </li>
+            </ul>
+
+            <div class="md-nav__section">
+              <div class="md-nav__title">
+                <span class="en">Documentation</span><span class="zh">文档站</span>
+              </div>
+              <ul class="md-nav__list">
+                <li class="md-nav__item">
+                  <a class="md-nav__link" href="index.html">
+                    <span class="en">Docs home</span><span class="zh">文档首页</span>
+                  </a>
+                </li>
+                <li class="md-nav__item">
+                  <a class="md-nav__link" href="manual.html">
+                    <span class="en">User Manual</span><span class="zh">用户手册</span>
+                  </a>
+                </li>
+              </ul>
+            </div>
+          </nav>
+        </aside>
+
+        <!-- Content -->
+        <main class="md-content">
+          <div class="md-content__inner md-typeset">
+
+            <!-- Overview -->
+            <article class="page" id="page-overview" data-page="overview">
+              <h1>
+                <span class="en">BIKINI 5.3 Release Notes</span>
+                <span class="zh">BIKINI 5.3 更新说明</span>
+              </h1>
+              <p class="meta">
+                Blender 5.3.0 Alpha · Windows x64 ·
+                <span class="en">portable</span><span class="zh">便携包</span>
+                · 2026-07-31
+              </p>
+              <p class="en">
+                Custom features on top of Blender 5.3 Alpha. Organised like the official
+                <a href="https://developer.blender.org/docs/release_notes/5.3/" target="_blank" rel="noopener">Blender 5.3 release notes</a>
+                (version → modules). Choose a module in the left navigation.
+              </p>
+              <p class="zh">
+                基于 Blender 5.3 Alpha 的自定义功能。版式对齐官方
+                <a href="https://developer.blender.org/docs/release_notes/5.3/" target="_blank" rel="noopener">Blender 5.3 发布说明</a>
+                （版本 → 模块）。请从左侧导航选择模块。
+              </p>
+
+              <div class="admonition">
+                <p class="admonition-title">
+                  <span class="en">Documentation only</span>
+                  <span class="zh">仅文档</span>
+                </p>
+                <p class="en">This page does not load with <code>blender.exe</code> and has no effect on runtime.</p>
+                <p class="zh">本页不随 <code>blender.exe</code> 加载，不影响运行时。</p>
+              </div>
+
+              <h2>
+                <span class="en">Modules</span><span class="zh">模块</span>
+              </h2>
+              <ul class="module-index">
+                <li><a href="#geometry-nodes" data-page="geometry-nodes"><span class="zh">几何节点</span><span class="en">Geometry Nodes</span></a></li>
+                <li><a href="#user-interface" data-page="user-interface"><span class="en">User Interface</span><span class="zh">用户界面</span></a></li>
+                <li><a href="#shaders" data-page="shaders"><span class="en">Shaders</span><span class="zh">着色器</span></a></li>
+                <li><a href="#image-process" data-page="image-process">Image Process</a></li>
+                <li><a href="#editors" data-page="editors"><span class="en">Editors</span><span class="zh">编辑器</span></a></li>
+                <li><a href="#eevee" data-page="eevee">EEVEE &amp; Viewport</a></li>
+                <li><a href="#zones" data-page="zones">Zones</a></li>
+                <li><a href="#known-issues" data-page="known-issues"><span class="en">Known Issues</span><span class="zh">已知问题</span></a></li>
+              </ul>
+            </article>
+
+            <!-- Geometry Nodes — content strictly from Achieve List -->
+            <article class="page" id="page-geometry-nodes" data-page="geometry-nodes">
+              <h1>BIKINI 5.3: Geometry Nodes</h1>
+              <p class="en">
+                Custom geometry nodes and related workflows. Layout modelled on
+                <a href="https://developer.blender.org/docs/release_notes/5.3/geometry_nodes/" target="_blank" rel="noopener">Blender 5.3 Geometry Nodes notes</a>.
+              </p>
+              <p class="zh">
+                自定义几何节点与相关工作流。版式参考
+                <a href="https://developer.blender.org/docs/release_notes/5.3/geometry_nodes/" target="_blank" rel="noopener">Blender 5.3 Geometry Nodes 说明</a>。
+              </p>
+
+              <h2>
+                <span class="en">Attributes</span><span class="zh">属性</span>
+              </h2>
+              <ul class="en">
+                <li>
+                  <strong>String attributes</strong> are supported end-to-end
+                  (Named Attribute, Store Named Attribute, Capture Attribute, Viewer,
+                  geometry propagation, and spreadsheet columns).
+                </li>
+              </ul>
+              <ul class="zh">
+                <li>
+                  <strong>String 属性</strong>全链路支持
+                  （Named Attribute、Store Named Attribute、Capture Attribute、Viewer、
+                  几何传递与电子表格列）。
+                </li>
+              </ul>
+
+              <h2>Portal &amp; Clip</h2>
+              <ul class="en">
+                <li>
+                  <strong>Named Portal</strong> / <strong>Store Named Portal</strong> —
+                  pass values by name across a node tree without long noodle runs.
+                </li>
+                <li>
+                  <strong>Geometry Clip</strong> — clip geometry against a plane / cut.
+                </li>
+              </ul>
+              <ul class="zh">
+                <li>
+                  <strong>Named Portal</strong> / <strong>Store Named Portal</strong> —
+                  按名称在节点树中传值，避免长距离拉线。
+                </li>
+                <li>
+                  <strong>Geometry Clip</strong> — 按平面或裁切几何。
+                </li>
+              </ul>
+
+              <h2>
+                <span class="en">Closures</span><span class="zh">闭包</span>
+              </h2>
+              <ul class="en">
+                <li>
+                  <strong>Set Default Closure</strong> — specify a default closure when no external closure is connected.
+                </li>
+              </ul>
+              <ul class="zh">
+                <li>
+                  <strong>Set Default Closure</strong> — 未连接外部闭包时设置默认闭包。
+                </li>
+              </ul>
+
+              <h2>
+                <span class="en">Subdivision</span><span class="zh">细分</span>
+              </h2>
+              <ul class="en">
+                <li>
+                  <strong>Loop Subdivision</strong> — classic Loop subdivision for triangle meshes.
+                </li>
+              </ul>
+              <ul class="zh">
+                <li>
+                  <strong>Loop Subdivision</strong> — 三角网格的经典 Loop 细分。
+                </li>
+              </ul>
+
+              <h2>
+                <span class="en">Nearest neighbours</span><span class="zh">最近邻</span>
+              </h2>
+              <ul class="en">
+                <li>
+                  <strong>K-Nearest</strong> — find nearest neighbours for points / samples
+                  (smoothing, clustering, field sampling).
+                </li>
+              </ul>
+              <ul class="zh">
+                <li>
+                  <strong>K-Nearest</strong> — 点 / 采样的最近邻查询（平滑、聚类、场采样）。
+                </li>
+              </ul>
+
+              <h2>
+                <span class="en">Debug &amp; time</span><span class="zh">调试与时间</span>
+              </h2>
+              <ul class="en">
+                <li><strong>Debug</strong> — inspect intermediate geometry / values while authoring.</li>
+                <li>
+                  <strong>Time Shift</strong> — offset evaluation time for downstream nodes.
+                  With a Simulation Zone, return to frame 1 (or reset cache) after structural changes
+                  (native Blender cache behaviour).
+                </li>
+                <li><strong>Object Info → Seed</strong> — deterministic randomness / instance variation.</li>
+              </ul>
+              <ul class="zh">
+                <li><strong>Debug</strong> — 编写时检查中间几何 / 数值。</li>
+                <li>
+                  <strong>Time Shift</strong> — 为下游偏移求值时间。
+                  与模拟区联用时，结构改动后需回到第一帧重置 cache（原生行为）。
+                </li>
+                <li><strong>Object Info → Seed</strong> — 确定性随机 / 实例变化。</li>
+              </ul>
+
+              <h2>
+                <span class="en">Select &amp; edit</span><span class="zh">选择与编辑</span>
+              </h2>
+              <ul class="en">
+                <li>
+                  <strong>Select Elements</strong> — domain selection helpers (points / edges / faces)
+                  and field-driven masks.
+                </li>
+                <li>
+                  <strong>Edit Elements</strong> — temporarily enter free Mesh Edit Mode on the cooked
+                  upstream result; store the full edited mesh back on the node (with Reset).
+                </li>
+              </ul>
+              <ul class="zh">
+                <li>
+                  <strong>Select Elements</strong> — 域选择（点 / 边 / 面）与场驱动遮罩。
+                </li>
+                <li>
+                  <strong>Edit Elements</strong> — 对上游结果临时进入自由 Mesh Edit Mode，
+                  将完整编辑结果存回节点（含 Reset）。
+                </li>
+              </ul>
+
+              <h2>
+                <span class="en">Geodesic, remesh &amp; fracture</span>
+                <span class="zh">测地线、重拓扑与破碎</span>
+              </h2>
+              <ul class="en">
+                <li>
+                  <strong>Heat Geodesic</strong> — approximate surface distance from selected sources
+                  via the heat method.
+                </li>
+                <li>
+                  <strong>Instant Meshes</strong> — field-aligned remeshing (quad or triangle output).
+                </li>
+                <li>
+                  <strong>QuadWild</strong> — remesh / field / layout stages (QRemeshify pipeline).
+                </li>
+                <li>
+                  <strong>Triangle Remesh</strong> — isotropic remeshing (uniform or curvature-adaptive).
+                </li>
+                <li>
+                  <strong>Voronoi Fracture</strong> — fracture from point / vertex sites
+                  (Voro++ neighbour planes, half-space clipping).
+                </li>
+              </ul>
+              <ul class="zh">
+                <li>
+                  <strong>Heat Geodesic</strong> — 热方法近似曲面测地距离。
+                </li>
+                <li>
+                  <strong>Instant Meshes</strong> — 场对齐重拓扑（四边形或三角形输出）。
+                </li>
+                <li>
+                  <strong>QuadWild</strong> — Remesh / Field / Layout 三阶段（QRemeshify 管线）。
+                </li>
+                <li>
+                  <strong>Triangle Remesh</strong> — 各向同性三角重拓扑（均匀或曲率自适应）。
+                </li>
+                <li>
+                  <strong>Voronoi Fracture</strong> — 点 / 顶点站点破碎（Voro++ 邻接平面、半空间裁切）。
+                </li>
+              </ul>
+
+              <h2>
+                <span class="en">Graph coloring &amp; fields</span>
+                <span class="zh">图染色与场</span>
+              </h2>
+              <ul class="en">
+                <li>
+                  <strong>Mesh Graph Coloring</strong> — color the vertex 1-ring graph
+                  so adjacent vertices get different integer IDs.
+                </li>
+                <li>
+                  <strong>Tangent Field</strong> — smooth N-RoSy tangent field on the mesh.
+                </li>
+                <li>
+                  <strong>Gradient</strong> / <strong>Divergence</strong> — differential operators
+                  on scalar / vector fields.
+                </li>
+                <li>
+                  <strong>Curve Intersection</strong> — detect / sample curve intersections.
+                </li>
+              </ul>
+              <ul class="zh">
+                <li>
+                  <strong>Mesh Graph Coloring</strong> — 顶点一环邻接图染色，相邻顶点不同整数 ID。
+                </li>
+                <li>
+                  <strong>Tangent Field</strong> — 平滑 N-RoSy 切向场。
+                </li>
+                <li>
+                  <strong>Gradient</strong> / <strong>Divergence</strong> — 标量 / 向量场微分算子。
+                </li>
+                <li>
+                  <strong>Curve Intersection</strong> — 曲线相交检测 / 采样。
+                </li>
+              </ul>
+
+              <h2>
+                <span class="en">Field write &amp; sample</span>
+                <span class="zh">场写入与采样</span>
+              </h2>
+              <ul class="en">
+                <li>
+                  <strong>Write at Index</strong> — scatter a field into a target domain by
+                  <strong>Target Index</strong> (source and target domains may differ).
+                  Collisions merge with <strong>Atomic Operator</strong>: Sum / Min / Max / Mean.
+                  Data Type: Float / Integer / Vector.
+                </li>
+                <li>
+                  <strong>RBF Interpolate</strong> — fit a radial-basis interpolant through
+                  Source sample Values so <code>f(xᵢ)=vᵢ</code> exactly (solves <code>Φw=v</code>,
+                  not a kernel-weighted average), then evaluate on <strong>Sample Position</strong>.
+                  Kernel panel: Type (Gaussian, Inverse Multiquadric, Linear, Cubic, Quintic, Wendland C2)
+                  and Size. Menu: Geometry → Sample. Dense solve; n ≤ 4096.
+                </li>
+              </ul>
+              <ul class="zh">
+                <li>
+                  <strong>Write at Index</strong> — 按 <strong>Target Index</strong> 将场 scatter 写入目标域
+                  （源/目标域可不同）。冲突用 <strong>Atomic Operator</strong> 归并：Sum / Min / Max / Mean。
+                  Data Type：Float / Integer / Vector。
+                </li>
+                <li>
+                  <strong>RBF Interpolate</strong> — 从 Source 采样点 Value 拟合径向基插值，
+                  采样点精确还原 <code>f(xᵢ)=vᵢ</code>（解 <code>Φw=v</code>，非核加权平均），
+                  在 <strong>Sample Position</strong> 上求值。Kernel 面板：Type
+                  （Gaussian / Inverse Multiquadric / Linear / Cubic / Quintic / Wendland C2）与 Size。
+                  菜单：Geometry → Sample。稠密求解；n ≤ 4096。
+                </li>
+              </ul>
+
+              <h2><span class="zh">表达式</span><span class="en">Expression</span></h2>
+              <ul class="en">
+                <li>
+                  <strong>Expression</strong> — evaluate a typed expression string on field / socket inputs,
+                  with <strong>autocomplete</strong> for identifiers, functions, and syntax.
+                  See <a href="manual.html#NodeExpression">Expression</a>.
+                </li>
+              </ul>
+              <ul class="zh">
+                <li>
+                  <strong>Expression</strong> — 对场 / 接口输入求值类型化表达式，
+                  支持标识符、函数与语法的<strong>自动补全</strong>。
+                  见 <a href="manual.html#NodeExpression">表达式</a>。
+                </li>
+              </ul>
+
+              <h2 id="gn-sparse-math">
+                <span class="en">Sparse matrix math</span>
+                <span class="zh">稀疏矩阵数学</span>
+              </h2>
+              <p class="en">
+                Geometry Nodes path for sparse linear algebra on meshes.
+                Backend: <strong>Eigen</strong> + <strong>Spectra</strong>.
+                Rigid-body solvers are in <a href="#v2-geometry-nodes" data-page="v2-geometry-nodes">v2</a>
+                (Box Engine, Jolt), not in this block.
+              </p>
+              <p class="zh">
+                几何节点内的稀疏线性代数路径。后端：<strong>Eigen</strong> + <strong>Spectra</strong>。
+                刚体求解在 <a href="#v2-geometry-nodes" data-page="v2-geometry-nodes">v2</a>
+                （Box 引擎、Jolt），不在这一节。
+              </p>
+              <p><code>Mesh → Mesh Laplacian → [Sparse Matrix Math] → Linear Solver</code></p>
+              <ul class="en">
+                <li>
+                  <strong>Mesh Laplacian</strong> — discrete mesh Laplacian as a sparse COO bundle
+                  (weight / row / col). Modes: Uniform, Cotangent; optional diffusion / mass.
+                </li>
+                <li>
+                  <strong>Sparse Matrix Math</strong> — add / multiply / combine sparse matrix bundles.
+                </li>
+                <li>
+                  <strong>Linear Solver</strong> — solve <code>Ax = b</code>, factor, multiply, or partial eigenpairs
+                  on sparse matrices (optional pin constraints).
+                </li>
+              </ul>
+              <ul class="zh">
+                <li>
+                  <strong>Mesh Laplacian</strong> — 离散网格拉普拉斯，稀疏 COO Bundle
+                  （weight / row / col）。模式：Uniform、Cotangent；可选扩散 / 质量。
+                </li>
+                <li>
+                  <strong>Sparse Matrix Math</strong> — 稀疏矩阵 Bundle 加减乘组合。
+                </li>
+                <li>
+                  <strong>Linear Solver</strong> — 在稀疏矩阵上求解 <code>Ax = b</code>、分解、乘积或部分特征对
+                  （可选钉约束）。
+                </li>
+              </ul>
+
+              <div class="admonition warning">
+                <p class="admonition-title">
+                  <span class="en">Simulation cache</span>
+                  <span class="zh">模拟缓存</span>
+                </p>
+                <p class="en">
+                  Time Shift + Simulation Zone: scrub to frame 1 (or reset the simulation cache)
+                  after structural changes.
+                </p>
+                <p class="zh">
+                  Time Shift 与模拟区：结构改动后请回到第 1 帧（或重置模拟缓存）。
+                </p>
+              </div>
+            </article>
+
+            <!-- User Interface — from Achieve List UI section + enable I/O -->
+            <article class="page" id="page-user-interface" data-page="user-interface">
+              <h1>
+                <span class="en">BIKINI 5.3: User Interface</span>
+                <span class="zh">BIKINI 5.3：用户界面</span>
+              </h1>
+
+              <h2>
+                <span class="en">Node Group interface</span><span class="zh">节点组接口</span>
+              </h2>
+              <ul class="en">
+                <li><strong>Separator</strong> / <strong>Message</strong> — dividers and help text on group inputs/outputs.</li>
+                <li><strong>Join to next parameter</strong> — place the next socket on the same row.</li>
+                <li><strong>Ctrl + LMB rename</strong> — rename group parameters with hover highlight.</li>
+                <li><strong>Enable Input / Output</strong> — when disabled: hide interface, ignore external links, fall back to defaults.</li>
+                <li><strong>Menu multi-select</strong> — multi-select menu items with list output.</li>
+              </ul>
+              <ul class="zh">
+                <li><strong>Separator</strong> / <strong>Message</strong> — 节点组输入输出分隔线与说明。</li>
+                <li><strong>参数并排</strong> — 下一参数同一行。</li>
+                <li><strong>Ctrl + LMB 改名</strong> — 节点组参数改名，高亮提示。</li>
+                <li><strong>Enable Input / Output</strong> — 关闭时隐藏接口、忽略外部连线，回落默认。</li>
+                <li><strong>Menu 多选</strong> — 菜单多选，输出 list。</li>
+              </ul>
+
+              <h2>
+                <span class="en">Socket shortcuts</span><span class="zh">接口快捷操作</span>
+              </h2>
+              <ul class="en">
+                <li><strong>Ctrl + LMB on socket</strong> — change socket data type.</li>
+                <li><strong>Alt + LMB on socket</strong> — change socket shape.</li>
+              </ul>
+              <ul class="zh">
+                <li><strong>Ctrl + LMB 接口</strong> — 修改接口数据类型。</li>
+                <li><strong>Alt + LMB 接口</strong> — 修改接口形状。</li>
+              </ul>
+
+              <h2>
+                <span class="en">Node editor &amp; spreadsheet</span>
+                <span class="zh">节点编辑器与电子表格</span>
+              </h2>
+              <ul class="en">
+                <li><strong>Shake to detach</strong> — shake a node to detach links; multi-insert along a chain.</li>
+                <li><strong>Hold U + drag</strong> — align nodes horizontally or vertically.</li>
+                <li><strong>Spreadsheet sort</strong> — click headers to sort attribute columns.</li>
+              </ul>
+              <ul class="zh">
+                <li><strong>抖动分离</strong> — 抖动节点拆线；可连续插入多个节点。</li>
+                <li><strong>按住 U + 拖动</strong> — 水平 / 垂直对齐节点。</li>
+                <li><strong>电子表格排序</strong> — 点击表头对属性列排序。</li>
+              </ul>
+            </article>
+
+            <!-- Shaders — image socket, sdf/fractal, expression, HLSL -->
+            <article class="page" id="page-shaders" data-page="shaders">
+              <h1>
+                <span class="en">BIKINI 5.3: Shaders</span>
+                <span class="zh">BIKINI 5.3：着色器</span>
+              </h1>
+              <ul class="en">
+                <li><strong>Image socket</strong> — image data-block socket type for shader / group wiring.</li>
+                <li><strong>SDF Shape</strong> — signed-distance primitives for materials.</li>
+                <li><strong>Fractal Primitive</strong> — Mandelbrot / Julia style colour + distance.</li>
+                <li><strong>Expression</strong> — compact math / vector expressions on shader sockets.</li>
+                <li>
+                  <strong>HLSL</strong> (<code>ShaderNodeHLSL</code>) — custom HLSL subset for
+                  <strong>EEVEE</strong>: multi-line Code textbox + extendable In/Out parameters
+                  (Float / Int / Boolean / Vector / Color), translated to GLSL and linked via
+                  <code>GPU_stack_link</code>. Menu: Add → Utilities → HLSL.
+                  Default: Color + Fac → Result. Cycles has no OSL/SVM path for this node.
+                  See <a href="manual.html#ShaderNodeHLSL">HLSL</a>.
+                </li>
+              </ul>
+              <ul class="zh">
+                <li><strong>Image socket</strong> — 着色器 / 节点组可用的图像数据块接口。</li>
+                <li><strong>SDF Shape</strong> — 材质用有符号距离基元。</li>
+                <li><strong>Fractal Primitive</strong> — Mandelbrot / Julia 风格颜色 + 距离。</li>
+                <li><strong>Expression</strong> — 着色器接口上的紧凑数学 / 向量表达式。</li>
+                <li>
+                  <strong>HLSL</strong>（<code>ShaderNodeHLSL</code>）— 面向 <strong>EEVEE</strong> 的 HLSL 子集：
+                  多行 Code 文本框 + 可扩展 In/Out 参数（Float / Int / Boolean / Vector / Color），
+                  翻译为 GLSL 后经 <code>GPU_stack_link</code> 接入材质。
+                  菜单：Add → Utilities → HLSL。默认 Color + Fac → Result。
+                  Cycles 无 OSL/SVM 路径，不执行 HLSL 主体。
+                  见 <a href="manual.html#ShaderNodeHLSL">HLSL</a>。
+                </li>
+              </ul>
+            </article>
+
+            <!-- Image Process / GPU Texture Editor — from Achieve List -->
+            <article class="page" id="page-image-process" data-page="image-process">
+              <h1>BIKINI 5.3: Image Process</h1>
+              <p class="en">
+                Dedicated image node tree (<code>ImageNodeTree</code>), also referred to as the
+                <strong>GPU Texture Editor</strong>. The 17 nodes below are the manual sidebar;
+                socket pages live in the user manual.
+              </p>
+              <p class="zh">
+                专用图像节点树（<code>ImageNodeTree</code>），亦称 <strong>GPU Texture Editor</strong>。
+                下面 17 个与手册侧栏一致，接口说明在用户手册。
+              </p>
+
+              <h2>
+                <span class="en">Nodes</span><span class="zh">节点</span>
+              </h2>
+              <ul class="en">
+                <li><a href="manual.html#ImageNodeImportPoints"><strong>Import Points</strong></a></li>
+                <li><a href="manual.html#ImageNodePointStamp"><strong>Point Stamp</strong></a></li>
+                <li><a href="manual.html#ImageNodeNormalToHeight"><strong>Normal to Height</strong></a> / <a href="manual.html#ImageNodeHeightToNormal"><strong>Height to Normal</strong></a></li>
+                <li><a href="manual.html#ImageNodeBakeImage"><strong>Bake Image</strong></a> / <a href="manual.html#ImageNodeFileOutput"><strong>Image Output</strong></a></li>
+                <li><a href="manual.html#ImageNodeGradient"><strong>Gradient</strong></a> / <a href="manual.html#ImageNodeDivergence"><strong>Divergence</strong></a></li>
+                <li><a href="manual.html#ImageNodeFluidSimInput"><strong>Fluid Simulation Input</strong></a> / <a href="manual.html#ImageNodeFluidSimOutput"><strong>Fluid Simulation Output</strong></a></li>
+                <li><a href="manual.html#ImageNodeRasterizeGeometry"><strong>Rasterize Geometry</strong></a></li>
+                <li><a href="manual.html#ImageNodeSampleAtPixel"><strong>Sample at Pixel</strong></a> / <a href="manual.html#ImageNodeWriteAtPixel"><strong>Write at Pixel</strong></a></li>
+                <li><a href="manual.html#ImageNodePaint"><strong>Paint</strong></a> / <a href="manual.html#ImageNodeHistogram"><strong>Histogram</strong></a></li>
+                <li><a href="manual.html#ImageNodeSDFShape"><strong>SDF Shape</strong></a> / <a href="manual.html#ImageNodeFractalPrimitive"><strong>Fractal Primitive</strong></a> — Image Process path, not the shader nodes.</li>
+                <li><strong>Simulation</strong> and <strong>Repeat</strong> zones are in the Add menu, same idea as Geometry Nodes. They are zones, not extra node types.</li>
+              </ul>
+              <ul class="zh">
+                <li><a href="manual.html#ImageNodeImportPoints"><strong>导入点</strong></a></li>
+                <li><a href="manual.html#ImageNodePointStamp"><strong>点图章</strong></a></li>
+                <li><a href="manual.html#ImageNodeNormalToHeight"><strong>法线转高度</strong></a> / <a href="manual.html#ImageNodeHeightToNormal"><strong>高度转法线</strong></a></li>
+                <li><a href="manual.html#ImageNodeBakeImage"><strong>烘焙图像</strong></a> / <a href="manual.html#ImageNodeFileOutput"><strong>图像输出</strong></a></li>
+                <li><a href="manual.html#ImageNodeGradient"><strong>梯度渐变</strong></a> / <a href="manual.html#ImageNodeDivergence"><strong>散度</strong></a></li>
+                <li><a href="manual.html#ImageNodeFluidSimInput"><strong>流体模拟输入</strong></a> / <a href="manual.html#ImageNodeFluidSimOutput"><strong>流体模拟输出</strong></a></li>
+                <li><a href="manual.html#ImageNodeRasterizeGeometry"><strong>栅格化几何</strong></a></li>
+                <li><a href="manual.html#ImageNodeSampleAtPixel"><strong>按像素采样</strong></a> / <a href="manual.html#ImageNodeWriteAtPixel"><strong>按像素写入</strong></a></li>
+                <li><a href="manual.html#ImageNodePaint"><strong>绘制</strong></a> / <a href="manual.html#ImageNodeHistogram"><strong>直方图</strong></a></li>
+                <li><a href="manual.html#ImageNodeSDFShape"><strong>SDF 形状</strong></a> / <a href="manual.html#ImageNodeFractalPrimitive"><strong>分形图元</strong></a> — 图像节点，不是着色器那两个。</li>
+                <li>Add 菜单里有<strong>模拟区</strong>和<strong>重复区</strong>，用法和几何节点一样。它们是区域，不是另外的节点类型。</li>
+              </ul>
+
+              <h2>
+                <span class="en">Compositor</span><span class="zh">合成器</span>
+              </h2>
+              <ul class="en">
+                <li>
+                  <strong>Compositor bridge</strong> — drive Image Process from the classic compositor
+                  and return cooked results (接通合成器).
+                </li>
+              </ul>
+              <ul class="zh">
+                <li>
+                  <strong>接通合成器</strong> — 从经典合成器驱动 Image Process 并取回结果。
+                </li>
+              </ul>
+            </article>
+
+            <!-- Editors -->
+            <article class="page" id="page-editors" data-page="editors">
+              <h1>
+                <span class="en">BIKINI 5.3: Editors</span>
+                <span class="zh">BIKINI 5.3：编辑器</span>
+              </h1>
+              <ul class="en">
+                <li>
+                  <strong>Data-block reference graph</strong> — visualise data-block reference relationships
+                  (who uses whom).
+                </li>
+                <li>
+                  <strong>GPU Texture Editor</strong> — see
+                  <a href="#image-process" data-page="image-process">Image Process</a>.
+                </li>
+              </ul>
+              <ul class="zh">
+                <li>
+                  <strong>Data-block reference graph</strong> — 可视化数据块引用关系（谁引用谁）。
+                </li>
+                <li>
+                  <strong>GPU Texture Editor</strong> — 见
+                  <a href="#image-process" data-page="image-process">Image Process</a>。
+                </li>
+              </ul>
+            </article>
+
+            <!-- EEVEE -->
+            <article class="page" id="page-eevee" data-page="eevee">
+              <h1>BIKINI 5.3: EEVEE &amp; Viewport</h1>
+              <ul class="en">
+                <li>
+                  <strong>Viewport overlay attribute preview</strong> — clearer attribute / Viewer text
+                  overlays for string and numeric attributes.
+                </li>
+                <li>
+                  SDF Shape / Fractal Primitive include GPU material paths for EEVEE viewport preview.
+                </li>
+              </ul>
+              <ul class="zh">
+                <li>
+                  <strong>视口叠加层属性预览优化</strong> — 字符串与数值属性的属性 / Viewer 文字叠加更清晰。
+                </li>
+                <li>
+                  SDF Shape / Fractal Primitive 提供 EEVEE 视口预览的 GPU 材质路径。
+                </li>
+              </ul>
+            </article>
+
+            <!-- Zones — Cache Limit + Repeat Break from list -->
+            <article class="page" id="page-zones" data-page="zones">
+              <h1>BIKINI 5.3: Zones</h1>
+              <ul class="en">
+                <li>
+                  <strong>Repeat Zone — Break</strong> — boolean early-exit before the iteration count is reached.
+                </li>
+                <li>
+                  <strong>Simulation Zone — Cache Limit</strong> — cap how many frames of simulation cache are retained.
+                </li>
+              </ul>
+              <ul class="zh">
+                <li>
+                  <strong>Repeat Zone — Break</strong> — 在达到迭代次数前布尔早退。
+                </li>
+                <li>
+                  <strong>Simulation Zone — Cache Limit</strong> — 限制模拟缓存保留帧数。
+                </li>
+              </ul>
+            </article>
+
+            <!-- Known Issues -->
+            <article class="page" id="page-known-issues" data-page="known-issues">
+              <h1>
+                <span class="en">BIKINI 5.3: Known Issues</span>
+                <span class="zh">BIKINI 5.3：已知问题</span>
+              </h1>
+              <ul class="en">
+                <li>
+                  <strong>Viewport Camera</strong> — listed in development notes as
+                  <code>//viewport camera</code>; not registered / not shipped in this build.
+                </li>
+                <li>
+                  <strong>Time Shift + Simulation Zone</strong> — after graph changes, return to the first frame
+                  or clear simulation cache.
+                </li>
+                <li>
+                  Unofficial custom build; not signed by the Blender Foundation.
+                </li>
+              </ul>
+              <ul class="zh">
+                <li>
+                  <strong>Viewport Camera</strong> — 开发笔记中记为
+                  <code>//viewport camera</code>；本构建未注册 / 未打包。
+                </li>
+                <li>
+                  <strong>Time Shift + 模拟区</strong> — 节点图改动后请回到第一帧或清理模拟缓存。
+                </li>
+                <li>
+                  非官方自定义构建，未经 Blender Foundation 签名。
+                </li>
+              </ul>
+            </article>
+
+
+            <article class="page is-active" id="page-v3-overview" data-page="v3-overview">
+              <h1><span class="en">BIKINI v3 Release Notes</span><span class="zh">BIKINI v3 更新说明</span></h1>
+              <p class="meta">Blender 5.3 · Windows x64</p>
+              <p class="zh">本版对应清单中的 V3。以下说明各项的作用与范围；接口与操作见<a href="manual.html#v3-curvature">用户手册 · v3</a>。</p>
+              <p class="en">This drop is the V3 section of the list. The notes below say what each piece is for. Sockets and steps are in the <a href="manual.html#v3-curvature">user manual · v3</a>.</p>
+              <h2><span class="en">Modules</span><span class="zh">模块</span></h2>
+              <ul class="module-index">
+                <li><a href="#v3-geometry-nodes" data-page="v3-geometry-nodes"><span class="en">Geometry Nodes</span><span class="zh">几何节点</span></a></li>
+                <li><a href="#v3-shaders" data-page="v3-shaders"><span class="en">Shaders</span><span class="zh">着色器</span></a></li>
+                <li><a href="#v3-render" data-page="v3-render"><span class="en">Render &amp; Compositor</span><span class="zh">渲染与合成器</span></a></li>
+                <li><a href="#v3-interface" data-page="v3-interface"><span class="en">Interface</span><span class="zh">界面</span></a></li>
+              </ul>
+            </article>
+
+            <article class="page" id="page-v3-geometry-nodes" data-page="v3-geometry-nodes">
+              <h1><span class="en">v3: Geometry Nodes</span><span class="zh">v3：几何节点</span></h1>
+              <ul class="zh">
+                <li><strong>曲率</strong>新增总曲率输出，即两主曲率的平方和 κ₁² + κ₂²。见<a href="manual.html#v3-curvature">手册</a>。</li>
+                <li><strong>Wrangle</strong>在点、边、面等域上执行 VEX。文本在 <code>Ctrl+Enter</code> 后编译。数组属性仅存在于脚本内，不写入 Blender 原生属性。语言见 <a href="vex.html">VEX</a>。</li>
+                <li>几何节点 Texture 菜单新增 <strong>SDF 形状</strong>与<strong>分形</strong>，与着色器为同一对节点。</li>
+                <li><strong>模态工具</strong>可使节点工具在首次激活后继续运行。Modal Event 等待后续事件，Modal Timer 按计时器重复求值。仅提供于工具节点树。</li>
+                <li><strong>FLIP 求解器</strong>将点云作为流体粒子，在域内推进一个时间步。功能仍在开发中，宜置于模拟区。接口见<a href="manual.html#GeometryNodeFlipSolver">手册</a>。</li>
+              </ul>
+              <ul class="en">
+                <li><strong>Curvature</strong> gained Total Curvature: the two principal curvatures, each squared and added. See the <a href="manual.html#v3-curvature">manual</a>.</li>
+                <li><strong>Wrangle</strong> runs VEX per point, edge, face, and so on. Typing is a draft; <code>Ctrl+Enter</code> compiles. Array attributes stay inside the script. Language: <a href="vex.html">VEX</a>.</li>
+                <li>The Geometry Nodes texture menu now includes <strong>SDF Shape</strong> and <strong>Fractal</strong>, the same nodes as in shaders.</li>
+                <li><strong>Modal tools</strong> can stay open. Modal Event waits for another key. Modal Timer runs again on a timer. Tool trees only.</li>
+                <li><strong>FLIP Solver</strong> steps a point-cloud fluid inside a box. Still in progress. Use it in a Simulation Zone. Sockets: <a href="manual.html#GeometryNodeFlipSolver">manual</a>.</li>
+              </ul>
+            </article>
+
+            <article class="page" id="page-v3-shaders" data-page="v3-shaders">
+              <h1><span class="en">v3: Shaders</span><span class="zh">v3：着色器</span></h1>
+              <ul class="zh">
+                <li><strong>视差遮挡</strong>沿视线以高度图偏移 UV，使平面呈现深度并产生遮挡。EEVEE 与 Cycles 均可求值。</li>
+                <li><strong>广告牌置换</strong>使卡片朝向摄像机。Displacement 须接到材质输出，置换方式设为 Displacement 或 Both。</li>
+                <li><strong>着色器 Wrangle</strong>在材质中编写 VEX，并编译为 EEVEE 函数。字段接口写为 <code>@名称</code>。</li>
+                <li><strong>DDX / DDY</strong>计算屏幕空间导数。仅 EEVEE 求值，Cycles 忽略该节点。</li>
+                <li>节点组的 <strong>Color Ramp</strong> / <strong>Curve</strong> 接口在材质里会进入 EEVEE 与 Cycles。通道须与 RGB Curves、Vector Curves、Float Curve 一致。说明见<a href="manual.html#ui-v3-ramp-curve">手册</a>。</li>
+              </ul>
+              <ul class="en">
+                <li><strong>Parallax Occlusion</strong> pushes UVs with a height map so a flat surface reads as depth, including occlusion. EEVEE and Cycles.</li>
+                <li><strong>Billboard Displacement</strong> turns a card to face the camera. Plug Displacement into the material output and set displacement to Displacement or Both.</li>
+                <li><strong>Shader Wrangle</strong> is VEX in a material, compiled for EEVEE. Fields are <code>@name</code>.</li>
+                <li><strong>DDX / DDY</strong> is how fast a value changes across the screen. EEVEE only. Cycles ignores the node.</li>
+                <li>A group's <strong>Color Ramp</strong> / <strong>Curve</strong> sockets are evaluated in materials by EEVEE and Cycles. The channel count has to match RGB Curves, Vector Curves, or Float Curve. See the <a href="manual.html#ui-v3-ramp-curve">manual</a>.</li>
+              </ul>
+            </article>
+
+            <article class="page" id="page-v3-render" data-page="v3-render">
+              <h1><span class="en">v3: Render &amp; Compositor</span><span class="zh">v3：渲染与合成器</span></h1>
+              <h2><span class="en">Compositor</span><span class="zh">合成器</span></h2>
+              <ul class="zh">
+                <li>合成器 <strong>Denoise</strong> 的降噪器新增 DLSS 4.5，使用 NVIDIA Ray Reconstruction 去除路径追踪噪声。需要 NVIDIA GPU。</li>
+                <li><strong>DLSS 5</strong> 为独立滤镜（节点标签 DLSS Neural）。依据深度、运动矢量、反照率与法线再处理画面。将 <code>nvngx_dlssnr.dll</code> 置于 <code>blender/dlss5/</code>。</li>
+              </ul>
+              <ul class="en">
+                <li>The compositor <strong>Denoise</strong> node can use DLSS 4.5, NVIDIA ray reconstruction for path-traced noise. NVIDIA GPU required.</li>
+                <li><strong>DLSS 5</strong> is a separate filter (node label DLSS Neural). It restyles a frame from depth, motion, albedo, and normals. Put <code>nvngx_dlssnr.dll</code> in <code>blender/dlss5/</code>.</li>
+              </ul>
+              <h2><span class="en">Render</span><span class="zh">渲染</span></h2>
+              <ul class="zh">
+                <li>Cycles 的视口降噪与最终渲染降噪均可选择 DLSS 4.5。放大质量自 None 至 Ultra Performance。若需合成其他通道，放大质量宜选 None。本包需包含 <code>nvngx_dlssd.dll</code>。</li>
+                <li><strong>LuxCore</strong> 已列入渲染引擎。选中后使用其自身的采样、光路与材质节点树，不使用 Cycles 面板。</li>
+              </ul>
+              <ul class="en">
+                <li>Cycles viewport denoise and final-render denoise can both use DLSS 4.5. Upscale quality runs from None to Ultra Performance. Prefer None if other passes will be composited. The build needs <code>nvngx_dlssd.dll</code>.</li>
+                <li><strong>LuxCore</strong> is a render engine. It has its own sampling, light paths, and material node tree, not the Cycles panels.</li>
+              </ul>
+            </article>
+
+            <article class="page" id="page-v3-interface" data-page="v3-interface">
+              <h1><span class="en">v3: Interface</span><span class="zh">v3：界面</span></h1>
+              <ul class="zh">
+                <li>节点使用自定义标签时，叠加层仍可显示其<strong>原始类型名</strong>。</li>
+                <li>Noise 与 Voronoi 支持<strong>无缝平铺</strong>。Size 为乘以 Scale 之后的整数周期，最小为 2。</li>
+                <li>作者可在节点组侧栏以<strong>密码上锁</strong>。锁定后他人无法打开该组查看内部节点；解锁须输入同一密码。</li>
+                <li>连线可改为<strong>正交折线</strong>（Angled）。折角半径由 Noodle Curving 控制。</li>
+                <li>节点图背景可显示<strong>坐标格</strong>，标注随缩放更新；角落可显示节点树<strong>缩略图</strong>。</li>
+                <li>网格镜像可按<strong>拓扑</strong>配对，挤出与删除一并镜像。UV 编辑器提供对应的 U / V 镜像。</li>
+                <li>编辑模拟区<strong>之后</strong>的节点不再使已计算的缓存失效。编辑模拟区内部的节点或其输入时，缓存仍然失效。</li>
+                <li><strong>集合</strong>的视口隐藏、渲染隐藏与颜色可插入关键帧。</li>
+                <li>纹理绘制提供<strong>图层</strong>与遮罩，支持混合、排序与合并。此为视口绘制，不是 GPU 纹理编辑器的 Paint 节点。</li>
+                <li>节点组可增加 <strong>Color Ramp</strong> 与 <strong>Curve</strong> 接口。未连线的输入和侧栏里编辑；Group Input 的输出只画普通插口。新建渐变两端 alpha 为 1。预设只在接口弹窗。几何、着色器、合成器、图像树里可接到 Color Ramp 与曲线节点。不是 Hide Value 时，Set Group Input Default 不生效，仍用组节点上的数值。见<a href="manual.html#ui-v3-ramp-curve">手册</a>。</li>
+              </ul>
+              <ul class="en">
+                <li>After you rename a node, overlays can still show its <strong>original type name</strong>.</li>
+                <li>Noise and Voronoi can <strong>tile without a seam</strong>. Size is an integer period of the coordinate after Scale, minimum 2.</li>
+                <li>The author can <strong>password-lock</strong> a node group from the Group sidebar. While locked, others cannot open it and inspect the nodes inside. The same password unlocks it.</li>
+                <li>Links can be <strong>orthogonal</strong> (Angled). Noodle Curving sets the corner radius.</li>
+                <li>The node graph can show a <strong>coordinate grid</strong> whose labels follow zoom, and a corner <strong>thumbnail</strong> of the tree.</li>
+                <li>Mesh mirror can pair by <strong>topology</strong>, so extrude and delete mirror too. The UV editor has the same U/V mirror.</li>
+                <li>Editing nodes <strong>after</strong> a Simulation Zone keeps the cache. Editing inside the zone, or its inputs, still clears it.</li>
+                <li><strong>Collections</strong> can keyframe viewport hide, render hide, and color.</li>
+                <li>Texture paint has <strong>layers</strong> and masks, with blend, reorder, and merge. This is viewport paint, not the GPU Texture Editor Paint node.</li>
+                <li>Node groups can add <strong>Color Ramp</strong> and <strong>Curve</strong> sockets. Edit them on an unlinked input or in the sidebar; Group Input outputs stay plain sockets. A new ramp is opaque on both stops. Presets are only on the socket popup. Geometry, shader, compositor, and image trees can feed them into a Color Ramp or curve node. If the socket is not Hide Value, Set Group Input Default is ignored and the group node keeps its own value. See the <a href="manual.html#ui-v3-ramp-curve">manual</a>.</li>
+              </ul>
+            </article>
+
+            <article class="page" id="page-v2-overview" data-page="v2-overview">
+              <h1><span class="en">BIKINI v2 Release Notes</span><span class="zh">BIKINI v2 更新说明</span></h1>
+              <p class="meta">Blender 5.3.0 Alpha · Windows x64 · 2026-08-24 · this EXE</p>
+              <p class="zh">v2 对照 <code>E:\Achieve List.txt</code> 的 <strong>V2</strong> 段，节点 IO 以本编译版 <code>blender.exe</code> 为准。左侧 v1 是上一轮功能，v2 是本次。</p>
+              <p class="en">v2 follows the <strong>V2</strong> section of Achieve List. Node IO is dumped from this blender.exe. v1 is the previous drop; v2 is this one.</p>
+              <h2><span class="en">Modules</span><span class="zh">模块</span></h2>
+              <ul class="module-index">
+                <li><a href="#v2-geometry-nodes" data-page="v2-geometry-nodes"><span class="en">Geometry Nodes</span><span class="zh">几何节点</span></a></li>
+                <li><a href="#v2-cgal" data-page="v2-cgal">CGAL</a></li>
+                <li><a href="#v2-texture" data-page="v2-texture"><span class="en">Texture / GTE</span><span class="zh">纹理 / GTE</span></a></li>
+                <li><a href="#v2-shaders" data-page="v2-shaders"><span class="en">Shaders</span><span class="zh">着色器</span></a></li>
+                <li><a href="#v2-object-editor" data-page="v2-object-editor"><span class="en">Object Editor</span><span class="zh">物体编辑器</span></a></li>
+                <li><a href="#v2-user-interface" data-page="v2-user-interface"><span class="en">User Interface</span><span class="zh">用户界面</span></a></li>
+              </ul>
+            </article>
+
+            <article class="page" id="page-v2-geometry-nodes" data-page="v2-geometry-nodes">
+              <h1><span class="en">v2: Geometry Nodes</span><span class="zh">v2：几何节点</span></h1>
+              <h2><span class="en">Group / Guide / Transfer</span><span class="zh">组 / 引导 / 传递</span></h2>
+              <ul class="en"><li><strong>Set Group Input Default</strong> (<code>GeometryNodeSetGroupInputDefault</code>) — When the matching group input is not linked outside the group, every Group Input node in this tree returns Default for that socket</li><li><strong>Guide Geometry</strong> (<code>GeometryNodeGuideGeometry</code>) — Draw extra geometry in the 3D Viewport while the object is selected. Hidden when the modifier is disabled. Does not affect render or the modifier output, and is not shown in the Spreadsheet</li><li><strong>Attribute Transfer</strong> (<code>GeometryNodeAttributeTransfer</code>) — Sample a point-domain field by kernel-weighted sum of all neighbors inside Smooth Distance. Weighted kernels keep distance falloff (not averaged)</li><li><strong>Optimal Transport</strong> (<code>GeometryNodeCgalOptimalTransport</code>) — One-to-one match Source points onto Target by min total squared distance (discrete optimal transport / assignment). Outputs the original Source plus an anonymous Target Index attribute. Extra source points get -1 when Source has more points than Target.</li><li><strong>Make It Stand</strong> (<code>GeometryNodeMakeItStand</code>) — Make It Stand (SIGGRAPH 2013): carve the heavy-side interior, then Laplacian-deform so the center of mass projects onto the landing. Not smoothing, not base-scale.</li><li><strong>Get Vector Component</strong> (<code>FunctionNodeGetVectorComponent</code>) — Get the X, Y or Z component of a vector by index</li><li><strong>Set Vector Component</strong> (<code>FunctionNodeSetVectorComponent</code>) — Set the X, Y or Z component of a vector by index</li><li><strong>Get Matrix Component</strong> (<code>FunctionNodeGetMatrixComponent</code>) — Get a 4x4 matrix component by column and row index</li><li><strong>Set Matrix Component</strong> (<code>FunctionNodeSetMatrixComponent</code>) — Set a 4x4 matrix component by column and row index</li></ul>
+              <ul class="zh"><li><strong>设置组输入默认值</strong>（<code>GeometryNodeSetGroupInputDefault</code>）— 当对应的组输入在组外未连接时，此节点树中每个组输入节点对该接口返回默认值</li><li><strong>引导几何体</strong>（<code>GeometryNodeGuideGeometry</code>）— 物体选中时在 3D 视图中绘制额外几何。修改器禁用时隐藏。不影响渲染或修改器输出，也不出现在电子表格中</li><li><strong>属性传递</strong>（<code>GeometryNodeAttributeTransfer</code>）— 用平滑距离内所有邻居的核加权和对点域场采样。带权核保留距离衰减（不取平均）</li><li><strong>最优传输</strong>（<code>GeometryNodeCgalOptimalTransport</code>）— 按总平方距离最小，将源点与目标点一一匹配（离散最优传输 / 指派）。输出原始源几何，并附带匿名「目标索引」属性。源点多于目标点时，多出的源点索引为 -1。</li><li><strong>使其站立</strong>（<code>GeometryNodeMakeItStand</code>）— 使其站立（SIGGRAPH 2013）：掏空偏重一侧内部，再拉普拉斯变形，使质心投影落到支撑面上。不是平滑，也不是缩放底座。</li><li><strong>获取矢量分量</strong>（<code>FunctionNodeGetVectorComponent</code>）— 按索引获取矢量的 X、Y 或 Z 分量</li><li><strong>设置矢量分量</strong>（<code>FunctionNodeSetVectorComponent</code>）— 按索引设置矢量的 X、Y 或 Z 分量</li><li><strong>获取矩阵分量</strong>（<code>FunctionNodeGetMatrixComponent</code>）— 按列、行索引获取 4×4 矩阵分量</li><li><strong>设置矩阵分量</strong>（<code>FunctionNodeSetMatrixComponent</code>）— 按列、行索引设置 4×4 矩阵分量</li></ul>
+              <h2>Box2D / Box3D</h2>
+              <p class="zh">Achieve List「Box2D/3D」：<strong>Box 引擎</strong> 为 2D（Box2D），<strong>Jolt</strong> 为 3D 刚体。</p>
+              <p class="en">Box Engine is the 2D (Box2D) path; Jolt is the 3D rigid-body path.</p>
+              <h3><span class="en">Box Engine</span><span class="zh">Box 引擎</span></h3>
+              <ul class="en"><li><strong>Box Set Rigid Body</strong> — Body type + collision shape for Box Engine. Mesh-based modes need no Size. Collision output shows the actual collider (hull / island hulls / triangle mesh)</li><li><strong>Box Set Constraint</strong> — Add one Box Engine joint. Distance/Weld/Prismatic take two named bodies. Revolute hinges Body A to a world Anchor</li><li><strong>Box Solver</strong> — Step Box2D/Box3D rigid bodies. Static/Kinematic bodies on Geometry are obstacles. Substeps = collide slices this frame. Prefer Instances inside a Simulation Zone</li></ul>
+              <ul class="zh"><li><strong>Box 设置刚体</strong> — Box 引擎的刚体类型 + 碰撞形状。基于网格的模式不需要尺寸。碰撞输出显示实际碰撞体（凸包 / 岛凸包 / 三角网格）</li><li><strong>Box 设置约束</strong> — 添加一个 Box 引擎关节。距离/焊接/滑动副需要两个已命名刚体。转动副把刚体 A 铰到世界锚点</li><li><strong>Box 求解器</strong> — 步进 Box2D/Box3D 刚体。几何上的静态/运动学刚体是障碍。子步数 = 本帧碰撞切片数。建议在模拟区内使用实例</li></ul>
+              <h3>Jolt</h3>
+              <ul class="en"><li><strong>Jolt Set Rigid Body</strong> — Body type + collision shape. Static bodies are colliders in Jolt Solver. Capsule/Cylinder are Z-up. Triangle Mesh is static (Dynamic uses a hull)</li><li><strong>Jolt Set Constraint</strong> — Add one Jolt constraint (fixed, distance, point, hinge, cone, slider, swing-twist, six-DOF, path, gear, rack-and-pinion, pulley, vehicle). Plug into Jolt Solver</li><li><strong>Jolt Solver</strong> — Black-box Jolt step from input geometry. Writes velocity, angular_velocity, acceleration, angular_acceleration, mass and inertia (I, not angular accel)</li></ul>
+              <ul class="zh"><li><strong>Jolt 设置刚体</strong> — 刚体类型 + 碰撞形状。静态刚体在 Jolt 求解器中作为碰撞体。胶囊/圆柱为 Z 向上。三角网格为静态（动态改用凸包）</li><li><strong>Jolt 设置约束</strong> — 添加一个 Jolt 约束（固定、距离、点、铰链、锥、滑轨、摆动-扭转、六自由度、路径、齿轮、齿条齿轮、滑轮、载具）。接到 Jolt 求解器</li><li><strong>Jolt 求解器</strong> — 从输入几何做黑盒 Jolt 步进。写入 velocity、angular_velocity、acceleration、angular_acceleration、mass 和 inertia（I，不是角加速度）</li></ul>
+              <p class="zh">完整 Inputs / Outputs 见 <a href="manual.html#GeometryNodeSetGroupInputDefault">User Manual · v2</a>。</p>
+              <p class="en">Full socket pages: <a href="manual.html#GeometryNodeSetGroupInputDefault">User Manual · v2</a>.</p>
+            </article>
+
+            <article class="page" id="page-v2-cgal" data-page="v2-cgal">
+              <h1><span class="en">v2: CGAL</span><span class="zh">v2：CGAL</span></h1>
+              <p class="zh">本编译版注册并可 <code>nodes.new</code> 的 CGAL 节点 <strong>142</strong> 个（清单写 153）。菜单：Add → Bikini → Lib → CGAL。</p>
+              <p class="en">This build instantiates <strong>142</strong> CGAL nodes (Achieve List: 153). Menu: Add → Bikini → Lib → CGAL.</p>
+              <ul class="en"><li><strong>Mesh / Processing</strong> (37): QEM Simplify, Collapse Short Edges, VSA Approximate, Smooth Shape, Fair, Fair Hole Fill, Repair, Orient Outward, Repair Self Intersections, Split Long Edges, Autorefine, Snap Borders, Remove Degenerate, Repair Degeneracies, Refine at Isolevel, Surface Delaunay Remesh, Convex Decomposition 3D, Approximate Convex Decomposition, Fill Polyline, Straight Skeleton 2D, Exterior Skeleton 2D, Polygon Offset 2D, Polygon Fill 2D, Polygon Repair 2D, Regularize Open Contour 2D, Extrude Skeleton, Convex Partition 2D, SSAB Partition 2D, Y-Monotone Partition 2D, Shape Simplify 2D, Refine Mesh 2D, Constrained Delaunay 2D, Find All Cells 2D, Vertical Decomposition 2D, Tet Remesh, Constraint Delaunay 3D, Implicit Surface.</li><li><strong>Mesh / Deform</strong> (3): ARAP Deform, Laplace Deform, Cage Deform 3D.</li><li><strong>Mesh / Boolean</strong> (8): Mesh Boolean, Corefine, Mesh Intersection, Convex Minkowski Sum 3D, Do Intersect 3D, Boolean Ops 2D, Do Intersect 2D, Minkowski Sum 2D.</li><li><strong>Mesh / Analyze</strong> (27): Does Self Intersect, Mark Self Intersect, Is Closed, Mesh Volume, Centroid, Side Of Mesh, Skeleton, Segment Mesh, Curvature, Principal Curvature, Shape Diameter, Region Growing, Surface Shortest Path, Exact Geodesic Distance, Geodesic Voronoi, Skeleton Spokes, Self Intersection Curves, Mesh Slicer, Contour Stack, Geodesic Isolines, Inscribed Sphere 3D, Graphcut Segment, Sphere Intersect, Sphere Arrangement, Visibility 2D, Largest Inscribed Circle 2D, Medial Axis 2D.</li><li><strong>Mesh / UV</strong> (3): LSCM UV, ARAP UV, UV Distortion.</li><li><strong>Points / Reconstruction</strong> (10): Alpha Shape, Alpha Wrap, Advancing Front, Poisson Reconstruct, Scale Space Reconstruct, Skin Surface, Union of Balls, Crust 2D, Alpha Complex 3D, Alpha Wrap 2D.</li><li><strong>Points / Processing</strong> (19): Jet Estimate Normals, VCM Estimate Normals, Jet Smooth, Bilateral Smooth, Remove Outliers, WLOP, Hierarchy Simplify, Edge Aware Upsample, PCA Estimate Normals, MST Orient Normals, Cluster Point Set, VCM Feature Edges, Point Shape Fitting, Natural Neighbor 2D, Natural Neighbor 3D, Neighbor Graph 3D, Point Features, Iterative Closest Point, 4-Point Congruent Sets.</li><li><strong>Points / Shape</strong> (34): Delaunay 3D, Min Sphere, Min Circle 2D, Min Rectangle 2D, Min Ellipse 2D, Min Parallelogram 2D, Min Annulus 2D, Max Area K-gon 2D, Max Perimeter K-gon 2D, Width 3D, Delaunay 2D, Alpha Shape 2D, Voronoi 2D, Voronoi 3D, Periodic Delaunay 2D, Periodic Delaunay 3D, Delaunay on Sphere, Voronoi on Sphere, Largest Empty Circle 2D, Largest Empty Sphere 3D, Min Width 2D, Min Sphere of Spheres, Optimal Bounding Box, Min Ellipsoid, Largest Empty Iso Rectangle 2D, Monge Jet Fit, Euclidean MST 3D, Convex Layers 2D, Convex Layers 3D, Periodic Voronoi 2D, Periodic Voronoi 3D, Min Cylinder 3D, Min Annulus 3D, Simple Polygon 2D.</li><li><strong>Curve</strong> (1): Simplify Polyline 3D.</li></ul>
+              <ul class="zh"><li><strong>网格 / 处理</strong>（37）：QEM 简化、塌缩短边、VSA 近似、形状平滑、光顺、光顺补洞、修复、朝外定向、修复自相交、拆分长边、自细化、吸附边界、去除退化、修复退化、等值线细化、曲面德劳内重网格、凸分解 3D、近似凸分解、折线补面、直骨架 2D、外直骨架 2D、多边形偏移 2D、多边形填充 2D、多边形修复 2D、规整开轮廓 2D、骨架挤出、凸划分 2D、SSAB 划分 2D、Y 单调剖分 2D、形状简化 2D、细化网格 2D、约束德劳内 2D、找出全部格子 2D、垂直分解 2D、四面体重网格、约束德劳内 3D、隐式曲面。</li><li><strong>网格 / 变形</strong>（3）：ARAP 变形、拉普拉斯变形、笼子变形 3D。</li><li><strong>网格 / 布尔</strong>（8）：网格布尔、共细化、网格交线、凸闵可夫斯基和 3D、是否相交 3D、布尔运算 2D、是否相交 2D、闵可夫斯基和 2D。</li><li><strong>网格 / 分析</strong>（27）：是否自相交、标记自相交、是否封闭、网格体积、质心、网格内外、骨架、网格分割、曲率、主曲率、形状直径、区域生长、曲面最短路径、精确测地距离、测地 Voronoi、骨架辐条、自相交曲线、网格切片、等高线堆叠、测地等值线、内切球 3D、图割分割、球面相交、球面排列、可见性 2D、最大内切圆 2D、中轴 2D。</li><li><strong>网格 / UV</strong>（3）：LSCM UV（最小二乘共形）、ARAP UV（尽可能刚性）、UV 畸变。</li><li><strong>点云 / 重建</strong>（10）：Alpha 形状、Alpha 包裹、推进前沿、泊松重建、尺度空间重建、蒙皮曲面、球并曲面、Crust 2D（二维外壳）、Alpha 复形 3D、Alpha 包裹 2D。</li><li><strong>点云 / 处理</strong>（19）：Jet 估计法线、VCM 估计法线、Jet 平滑、双边平滑、去除离群点、WLOP（加权局部最优投影）、层级简化、边缘感知加密、PCA 估计法线、MST 定向法线、点集聚类、VCM 特征边、点形状拟合、自然邻点 2D、自然邻点 3D、邻接图 3D、点特征、迭代最近点 (ICP)、四点全等集。</li><li><strong>点云 / 形状</strong>（34）：德劳内 3D、最小包围球、最小圆 2D、最小矩形 2D、最小椭圆 2D、最小平行四边形 2D、最小圆环 2D、最大面积 K 边形 2D、最大周长 K 边形 2D、宽度 3D、德劳内 2D、Alpha 形状 2D、Voronoi 2D（二维）、Voronoi 3D（三维）、周期德劳内 2D、周期德劳内 3D、球面德劳内、球面 Voronoi、最大空圆 2D、最大空球 3D、最小宽度 2D、球集最小包围球、最优包围盒、最小椭球、最大空轴对齐矩形 2D、Monge Jet 拟合、欧氏最小生成树 3D、凸包层 2D、凸包层 3D、周期 Voronoi 2D、周期 Voronoi 3D、最小圆柱 3D、最小球壳 3D、简单多边形 2D。</li><li><strong>曲线</strong>（1）：简化折线 3D。</li></ul>
+              <p class="zh">逐节点 IO：<a href="manual.html#v2-cgal-index">手册 CGAL 索引</a>。</p>
+              <p class="en">Per-node IO: <a href="manual.html#v2-cgal-index">Manual CGAL index</a>.</p>
+            </article>
+
+            <article class="page" id="page-v2-texture" data-page="v2-texture">
+              <h1><span class="en">v2: Texture / GPU Texture Editor</span><span class="zh">v2：纹理 / GPU 纹理编辑器</span></h1>
+              <p class="en">These ten nodes are the manual’s v2 Texture / GTE list. Socket pages are in the <a href="manual.html#ImageNodeCameraView">user manual</a>.</p>
+              <p class="zh">下面十个就是手册 v2「纹理 / GTE」。接口页在<a href="manual.html#ImageNodeCameraView">用户手册</a>。</p>
+              <ul class="en"><li><strong>Camera View</strong> (<code>ImageNodeCameraView</code>) — Viewport-style preview from a camera (Wireframe/Solid/Material/Rendered). Updates every frame when used; does not re-evaluate unrelated node branches</li><li><strong>Island UV</strong> (<code>ImageNodeIslandUV</code>) — Each same-color connected island gets its own UV from that island's OBB. Origin: OBB center (0 at center) or bottom-left (0 at min). Fit 0-1 normalizes the island; Real Size keeps its size in the texture 0-1 UV</li><li><strong>Island Padding</strong> (<code>ImageNodeIslandPadding</code>) — Expand island colors into empty pixels by sampling the nearest seed, clipped by Distance</li><li><strong>Named Portal</strong> (<code>CompositorNodeNamedPortal</code>) — Read a value from a Store Named Portal in the current node tree</li><li><strong>Store Named Portal</strong> (<code>CompositorNodeStoreNamedPortal</code>) — Publish a value under a unique name in the current node tree</li><li><strong>FFT</strong> (<code>ImageNodeFFT</code>) — 2D FFT of a complex field packed as R = real, G = imaginary (row then column 1D FFTs)</li><li><strong>Import Geo</strong> (<code>ImageNodeImportGeo</code>) — Nested Geometry Nodes under GPU Texture Editor (groups named COP-Import Geo[.N]; switchable among those groups only; no Group Input). Group Output: Geometry. Double-click to edit in-place. Connect to Rasterize Geometry</li><li><strong>Geo SDF</strong> (<code>ImageNodeGeoSDF</code>) — Compute a per-pixel SDF on the 0–1 XY texture grid. 3D solids are sliced at z=0; closed contours are filled (signed), open curves and points are unsigned</li><li><strong>Render Material</strong> (<code>ImageNodeRenderMaterial</code>) — Temporarily assign a material to a UV plane and render it to a color texture</li><li><strong>ShaderToy</strong> (<code>ImageNodeShaderToy</code>) — Paste ShaderToy GLSL (Image / Common / Buffer A–D) in the sidebar, Compile, output Color</li></ul>
+              <ul class="zh"><li><strong>摄像机视图</strong>（<code>ImageNodeCameraView</code>）— 摄像机视口风格预览（线框 / 实体 / 材质 / 渲染）。被使用时每帧更新；不会重算无关节点分支</li><li><strong>岛 UV</strong>（<code>ImageNodeIslandUV</code>）— 每个同色连通岛用该岛 OBB 得到自己的 UV。原点：OBB 中心（中心为 0）或左下（最小为 0）。适配 0-1 归一化该岛；真实尺寸保持它在纹理 0-1 UV 中的大小</li><li><strong>岛填充</strong>（<code>ImageNodeIslandPadding</code>）— 按最近种子把岛颜色扩展到空像素，受距离裁剪</li><li><strong>命名传送门</strong>（<code>CompositorNodeNamedPortal</code>）— 从当前节点树中的存储命名传送门读取值</li><li><strong>存储命名传送门</strong>（<code>CompositorNodeStoreNamedPortal</code>）— 在当前节点树中以唯一名称发布值</li><li><strong>FFT</strong>（<code>ImageNodeFFT</code>）— 把复数场打成 R = 实部、G = 虚部后做二维 FFT（先按行再按列的一维 FFT）</li><li><strong>导入几何</strong>（<code>ImageNodeImportGeo</code>）— GPU 纹理编辑器下的嵌套几何节点（组名 COP-Import Geo[.N]；仅在这些组之间切换；无组输入）。组输出：几何。双击就地编辑。接到栅格化几何</li><li><strong>几何 SDF</strong>（<code>ImageNodeGeoSDF</code>）— 在 0–1 XY 纹理网格上逐像素计算 SDF。三维实体在 z=0 切片；闭合轮廓填充（有符号），开放曲线和点为无符号</li><li><strong>渲染材质</strong>（<code>ImageNodeRenderMaterial</code>）— 临时把材质赋给 UV 平面并渲染成颜色纹理</li><li><strong>ShaderToy</strong>（<code>ImageNodeShaderToy</code>）— 在侧栏粘贴 ShaderToy GLSL（Image / Common / Buffer A–D），编译，输出颜色</li></ul>
+            </article>
+
+            <article class="page" id="page-v2-shaders" data-page="v2-shaders">
+              <h1><span class="en">v2: Shaders</span><span class="zh">v2：着色器</span></h1>
+              <ul class="en">
+                <li><strong>Named Portal / Store Named Portal</strong> — same named-portal pattern as Geometry Nodes, now in ShaderNodeTree.</li>
+                <li><strong>String nodes</strong> — Function string utilities in Add → Utilities → Text, plus String input in Input → Constant.</li>
+              </ul>
+              <ul class="zh">
+                <li><strong>Named Portal / Store Named Portal</strong> — 与几何节点相同的按名传值，现可用于着色器树。</li>
+                <li><strong>字符串节点</strong> — Add → Utilities → Text 下的 Function 字符串工具，以及 Input → Constant 的 String。</li>
+              </ul>
+              <ul class="en"><li><strong>Named Portal</strong> (<code>ShaderNodeNamedPortal</code>)</li><li><strong>Store Named Portal</strong> (<code>ShaderNodeStoreNamedPortal</code>)</li><li><strong>String</strong> (<code>FunctionNodeInputString</code>)</li><li><strong>Format String</strong> (<code>FunctionNodeFormatString</code>)</li><li><strong>Match String</strong> (<code>FunctionNodeMatchString</code>)</li><li><strong>Replace String</strong> (<code>FunctionNodeReplaceString</code>)</li><li><strong>Reverse String</strong> (<code>FunctionNodeReverseString</code>)</li><li><strong>Set String Case</strong> (<code>FunctionNodeSetStringCase</code>)</li><li><strong>Slice String</strong> (<code>FunctionNodeSliceString</code>)</li><li><strong>Trim String</strong> (<code>FunctionNodeTrimString</code>)</li><li><strong>Find in String</strong> (<code>FunctionNodeFindInString</code>)</li><li><strong>String Length</strong> (<code>FunctionNodeStringLength</code>)</li><li><strong>String to Value</strong> (<code>FunctionNodeStringToValue</code>)</li><li><strong>Value to String</strong> (<code>FunctionNodeValueToString</code>)</li><li><strong>Special Characters</strong> (<code>FunctionNodeInputSpecialCharacters</code>)</li></ul>
+              <ul class="zh"><li><strong>命名传送门</strong>（<code>ShaderNodeNamedPortal</code>）</li><li><strong>存储命名传送门</strong>（<code>ShaderNodeStoreNamedPortal</code>）</li><li><strong>字符串</strong>（<code>FunctionNodeInputString</code>）</li><li><strong>格式化字符串</strong>（<code>FunctionNodeFormatString</code>）</li><li><strong>匹配字符串</strong>（<code>FunctionNodeMatchString</code>）</li><li><strong>替换字符串</strong>（<code>FunctionNodeReplaceString</code>）</li><li><strong>反转字符串</strong>（<code>FunctionNodeReverseString</code>）</li><li><strong>设置字符串大小写</strong>（<code>FunctionNodeSetStringCase</code>）</li><li><strong>字符串切片</strong>（<code>FunctionNodeSliceString</code>）</li><li><strong>修剪字符串</strong>（<code>FunctionNodeTrimString</code>）</li><li><strong>在字符串中查找</strong>（<code>FunctionNodeFindInString</code>）</li><li><strong>字符串长度</strong>（<code>FunctionNodeStringLength</code>）</li><li><strong>字符串 转为 数值</strong>（<code>FunctionNodeStringToValue</code>）</li><li><strong>数值 转为 字符串</strong>（<code>FunctionNodeValueToString</code>）</li><li><strong>特殊字符</strong>（<code>FunctionNodeInputSpecialCharacters</code>）</li></ul>
+            </article>
+
+            <article class="page" id="page-v2-object-editor" data-page="v2-object-editor">
+              <h1><span class="en">v2: Object Editor</span><span class="zh">v2：物体编辑器</span></h1>
+              <p class="zh">新的 <code>ObjectNodeTree</code>：用节点图创建 / 引用物体、改变换与可见性、指定材质槽与修改器、设置父级或删除。默认图：Object → Set Transform → Object Output。</p>
+              <p class="en">New <code>ObjectNodeTree</code>: create or pick objects, set transform/visibility, material slots, modifiers, parent, or delete. Default graph: Object → Set Transform → Object Output.</p>
+              <ul class="en"><li><strong>Object</strong> (<code>ObjectNodeObject</code>) — Pick an existing object, or use the view-layer active object</li><li><strong>Create Object</strong> (<code>ObjectNodeCreate</code>) — Create a scene object (reused on recook). Connect to Object Output to instantiate</li><li><strong>Object Output</strong> (<code>ObjectNodeOutput</code>) — Apply every connected object graph to the scene, like Join Geometry. All used inputs stay live; nodes that do not reach an Object Output are not written</li><li><strong>Set Transform</strong> (<code>ObjectNodeSetTransform</code>) — Write location, rotation and scale of the incoming object</li><li><strong>Set Visibility</strong> (<code>ObjectNodeSetVisibility</code>) — Set viewport, select and render visibility, holdout and shadow catcher</li><li><strong>Viewport Display</strong> (<code>ObjectNodeViewportDisplay</code>) — Set object viewport display type, extras, bounds and object color</li><li><strong>Set Material Slots</strong> (<code>ObjectNodeSetMaterialSlots</code>) — Assign object material slots. Add and remove slots like the Properties editor</li><li><strong>Set Modifiers</strong> (<code>ObjectNodeSetModifiers</code>) — Edit the object's modifier stack. Expand a modifier to set Geometry Nodes groups, Subdivision levels, Apply, and the rest of its settings</li><li><strong>Set Parent</strong> (<code>ObjectNodeSetParent</code>) — Bind or clear object parenting. Bind: Object / Object without inverse, with optional Keep Transform. Clear: Clear Parent, keep transform, or reset the parent inverse</li><li><strong>Delete Object</strong> (<code>ObjectNodeDelete</code>) — Delete the incoming object from the scene when the graph is evaluated</li></ul>
+              <ul class="zh"><li><strong>物体</strong>（<code>ObjectNodeObject</code>）— 选取已有物体，或使用视图层活动物体</li><li><strong>创建物体</strong>（<code>ObjectNodeCreate</code>）— 创建场景物体（重评估时复用）。接到物体输出才会实例化</li><li><strong>物体输出</strong>（<code>ObjectNodeOutput</code>）— 把所有连上的物体图应用到场景，类似合并几何。用到的输入保持有效；到不了物体输出的节点不会写入</li><li><strong>设置变换</strong>（<code>ObjectNodeSetTransform</code>）— 写入传入物体的位置、旋转和缩放</li><li><strong>设置可见性</strong>（<code>ObjectNodeSetVisibility</code>）— 设置视口 / 可选 / 渲染可见性，以及阻光与阴影捕捉</li><li><strong>视图显示</strong>（<code>ObjectNodeViewportDisplay</code>）— 设置物体视口显示类型、附加项、包围盒和物体颜色</li><li><strong>设置材质槽</strong>（<code>ObjectNodeSetMaterialSlots</code>）— 指定物体材质槽。可像属性编辑器一样增删槽</li><li><strong>设置修改器</strong>（<code>ObjectNodeSetModifiers</code>）— 编辑物体修改器栈。展开修改器可设置几何节点组、细分级别、应用及其它参数</li><li><strong>设置父级</strong>（<code>ObjectNodeSetParent</code>）— 绑定或清除物体父子。绑定：物体 / 物体（无反向），可选保持变换。清除：清除父级、保持变换，或重置父级反向</li><li><strong>删除物体</strong>（<code>ObjectNodeDelete</code>）— 图求值时从场景中删除传入物体</li></ul>
+            </article>
+
+            <article class="page" id="page-v2-user-interface" data-page="v2-user-interface">
+              <h1><span class="en">v2: User Interface</span><span class="zh">v2：用户界面</span></h1>
+              <ul class="en">
+                <li><strong>G</strong> — move only; does not insert into noodles. Drag still can attach.</li>
+                <li><strong>Rename highlight</strong> — clearer hover on renamable group sockets.</li>
+                <li><strong>Shift+LMB</strong> on socket shape — change data type (was Ctrl+LMB in v1). Alt+LMB still changes structure.</li>
+                <li><strong>Cross-editor group paste</strong> — copy node groups between tree types; Group nodes are retargeted.</li>
+                <li><strong>Dirty evaluation</strong> — recook demand paths only. Ctrl-click / Viewer preview isolates the active terminal.</li>
+                <li><strong>Spreadsheet</strong> — Group Filter (<code>row_pattern</code>) and Attribute Filter (<code>attribute_pattern</code>), with <code>^</code>/<code>!</code> excludes.</li>
+                <li><strong>Drag-search group create</strong> — no longer recooks the whole Geometry Nodes tree.</li>
+                <li><strong>8K Texture Paint</strong> — 3D Viewport Texture Paint mode (not GTE) stays interactive at 8K.</li>
+              </ul>
+              <ul class="zh">
+                <li><strong>G</strong> — 只移动，不插入连线；拖动仍可插线。</li>
+                <li><strong>改名高亮</strong> — 可改名组接口悬停更清晰。</li>
+                <li><strong>Shift+LMB</strong> 点 socket 形状改数据类型（v1 为 Ctrl+LMB）。Alt+LMB 仍改形状。</li>
+                <li><strong>跨编辑器粘贴节点组</strong> — 不同树类型之间复制；Group 会 retarget。</li>
+                <li><strong>Dirty 评估</strong> — 只煮脏路径。Ctrl 点击 / Viewer 预览只刷新当前终端。</li>
+                <li><strong>电子表格</strong> — Group Filter 与 Attribute Filter，<code>^</code>/<code>!</code> 排除。</li>
+                <li><strong>Drag Search 建组</strong> — 不再整树重评估。</li>
+                <li><strong>8K 纹理绘制</strong> — 3D 视口 Texture Paint 模式（不是 GTE）可流畅画 8K 贴图。</li>
+              </ul>
+            </article>
+
+            <footer class="md-footer-meta">
+              <span class="en">
+                Typography &amp; layout aligned with
+                <a href="https://developer.blender.org/docs/release_notes/5.3/geometry_nodes/" target="_blank" rel="noopener">developer.blender.org</a>
+                (Same visual style as User Manual). Does not load with Blender.
+              </span>
+              <span class="zh">
+                字体与版式对齐
+                <a href="https://developer.blender.org/docs/release_notes/5.3/geometry_nodes/" target="_blank" rel="noopener">developer.blender.org</a>
+                （与用户手册同一套视觉风格）。不随 Blender 加载。
+              </span>
+            </footer>
+          </div>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var KEYS = ["bikini-changelog-lang", "bikini-docs-lang"];
+      var pages = document.querySelectorAll(".page");
+      /* Anchors only. Article nodes also have data-page; listening on them
+         swallows clicks on links out to the manual. */
+      var links = document.querySelectorAll("a[data-page]");
+      var titles = {
+        en: {
+          overview: "BIKINI · Developer Docs",
+          "geometry-nodes": "Geometry Nodes - BIKINI Developer Docs",
+          "user-interface": "User Interface - BIKINI Developer Docs",
+          shaders: "Shaders - BIKINI Developer Docs",
+          "image-process": "Image Process - BIKINI Developer Docs",
+          editors: "Editors - BIKINI Developer Docs",
+          eevee: "EEVEE & Viewport - BIKINI Developer Docs",
+          zones: "Zones - BIKINI Developer Docs",
+          "known-issues": "Known Issues - BIKINI Developer Docs",
+          "v2-overview": "v2 Overview - BIKINI Developer Docs",
+          "v2-geometry-nodes": "v2 Geometry Nodes - BIKINI Developer Docs",
+          "v2-cgal": "v2 CGAL - BIKINI Developer Docs",
+          "v2-texture": "v2 Texture - BIKINI Developer Docs",
+          "v2-shaders": "v2 Shaders - BIKINI Developer Docs",
+          "v2-object-editor": "v2 Object Editor - BIKINI Developer Docs",
+          "v2-user-interface": "v2 User Interface - BIKINI Developer Docs",
+          "v3-overview": "v3 Overview - BIKINI Developer Docs",
+          "v3-geometry-nodes": "v3 Geometry Nodes - BIKINI Developer Docs",
+          "v3-shaders": "v3 Shaders - BIKINI Developer Docs",
+          "v3-render": "v3 Render - BIKINI Developer Docs",
+          "v3-interface": "v3 Interface - BIKINI Developer Docs"
+        },
+        zh: {
+          overview: "BIKINI · 开发者文档",
+          "geometry-nodes": "Geometry Nodes - BIKINI 开发者文档",
+          "user-interface": "用户界面 - BIKINI 开发者文档",
+          shaders: "着色器 - BIKINI 开发者文档",
+          "image-process": "Image Process - BIKINI 开发者文档",
+          editors: "编辑器 - BIKINI 开发者文档",
+          eevee: "EEVEE & Viewport - BIKINI 开发者文档",
+          zones: "Zones - BIKINI 开发者文档",
+          "known-issues": "已知问题 - BIKINI 开发者文档",
+          "v2-overview": "v2 概览 - BIKINI 开发者文档",
+          "v2-geometry-nodes": "v2 几何节点 - BIKINI 开发者文档",
+          "v2-cgal": "v2 CGAL - BIKINI 开发者文档",
+          "v2-texture": "v2 纹理 - BIKINI 开发者文档",
+          "v2-shaders": "v2 着色器 - BIKINI 开发者文档",
+          "v2-object-editor": "v2 物体编辑器 - BIKINI 开发者文档",
+          "v2-user-interface": "v2 用户界面 - BIKINI 开发者文档",
+          "v3-overview": "v3 概览 - BIKINI 开发者文档",
+          "v3-geometry-nodes": "v3 几何节点 - BIKINI 开发者文档",
+          "v3-shaders": "v3 着色器 - BIKINI 开发者文档",
+          "v3-render": "v3 渲染 - BIKINI 开发者文档",
+          "v3-interface": "v3 界面 - BIKINI 开发者文档"
+        }
+      };
+
+      function lang() {
+        return document.documentElement.getAttribute("data-lang") === "zh" ? "zh" : "en";
+      }
+
+      function setLang(l) {
+        if (l !== "en" && l !== "zh") l = "en";
+        document.documentElement.setAttribute("data-lang", l);
+        document.documentElement.lang = l === "zh" ? "zh-CN" : "en";
+        try {
+          KEYS.forEach(function (k) { localStorage.setItem(k, l); });
+        } catch (e) {}
+        var zh = document.getElementById("lang-zh");
+        var en = document.getElementById("lang-en");
+        if (zh) zh.setAttribute("aria-pressed", l === "zh" ? "true" : "false");
+        if (en) en.setAttribute("aria-pressed", l === "en" ? "true" : "false");
+        var active = document.querySelector(".page.is-active");
+        var id = active ? active.getAttribute("data-page") : "overview";
+        document.title = (titles[l] && titles[l][id]) || titles[l].overview;
+      }
+
+      function showPage(id, push) {
+        if (!id) id = "v3-overview";
+        var found = false;
+        pages.forEach(function (p) {
+          var on = p.getAttribute("data-page") === id;
+          p.classList.toggle("is-active", on);
+          if (on) found = true;
+        });
+        if (!found) {
+          id = "v3-overview";
+          pages.forEach(function (p) {
+            p.classList.toggle("is-active", p.getAttribute("data-page") === id);
+          });
+        }
+        document.querySelectorAll(".md-sidebar .md-nav__link[data-page]").forEach(function (a) {
+          a.classList.toggle("md-nav__link--active", a.getAttribute("data-page") === id);
+        });
+        document.title = (titles[lang()] && titles[lang()][id]) || "BIKINI · Release Notes";
+        if (push !== false) history.replaceState(null, "", "#" + id);
+        window.scrollTo(0, 0);
+        document.body.classList.remove("nav-open");
+      }
+
+      function pageFromHash() {
+        var h = (location.hash || "#v3-overview").replace(/^#/, "") || "v3-overview";
+        /* Legacy: math-solver merged into Geometry Nodes */
+        if (h === "math-solver") return "geometry-nodes";
+        var pageIds = {};
+        pages.forEach(function (p) { pageIds[p.getAttribute("data-page")] = true; });
+        if (pageIds[h]) return h;
+        var el = document.getElementById(h);
+        if (el) {
+          var art = el.closest(".page");
+          if (art) return art.getAttribute("data-page");
+        }
+        return "v3-overview";
+      }
+
+      links.forEach(function (a) {
+        a.addEventListener("click", function (e) {
+          var id = a.getAttribute("data-page");
+          if (!id) return;
+          e.preventDefault();
+          showPage(id);
+        });
+      });
+
+      window.addEventListener("hashchange", function () {
+        showPage(pageFromHash(), false);
+      });
+
+      document.getElementById("lang-zh").addEventListener("click", function () { setLang("zh"); });
+      document.getElementById("lang-en").addEventListener("click", function () { setLang("en"); });
+      document.getElementById("nav-toggle").addEventListener("click", function () {
+        document.body.classList.toggle("nav-open");
+      });
+
+      try {
+        var saved = localStorage.getItem(KEYS[0]) || localStorage.getItem(KEYS[1]);
+        if (saved === "en" || saved === "zh") setLang(saved);
+        else {
+          var nav = navigator.language || "en";
+          setLang(/^zh\b/i.test(nav) ? "zh" : "en");
+        }
+      } catch (e) {
+        setLang("zh");
+      }
+
+      showPage(pageFromHash(), false);
+    })();
+  </script>
+</body>
+</html>

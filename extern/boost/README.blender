@@ -1,0 +1,7 @@
+Project: Boost (headers only, for CGAL)
+URL: https://www.boost.org/
+License: BSL-1.0
+Version: 1.86.0
+
+Only the `boost/` header tree is vendored (no libraries, no b2).
+Used by WITH_CGAL Geometry Nodes integration.

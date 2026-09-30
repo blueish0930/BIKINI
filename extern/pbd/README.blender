@@ -1,0 +1,8 @@
+# PBD / XPBD in Blender
+
+Compact XPBD core (distance, bending, volume) for Geometry Nodes **PBD Solver**.
+
+- Method: Macklin / Müller / Bender XPBD (MIG 2016) + Bender PBD survey.
+- Not a git-subtree of https://github.com/InteractiveComputerGraphics/PositionBasedDynamics
+  (that tree pulls Eigen, imgui, JSON scenes). This is a Box2D-style embeddable subset.
+- License: MIT (see LICENSE)

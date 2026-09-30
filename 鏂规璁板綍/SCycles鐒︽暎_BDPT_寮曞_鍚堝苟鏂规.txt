@@ -1,0 +1,169 @@
+SCycles 焦散 / BDPT / 路径引导 — 合并方案（BIKINI Windows CUDA）
+================================================================
+日期: 2026-09-21
+相对旧文档「整棵 intern/cycles 换成 SCycles、丢掉 SPPM」：本方案作废那条路。
+当前树是 bikini-pre-scycles + 拣进的 PD，BIKINI SPPM 还在。
+
+0. 三句话
+----------
+1. 「焦散」不是一个开关，是四套互不相同的采样器叠在一起。
+2. SCycles 分支里的 Photon Mapping / BDPT / GPU Guiding 在原版几乎全锁 Metal。
+3. Windows 上不要整棵替换 intern/cycles；在现有 BIKINI SPPM + 官方 MNEE + CPU OpenPGL 上，按 CUDA BVH2 分期移植。
+
+
+1. 分支里那三样分别干什么
+--------------------------
+
+1.1 普通路径追踪（你们已经有，默认）
+  从相机往外弹。灯光用 NEE。
+  SDS（镜面→漫反射→镜面，玻璃里的焦散、水面波纹）几乎采不到。
+  Filter Glossy / Reflective·Refractive Caustics 只是允许或糊掉这类路径，不是求解器。
+
+1.2 Shadow Caustics（MNEE，官方 Cycles，你们已经有）
+  物体面板 Cast/Receive Shadow Caustics，灯光 Shadow Caustics。
+  用流形牛顿在「灯–镜面链–着色点」上找连接。
+  适合：单灯、标注过的 caster/receiver、阴影里的焦斑。
+  不适合：环境光、多弹、体积、没标注的整场景。
+
+1.3 Photon Mapping（SCycles：use_photon_mapping，Metal）
+  从灯往外打光子，在「足够硬的镜面链之后的第一块非镜面」上存通量，
+  相机路径在着色点按半径 gather。
+  渐进缩小半径（radius decay），表面 + 体积 3D 估计。
+  专治：锐利焦散（焦散池、体积丁达尔）。
+  SCycles 实现：kernel/integrator/photon_mapping.h，hash cell，48B 光子记录。
+  和 BDPT 互斥：开 BDPT 时光子图被忽略。
+
+1.4 BIKINI SPPM（你们现在的 use_photon_caustics）
+  同类武器，另一套实现：
+    intern/cycles/integrator/photon_map.*
+    kernel/integrator/photon_trace.h, photon_grid.h, photon_lookup.h
+    kernel/film/photon_passes.h
+  每轮独立光子批次，半径=格子；胶片里 SPPM 统计自己收缩半径。
+  CUDA 上已经能跑（WITH_CYCLES_SPPM_CAUSTICS）。
+  这就是当前 Windows 上的「光子焦散」，不是 SCycles 那份 Metal PPM。
+
+1.5 Bidirectional Path Tracing（SCycles：use_bidirectional_path_tracing）
+  同时打「灯端子路径」和「相机端子路径」，在顶点之间 MIS 连接
+  （Georgiev balance heuristic）。
+  SCycles 做成：一趟 GPU 生成灯路径，reservoir 抽一个可连接顶点进全局 cache，
+  相机路径在表面顶点去采样这个 cache。
+  文件：kernel/integrator/bidirectional.h, bidirectional_transport.h,
+        bidirectional_volume.h
+  原版 UI 写明 Metal GPU only。
+  开 BDPT 会顺带开 MNEE 特征：灯顶点到相机的镜面链用流形求解
+  （不要求用户标 caster/receiver）。
+  擅长：SDS、surface→volume→surface、灯很难被相机路径碰到的情况。
+  短处：锐利焦散通常不如光子图干净；费内存（light cache）；实现远比光子重。
+  不是「更好的路径追踪」，是另一种积分器。
+
+1.6 Path Guiding（路径引导）
+  不建焦散图。边渲染边学「这个点往哪边走容易碰到亮光」，
+  用学到的分布去偏置下次弹射方向（和 BSDF 做 MIS/RIS）。
+  两类实现：
+    A. 官方 OpenPGL（WITH_CYCLES_PATH_GUIDING）——你们已有，主要是 CPU。
+       Sampling → Path Guiding。训练慢，适合最终帧间接光/难采 GI。
+    B. SCycles GPU Guiding —— Metal 上的另一套场（guiding_gpu / mixture fit metal）。
+       UI 在 Metal 设备上才给 Field Memory、Training Memory。
+       ShaderData 上有 Metal 专用缓存字段，不能原样丢给 CUDA。
+  Guiding 可以和普通 PT 一起用；SCycles 里不跟光子/BDPT 抢同一条「焦散求解」定位。
+  对锐利焦散：有帮助但不是光子的替代品。
+
+
+2. 怎么选（用户层）
+--------------------
+
+  场景                          用什么
+  ----------------------------  ------------------------------------------
+  玻璃/水面清晰焦斑             光子（BIKINI SPPM 或以后的 PPM）
+  体积里看得见的光束            光子体积 / 体积半径
+  单盏灯、标好的阴影焦散        MNEE Shadow Caustics
+  SDS、灯藏在几何后面、体积耦合 BDPT（移植完成后）
+  室内间接光、难采 GI           Path Guiding（先 CPU OpenPGL）
+  默认产品外观                  普通 PT + Filter Glossy
+
+  不要同时开：BDPT + Photon Mapping（SCycles 已互斥）。
+  Guiding + Photon：理论可叠加，先禁止，避免双份能量/训练干扰。
+  PD 开着时设备已经是 CUDA BVH2：光子/BDPT 必须走同一套，禁止再上 OptiX HW RT。
+
+
+3. 合并原则（相对旧「整棵替换」方案）
+--------------------------------------
+
+  禁止：再把 intern/cycles 整目录换成 SCycles（已经回滚过一次）。
+  禁止：为了 PPM 拆掉还能编过的 BIKINI SPPM，除非 CUDA PPM 已经能出图。
+  必须：CUDA BVH2 求交（与 Pixel Displacement 同一约束）。
+  必须：RNA 名字不和现有 use_photon_caustics / photon_cast 撞车。
+  必须：DLSS G-buffer 与光子 film pass（PHOTON_HITPOINT 等）分通道，互不覆盖。
+  保留：LuxCore、合成器 DLSS、CGAL 等非 Cycles 东西。
+
+
+4. 推荐产品形态
+----------------
+
+  Light Paths → Caustics
+    Filter Glossy / Reflective / Refractive     （官方）
+    Shadow Caustics（物体/灯标注）               （官方 MNEE）
+    Photon Caustics                              （继续用 BIKINI SPPM，CUDA）
+      Photons / Detail / Intensity / Casters / Volume Beams
+
+  Light Paths → Bidirectional（后做）
+    开关；与 Photon Caustics 互斥
+    仅 CUDA（或以后的 OptiX 软件 BVH），UI 不要再写 Metal only
+
+  Sampling → Path Guiding
+    CPU：OpenPGL（已有）
+    GPU：暂不移植 SCycles Metal 场，直到 PT/光子稳定
+
+  短期不把 SCycles 的 use_photon_mapping 再暴露一个第二套光子 UI。
+  若 PPM kernel 移植成功，再在 SPPM 背后换实现，RNA 仍叫 Photon Caustics。
+
+
+5. 分期施工
+------------
+
+阶段 A — 稳住现有焦散（现在）
+  A1. 确认 WITH_CYCLES_SPPM_CAUSTICS=ON 的 CUDA 出图、视口、体积光束。
+  A2. PD 开时强制 CUDA BVH2（已有 remap），光子 gather 走同一 device。
+  A3. UI 写清：Photon Caustics ≠ Shadow Caustics ≠ Filter Glossy。
+  A4. 旧 merge 文档里「丢掉 SPPM」条款作废。
+
+阶段 B — 对齐 SCycles 光子语义（中，可选）
+  目标：SCycles photon_mapping.h 的「镜面链后第一非镜面 + 渐进半径 + 体积 3D」
+        接到 CUDA compute，替换或作为 SPPM 的 backend。
+  B1. 抽出 SCycles 光子记录布局 / hash cell / gather kernel，去掉 Metal 限定。
+  B2. 用现有 DEVICE_KERNEL_PHOTON_TRACE / GATHER 槽位，避免再加一套 KernelData。
+  B3. RNA：继续 use_photon_caustics；内部可映射 photon_radius_decay 等新槽。
+  B4. 验收：同一套玻璃球+点光，SPPM 与 PPM 能量同量级、无双份焦散。
+
+阶段 C — BDPT（大）
+  C1. Light subpath generate + reservoir cache：纯 CUDA，不要 optixTrace。
+  C2. Camera connect 写进 shade_surface，MIS 用 bidirectional_transport.h。
+  C3. Volume 连接（bidirectional_volume.h）第二批。
+  C4. BDPT 开时自动 KERNEL_FEATURE_MNEE；与 Photon 互斥（照抄 SCycles）。
+  C5. PD+BDPT：同一 CUDA BVH2；先禁 PD 或先禁 BDPT 做隔离测试。
+  C6. 内存：bdpt_light_paths 默认 64K，注意 50 系卡 TDR / kernel_params 64KB。
+
+阶段 D — GPU Guiding（最后）
+  D1. 继续卖 CPU OpenPGL。
+  D2. SCycles Metal guiding 的 ShaderData 缓存、mixture fit 不要直接 #ifdef CUDA。
+  D3. 若做：独立 KernelData 块 + 训练 pass，和光子 film 分开。
+
+
+6. 风险
+--------
+
+  - KernelData / KernelParamsCUDA 再加光子或 BDPT 字段 → 必须整包 JIT，禁混用旧 cubin。
+  - OptiX HW RT 不跑自定义 triangle_intersect：PD、光子 shade、BDPT connect 都要 CUDA BVH2。
+  - DLSS 要深度/法线；光子 gather 改 P 或额外 pass 会让 G-buffer 和着色不一致。
+  - 两套光子同时链进 kernel 会爆寄存器/栈（已经为 PD 加过 64KB stack）。
+  - SCycles GPU Guiding 原注释：Metal 预处理 include 行为不同，CUDA 不能照搬。
+
+
+7. 建议的下一步（若开始写代码）
+--------------------------------
+
+  不要从 BDPT 或 Guiding 开刀。
+  先把阶段 A 做完：现有 SPPM 在 PD+CUDA 下稳定出焦散。
+  再决定 B（换 PPM kernel）还是直接 C（BDPT）。
+  用户侧「合并 SCycles 焦散」的最小交付 = 阶段 A 的产品化（UI/文档/互斥）
+  + 视需要的阶段 B。

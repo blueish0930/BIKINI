@@ -1,0 +1,257 @@
+/* SPDX-FileCopyrightText: 2005 Blender Authors
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later */
+
+/** \file
+ * \ingroup gpu
+ *
+ * Wrap OpenGL features such as textures, shaders and GLSL
+ * with checks for drivers and GPU support.
+ */
+
+#include <cstdint>
+
+#include "MEM_guardedalloc.h"
+
+#include "BLI_dynstr.hh"
+#include "BLI_string.hh"
+#include "BLI_string_utils.hh"
+#include "BLI_vector.hh"
+
+#include "GPU_platform.hh"
+
+#include "gpu_platform_private.hh"
+
+namespace blender {
+
+/* -------------------------------------------------------------------- */
+/** \name GPUPlatformGlobal
+ * \{ */
+
+namespace gpu {
+
+GPUPlatformGlobal GPG;
+
+static char *create_key(GPUSupportLevel support_level,
+                        const char *vendor,
+                        const char *renderer,
+                        const char *version)
+{
+  DynStr *ds = BLI_dynstr_new();
+  BLI_dynstr_appendf(ds, "{%s/%s/%s}=", vendor, renderer, version);
+  if (support_level == GPU_SUPPORT_LEVEL_SUPPORTED) {
+    BLI_dynstr_append(ds, "SUPPORTED");
+  }
+  else if (support_level == GPU_SUPPORT_LEVEL_LIMITED) {
+    BLI_dynstr_append(ds, "LIMITED");
+  }
+  else {
+    BLI_dynstr_append(ds, "UNSUPPORTED");
+  }
+
+  char *support_key = BLI_dynstr_get_cstring(ds);
+  BLI_dynstr_free(ds);
+  BLI_string_replace_char(support_key, '\n', ' ');
+  BLI_string_replace_char(support_key, '\r', ' ');
+  return support_key;
+}
+
+static char *create_gpu_name(const char *vendor, const char *renderer, const char *version)
+{
+  DynStr *ds = BLI_dynstr_new();
+  BLI_dynstr_appendf(ds, "%s %s %s", vendor, renderer, version);
+
+  char *gpu_name = BLI_dynstr_get_cstring(ds);
+  BLI_dynstr_free(ds);
+  BLI_string_replace_char(gpu_name, '\n', ' ');
+  BLI_string_replace_char(gpu_name, '\r', ' ');
+  return gpu_name;
+}
+
+void GPUPlatformGlobal::init(GPUDeviceType gpu_device,
+                             GPUOSType os_type,
+                             GPUDriverType driver_type,
+                             GPUSupportLevel gpu_support_level,
+                             GPUBackendType backend,
+                             const char *vendor_str,
+                             const char *renderer_str,
+                             const char *version_str,
+                             GPUArchitectureType arch_type)
+{
+  this->clear();
+
+  this->initialized = true;
+
+  this->device = gpu_device;
+  this->os = os_type;
+  this->driver = driver_type;
+  this->support_level = gpu_support_level;
+
+  const char *vendor = vendor_str ? vendor_str : "UNKNOWN";
+  const char *renderer = renderer_str ? renderer_str : "UNKNOWN";
+  const char *version = version_str ? version_str : "UNKNOWN";
+
+  this->vendor = BLI_strdup(vendor);
+  this->renderer = BLI_strdup(renderer);
+  this->version = BLI_strdup(version);
+  this->support_key = create_key(gpu_support_level, vendor, renderer, version);
+  this->gpu_name = create_gpu_name(vendor, renderer, version);
+  this->backend = backend;
+  this->architecture_type = arch_type;
+}
+
+void GPUPlatformGlobal::clear()
+{
+  MEM_SAFE_DELETE(vendor);
+  MEM_SAFE_DELETE(renderer);
+  MEM_SAFE_DELETE(version);
+  MEM_SAFE_DELETE(support_key);
+  MEM_SAFE_DELETE(gpu_name);
+  devices.clear_and_shrink();
+  device_uuid.reinitialize(0);
+  device_luid.reinitialize(0);
+  device_luid_node_mask = 0;
+  initialized = false;
+}
+
+}  // namespace gpu
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name C-API
+ * \{ */
+
+using namespace blender::gpu;
+
+GPUSupportLevel GPU_platform_support_level()
+{
+  BLI_assert(GPG.initialized);
+  return GPG.support_level;
+}
+
+const char *GPU_platform_vendor()
+{
+  BLI_assert(GPG.initialized);
+  return GPG.vendor;
+}
+
+const char *GPU_platform_renderer()
+{
+  BLI_assert(GPG.initialized);
+  return GPG.renderer;
+}
+
+const char *GPU_platform_version()
+{
+  BLI_assert(GPG.initialized);
+  return GPG.version;
+}
+
+const char *GPU_platform_support_level_key()
+{
+  BLI_assert(GPG.initialized);
+  return GPG.support_key;
+}
+
+const char *GPU_platform_gpu_name()
+{
+  BLI_assert(GPG.initialized);
+  return GPG.gpu_name;
+}
+
+GPUArchitectureType GPU_platform_architecture()
+{
+  BLI_assert(GPG.initialized);
+  return GPG.architecture_type;
+}
+
+bool GPU_type_matches(GPUDeviceType device, GPUOSType os, GPUDriverType driver)
+{
+  return GPU_type_matches_ex(device, os, driver, GPU_BACKEND_ANY);
+}
+
+bool GPU_type_matches_ex(GPUDeviceType device,
+                         GPUOSType os,
+                         GPUDriverType driver,
+                         GPUBackendType backend)
+{
+  BLI_assert(GPG.initialized);
+  return (GPG.device & device) && (GPG.os & os) && (GPG.driver & driver) &&
+         (GPG.backend & backend);
+}
+
+Span<GPUDevice> GPU_platform_devices_list()
+{
+  return GPG.devices.as_span();
+}
+
+Span<uint8_t> GPU_platform_uuid()
+{
+  return GPG.device_uuid.as_span();
+}
+
+Span<uint8_t> GPU_platform_luid()
+{
+  return GPG.device_luid.as_span();
+}
+
+uint32_t GPU_platform_luid_node_mask()
+{
+  return GPG.device_luid_node_mask;
+}
+
+GPUIntelGpuArch GPU_platform_get_intel_arch(uint32_t device_id)
+{
+  /* Source for device IDs:
+   * https://gitlab.freedesktop.org/mesa/mesa/-/blob/main/include/pci_ids/iris_pci_ids.h
+   */
+  switch (device_id & 0xFF00) {
+    case 0x2900:  // Broadwater
+    case 0x2A00:  // Broadwater/Eagle Lake
+    case 0x2E00:  // Eagle Lake
+    case 0x0000:  // Iron Lake
+    case 0x0100:  // Ivy Bridge/Sandy Bridge/Baytrail
+    case 0x0F00:  // Baytrail
+    case 0x0400:  // Haswell
+    case 0x0C00:  // Haswell
+    case 0x0D00:  // Haswell
+    case 0x0A00:  // Haswell / Appollo Lake
+    case 0x2200:  // Cherrytrail
+    case 0x1600:  // Broadwell
+    case 0x5A00:  // Apollo Lake
+    case 0x1900:  // Skylake
+    case 0x1A00:  // Apollo Lake
+    case 0x3100:  // Gemini Lake
+    case 0x5900:  // Kaby Lake/Amber Lake
+    case 0x8700:  // Kaby Lake/Coffee Lake
+    case 0x3E00:  // Coffee Lake/Whiskey Lake
+    case 0x9B00:  // Comet Lake
+      return GPUIntelGpuArch::Gen9AndOlder;
+    case 0x8A00:  // Ice Lake
+    case 0x4500:  // Elkhart Lake
+    case 0x4E00:  // Jasper Lake
+      return GPUIntelGpuArch::Gen11;
+    case 0x9A00:  // Tiger Lake
+    case 0x4C00:  // Rocket Lake
+    case 0x4900:  // DG1
+    case 0x4600:  // Alder Lake
+    case 0x4F00:  // Alchemist
+    case 0x5600:  // Alchemist
+    case 0xA700:  // Raptor Lake
+    case 0x7D00:  // Meteor Lake / Arrow Lake
+    case 0xB600:  // Meteor Lake / Arrow Lake
+      return GPUIntelGpuArch::Xe;
+    case 0x6400:  // Lunar Lake
+    case 0xE200:  // Battlemage
+      return GPUIntelGpuArch::Xe2;
+    case 0xB000:  // Panther Lake
+    case 0xFD00:  // Wildcat Lake
+    default:
+      return GPUIntelGpuArch::Xe3AndNewer;
+  }
+}
+
+/** \} */
+
+}  // namespace blender

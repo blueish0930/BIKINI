@@ -1,0 +1,119 @@
+/* SPDX-FileCopyrightText: 2025 Blender Authors
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later */
+
+#include "BLI_math_angle_types.hh"
+#include "BLI_math_matrix.hh"
+#include "BLI_math_vector_types.hh"
+
+#include "COM_node_operation.hh"
+#include "COM_realize_on_domain_operation.hh"
+
+#include "node_composite_util.hh"
+
+namespace blender::nodes::node_composite_image_info_cc {
+
+static void node_declare(NodeDeclarationBuilder &b)
+{
+  b.add_input<decl::Color>("Image"_ustr)
+      .hide_value()
+      .compositor_realization_mode(CompositorInputRealizationMode::None)
+      .structure_type(StructureType::Dynamic)
+      .description(
+          "Image to inspect. Unconnected: use the texture editor / compositing canvas "
+          "resolution (same as Image Coordinates)");
+
+  b.add_output<decl::IntVector>("Dimensions"_ustr)
+      .dimensions(2)
+      .description(
+          "The dimensions of the image in pixels with transformations applied. "
+          "Unconnected Image: canvas size");
+  b.add_output<decl::IntVector>("Resolution"_ustr)
+      .dimensions(2)
+      .description(
+          "The original resolution of the image in pixels before any transformations. "
+          "Unconnected Image: canvas size");
+  b.add_output<decl::Vector>("Location"_ustr).dimensions(2);
+  b.add_output<decl::Float>("Rotation"_ustr);
+  b.add_output<decl::Vector>("Scale"_ustr).dimensions(2);
+}
+
+using namespace blender::compositor;
+
+class ImageInfoOperation : public NodeOperation {
+ public:
+  ImageInfoOperation(Context &context, const bNode &node) : NodeOperation(context, node)
+  {
+    InputDescriptor &image_descriptor = this->get_input_descriptor("Image");
+    image_descriptor.skip_type_conversion = true;
+  }
+
+  void execute() override
+  {
+    const Result &input = this->get_input("Image");
+    /* Unconnected / single-value Image: fall back to the compositing domain
+     * (texture editor canvas size in Image Process, render size in compositor).
+     * Same default as CompositorNodeImageCoordinates. */
+    const Domain domain = input.is_single_value() ? this->context().get_compositing_domain() :
+                                                    input.domain();
+
+    Result &dimensions_result = this->get_result("Dimensions");
+    if (dimensions_result.should_compute()) {
+      dimensions_result.allocate_single_value();
+      const Domain realized_domain = domain.realize_transformation();
+      dimensions_result.set_single_value(realized_domain.data_size);
+    }
+
+    Result &resolution_result = this->get_result("Resolution");
+    if (resolution_result.should_compute()) {
+      resolution_result.allocate_single_value();
+      resolution_result.set_single_value(domain.data_size);
+    }
+
+    math::AngleRadian rotation;
+    float2 location, scale;
+    math::to_loc_rot_scale(domain.transformation, location, rotation, scale);
+
+    Result &location_result = this->get_result("Location");
+    if (location_result.should_compute()) {
+      location_result.allocate_single_value();
+      location_result.set_single_value(location);
+    }
+
+    Result &rotation_result = this->get_result("Rotation");
+    if (rotation_result.should_compute()) {
+      rotation_result.allocate_single_value();
+      rotation_result.set_single_value(float(rotation));
+    }
+
+    Result &scale_result = this->get_result("Scale");
+    if (scale_result.should_compute()) {
+      scale_result.allocate_single_value();
+      scale_result.set_single_value(scale);
+    }
+  }
+};
+
+static NodeOperation *get_compositor_operation(Context &context, const bNode &node)
+{
+  return new ImageInfoOperation(context, node);
+}
+
+static void node_register()
+{
+  static bke::bNodeType ntype;
+
+  cmp_node_type_base(&ntype, "CompositorNodeImageInfo"_ustr, CMP_NODE_IMAGE_INFO);
+  ntype.ui_name = "Image Info";
+  ntype.ui_description =
+      "Returns resolution and transform of an image. Unconnected Image uses the "
+      "texture editor / compositing canvas size";
+  ntype.nclass = NODE_CLASS_INPUT;
+  ntype.declare = node_declare;
+  ntype.get_compositor_operation = get_compositor_operation;
+
+  bke::node_register_type(ntype);
+}
+NOD_REGISTER_NODE(node_register)
+
+}  // namespace blender::nodes::node_composite_image_info_cc

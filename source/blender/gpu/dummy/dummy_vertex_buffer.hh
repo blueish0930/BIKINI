@@ -1,0 +1,47 @@
+/* SPDX-FileCopyrightText: 2023 Blender Authors
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later */
+
+/** \file
+ * \ingroup gpu
+ */
+
+#pragma once
+
+#include "BLI_sys_types.hh"
+
+#include "GPU_vertex_buffer.hh"
+
+namespace blender::gpu {
+
+class DummyVertexBuffer : public VertBuf {
+
+ public:
+  void bind_as_ssbo(uint /*binding*/) override {}
+  void bind_as_texture(uint /*binding*/) override {}
+  void wrap_handle(uint64_t /*handle*/) override {}
+
+  void update_sub(uint /*start*/, uint /*len*/, const void * /*data*/) override {}
+  void copy_sub(VertBuf & /*source_buf*/,
+                uint /*source_first_vertex*/,
+                uint /*dest_first_vertex*/,
+                uint /*vertex_len*/) override
+  {
+  }
+  void read(void * /*data*/) const override {}
+
+ protected:
+  void acquire_data() override
+  {
+    MEM_SAFE_DELETE(data_);
+    data_ = MEM_new_array_uninitialized<uchar>(this->size_alloc_get(), __func__);
+  }
+  void resize_data() override {}
+  void release_data() override
+  {
+    MEM_SAFE_DELETE(data_);
+  }
+  void upload_data() override {}
+};
+
+}  // namespace blender::gpu

@@ -1,0 +1,189 @@
+/* SPDX-FileCopyrightText: 2022 Blender Authors
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later */
+
+/** \file
+ * \ingroup gpu
+ */
+
+#pragma once
+
+#include "gpu_texture_private.hh"
+
+#include "vk_context.hh"
+#include "vk_image_view.hh"
+#include "vk_memory.hh"
+
+#include "BLI_enum_flags.hh"
+
+namespace blender::gpu {
+
+class VKSampler;
+class VKDescriptorSetTracker;
+class VKVertexBuffer;
+class VKPixelBuffer;
+
+/** Additional modifiers when requesting image views. */
+enum class VKImageViewFlags {
+  DEFAULT = 0,
+  NO_SWIZZLING = 1 << 0,
+  FOR_STORAGE_IMAGE = 1 << 1,
+};
+ENUM_OPERATORS(VKImageViewFlags)
+
+class VKTexture : public Texture {
+  friend class VKDescriptorSetTracker;
+  friend class VKDescriptorSetUpdator;
+  friend class VKContext;
+  friend class VKTexturePool;
+
+  /**
+   * Texture format how the texture is stored on the device.
+   *
+   * This can be a different format then #Texture.format_ in case the texture format isn't natively
+   * supported by the device.
+   */
+  TextureFormat device_format_ = TextureFormat::Invalid;
+
+  /**
+   * Store of source vertex buffer. Related to `GPU_texture_create_from_vertbuf`.
+   *
+   * In vulkan a texel buffer is a buffer and not a texture. Calls will be forwarded to the vertex
+   * buffer in this case. GPU_texture_create_from_vertbuf should be phased out (currently only used
+   * by particle hair).
+   */
+  VKVertexBuffer *source_buffer_ = nullptr;
+  VkImage vk_image_ = VK_NULL_HANDLE;
+  VkImageUsageFlags vk_image_usage_ = 0;
+  VmaAllocation allocation_ = VK_NULL_HANDLE;
+  VmaAllocationInfo allocation_info_ = {};
+
+  /**
+   * Image views are owned by VKTexture. When a specific image view is needed it will be created
+   * and stored here. Image view can be requested by calling `image_view_get` method.
+   */
+  Vector<VKImageView> image_views_;
+
+  bool use_stencil_ = false;
+
+  char swizzle_[4] = {'r', 'g', 'b', 'a'};
+
+  /**
+   * \brief Has this texture data.
+   *
+   * Is used to decide if host image copy can be performed to overwrite the data outside the
+   * render-graph.
+   */
+  bool has_data_ = false;
+  bool allow_host_image_copy_ = false;
+
+ public:
+  VKTexture(const char *name) : Texture(name) {}
+
+  virtual ~VKTexture() override;
+
+  void generate_mipmap() override;
+  void copy_to(Texture *texture, IndexRange mip_levels) override;
+  void copy_to(VKTexture &dst_texture, IndexRange mip_levels, VkImageAspectFlags vk_image_aspect);
+  void clear(const double4 data) override;
+  void clear_depth_stencil(const GPUFrameBufferBits buffer,
+                           float clear_depth,
+                           uint clear_stencil,
+                           std::optional<int> layer);
+  void swizzle_set(const char swizzle_mask[4]) override;
+  void read(int mip, eGPUDataFormat format, void *data) override;
+  void read_sub(
+      int mip, eGPUDataFormat format, const int region[6], IndexRange layers, void *r_data);
+  void update_sub(int mip,
+                  int offset[3],
+                  int extent[3],
+                  eGPUDataFormat format,
+                  const void *data,
+                  VKPixelBuffer *pixel_buffer,
+                  const uint unpack_row_length = 0);
+
+  void update_sub(int mip,
+                  int offset[3],
+                  int extent[3],
+                  eGPUDataFormat format,
+                  const void *data,
+                  const uint unpack_row_length) override;
+  void update_sub(int offset[3],
+                  int extent[3],
+                  eGPUDataFormat format,
+                  GPUPixelBuffer *pixbuf) override;
+
+  /**
+   * Export the memory associated with this texture to be imported by a different
+   * API/Process/Instance.
+   *
+   * Returns the handle + offset of the image inside the handle.
+   */
+  VKMemoryExport export_memory(VkExternalMemoryHandleTypeFlagBits handle_type);
+
+  VkImage vk_image_handle() const
+  {
+    if (is_texture_view()) {
+      return static_cast<VKTexture *>(source_texture_)->vk_image_handle();
+    }
+    BLI_assert(vk_image_ != VK_NULL_HANDLE);
+    return vk_image_;
+  }
+
+  /**
+   * Get the texture format how the texture is stored on the device.
+   */
+  TextureFormat device_format_get() const
+  {
+    return device_format_;
+  }
+
+  /** Vulkan usage flags the underlying image was created with. */
+  VkImageUsageFlags vk_image_usage_get() const
+  {
+    return is_texture_view() ? static_cast<VKTexture *>(source_texture_)->vk_image_usage_get() :
+                               vk_image_usage_;
+  }
+
+  /**
+   * Get a specific image view for this texture. The specification of the image view are passed
+   * inside the `info` parameter.
+   */
+  const VKImageView &image_view_get(const VKImageViewInfo &info);
+
+  /**
+   * Get the current image view for this texture.
+   */
+  const VKImageView &image_view_get(VKImageViewArrayed arrayed, VKImageViewFlags flags);
+
+ protected:
+  bool init_internal() override;
+  bool init_internal(VertBuf *vbo) override;
+  bool init_internal(gpu::Texture *src, bool use_stencil) override;
+  /* Initialize VKTexture with a swapchain image. */
+  void init_swapchain(VkImage vk_image, TextureFormat gpu_format);
+
+ private:
+  /**
+   * Allocate the texture of the device. Result is `true` when texture is successfully allocated
+   * on the device.
+   */
+  bool allocate();
+
+  /**
+   * Determine the VkExtent3D for the given mip_level.
+   */
+  VkExtent3D vk_extent_3d(int mip_level) const;
+};
+
+BLI_INLINE VKTexture *unwrap(Texture *texture)
+{
+  return static_cast<VKTexture *>(texture);
+}
+
+BLI_INLINE Texture *wrap(VKTexture *texture)
+{
+  return static_cast<Texture *>(texture);
+}
+
+}  // namespace blender::gpu

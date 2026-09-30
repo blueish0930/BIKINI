@@ -1,0 +1,9 @@
+# Box2D in Blender
+
+Upstream: https://github.com/erincatto/box2d
+License: MIT (see LICENSE)
+Vendored for Geometry Nodes **Box Engine Solver** (2D path).
+
+- `CMakeLists.txt` is Blender-local (core sources only).
+- Upstream CMake preserved as `CMakeLists.upstream.txt`.
+- Samples / tests / docs are not built.

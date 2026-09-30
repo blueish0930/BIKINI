@@ -1,0 +1,511 @@
+==============================================================================
+A. 点云处理 Point Set Processing 3
+==============================================================================
+P01 [已有] jet_estimate_normals / Estimate Normals �?Jet 估计法线
+P02 [已有] pca_estimate_normals / PCA Estimate Normals �?PCA 估计法线
+P03 [已有] vcm_estimate_normals / VCM Estimate Normals �?Voronoi 协方差法线（锐边更好�?P04 [已有] mst_orient_normals / MST Orient Normals �?最小生成树统一法线朝向
+P05 [曾删] scanline_orient_normals / Scanline Orient Normals �?扫描线定向法�?P06 [曾删] radial_orient_normals �?径向定向法线
+P07 [已有] cluster_point_set / Cluster Point Set �?固定半径邻接聚类
+P08 [曾删] estimate_global_k_neighbor_scale / Neighbor Scale �?全局邻域 k
+P09 [曾删] estimate_local_k_neighbor_scales �?每点局�?k（你刚否决的那批�?P10 [曾删] 局部密�?Local Density �?1/mean kNN 距离（你刚否决）
+P11 [曾删] 点集聚类/组件类重复度�?P12 [已有] jet_smooth_point_set / Jet Smooth �?Jet 点云平滑
+P13 [已有] bilateral_smooth_point_set / Bilateral Smooth �?双边平滑点云
+P14 [已有] remove_outliers / Remove Outliers �?离群点剔�?P15 [曾删] grid_simplify_point_set �?体素网格简化点�?P16 [曾删] random_simplify_point_set �?随机简化点�?P17 [已有] hierarchy_simplify_point_set / Hierarchy Simplify �?层级聚类简�?P18 [已有] wlop_simplify_and_regularize_point_set / WLOP �?加权投影简化规则化
+P19 [已有] edge_aware_upsample_point_set / Edge Aware Upsample �?边缘感知加密
+P20 [曾删] structure_point_set / Structure Point Set �?平面结构化重采样
+     （把点重投到检测到的平�?�?角上；Epsilon 与模型尺度不匹配时点云「炸开」�?      用户否决，节点已删；legacy id 2429 reserved�?P21 [曾删] compute_average_spacing �?平均点距（曾�?Average Spacing 存在后禁�?P22 [可用] 点云配准/注册相关（若启用 Registration 包；需�?license 与依赖）
+P23 [已有] Shape_detection::Efficient_RANSAC / Efficient RANSAC �?平面/圆柱/�?锥形状检测（RANSAC�?P24 [已有] Shape_detection::Region_growing / Point Region Growing �?点云区域生长形状检�?P25 [�?难] Classification �?点云语义分类（特�?分类器，�?ML 流水线）
+
+==============================================================================
+B. 点云重建 Surface Reconstruction
+==============================================================================
+R01 [已有] poisson_surface_reconstruction_3 / Poisson �?泊松重建
+R02 [已有] advancing_front_surface_reconstruction / Advancing Front �?推进前沿
+R03 [已有] scale_space_surface_reconstruction_3 / Scale Space Reconstruct �?尺度空间重建
+     （噪声点云：多尺�?WPCA 平滑 �?Alpha 在平滑坐标上建连�?�?索引映回原始采样点�?      �?直接 Alpha Shape / Advancing Front 节点�?R04 [已有] alpha_shape_3 / Alpha Shape �?Alpha 形状
+R05 [已有] alpha_wrap_3 / Alpha Wrap �?Alpha 包裹（防水外壳）
+R06 [不要] Scale Space Jet/WPCA 枚举暴露 �?曾破�?Alpha 半径(m_internal_squared_radius)，已撤回
+     节点固定 WPCA + Alpha（CGAL 默认路径�?R07 [不要] Scale Space Advancing Front mesher 枚举 �?已撤回；请用独立 Advancing Front 节点
+R08 [可用] make_piecewise_smooth_surface_mesh �?分段光滑曲面网格（若头文件可用）
+
+==============================================================================
+C. 形状 / 包络 / 剖分（点或体积）
+==============================================================================
+S01 [曾删] convex_hull_3 / CGAL Convex Hull �?凸包（请用原�?Convex Hull�?S02 [已有] Min_sphere / Min Sphere �?最小包围球（含可视�?UV 球）
+S03 [已有] Min_ellipsoid / Min Ellipsoid �?最小包围椭�?S04 [已有] optimal_bounding_box / Optimal Bounding Box �?最优定向包围盒
+S05 [已有] Delaunay_triangulation_3 / Delaunay 3D �?三维德劳内（四面体面导出�?S06 [曾删] Fit Plane �?最小二乘拟合平�?S07 [曾删] Fit Line �?最小二乘拟合直�?S08 [曾删] Points Diameter �?�?Min Sphere 直径重复，勿�?S09 [曾删] Points Centroid �?点算术中�?S10 [已有] convex_decomposition_3 �?三维凸分解（基于 Nef_polyhedron）【重/难·依�?Nef�?S11 [可用] Polyhedral_envelope �?多面体外壳查询（曾以 Polyhedral Envelope 删除�?S12 [可用] AABB_tree 距离/最�?相交查询（曾�?Distance To Mesh / Closest 等删除部分）
+S13 [已有] Side_of_triangle_mesh �?已有 Side Of Mesh
+S14 [已有] Min Sphere of Spheres �?球集最小包围球（中�?半径+可视�?UV 球）
+S15 [已有] Min Circle 2D �?平面投影最小包围圆（圆盘网�?中心+半径�?S16 [已有] Min Rectangle 2D �?平面投影最小面积定向矩形（四边形网格）
+     [可用] min annulus / ellipse �?2D 变体仍可后续�?
+==============================================================================
+D. 网格变形 Surface Mesh Deformation ★你提到的重�?==============================================================================
+D01 [已有] Surface_mesh_deformation / ARAP Deform �?表面网格变形（手�?约束顶点�?D02 [已有]   ARAP Deform Method 0 = ORIGINAL_ARAP
+D03 [已有]   ARAP Deform Method 1 = SPOKES_AND_RIMS（默认）
+D04 [依赖] 需：ROI 顶点、控制手柄顶点、目标位置；迭代求解（Eigen�?D05 [说明] 「Laplace 形变」在 CGAL 中通常对应 cotangent Laplacian 能量/平滑�?           更接�?fair / smooth_shape / 曲率流，而不是独立名�?LaplaceDeform �?API�?           ARAP 内部也会用到局部刚�?旋转拟合。若要「拉普拉斯网格编辑」，
+           优先评估：D01–D03、M20 fair、M21 smooth_shape、M22 angle_and_area_smoothing�?
+==============================================================================
+E. 网格参数�?Surface Mesh Parameterization（UV）★
+==============================================================================
+E01 [已有] parameterize() 主入�?�?将三角网格映射到 2D (u,v)（bridge 仍保�?method 0�? 代码路径�?E02 [已有] LSCM_parameterizer_3 / LSCM UV �?最小二乘共形映射（自由边界，钉 2 顶点�?E03 [已有] ARAP_parameterizer_3 / ARAP UV �?ARAP 参数化（保局部刚性的 UV�?E04 [曾删] Discrete_conformal_map_parameterizer_3 / Discrete Conformal UV �?离散共形
+     （固�?Circular 边界 �?圆盘外形；用户否决，节点已删；legacy id 2420 reserved�?E05 [曾删] Mean_value_coordinates_parameterizer_3 / Mean Value UV �?Floater 均值坐�?     （固�?Circular 边界 �?圆盘；用户否决，节点已删；legacy id 2422 reserved�?E06 [曾删] Discrete_authalic_parameterizer_3 / Discrete Authalic UV �?离散保面�?     + Iterative_authalic_parameterizer_3 / Iterative Authalic UV �?迭代保面�?     （固�?Circular 边界 �?圆盘；用户否决，节点已删；legacy id 2423/2425 reserved�?E07 [曾删] Barycentric_mapping_parameterizer_3 / Barycentric UV �?Tutte 均匀重心映射
+     （固�?Circular 边界 �?圆盘；用户否决，节点已删；legacy id 2424 reserved�?E08 [不要] Orbifold_Tutte_parameterizer_3 �?轨道 Tutte（同属固定边界族，暂不做�?E09 [不要] 边界策略 Circular/Square/Fixed（曾考虑给固定边�?UV �?Border 枚举；固定边�?UV 节点整批已删，无需�?E10 [已有] UV Distortion �?面域 Area Stretch / Conformal Stretch（L2 伸展族度量，�?Corner UV；可用于 LSCM/ARAP�?E11 [依赖] 三角网格、边�?halfedge、顶�?角点 UV 属性输�?
+==============================================================================
+F. 多边形网格处�?Polygon Mesh Processing（PMP�?==============================================================================
+
+--- F1 修复 / 定向 / 流形 ---
+M01 [已有] repair / Repair �?基础修复
+M02 [已有] remove_degenerate / Remove Degenerate �?去退�?M03 [已有] repair_self_intersections / Repair Self Intersections
+M04 [已有] self_intersections 检�?/ Does Self Intersect + Mark Self Intersect
+M05 [已有] orient_outward / Orient Outward
+M06 [已有] autorefine / Autorefine �?自相交处细化出显式边
+M07 [已有] repair_degeneracies / Repair Degeneracies �?�?帽近似退�?+ 精确退�?     （属性：face/vert map + reproject，与 Remove Degenerate 同路径）
+M08 [已有] repair_polygon_soup / Repair Polygon Soup �?多边形汤修复（Batch 29�?M09 [曾删] orient_polygon_soup �?GN �?soup 概念，已�?+ polygon_soup_to_polygon_mesh �?汤定向成网格
+M10 [曾删] reverse_face_orientations �?反转朝向（曾禁）
+M11 [不要] is_outward_oriented �?是否朝外（曾禁）
+M12 [不要] duplicate_non_manifold_vertices �?拆非流形顶点（曾禁）
+M13 [不要] is_polygon_soup_a_polygon_mesh / manifoldness 相关判定
+
+--- F2 孔洞 / 边界 ---
+M14 [已有] triangulate_hole(+refine/fair) / Hole Fill �?填洞
+M15 [曾删] extract border halfedges �?边界半边（曾�?Extract Border 加回又删�?M16 [曾删] merge_border_vertices �?合并边界点（曾禁�?M17 [曾删] stitch_borders �?缝合边界（曾禁）
+M18 [不要] hole_count �?孔洞计数（曾禁）
+M19 [曾删] border length / border edge flags（曾禁）
+
+--- F3 平滑 / 光顺 / 细化 / 重网�?---
+M20 [已有] fair / Fair �?离散光顺（可理解�?Laplace 型能量平滑的一种）
+M21 [已有] smooth_shape / Smooth Shape �?平均曲率流形状平�?M22 [曾删] angle_and_area_smoothing �?角度+面积平滑（曾�?Angle Area Smooth 禁）
+M23 [曾删] tangential_relaxation �?切向松弛（曾禁）
+M24 [曾删] refine �?三角形密度细�?M25 [已有] refine_mesh_at_isolevel / Refine at Isolevel �?顶点标量跨等值线时剖分边并插入等值边
+M26 [曾删] isotropic_remeshing / remesh.h �?各向同性重网格（曾禁）
+M27 [曾删] remesh_planar_patches �?平面片重网格（曾禁）
+M28 [已有] surface_Delaunay_remeshing �?曲面德劳内重网格【重�?M29 [曾删] random_perturbation �?随机扰动顶点（曾加回又删�?M30 [已有] split_long_edges / Split Long Edges
+M31 [曾删] detect_features �?特征边检测（曾禁�?M32 [曾删] subdivision 系列（Loop/Catmull-Clark 等，曾禁�?
+--- F4 布尔 / 裁剪 / 共细�?---
+M33 [已有] corefine_and_compute_* / Mesh Boolean �?网格布尔
+M34 [已有] corefine / Corefine �?共细化嵌相交
+M35 [曾删] clip �?平面裁剪（曾禁）
+M36 [已有] surface_intersection / Mesh Intersection �?两网格交线（Curves 折线�?M37 [曾删] extrude / Extrude �?挤出
+
+--- F5 连通分�?/ 清理碎块 ---
+M38 [曾删] connected_components �?面连通分量标记（Face Component 曾禁�?M39 [曾删] keep_connected_components / keep by id（曾�?Keep Component 又删�?M40 [曾删] remove_connected_components / 按大小删小分量（曾加又删�?M41 [曾删] keep_large_connected_components �?保留大分量（Keep Largest 曾禁�?
+--- F6 度量 / 属性场 ---
+M42 [已有] volume / Mesh Volume
+M43 [已有] centroid / Centroid
+M44 [已有] is_closed / Is Closed
+M45 [曾删] area �?表面积（Mesh Area / Face Areas 曾禁�?M46 [曾删] compute_normal �?Vertex/Face Normals 节点
+M47 [已有] interpolated_corrected_curvatures / Curvature + Principal Curvature
+M48 [已有] shape diameter function / Shape Diameter + Segmentation
+M49 [已有] region_growing_of_planes_on_faces / Region Growing
+M50 [已有] discrete mean/gaussian curvature 相关（部分已并入 Curvature�?M51 [不要] dihedral angles �?二面角（曾禁�?M52 [曾删] does_bound_a_volume �?是否围成体积（曾禁）
+M53 [曾删] Euler characteristic �?欧拉示性数（曾禁）
+M54 [曾删] is_manifold �?是否流形（曾禁）
+M55 [曾删] bbox �?轴对齐包围盒（AABB 节点曾禁�?M56 [曾删] locate �?点在网格上定位（Mesh Locate 曾删�?M57 [曾删] distance to mesh / squared_distance（Distance To Mesh 曾禁�?M58 [曾删] sample_triangle_mesh �?面上采样点（Sample Points 曾禁�?M59 [曾删] transform �?仿射变换网格
+M60 [曾删] triangulate_faces �?三角化（曾禁�?
+--- F7 测地 / 骨架 / 路径 ---
+M61 [已有] Mean_curvature_flow_skeletonization / Skeleton �?曲线骨架
+M62 [已有] Surface_mesh_shortest_path / Surface Shortest Path �?测地最短路�?M63 [曾删] Heat_method_3 geodesic distances �?热方法测地距离场
+     （曾�?CGAL Geodesic Distance 节点存在；原生也�?Heat Geodesic 场节点）
+M64 [已有] Exact Geodesic Distance �?精确多源测地距离场（Surface_mesh_shortest_path；≠ Heat�?
+==============================================================================
+G. 其它大包（实现重，但效果强）
+==============================================================================
+G01 [�?难] Mesh_3 �?三维体积网格生成（四面体�?G02 [�?难] Periodic_3 三角�?/ 网格
+G03 [�?难] Nef_3 �?任意布尔与凸分解底层
+G04 [已有] Skin_surface_3 / Skin Surface �?点云球蒙皮并（Shrink 收缩）重�?     + Union of Balls / 球并曲面 �?make_union_of_balls_mesh_3（无 Shrink，纯并）
+G05 [�?难] Isosurfacing_3 �?等值面提取
+G06 [�?难] Arrangement_on_surface_2 �?曲面上排�?G07 [已有] Boolean_set_operations_2 / Boolean Ops 2D �?2D 布尔（Batch 29；EPICK�?G08 [�?难] Minkowski_sum �?闵可夫斯基和
+G09 [可用] Polyhedral complex / alpha complex 变体
+G10 [可用] Kinetic surface reconstruction 等新算法（视版本头文件）
+G11 [已有] Variational Shape Approximation / VSA Approximate �?变分形状近似（平面代理简化网格）
+==============================================================================
+H. Batch 27 新增�?026-08-11，未恢复曾删节点�?==============================================================================
+H01 [已有] Min Ellipse 2D / Approximate_min_ellipsoid_d 2D 投影最小包围椭�?H02 [已有] Min Parallelogram 2D / min_parallelogram_2 投影最小面积平行四边形
+H03 [曾删] Convex Hull 2D / convex_hull_2 投影二维凸包（≠已删 3D Convex Hull�?(user deleted; legacy id 2440 reserved)
+H04 [已有] Mesh Slicer / Polygon_mesh_slicer 平面切片→Curves
+H05 [已有] VCM Feature Edges / compute_vcm + vcm_is_on_feature_edge 锐边点标�?H06 [已有] Delaunay 2D / Delaunay_triangulation_2 投影德劳内三角网�?H07 [已有] Alpha Shape 2D / Alpha_shape_2 投影 Alpha 形状
+H08 [已有] Voronoi 2D / 德劳内对�?Voronoi 线框（无限边裁剪�?H09 [已有] Straight Skeleton 2D / create_interior_straight_skeleton_2 内直骨架
+H10 [已有] Polygon Offset 2D / create_interior_skeleton_and_offset_polygons_2 内偏�?
+Legacy ids: 2438-2447. 未使�?reserved 曾删 id�?
+==============================================================================
+I. Batch 28 新增�?026-08-11，未恢复曾删节点�?==============================================================================
+I01 [已有] Min Annulus 2D / Min_annulus_d 投影最小包围圆�?I02 [已有] Convex Partition 2D / approx|greene|optimal_convex_partition_2
+I03 [曾删] Y-Monotone Partition 2D / y_monotone_partition_2
+I04 [已有] Max Area K-gon 2D / maximum_area_inscribed_k_gon_2
+I05 [曾删] Polyline Simplify 2D / Polyline_simplification_2
+I06 [已有] Width 3D / Width_3 点集最小宽度（支撑平面�?I07 [已有] Minkowski Sum 2D / minkowski_sum_by_reduced_convolution_2
+I08 [已有] Extrude Skeleton / extrude_skeleton 直骨架屋顶挤�?I09 [已有] Polygon Fill 2D / CDT+mark_domain 带孔三角填充
+I10 [已有] Do Intersect 2D / 二维边界多边形相交判�?
+Legacy ids: 2448-2457.
+
+==============================================================================
+J. Offset / Medial updates (2026-08-11)
+==============================================================================
+J01 [已有] Polygon Offset 2D �?Mode 0 skeleton / Mode 1 Euclidean (disk Minkowski)
+     + 支持纯边�?wire)输入；Outward 外扩�?J02 [已有] Medial Axis 2D �?二维中轴/中心线（内直骨架弧；�?3D MAT�?J03 [说明] CGAL �?3D 直骨架；3D �?Mean Curvature Flow Skeleton（闭曲面�?     3D 真中轴面(MAT) 不在�?vendored CGAL 中�?
+==============================================================================
+K. Batch 29 新增�?026-08-12，未恢复曾删节点�?==============================================================================
+K01 [已有] Boolean Ops 2D / Boolean_set_operations_2 �?�?�?�?对称差（Mode 0�?�?K02 [已有] Largest Empty Iso Rectangle 2D / Largest_empty_iso_rectangle_2
+K03 [已有] Polygon Repair 2D / Polygon_repair (even-odd)
+K04 [已有] Repair Polygon Soup / repair_polygon_soup + orient + soup_to_mesh  (M08)
+K05 [已有] Apollonius Graph 2D / Apollonius_graph_2 加权点对偶图（线框）
+K06 [已有] Rectangular P-Center 2D / rectangular_p_center_2 (p=2..4)
+K07 [曾删] Regularize Contour 2D (legacy 2465 reserved)
+K08 [已有] Monge Jet Fit / Monge_via_jet_fitting 点属�?monge_k1/k2/d1/d2/normal
+
+Legacy ids: 2459-2466. 未使�?reserved 曾删 id�?G07 Boolean 2D 已实现为 K01（轻�?EPICK；复杂输入可能失败）�?
+
+# Batch30 (2026-08-13)
+# S10 Convex Decomposition 3D -> GeometryNodeCgalConvexDecomposition3 (2467)
+# Laplace Deform (cotangent+Eigen, not Fair alias) -> GeometryNodeCgalLaplaceDeform (2468)
+# M28 Surface Delaunay Remesh -> GeometryNodeCgalSurfaceDelaunayRemesh (2469) [heavy]
+# Skipped: R08 deprecated make_surface_mesh stub; G10 Kinetic needs EPECK/GMP; P22 Registration needs OpenGR; S11/S12 user-deleted Distance/Envelope.
+
+==============================================================================
+L. Batch 31 新增（2026-08-14，未恢复曾删节点）
+==============================================================================
+L01 [曾删] OTR Reconstruct 2D / Optimal_transportation_reconstruction_2 — 噪声点重建折线 (legacy 2471 reserved)
+L02 [已有] Regular Triangulation 2D / Regular_triangulation_2 — 加权德劳内
+L03 [已有] Power Diagram 2D — 正则三角对偶（加权 Voronoi 线框）
+L04 [已有] Voronoi 3D — 三维 Voronoi 有限对偶边（线框）
+L05 [已有] Visibility 2D / Simple_polygon_visibility_2 — 可见多边形
+L06 [已有] Refine Mesh 2D / Mesh_2 refine_Delaunay_mesh_2 — 质量三角剖分
+L07 [已有] Alpha Complex 3D / Alpha_shape_3 cells — 三维 Alpha 复形（四面体面）G09
+L08 [已有] Convex Minkowski Sum 3D — 凸包点对和（G08 轻量，非 Nef）
+
+Legacy ids: 2471-2478. 2470 reserved (deleted StringToStrokeCurves).
+Skipped: P22 OpenGR; R08 deprecated; G10 Kinetic EPECK; S11/S12 user-deleted.
+
+==============================================================================
+M. Batch 32 新增（2026-08-15，未恢复曾删节点）
+==============================================================================
+M01 [已有] Regular Triangulation 3D / Regular_triangulation_3 — 加权德劳内四面体
+M02 [已有] Power Diagram 3D — 正则三角对偶（加权 Voronoi 线框）
+M03 [已有] Largest Empty Circle 2D — 点集最大空圆（凸包内 Voronoi 顶点）
+M04 [已有] Largest Inscribed Circle 2D — 多边形最大内切圆
+M05 [已有] Min Width 2D — 投影最小卡尺宽度（旋转卡尺）
+M06 [已有] Periodic Delaunay 2D / Periodic_2_Delaunay_triangulation_2
+M07 [曾删] Constrained Voronoi 2D — 多边形域内约束 Voronoi 线框 (legacy 2485)
+M08 [曾删] Connect Holes 2D / connect_holes — 孔洞零宽通道接到外环 (legacy 2486)
+
+Legacy ids: 2479-2486.
+Skipped: Polygonal Surface Reconstruction (SCIP/GLPK); Mesh_3 volume (heavy);
+Ridges_3 (jet 阶数敏感); P22 OpenGR; G10 Kinetic EPECK; 曾删度量/查询/重网格节点.
+
+==============================================================================
+N. Batch 33 新增（2026-08-15，未恢复曾删节点）
+==============================================================================
+N01 [已有] Arrangement 2D / Arrangement_2 — XY 边叠加，连通 n-gon（共享顶点）
+N02 [已删] Segment Voronoi 2D 2488
+N03 [已删] Snap Rounding 2D 2489
+N04 [已删] Theta Graph 2D 2490
+N05 [已删] Yao Graph 2D 2491
+N06 [已有] Delaunay on Sphere / Delaunay_triangulation_on_sphere_2
+N07 [已有] Periodic Delaunay 3D / Periodic_3_Delaunay_triangulation_3
+N08 [已删] All Furthest Neighbors 2D 2494
+N09 [已有] Project Mesh 2D / flatten XY — 保留原始 n-gon 拓扑
+
+Legacy ids: 2487-2494. 2486 reserved (deleted Connect Holes 2D).
+Skipped: P22 OpenGR; G10 Kinetic EPECK; Mesh_3 volume; PolyFit SCIP;
+Ridges_3; Classification; OSQP Regularize Segments; 曾删度量/查询/重网格.
+
+==============================================================================
+O. Batch 34 新增（2026-08-15，未恢复曾删节点）
+==============================================================================
+O01 [已有] Do Intersect 3D / PMP::do_intersect — 两网格是否相交（≠自相交 / ≠交线）
+O02 [曾删] Split by Mesh / PMP::split — 用切割网格剖分（保留两侧，非平面裁剪、非实体布尔）
+O03 [已有] Natural Neighbor 2D / natural_neighbor_coordinates_2 — Sibson 自然邻点插值
+O04 [曾删] Cage Deform 2D (legacy 2499 reserved)
+O05 [已有] Proximity Graph 2D — Gabriel / RNG / 欧氏 MST（德劳内子图）
+O06 [已有] Fill Polyline / triangulate_hole_polyline — 闭合空间折线补面（≠网格填洞）
+O07 [曾删] Regularize Planes / Shape_regularization::regularize_planes — 平面族规整后投影
+
+Legacy ids: 2496/2498-2501. 2495 reserved (deleted Project Mesh 2D); 2497 reserved (deleted Split by Mesh); 2502 reserved (deleted Regularize Planes).
+Skipped: P22 OpenGR; G10 Kinetic EPECK; Mesh_3 volume; PolyFit SCIP;
+Ridges_3; Classification; OSQP Regularize Segments; 曾删度量/查询/重网格.
+
+==============================================================================
+P. Batch 35 新增（2026-08-16，未恢复曾删节点）
+==============================================================================
+P01 [已有] Halfspace Intersection 3D / halfspace_intersection_with_constructions_3 — 面半空间求交→凸多面体
+P02 [已有] Lloyd Relax / restricted Voronoi CVT — 网格表面 2/3D + 点云均匀松弛
+P03 [已有] Conforming Delaunay 2D / make_conforming_Delaunay_2|Gabriel — 插点使约束边成为德劳内/Gabriel
+P04 [已有] Max Perimeter K-gon 2D / maximum_perimeter_inscribed_k_gon_2 — 凸包内最大周长 k 边形
+P05 [曾删] Weighted Skeleton 2D (legacy 2507 reserved)
+P06 [已有] Constrained Delaunay 2D / Constrained_Delaunay_triangulation_2 — 约束德劳内（无 Steiner）；域判定=轮廓奇偶，非凸包
+P07 [曾删] Point in Polygon 2D / bounded_side_2 — 二维点在多边形内
+
+Legacy ids: 2503-2508. 2509 reserved (deleted Point in Polygon 2D).
+Skipped: P22 OpenGR; G10 Kinetic EPECK; Mesh_3 volume; PolyFit SCIP;
+Ridges_3; Classification; OSQP Regularize Segments; 曾删度量/查询/重网格.
+
+==============================================================================
+Q. Batch 36 新增（2026-08-16，未恢复曾删节点）
+==============================================================================
+Q01 [已有] Exterior Skeleton 2D / create_exterior_straight_skeleton_2 — 外直骨架（丢弃外框）
+Q02 [曾删] Weighted Offset 2D (legacy 2511 reserved)
+Q03 [已有] Voronoi on Sphere — 球面德劳内对偶（孤立 n 边形，cell_id）
+Q04 [曾删] Stream Lines 2D / Stream_lines_2 (legacy 2513 reserved)
+Q05 [曾删] Upper Envelope 3D (legacy 2514 reserved)
+Q06 [曾删] Round Offset 2D (legacy 2515 reserved)
+
+Legacy ids: 2510, 2512. 2507 reserved (Weighted Skeleton 2D). 2511 reserved (Weighted Offset 2D).
+2509 reserved (Point in Polygon 2D). 2513 reserved (Stream Lines 2D). 2514 reserved (Upper Envelope 3D).
+2515 reserved (Round Offset 2D).
+Skipped: P22 OpenGR; G10 Kinetic EPECK; Mesh_3 volume; PolyFit SCIP;
+Ridges_3; Classification; OSQP Regularize Segments; Hyperbolic Delaunay (EPECK+sqrt);
+曾删度量/查询/重网格.
+
+==============================================================================
+R. Batch 37 新增（2026-08-16，未恢复曾删节点）
+==============================================================================
+R01 [已有] Radius Graph 3D / Kd_tree + Fuzzy_sphere — 半径阈值连边
+R02 [已有] Visibility Holes 2D / Triangular_expansion_visibility_2 — 带孔安排的可见多边形
+R03 [已有] KNN Graph 3D / Orthogonal_k_neighbor_search — k 近邻线框
+R04 [已有] Natural Neighbor 3D — 与 2D 相同场节点格式（Mesh + Value + Sample Position + Is Valid）
+R05 [曾删] Sibson Gradient 2D（legacy 2520 reserved）
+
+Legacy ids: 2516-2520.
+Skipped: P22 OpenGR; G10 Kinetic EPECK; Mesh_3 volume; PolyFit SCIP;
+Ridges_3; Classification; OSQP Regularize Segments; Hyperbolic Delaunay;
+曾删度量/查询/重网格；Weighted Skeleton / Weighted Offset / Round Offset;
+Periodic Regular 3D（加权 Delaunay）；Optimize Mesh 2D（Lloyd）。
+
+==============================================================================
+S. Batch 38 新增（2026-08-16，10 个新节点，未恢复曾删节点）
+==============================================================================
+S01 [曾删] Octree 3D（legacy 2521 reserved）
+S02 [曾删] Hilbert Path 3D（legacy 2522 reserved）
+S03 [曾删] Envelope 2D (legacy 2523 reserved)
+S04 [曾删] Shortest Cycle（legacy 2524 reserved）
+S05 [已有] Periodic Voronoi 2D — 周期德劳内对偶（非加权）
+S06 [已有] Periodic Voronoi 3D — 每个 cell 的封闭网格体（非加权）
+S07 [曾删] Gabriel Graph 3D（legacy 2527 reserved）
+S08 [已有] Euclidean MST 3D — Borůvka 合并两棵子树的最短边（DT 候选）
+S09 [曾删] Beta Skeleton 2D（legacy 2529 reserved）
+S10 [已有] Convex Layers 2D / convex_hull_2 剥洋葱 — 嵌套凸包
+
+Also reserved this turn: Regular Triangulation 2/3D (2472/2479), Power Diagram 2/3D (2473/2480),
+Proximity Graph 2D (2500), Lloyd Optimize 2D (2504), Conforming Delaunay 2D (2505).
+
+Legacy ids: 2521-2530.
+Skipped: 同 Batch 37；不恢复曾删；不加加权 Delaunay / Lloyd。
+
+==============================================================================
+T. Batch 39 新增（2026-08-17，8 个新节点，未恢复曾删节点）
+==============================================================================
+T01 [曾删] Farthest Voronoi 2D — 最远点 Voronoi（抛物面上凸包对偶） (legacy 2531)
+T02 [已有] Convex Layers 3D / convex_hull_3 剥洋葱 — 嵌套三维凸包
+T03 [曾删] Overlay 2D / Arrangement_2 — 两套 XY 边叠加，保留全部有界格子 (legacy 2533)
+T04 [曾删] Polygon Kernel 2D — 多边形核（向内半平面求交） (legacy 2534)
+T05 [已有] Self Intersection Curves / PMP::self_intersections — 单网格自相交折线
+T06 [已有] Crust 2D — Amenta–Bern–Eppstein 曲线重建
+T07 [已有] Geodesic Voronoi / Surface_mesh_shortest_path — 测地最近源划分（MMP 等距 bisector 切面，不是顶点标签对偶）
+T08 [已有] Isosurface 3D — 德劳内四面体上行进四面体等值面（G05 轻量）
+
+Legacy ids: 2531-2538.
+Skipped: 同 Batch 38；不恢复曾删；不加加权 Delaunay / Lloyd / Mesh_3 volume。
+
+==============================================================================
+U. Batch 40 新增（2026-08-17，8 个新节点，未恢复曾删节点）
+==============================================================================
+U01 [曾删] QEM Simplify unconstrained (legacy 2539 reserved). Replaced by QEM = Constrained Simplify 2580.
+U02 [曾删] Line Arrangement 2D (legacy 2540 reserved)
+U03 [已有] Vertical Decomposition 2D — 安排垂直分解（顶点上下垂线 → 梯形）
+U04 [曾删] Circle Arrangement 2D (legacy 2542 reserved)
+U05 [曾删] Crust 3D (legacy 2543 reserved)
+U06 [曾删] Clipped Voronoi 3D (legacy 2544 reserved)
+U07 [曾删] Complement 2D (legacy 2545 reserved)
+U08 [已有] Simple Polygon 2D / make_simple_polygon — 打散交叉，过全部点的简单多边形
+
+Legacy ids: 2539-2546.
+Skipped: 同 Batch 39；不恢复曾删；不加 Nef Minkowski / Kinetic / Mesh_3 volume。
+
+==============================================================================
+V. Batch 41 新增（2026-08-17，8 个新节点，未恢复曾删节点）
+==============================================================================
+V01 [曾删] Split Crossings 2D (legacy 2547 reserved)
+V02 [曾删] Crossing Points 2D (legacy 2548 reserved)
+V03 [已有] Pullout Directions 2D / Set_movable_separability_2 top_edges — 单模平移铸造可拔模方向楔
+V04 [已有] SSAB Partition 2D / Small_side_angle_bisector_decomposition_2 — 小边角平分凸分解
+V05 [已有] Snap Borders / PMP experimental snap_borders — 只吸附不同孤岛的开口边界并缝合
+V06 [已有] Autorefine Clean / autorefine + remove_self_intersections — 先切开再局部修自交（保留整网）
+V07 [曾删] Random Polygon 2D (legacy 2553 reserved)
+V08 [曾删] Random Convex Set 2D (legacy 2554 reserved)
+
+Legacy ids: 2547-2554.
+Skipped: 同 Batch 40；不恢复曾删；不加 Nef Minkowski / Kinetic / Mesh_3 volume。
+
+==============================================================================
+Z. Batch 45 清理（2026-08-20）
+==============================================================================
+Z01 [曾删] Envelope Simplify (legacy 2576 reserved)
+Z02 [曾删] Contract Mesh (legacy 2577 reserved)
+Z03 [已有] Regularize Open Contour 2D (2578) — 开口轮廓规整
+Z04 [曾删] Harmonic Deform 2D (legacy 2579 reserved)
+Z05 [已有] QEM Simplify / Constrained Simplify (2580) — 带 Keep Boundary + Preserve 的 QEM，取代 2539
+
+Also reserved this turn: Cage Deform 2D (2499), Regularize Contour 2D (2465),
+old unconstrained QEM Simplify (2539).
+
+==============================================================================
+AA. Batch 46 新增（2026-08-20，未恢复曾删节点）
+==============================================================================
+AA01 [已有] Sphere Slice — 网格 ∩ 球面 → Curves（≠ Mesh Slicer 平面）
+AA02 [已有] Cylinder Slice — 网格 ∩ 有限圆柱侧面 → Curves
+AA03 [已有] Merge Coplanar — 共面三角片 Euler 合成 n-gon（≠ Region Growing 打标签 / ≠ VSA）
+AA04 [已有] MVC Relax UV — 已有 UV 的均值坐标后处理（≠ 已删圆形边界 Mean Value UV）
+AA05 [已有] CDT Plus 2D — 交叉约束插 Steiner 点（≠ Constrained Delaunay 跳过交叉 / ≠ Arrangement n-gon）
+
+Legacy ids: 2581-2585.
+Skipped: OpenGR; Kinetic EPECK; Mesh_3 volume; PolyFit SCIP; Ridges_3;
+Classification; OSQP; Hyperbolic Delaunay; weighted Delaunay / Lloyd;
+不恢复曾删节点。
+
+==============================================================================
+AB. Batch 47 新增（2026-08-20，未恢复曾删节点）
+==============================================================================
+AB01 [曾删] Cone Slice — 网格 ∩ 有限圆锥侧面 → Curves (legacy 2586)
+AB02 [曾删] Clip Box — PMP clip Iso_cuboid，保留 AABB 内 (legacy 2587)
+AB03 [已有] Y-Monotone Partition 2D — y 单调剖分（≠ Convex Partition / ≠ SSAB）
+AB04 [已有] Shape Simplify 2D — XY 多边形平方距离简化（≠ Simplify Polyline 3D 曲线；原名 Polyline Simplify 2D）
+AB05 [曾删] Clip by Mesh — 用封闭裁切体 clip (legacy 2590)
+
+Legacy ids: 2586-2590.
+Skipped: OpenGR; Kinetic EPECK; Mesh_3 volume; PolyFit SCIP; Ridges_3;
+Classification; OSQP; Hyperbolic Delaunay; weighted Delaunay / Lloyd;
+不恢复曾删节点（Keep Largest / Remesh Planar / Split by Mesh 等）。
+
+==============================================================================
+AC. Batch 48 新增（2026-08-21，未恢复曾删节点）
+==============================================================================
+AC01 [曾删] Proximity Graph 2D (legacy 2500 / 2591 reserved)
+AC02 [曾删] Conforming Delaunay 2D (legacy 2505 / 2592 reserved)
+AC03 [曾删] Rectangular P-Center 2D (legacy 2464 / 2593 reserved)
+AC04 [曾删] Polyline Hull 2D (legacy 2594 reserved; hull family)
+
+Legacy ids: 2591-2594.
+Skipped: OpenGR; Kinetic EPECK; Mesh_3 volume; PolyFit SCIP; Ridges_3;
+Classification; OSQP; Hyperbolic Delaunay; weighted Delaunay / Lloyd;
+不恢复曾删节点。
+
+==============================================================================
+AD. Batch 49 新增（2026-08-21，未恢复曾删节点）
+==============================================================================
+AD01 [曾删] Curve Mesh Intersect (legacy 2595 reserved)
+AD02 [已有] Geodesic Isolines — MMP 多源测地距离等值线 → Curves
+     ≠ Exact Geodesic（顶点场）≠ Refine at Isolevel（剖分网格）≠ Geodesic Voronoi（单元格）
+AD03 [曾删] Overlap Faces (legacy 2597 reserved)
+AD04 [已有] Contour Stack — 沿方向的一组平行平面切片 → Curves
+     ≠ Mesh Slicer（单个平面）
+
+Legacy ids: 2595-2598.
+Skipped: OpenGR; Kinetic EPECK; Mesh_3 volume; PolyFit SCIP; Ridges_3;
+Classification; OSQP; Hyperbolic Delaunay; weighted Delaunay / Lloyd;
+不恢复曾删节点。
+
+==============================================================================
+AE. Batch 50 新增（2026-08-21，未恢复曾删节点）
+==============================================================================
+AE01 [曾删] Alpha Edges 3D (legacy 2599 reserved) — 与 Alpha Shape 功能重复
+AE02 [曾删] Delaunay Edges 3D (legacy 2600 reserved) — 与 Delaunay 3D 功能重复
+AE03 [曾删] Mesh Edge Path (legacy 2601 reserved) — 与 Surface Shortest Path 功能重复
+AE04 [曾删] Curvature Isolines (legacy 2602 reserved) — 与 Curvature / Geodesic Isolines 功能重复
+
+Legacy ids: 2599-2602.
+Skipped: OpenGR; Kinetic EPECK; Mesh_3 volume; PolyFit SCIP; Ridges_3;
+Classification; OSQP; Hyperbolic Delaunay; weighted Delaunay / Lloyd;
+不恢复曾删节点。
+
+==============================================================================
+AF. Batch 51 新增（2026-08-21，未恢复曾删节点）
+==============================================================================
+AF01 [曾删] Offset Mesh 3D (legacy 2603 reserved)
+AF02 [曾删] CDT Hole Fill (legacy 2604 reserved) — 用 Fill Polyline 铺所有闭合环
+AF03 [曾删] Bisector Surface (legacy 2605 reserved)
+AF04 [曾删] Projected Outline (legacy 2606 reserved)
+
+Legacy ids: 2603-2606.
+Skipped: OpenGR; Kinetic EPECK; Mesh_3 volume; PolyFit SCIP; Ridges_3;
+Classification; OSQP; Hyperbolic Delaunay; weighted Delaunay / Lloyd;
+不恢复曾删节点。
+
+==============================================================================
+AG. Batch 52 新增（2026-08-21，未恢复曾删节点）
+==============================================================================
+AG01 [曾删] Visibility Graph 2D (legacy 2607) — 与 Visibility 2D 功能相近
+AG02 [曾删] Terrain TIN (legacy 2608) — 与 Delaunay 2D / Constrained Delaunay 2D 相近
+AG03 [曾删] Principal Lines (legacy 2609) — 与 Principal Curvature 相近
+AG04 [曾删] Min Circle 3D (legacy 2610) — 与 Min Circle 2D 相近
+
+Legacy ids: 2607-2610.
+
+==============================================================================
+AH. Batch 53 新增（2026-08-21，未恢复曾删节点）
+==============================================================================
+AH01 [曾删] Interior Tets (legacy 2611) — 与 Delaunay 3D 相近
+AH02 [曾删] Surface Delaunay Graph (legacy 2612) — 与 KNN Graph 3D 相近
+AH03 [曾删] Split Charts (legacy 2613) — 与 Region Growing / Detect Features 相近
+AH04 [曾删] Restricted Voronoi (legacy 2614) — 与 Geodesic Voronoi 相近
+
+Legacy ids: 2611-2614.
+
+==============================================================================
+AI. Batch 54 新增（2026-08-22，未恢复曾删节点）
+==============================================================================
+AI01 [曾删] Walk Tets — 查询线段穿过的德劳内四面体
+AI02 [已有] Skeleton Spokes — 曲率流骨架节点到收缩表面顶点的辐条
+     ≠ Skeleton（只有中心线）
+AI03 [曾删] Radial Slices — 共轴平面扇切 → Curves
+AI04 [曾删] Intersection Band — 两网格 corefine 交缝两侧的面带
+
+Legacy ids: 2615-2618.
+Skipped: OpenGR; Kinetic EPECK; Mesh_3 volume; PolyFit SCIP; Ridges_3;
+Classification; OSQP; Hyperbolic Delaunay; weighted Delaunay / Lloyd;
+不恢复曾删节点。
+
+==============================================================================
+AJ. Batch 55 新增（2026-08-23）官方剩余 + 6.1/6.2 头文件叠加
+==============================================================================
+一、CGAL 6.0.1 里原来没做成节点
+AJ01 [已有] Kinetic Partition / Kinetic_space_partition_3 — 平面动能剖分凸体
+AJ02 [已有] Kinetic Reconstruct / Kinetic_surface_reconstruction_3 — 分片平面重建
+AJ03 [已有] Minkowski Glide 3D / Nef minkowski_sum_3 — 网格沿折线扫掠
+AJ04 [已有] Ridge Curves / Ridges_3 — 脊线折线
+AJ05 [已有] Sphere Intersect — 球-球交圆
+AJ06 [已有] Sphere Arrangement — 面平面在单位球上的大圆
+AJ07 [已有] Segment Voronoi Linf / Segment_Delaunay_graph_Linf_2
+AJ08 [已有] Graphcut Segment / alpha_expansion_graphcut
+AJ09 [已有] Collision Detect / Rigid_triangle_mesh_collision_detection
+AJ10 [已有] Hyperbolic Delaunay / Hyperbolic_Delaunay_triangulation_2
+AJ11 [已有] Volume Mesh 3 / Mesh_3 make_mesh_3（独立 volume DLL）
+AJ12 [已有] Tet Remesh — Mesh_3 尺寸场四面体
+AJ13 [已有] Periodic Mesh 3 — 走 Mesh_3 后端（MSVC 避开周期核爆炸）
+AJ14 [已有] Surface Mesher / make_surface_mesh 符号距离等值面
+
+二、原来要额外依赖
+AJ15 [已有] Point Features / Classification Local_eigen_analysis
+AJ16 [已有] Classify / ETHZ Random_forest_classifier（头文件，无 OpenCV）
+AJ17 [已有] Register ICP — kd-tree 最近点 + Kabsch（无 libpointmatcher）
+AJ18 [已有] Super4PCS — 四点同余 + ICP（无 OpenGR 库）
+AJ19 [已有] Regularize Segments — 平行/共线捕捉（无 OSQP）
+AJ20 [已有] PolyFit — 平面区域生长凸包面（无 SCIP MIP）
+
+三、升级头文件（6.1 / 6.2 overlay 进 extern/cgal）
+AJ21 [已有] Constrained DT3 / make_conforming_constrained_Delaunay_triangulation_3
+AJ22 [已有] Dual Contour / Isosurfacing_3 Marching Cubes + Dual Contouring
+AJ23 [已有] Frechet Distance / bounded_error_Frechet_distance
+AJ24 [已有] Alpha Wrap 2D / alpha_wrap_2
+AJ25 [已有] Cage Deform 3D / Mean_value_coordinates_3
+
+Vendored core still 6.0.1; extra packages copied from CGAL 6.2:
+Alpha_wrap_2, Barycentric_coordinates_3, Constrained_triangulation_3,
+Frechet_distance, Isosurfacing_3.
+
+Heavy Mesh_3 / Kinetic / Nef live in bf_intern_cgal_volume.dll
+(WINDOWS_EXPORT_ALL_SYMBOLS, isolated from cgal_bridge).
+
+Legacy ids: 2619-2643.
+不恢复曾删节点。
+
+

@@ -1,0 +1,9 @@
+#ifndef _LUXCORE_CFG_H
+#define _LUXCORE_CFG_H
+
+#define LUXCORE_VERSION "2.11.0"
+#define LUXRAYS_ENABLE_OPENCL "ON"
+#define LUXRAYS_ENABLE_CUDA "OFF"
+#define LUXRAYS_ENABLE_OPTIX "OFF"
+
+#endif

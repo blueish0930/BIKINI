@@ -1,0 +1,428 @@
+/* SPDX-FileCopyrightText: 2026 Blender Authors
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later */
+
+/** \file
+ * \ingroup spnode
+ */
+
+#include "BLI_listbase.hh"
+#include "BLI_string_ref.hh"
+
+#include "GPU_capabilities.hh"
+
+#include "IMB_imbuf.hh"
+
+#include "BKE_callbacks.hh"
+#include "BKE_compositor.hh"
+#include "BKE_context.hh"
+#include "BKE_global.hh"
+#include "BKE_image.hh"
+#include "BKE_main.hh"
+#include "BKE_scene.hh"
+#include "BKE_scene_runtime.hh"
+
+#include "WM_api.hh"
+#include "WM_types.hh"
+
+#include "DNA_node_types.h"
+
+#include "DEG_depsgraph.hh"
+#include "DEG_depsgraph_build.hh"
+#include "DEG_depsgraph_debug.hh"
+#include "DEG_depsgraph_query.hh"
+
+#include "RE_compositor.hh"
+
+#include "NOD_eval_log.hh"
+
+#include "ED_image.hh"
+#include "ED_node.hh"
+#include "ED_screen.hh"
+
+#include "COM_context.hh"
+
+namespace blender {
+
+struct CompositorJob {
+  wmWindowManager *window_manager;
+  Main *bmain;
+  Scene *scene;
+  ViewLayer *view_layer;
+  Render *render;
+  compositor::SideEffectOutputTypes needed_side_effect_outputs;
+  /* Identifies if the compositor is executing due to the user making a modification or if it is
+   * executing due to playback or rendering. */
+  bool triggered_by_user = false;
+  /* DLSS nodes must finish the frame they started. While set, the UI is locked and this job is
+   * not canceled by further edits. */
+  bool interface_locked_by_job = false;
+  bool *stop = nullptr;
+};
+
+/* Set for the whole time a DLSS preview job owns the interface lock. */
+static bool compositor_preview_locked = false;
+
+static bool tree_has_dlss(const bNodeTree *tree, const int depth)
+{
+  if (tree == nullptr || depth > 8) {
+    return false;
+  }
+  for (const bNode &node : tree->nodes) {
+    if (StringRef(node.idname) == "CompositorNodeNeural") {
+      return true;
+    }
+    if (StringRef(node.idname) == "CompositorNodeDenoise") {
+      for (const bNodeSocket &sock : node.inputs) {
+        if (StringRef(sock.identifier) != "Denoiser" || sock.default_value == nullptr) {
+          continue;
+        }
+        const bNodeSocketValueMenu *menu = sock.default_value_typed<bNodeSocketValueMenu>();
+        if (menu != nullptr && menu->value == CMP_NODE_DENOISE_DENOISER_DLSS) {
+          return true;
+        }
+      }
+    }
+    if (node.id != nullptr && GS(node.id->name) == ID_NT) {
+      if (tree_has_dlss(reinterpret_cast<const bNodeTree *>(node.id), depth + 1)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/* Preview must run the DLSS node to completion. Canceling it shows the unprocessed input while
+ * the UI stays interactive. */
+static bool scene_preview_uses_dlss(const Scene &scene)
+{
+  for (const SceneCompositorEffect &effect : scene.compositor_effects) {
+    if ((uint8_t(effect.flags) & uint8_t(SceneCompositorEffectFlags::EnableForPreview)) == 0) {
+      continue;
+    }
+    if (tree_has_dlss(effect.node_group, 0)) {
+      return true;
+    }
+  }
+  return tree_has_dlss(scene.nodetree, 0);
+}
+
+static void unlock_compositor_preview(CompositorJob *compositor_job)
+{
+  if (!compositor_job->interface_locked_by_job) {
+    return;
+  }
+  compositor_job->interface_locked_by_job = false;
+  compositor_preview_locked = false;
+  WM_locked_interface_set(compositor_job->window_manager, false);
+}
+
+/* Suspend or resume animation playback if animation is playing. */
+static void set_animation_playback(wmWindowManager *window_manager, const bool enabled)
+{
+  wmWindow *animation_playback_window = ED_window_animation_playing_no_scrub(window_manager);
+  if (animation_playback_window) {
+    bScreen *screen = WM_window_get_active_screen(animation_playback_window);
+    WM_event_timer_sleep(window_manager, animation_playback_window, screen->animtimer, !enabled);
+  }
+}
+
+static void compositor_job_init(void *compositor_job_data)
+{
+  CompositorJob *compositor_job = static_cast<CompositorJob *>(compositor_job_data);
+
+  Main *bmain = compositor_job->bmain;
+  Scene *scene = compositor_job->scene;
+  ViewLayer *view_layer = compositor_job->view_layer;
+
+  BKE_scene_runtime_ensure(scene);
+  if (scene == nullptr || scene->runtime == nullptr) {
+    return;
+  }
+
+  /* Lock before the depsgraph refresh below, which can re-enter the compositor job. */
+  if (scene_preview_uses_dlss(*scene)) {
+    compositor_job->interface_locked_by_job = true;
+    compositor_preview_locked = true;
+    WM_locked_interface_set(compositor_job->window_manager, true);
+  }
+
+  bke::CompositorRuntime &compositor_runtime = scene->runtime->compositor;
+
+  if (!compositor_runtime.preview_depsgraph) {
+    compositor_runtime.preview_depsgraph = DEG_graph_new(
+        bmain, scene, view_layer, DAG_EVAL_RENDER);
+    DEG_debug_name_set(compositor_runtime.preview_depsgraph, "COMPOSITOR");
+  }
+
+  /* Update the viewer layer of the compositor if it changed since the depsgraph was created. */
+  if (DEG_get_input_view_layer(compositor_runtime.preview_depsgraph) != view_layer) {
+    DEG_graph_replace_owners(compositor_runtime.preview_depsgraph, bmain, scene, view_layer);
+    DEG_graph_tag_relations_update(compositor_runtime.preview_depsgraph);
+  }
+
+  DEG_graph_build_for_compositor_preview(compositor_runtime.preview_depsgraph);
+
+  /* NOTE: Don't update animation to preserve unkeyed changes, this means can not use
+   * evaluate_on_framechange. */
+  DEG_evaluate_on_refresh(compositor_runtime.preview_depsgraph);
+
+  compositor_job->render = RE_NewInteractiveCompositorRender(scene);
+  if (scene->r.compositor_device == SCE_COMPOSITOR_DEVICE_GPU) {
+    RE_display_ensure_gpu_context(compositor_job->render);
+    IMB_ensure_gpu_context();
+  }
+
+  /* Suspend animation playback (if any) until the compositor is done to allow frames to be fully
+   * processed. */
+  set_animation_playback(compositor_job->window_manager, false);
+}
+
+static void compositor_job_start(void *compositor_job_data, wmJobWorkerStatus *worker_status)
+{
+  CompositorJob *compositor_job = static_cast<CompositorJob *>(compositor_job_data);
+
+  compositor_job->stop = &worker_status->stop;
+  RE_test_break_cb(compositor_job->render, compositor_job, [](void *job_data) -> bool {
+    const CompositorJob *job = static_cast<const CompositorJob *>(job_data);
+    /* Keep the state that started this preview until DLSS has written its result.
+     * Escape still cancels. */
+    if (job->interface_locked_by_job) {
+      return G.is_break;
+    }
+    return (job->stop != nullptr && *job->stop) || G.is_break;
+  });
+
+  BKE_callback_exec_id(
+      compositor_job->bmain, &compositor_job->scene->id, BKE_CB_EVT_COMPOSITE_PRE);
+
+  if (compositor_job->scene == nullptr || compositor_job->scene->runtime == nullptr ||
+      compositor_job->scene->runtime->compositor.preview_depsgraph == nullptr)
+  {
+    return;
+  }
+
+  bke::CompositorRuntime &compositor_runtime = compositor_job->scene->runtime->compositor;
+  Scene *evaluated_scene = DEG_get_evaluated_scene(compositor_runtime.preview_depsgraph);
+  render::CompositorInputData input_data(*compositor_job->render,
+                                         *compositor_job->bmain,
+                                         *evaluated_scene,
+                                         evaluated_scene->r,
+                                         "",
+                                         nullptr,
+                                         compositor_job->needed_side_effect_outputs,
+                                         compositor_job->triggered_by_user);
+  if (!(evaluated_scene->r.scemode & R_MULTIVIEW)) {
+    RE_compositor_execute(input_data);
+  }
+  else {
+    for (SceneRenderView &scene_render_view : evaluated_scene->r.views) {
+      if (!BKE_scene_multiview_is_render_view_active(&evaluated_scene->r, &scene_render_view)) {
+        continue;
+      }
+      input_data.view_name = scene_render_view.name;
+      RE_compositor_execute(input_data);
+    }
+  }
+}
+
+static void compositor_job_complete(void *compositor_job_data)
+{
+  CompositorJob *compositor_job = static_cast<CompositorJob *>(compositor_job_data);
+
+  Scene *scene = compositor_job->scene;
+  BKE_callback_exec_id(compositor_job->bmain, &scene->id, BKE_CB_EVT_COMPOSITE_POST);
+
+  if (scene->runtime == nullptr || scene->runtime->compositor.preview_depsgraph == nullptr) {
+    return;
+  }
+  Scene *evaluated_scene = DEG_get_evaluated_scene(scene->runtime->compositor.preview_depsgraph);
+  if (evaluated_scene && evaluated_scene->runtime) {
+    scene->runtime->compositor.nodes_evaluation_log = std::move(
+        evaluated_scene->runtime->compositor.nodes_evaluation_log);
+  }
+
+  unlock_compositor_preview(compositor_job);
+
+  WM_main_add_notifier(NC_SCENE | ND_COMPO_RESULT, nullptr);
+
+  /* Resume animation playback (if any) after the compositor is done. */
+  set_animation_playback(compositor_job->window_manager, true);
+}
+
+static void compositor_job_cancel(void *compositor_job_data)
+{
+  CompositorJob *compositor_job = static_cast<CompositorJob *>(compositor_job_data);
+
+  Scene *scene = compositor_job->scene;
+  BKE_callback_exec_id(compositor_job->bmain, &scene->id, BKE_CB_EVT_COMPOSITE_CANCEL);
+
+  unlock_compositor_preview(compositor_job);
+
+  /* Resume animation playback (if any) after the compositor is done. */
+  set_animation_playback(compositor_job->window_manager, true);
+}
+
+static void compositor_job_free(void *compositor_job_data)
+{
+  MEM_delete(static_cast<CompositorJob *>(compositor_job_data));
+}
+
+static bool is_compositing_possible(const Scene *scene)
+{
+  if (G.background) {
+    return false;
+  }
+
+  if (G.is_rendering) {
+    return false;
+  }
+
+  if (!bke::compositor::is_enabled(*scene, bke::compositor::ExecutionMode::Preview)) {
+    return false;
+  }
+
+  /* CPU compositor can always run. */
+  if (scene->r.compositor_device != SCE_COMPOSITOR_DEVICE_GPU) {
+    return true;
+  }
+
+  /* The render size exceeds what can be allocated as a GPU texture. */
+  int width, height;
+  BKE_render_resolution(&scene->r, false, &width, &height);
+  if (width > 8192 || height > 8192) {
+    WM_global_report(RPT_ERROR, "Render size too large for GPU, use CPU compositor instead");
+    return false;
+  }
+
+  return true;
+}
+
+/* Returns the compositor outputs that need to be computed because their result is visible to the
+ * user or required by the render pipeline. */
+static compositor::SideEffectOutputTypes get_needed_side_effect_outputs(
+    const wmWindowManager *window_manager)
+{
+  if (G.background) {
+    return compositor::SideEffectOutputTypes::None;
+  }
+
+  compositor::SideEffectOutputTypes needed_side_effect_outputs =
+      compositor::SideEffectOutputTypes::None;
+
+  for (wmWindow &window : window_manager->windows) {
+    bScreen *screen = WM_window_get_active_screen(&window);
+    for (ScrArea &area : screen->areabase) {
+      SpaceLink *space_link = area.spacedata.first();
+      if (!space_link || !ELEM(space_link->spacetype, SPACE_NODE, SPACE_IMAGE)) {
+        continue;
+      }
+      if (space_link->spacetype == SPACE_NODE) {
+        const SpaceNode *space_node = reinterpret_cast<const SpaceNode *>(space_link);
+        if (space_node->flag & SNODE_BACKDRAW) {
+          needed_side_effect_outputs |= compositor::SideEffectOutputTypes::ViewerNode;
+        }
+        if (space_node->overlay.flag & SN_OVERLAY_SHOW_PREVIEWS) {
+          needed_side_effect_outputs |= compositor::SideEffectOutputTypes::NodePreviews;
+        }
+      }
+      else if (space_link->spacetype == SPACE_IMAGE) {
+        const SpaceImage *space_image = reinterpret_cast<const SpaceImage *>(space_link);
+        Image *image = ED_space_image(space_image);
+        if (image && image->source == IMA_SRC_VIEWER && image->type == IMA_TYPE_COMPOSITE) {
+          needed_side_effect_outputs |= compositor::SideEffectOutputTypes::ViewerNode;
+        }
+      }
+
+      /* All possible outputs are already needed, return early. */
+      if (needed_side_effect_outputs == (compositor::SideEffectOutputTypes::ViewerNode |
+                                         compositor::SideEffectOutputTypes::NodePreviews))
+      {
+        return needed_side_effect_outputs;
+      }
+    }
+  }
+
+  /* None of the outputs are needed except node previews but they are a secondary output that needs
+   * another output to be computed with, so this is practically none. */
+  if (needed_side_effect_outputs == compositor::SideEffectOutputTypes::NodePreviews) {
+    return compositor::SideEffectOutputTypes::None;
+  }
+
+  return needed_side_effect_outputs;
+}
+
+static eWM_JobFlag get_job_flags(const bool triggered_by_user)
+{
+  /* Of the job is triggered by the user, report progress. */
+  if (triggered_by_user) {
+    return WM_JOB_EXCL_RENDER | WM_JOB_PROGRESS;
+  }
+
+  return WM_JOB_EXCL_RENDER;
+}
+
+void ED_node_compositor_job(Main *bmain,
+                            Scene *scene,
+                            ViewLayer *view_layer,
+                            const bool triggered_by_user)
+{
+  /* A DLSS preview is still applying the state it captured. Drop new edits until it finishes
+   * instead of canceling it and showing the unprocessed input. */
+  if (compositor_preview_locked) {
+    return;
+  }
+
+  BKE_scene_runtime_ensure(scene);
+  if (scene == nullptr || scene->runtime == nullptr) {
+    return;
+  }
+  /* Avoid displaying stale warnings/errors of the previously assigned node group. */
+  scene->runtime->compositor.nodes_evaluation_log.reset();
+
+  if (!is_compositing_possible(scene)) {
+    return;
+  }
+
+  wmWindowManager *window_manager = bmain->wm.first();
+  const compositor::SideEffectOutputTypes needed_side_effect_outputs =
+      get_needed_side_effect_outputs(window_manager);
+  if (needed_side_effect_outputs == compositor::SideEffectOutputTypes::None) {
+    return;
+  }
+
+  Image *render_result_image = BKE_image_ensure_viewer(bmain, IMA_TYPE_R_RESULT, "Render Result");
+  BKE_image_backup_render(scene, render_result_image, false);
+
+  wmWindow *window = window_manager->runtime->winactive ? window_manager->runtime->winactive :
+                                                          window_manager->windows.first();
+  wmJob *job = WM_jobs_get(window_manager,
+                           window,
+                           scene,
+                           "Compositing...",
+                           get_job_flags(triggered_by_user),
+                           WM_JOB_TYPE_COMPOSITE);
+
+  CompositorJob *compositor_job = MEM_new<CompositorJob>("Compositor Job");
+  compositor_job->window_manager = window_manager;
+  compositor_job->bmain = bmain;
+  compositor_job->scene = scene;
+  compositor_job->view_layer = view_layer;
+  compositor_job->needed_side_effect_outputs = needed_side_effect_outputs;
+  compositor_job->triggered_by_user = triggered_by_user;
+
+  WM_jobs_customdata_set(job, compositor_job, compositor_job_free);
+  WM_jobs_timer(job, 0.1, 0, 0);
+  WM_jobs_callbacks_ex(job,
+                       compositor_job_start,
+                       compositor_job_init,
+                       nullptr,
+                       nullptr,
+                       compositor_job_complete,
+                       compositor_job_cancel);
+
+  G.is_break = false;
+  WM_jobs_start(window_manager, job);
+}
+
+}  // namespace blender

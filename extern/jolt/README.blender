@@ -1,0 +1,12 @@
+# Jolt Physics in Blender
+
+Upstream: https://github.com/jrouwe/JoltPhysics
+Tag: v5.6.0
+License: MIT (see JoltPhysics/LICENSE)
+
+Vendored for Geometry Nodes **Jolt Solver** (black-box rigid body + constraint step).
+
+- `CMakeLists.txt` is Blender-local. It includes upstream `Jolt/Jolt.cmake`.
+- Samples / tests / viewer / GPU compute (DX12, Vulkan, Metal, CPU hair) are not built.
+- Instruction set: AVX2 + FMA (x64). The bridge must use the same `JPH_USE_*` defines
+  (propagated by linking the `Jolt` target).

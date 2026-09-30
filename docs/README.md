@@ -1,0 +1,13 @@
+# BIKINI 文档
+
+GitHub Pages 根目录。语言切换三页共用（`localStorage`）。
+
+| 文件 | 内容 |
+|------|------|
+| [index.html](index.html) | 入口 |
+| [manual.html](manual.html) | 用户手册（v1 / v2 / v3，中 / 英） |
+| [changelog.html](changelog.html) | 开发说明（v1 / v2 / v3） |
+| [vex.html](vex.html) | VEX 语言介绍（类型、循环、分支） |
+| [vex-functions.html](vex-functions.html) | VEX 内置函数清单 |
+
+本地直接打开 `index.html` 即可。第三方库与许可证见包根目录 `README.md`。

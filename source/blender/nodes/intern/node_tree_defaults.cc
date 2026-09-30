@@ -1,0 +1,141 @@
+/* SPDX-FileCopyrightText: 2025 Blender Authors
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later */
+
+/** \file
+ * \ingroup nodes
+ */
+
+#include "DNA_material_types.h"
+#include "DNA_node_types.h"
+#include "DNA_object_types.h"
+#include "DNA_pointcloud_types.h"
+#include "DNA_world_types.h"
+
+#include "BKE_context.hh"
+#include "BKE_global.hh"
+#include "BKE_material.hh"
+#include "BKE_node.hh"
+#include "BKE_node_legacy_types.hh"
+#include "BKE_node_runtime.hh"
+#include "BKE_node_tree_update.hh"
+
+#include "BLI_listbase.hh"
+#include "BLI_math_vector_c.hh"
+#include "BLI_string_utf8.hh"
+
+#include "BLT_translation.hh"
+
+#include "NOD_composite.hh"
+#include "NOD_defaults.hh"
+#include "NOD_shader.h"
+
+namespace blender::nodes {
+
+void node_tree_shader_default(const bContext *C, Main *bmain, ID *id)
+{
+  if (GS(id->name) == ID_MA) {
+    /* Materials */
+    Object *ob = (C) ? CTX_data_active_object(C) : nullptr;
+    Material *ma = reinterpret_cast<Material *>(id);
+    Material *ma_default;
+
+    if (ob && ob->type == OB_VOLUME) {
+      ma_default = BKE_material_default_volume();
+    }
+    else if (ob && ob->type == OB_POINTCLOUD && ob->data &&
+             id_cast<const PointCloud *>(ob->data)->type == PointCloudType::GSplat)
+    {
+      ma_default = BKE_material_default_gsplat();
+    }
+    else {
+      ma_default = BKE_material_default_surface();
+    }
+
+    if (ma->nodetree) {
+      bke::node_tree_free_embedded_tree(ma->nodetree);
+      MEM_delete(ma->nodetree);
+      ma->nodetree = nullptr;
+    }
+    ma->nodetree = bke::node_tree_copy_tree(bmain, *ma_default->nodetree);
+    ma->nodetree->owner_id = &ma->id;
+    for (bNode *node_iter : ma->nodetree->all_nodes()) {
+      STRNCPY_UTF8(node_iter->name, DATA_(node_iter->name));
+      bke::node_unique_name(*ma->nodetree, *node_iter);
+    }
+
+    BKE_ntree_update_after_single_tree_change(*bmain, *ma->nodetree);
+  }
+  else if (ELEM(GS(id->name), ID_WO, ID_LA)) {
+    /* Emission */
+    bNode *shader, *output;
+    bNodeTree *ntree = nullptr;
+
+    if (GS(id->name) == ID_WO) {
+      World *world = reinterpret_cast<World *>(id);
+      ntree = world->nodetree;
+
+      shader = bke::node_add_static_node(nullptr, *ntree, SH_NODE_BACKGROUND);
+      output = bke::node_add_static_node(nullptr, *ntree, SH_NODE_OUTPUT_WORLD);
+      bke::node_add_link(*ntree,
+                         *shader,
+                         *bke::node_find_socket(*shader, SOCK_OUT, "Background"_ustr),
+                         *output,
+                         *bke::node_find_socket(*output, SOCK_IN, "Surface"_ustr));
+
+      bNodeSocket *color_sock = bke::node_find_socket(*shader, SOCK_IN, "Color"_ustr);
+      copy_v3_v3((reinterpret_cast<bNodeSocketValueRGBA *>(color_sock->default_value))->value,
+                 &world->horr);
+    }
+    else {
+      ntree = bke::node_tree_add_tree_embedded(
+          nullptr, id, "Shader Nodetree", ntreeType_Shader->idname.ref());
+      shader = bke::node_add_static_node(nullptr, *ntree, SH_NODE_EMISSION);
+      output = bke::node_add_static_node(nullptr, *ntree, SH_NODE_OUTPUT_LIGHT);
+      bke::node_add_link(*ntree,
+                         *shader,
+                         *bke::node_find_socket(*shader, SOCK_OUT, "Emission"_ustr),
+                         *output,
+                         *bke::node_find_socket(*output, SOCK_IN, "Surface"_ustr));
+    }
+
+    shader->location[0] = -200.0f;
+    shader->location[1] = 100.0f;
+    output->location[0] = 200.0f;
+    output->location[1] = 100.0f;
+    bke::node_set_active(*ntree, *output);
+    BKE_ntree_update_after_single_tree_change(*bmain, *ntree);
+  }
+  else {
+    printf("node_tree_shader_default() called on wrong ID type.\n");
+    return;
+  }
+}
+
+void node_tree_composit_default_init(const bContext *C, bNodeTree *ntree)
+{
+  BLI_assert(ntree != nullptr && ntree->type == NTREE_COMPOSIT);
+  BLI_assert(ntree->nodes.count() == 0);
+
+  ntree->tree_interface.add_socket(
+      DATA_("Image"), "", "NodeSocketColor", NODE_INTERFACE_SOCKET_INPUT, nullptr);
+  ntree->tree_interface.add_socket(
+      DATA_("Image"), "", "NodeSocketColor", NODE_INTERFACE_SOCKET_OUTPUT, nullptr);
+
+  bNode *composite = bke::node_add_node(C, *ntree, "NodeGroupOutput"_ustr);
+  composite->location[0] = 200.0f;
+  /* The asset shelf is visible by default, so add a small offset to keep nodes centered in the
+   * visible area.*/
+  composite->location[1] = 100.0f;
+
+  bNode *in = bke::node_add_node(C, *ntree, "NodeGroupInput"_ustr);
+  in->location[0] = -150.0f - in->width;
+  in->location[1] = 100.0f;
+  bke::node_set_active(*ntree, *in);
+
+  bke::node_add_link(*ntree, *in, *in->outputs.first(), *composite, *composite->inputs.first());
+
+  BKE_ntree_update_after_single_tree_change(*CTX_data_main(C), *ntree);
+}
+
+}  // namespace blender::nodes

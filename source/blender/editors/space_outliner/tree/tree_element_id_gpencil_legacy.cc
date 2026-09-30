@@ -1,0 +1,43 @@
+/* SPDX-FileCopyrightText: 2023 Blender Authors
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later */
+
+/** \file
+ * \ingroup spoutliner
+ */
+
+#include "DNA_gpencil_legacy_types.h"
+#include "DNA_outliner_types.h"
+
+#include "BLI_listbase.hh"
+
+#include "../outliner_intern.hh"
+
+#include "tree_display.hh"
+#include "tree_element_gpencil_layer.hh"
+#include "tree_element_id_gpencil_legacy.hh"
+
+namespace blender::ed::outliner {
+
+TreeElementIDGPLegacy::TreeElementIDGPLegacy(TreeElement &legacy_te, bGPdata &gpd)
+    : TreeElementID(legacy_te, gpd.id), gpd_(gpd)
+{
+}
+
+void TreeElementIDGPLegacy::expand(SpaceOutliner & /*space_outliner*/) const
+{
+  expand_animation_data(gpd_.adt);
+
+  expand_layers();
+}
+
+void TreeElementIDGPLegacy::expand_layers() const
+{
+  int index = 0;
+  for (bGPDlayer &gpl : gpd_.layers.items_reversed()) {
+    add_element<TreeElementGPencilLayer>({.index = index, .owner_id = &gpd_.id}, gpl);
+    index++;
+  }
+}
+
+}  // namespace blender::ed::outliner

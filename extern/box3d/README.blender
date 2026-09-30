@@ -1,0 +1,9 @@
+# Box3D in Blender
+
+Upstream: https://github.com/erincatto/box3d
+License: MIT (see LICENSE)
+Vendored for Geometry Nodes **Box Engine Solver** (3D path).
+
+- `CMakeLists.txt` is Blender-local (core sources only).
+- Upstream CMake preserved as `CMakeLists.upstream.txt`.
+- Samples / tests / docs are not built.

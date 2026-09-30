@@ -1,0 +1,956 @@
+/* SPDX-FileCopyrightText: 2011-2026 Blender Foundation
+ *
+ * SPDX-License-Identifier: Apache-2.0 */
+
+#include "util/colorspace.h"
+#include "util/color.h"
+#include "util/image.h"
+#include "util/log.h"
+#include "util/map.h"
+#include "util/math.h"
+#include "util/string.h"
+#include "util/thread.h"
+#include "util/transform.h"
+#include "util/vector.h"
+
+#ifdef WITH_OCIO
+#  include <OpenColorIO/OpenColorIO.h>
+namespace OCIO = OCIO_NAMESPACE;
+#endif
+
+CCL_NAMESPACE_BEGIN
+
+/* Builtin colorspaces. */
+ustring u_colorspace_auto;
+ustring u_colorspace_data("data");
+ustring u_colorspace_scene_linear("scene_linear");
+ustring u_colorspace_scene_linear_srgb("scene_linear_srgb");
+ustring u_colorspace_srgb("__builtin_srgb");
+
+/* Cached data. */
+static thread_mutex cache_xyz_to_scene_linear_mutex;
+static string cache_xyz_to_scene_linear_hash;
+
+#ifdef WITH_OCIO
+static thread_mutex cache_processors_mutex;
+static unordered_map<ustring, OCIO::ConstProcessorRcPtr> cache_processors;
+
+static thread_mutex cache_colorspaces_mutex;
+static unordered_map<ustring, ustring> cached_colorspaces;
+
+static thread_mutex cache_scene_linear_interop_id_mutex;
+static bool cache_scene_linear_interop_id_done = false;
+static const char *cache_scene_linear_interop_id = "";
+static const char *cache_scene_linear_srgb_interop_id = "";
+
+/* Config the caches were built for, holding a reference so a new config can't
+ * reuse its address. */
+static OCIO::ConstConfigRcPtr cache_config;
+
+static void check_invalidate_caches()
+{
+  static thread_mutex cache_scene_linear_mutex;
+  static string cache_scene_linear_name;
+
+  /* Invalidate cached processors and colorspace, in case Blender changed the
+   * scene linear space or switched to another config.
+   * Note this should not happen during rendering, all render should be stopped
+   * before it is changed. */
+  const thread_scoped_lock cache_scene_linear_lock(cache_scene_linear_mutex);
+  OCIO::ConstConfigRcPtr config = nullptr;
+  try {
+    config = OCIO::GetCurrentConfig();
+  }
+  catch (const OCIO::Exception &exception) {
+    LOG_ERROR << "OCIO config error: " << exception.what();
+    return;
+  }
+
+  const OCIO::ConstColorSpaceRcPtr scene_linear_colorspace = config->getColorSpace("scene_linear");
+  if (scene_linear_colorspace &&
+      (cache_config != config || cache_scene_linear_name != scene_linear_colorspace->getName()))
+  {
+    cache_config = config;
+    cache_scene_linear_name = scene_linear_colorspace->getName();
+    {
+      const thread_scoped_lock cache_processors_lock(cache_processors_mutex);
+      cache_processors.clear();
+    }
+    {
+      const thread_scoped_lock cache_lock(cache_colorspaces_mutex);
+      cached_colorspaces.clear();
+    }
+    {
+      const thread_scoped_lock cache_lock(cache_scene_linear_interop_id_mutex);
+      cache_scene_linear_interop_id_done = false;
+      cache_scene_linear_interop_id = "";
+      cache_scene_linear_srgb_interop_id = "";
+    }
+    {
+      const thread_scoped_lock cache_lock(cache_xyz_to_scene_linear_mutex);
+      cache_xyz_to_scene_linear_hash.clear();
+    }
+  }
+}
+#endif
+
+ColorSpaceProcessor *ColorSpaceManager::get_processor(ustring colorspace)
+{
+#ifdef WITH_OCIO
+  /* Only use this for OpenColorIO color spaces, not the builtin ones. */
+  assert(colorspace != u_colorspace_scene_linear_srgb && colorspace != u_colorspace_auto);
+
+  if (colorspace == u_colorspace_data || colorspace == u_colorspace_scene_linear) {
+    return nullptr;
+  }
+
+  OCIO::ConstConfigRcPtr config = nullptr;
+  try {
+    config = OCIO::GetCurrentConfig();
+  }
+  catch (const OCIO::Exception &exception) {
+    LOG_WARNING << "OCIO config error: " << exception.what();
+    return nullptr;
+  }
+
+  if (!config) {
+    return nullptr;
+  }
+
+  /* Outside the mutex lock. This will also invalidate the cache if
+   * scene linear colorspace changed. */
+  const char *scene_linear_interop_id = get_scene_linear_interop_id();
+
+  /* Cache processor until free_memory(), memory overhead is expected to be
+   * small and the processor is likely to be reused. */
+  const thread_scoped_lock cache_processors_lock(cache_processors_mutex);
+  if (!cache_processors.contains(colorspace)) {
+    try {
+      if (colorspace == u_colorspace_srgb) {
+        /* The sRGB transfer function is handled separately in to_scene_linear, here
+         * we only need the matrix transform from Linear Rec.709 to scene_linear. */
+        if (strcmp(scene_linear_interop_id, "lin_rec709_scene") == 0) {
+          cache_processors[colorspace] = nullptr;
+        }
+        else {
+          const Transform rec709_to_rgb = get_xyz_to_scene_linear_rgb() *
+                                          transform_inverse(get_xyz_to_rec709());
+          const double data[16] = {rec709_to_rgb.x.x,
+                                   rec709_to_rgb.x.y,
+                                   rec709_to_rgb.x.z,
+                                   rec709_to_rgb.x.w,
+                                   rec709_to_rgb.y.x,
+                                   rec709_to_rgb.y.y,
+                                   rec709_to_rgb.y.z,
+                                   rec709_to_rgb.y.w,
+                                   rec709_to_rgb.z.x,
+                                   rec709_to_rgb.z.y,
+                                   rec709_to_rgb.z.z,
+                                   rec709_to_rgb.z.w,
+                                   0.0f,
+                                   0.0f,
+                                   0.0f,
+                                   1.0f};
+          OCIO::MatrixTransformRcPtr tfm = OCIO::MatrixTransform::Create();
+          tfm->setMatrix(data);
+          cache_processors[colorspace] = config->getProcessor(tfm, OCIO::TRANSFORM_DIR_FORWARD);
+        }
+      }
+      else {
+        cache_processors[colorspace] = config->getProcessor(colorspace.c_str(), "scene_linear");
+      }
+    }
+    catch (const OCIO::Exception &exception) {
+      cache_processors[colorspace] = OCIO::ConstProcessorRcPtr();
+      LOG_WARNING << "Colorspace " << colorspace.c_str()
+                  << " can't be converted to scene_linear: " << exception.what();
+    }
+  }
+
+  const OCIO::Processor *processor = cache_processors[colorspace].get();
+  return (ColorSpaceProcessor *)processor;
+#else
+  /* No OpenColorIO. */
+  (void)colorspace;
+  return nullptr;
+#endif
+}
+
+bool ColorSpaceManager::colorspace_is_data(ustring colorspace)
+{
+  if (colorspace == u_colorspace_data) {
+    return true;
+  }
+  if (colorspace == u_colorspace_auto || colorspace == u_colorspace_scene_linear ||
+      colorspace == u_colorspace_scene_linear_srgb || colorspace == u_colorspace_srgb)
+  {
+    return false;
+  }
+
+#ifdef WITH_OCIO
+  OCIO::ConstConfigRcPtr config = nullptr;
+  try {
+    config = OCIO::GetCurrentConfig();
+  }
+  catch (const OCIO::Exception &exception) {
+    LOG_WARNING << "OCIO config error: " << exception.what();
+    return false;
+  }
+
+  if (!config) {
+    return false;
+  }
+
+  try {
+    const OCIO::ConstColorSpaceRcPtr space = config->getColorSpace(colorspace.c_str());
+    return space && space->isData();
+  }
+  catch (const OCIO::Exception &) {
+    return false;
+  }
+#else
+  return false;
+#endif
+}
+
+const char *ColorSpaceManager::colorspace_interop_id(ustring colorspace)
+{
+  if (colorspace == u_colorspace_auto) {
+    return nullptr;
+  }
+  if (colorspace == u_colorspace_data) {
+    return "data";
+  }
+  if (colorspace == u_colorspace_srgb) {
+    return "srgb_rec709_scene";
+  }
+  if (colorspace == u_colorspace_scene_linear) {
+    const char *interop_id = get_scene_linear_interop_id(false);
+    if (strcmp(interop_id, "unknown") != 0) {
+      return interop_id;
+    }
+  }
+  else if (colorspace == u_colorspace_scene_linear_srgb) {
+    const char *interop_id = get_scene_linear_interop_id(true);
+    if (strcmp(interop_id, "unknown") != 0) {
+      return interop_id;
+    }
+  }
+
+#ifdef WITH_OCIO
+  OCIO::ConstConfigRcPtr config = nullptr;
+  try {
+    config = OCIO::GetCurrentConfig();
+    if (!config) {
+      return nullptr;
+    }
+  }
+  catch (const OCIO::Exception &) {
+    return nullptr;
+  }
+
+  try {
+    const OCIO::ConstColorSpaceRcPtr space = config->getColorSpace(colorspace.c_str());
+    if (space) {
+      if (space->isData()) {
+        return "data";
+      }
+      /* From https://github.com/AcademySoftwareFoundation/ColorInterop. */
+      /* TODO: Use native interop ID support in OpenColorIO 2.5. */
+      const char *interop_ids[] = {"lin_rec709_scene",
+                                   "lin_p3d65_scene",
+                                   "lin_rec2020_scene",
+                                   "lin_adobergb_scene",
+                                   "lin_ap1_scene",
+                                   "lin_ap0_scene",
+                                   "lin_ciexyzd65_scene",
+                                   "srgb_rec709_scene",
+                                   "g22_rec709_scene",
+                                   "g18_rec709_scene",
+                                   "srgb_ap1_scene",
+                                   "g22_ap1_scene",
+                                   "srgb_p3d65_scene",
+                                   "g22_adobergb_scene"};
+      for (const char *interop_id : interop_ids) {
+#  if OCIO_VERSION_MAJOR == 2 && OCIO_VERSION_MINOR == 2
+        for (int i = 0; i < space->getNumAliases(); i++) {
+          if (string_iequals(space->getAlias(i), interop_id)) {
+            return interop_id;
+          }
+        }
+#  else
+        if (space->hasAlias(interop_id)) {
+          return interop_id;
+        }
+#  endif
+      }
+    }
+  }
+  catch (const OCIO::Exception &) {
+    return nullptr;
+  }
+#endif
+
+  return nullptr;
+}
+
+ustring ColorSpaceManager::detect_known_colorspace(ustring colorspace,
+                                                   const char *file_colorspace,
+                                                   const char * /*file_format*/,
+                                                   bool is_float)
+{
+#ifdef WITH_OCIO
+  OCIO::ConstConfigRcPtr config = nullptr;
+  try {
+    config = OCIO::GetCurrentConfig();
+  }
+  catch (const OCIO::Exception &exception) {
+    LOG_WARNING << "OCIO config error: " << exception.what();
+  }
+
+  /* Rely on OpenImageIO and OpenColorIO guessed color spaces when available. This relies on
+   * recent OpenImageIO versions supporting interop IDs. */
+  if (config && colorspace == u_colorspace_auto) {
+    if (file_colorspace[0] && config->getColorSpace(file_colorspace)) {
+      colorspace = file_colorspace;
+    }
+    else {
+#  if OCIO_VERSION_MAJOR == 2 && OCIO_VERSION_MINOR == 2
+      /* Roles are looked up by index, where -1 means the role is not defined in the config. */
+      int default_float_id = -1;
+      int default_byte_id = -1;
+      int default_id = -1;
+      for (int i = 0; i < config->getNumRoles(); i++) {
+        const char *role_name = config->getRoleName(i);
+        if (strcmp(role_name, "default_float") == 0) {
+          default_float_id = i;
+        }
+        else if (strcmp(role_name, "default_byte") == 0) {
+          default_byte_id = i;
+        }
+        else if (strcmp(role_name, "default") == 0) {
+          default_id = i;
+        }
+      }
+      const int role_id = (is_float) ? default_float_id : default_byte_id;
+      const char *role_colorspace = (role_id != -1) ? config->getRoleColorSpace(role_id) : nullptr;
+      if (role_colorspace == nullptr && default_id != -1) {
+        role_colorspace = config->getRoleColorSpace(default_id);
+      }
+#  else
+      const char *role_name = (is_float) ? "default_float" : "default_byte";
+      const char *role_colorspace = config->hasRole(role_name) ?
+                                        config->getRoleColorSpace(role_name) :
+                                        nullptr;
+      if (role_colorspace == nullptr && config->hasRole("default")) {
+        role_colorspace = config->getRoleColorSpace("default");
+      }
+#  endif
+      if (role_colorspace) {
+        colorspace = role_colorspace;
+      }
+    }
+  }
+#endif
+
+  /* Fall back to simple guess if we don't have OpenColorIO. */
+  if (colorspace == u_colorspace_auto) {
+    const bool is_srgb = !is_float || strcmp(file_colorspace, "srgb_rec709_scene") == 0 ||
+                         strcmp(file_colorspace, "srgb_rec709_display") == 0;
+
+    if (!is_srgb) {
+      colorspace = u_colorspace_scene_linear;
+    }
+    else if (strcmp(get_scene_linear_interop_id(), "lin_rec709_scene") == 0) {
+      /* If working space is Rec.709, scene_linear_srgb is more efficient since
+       * the matrix transform can be skipped. */
+      colorspace = u_colorspace_scene_linear_srgb;
+    }
+    else {
+      colorspace = u_colorspace_srgb;
+    }
+  }
+
+  /* Builtin colorspaces. */
+  if (colorspace == u_colorspace_srgb || colorspace == u_colorspace_scene_linear ||
+      colorspace == u_colorspace_scene_linear_srgb || colorspace == u_colorspace_data)
+  {
+    return colorspace;
+  }
+
+  if (colorspace_is_data(colorspace)) {
+    return u_colorspace_data;
+  }
+
+  /* Use OpenColorIO. */
+#ifdef WITH_OCIO
+  check_invalidate_caches();
+
+  {
+    const thread_scoped_lock cache_lock(cache_colorspaces_mutex);
+    /* Cached lookup. */
+    if (cached_colorspaces.contains(colorspace)) {
+      return cached_colorspaces[colorspace];
+    }
+  }
+
+  /* Detect if it matches a simple builtin colorspace. */
+  bool is_scene_linear;
+  bool is_scene_linear_srgb;
+  is_builtin_colorspace(colorspace, is_scene_linear, is_scene_linear_srgb);
+
+  const thread_scoped_lock cache_lock(cache_colorspaces_mutex);
+  if (is_scene_linear) {
+    LOG_DEBUG << "Colorspace " << colorspace.string() << " is no-op";
+    cached_colorspaces[colorspace] = u_colorspace_scene_linear;
+    return u_colorspace_scene_linear;
+  }
+  if (is_scene_linear_srgb) {
+    LOG_DEBUG << "Colorspace " << colorspace.string() << " is scene linear sRGB";
+    cached_colorspaces[colorspace] = u_colorspace_scene_linear_srgb;
+    return u_colorspace_scene_linear_srgb;
+  }
+
+  /* Verify if we can convert from the requested color space. */
+  if (!get_processor(colorspace)) {
+    if (!config || !config->getColorSpace(colorspace.c_str())) {
+      LOG_WARNING << "Colorspace " << colorspace.c_str()
+                  << " not found, using scene linear instead";
+    }
+    else {
+      LOG_WARNING << "Colorspace " << colorspace.c_str()
+                  << " can't be converted to scene_linear, using scene linear instead";
+    }
+    cached_colorspaces[colorspace] = u_colorspace_scene_linear;
+    return u_colorspace_scene_linear;
+  }
+
+  /* Convert to/from colorspace with OpenColorIO. */
+  LOG_DEBUG << "Colorspace " << colorspace.string() << " handled through OpenColorIO";
+  cached_colorspaces[colorspace] = colorspace;
+  return colorspace;
+#else
+  LOG_WARNING << "Colorspace " << colorspace.c_str()
+              << " not available, built without OpenColorIO";
+  return u_colorspace_scene_linear;
+#endif
+}
+
+void ColorSpaceManager::is_builtin_colorspace(ustring colorspace,
+                                              bool &is_scene_linear,
+                                              bool &is_scene_linear_srgb)
+{
+#ifdef WITH_OCIO
+  const OCIO::Processor *processor = (const OCIO::Processor *)get_processor(colorspace);
+  if (!processor) {
+    is_scene_linear = false;
+    is_scene_linear_srgb = false;
+    return;
+  }
+
+  const OCIO::ConstCPUProcessorRcPtr device_processor = processor->getDefaultCPUProcessor();
+  is_scene_linear = true;
+  is_scene_linear_srgb = true;
+  for (int i = 0; i < 256; i++) {
+    const float v = i / 255.0f;
+
+    float cR[3] = {v, 0, 0};
+    float cG[3] = {0, v, 0};
+    float cB[3] = {0, 0, v};
+    float cW[3] = {v, v, v};
+    device_processor->applyRGB(cR);
+    device_processor->applyRGB(cG);
+    device_processor->applyRGB(cB);
+    device_processor->applyRGB(cW);
+
+    /* Make sure that there is no channel crosstalk. */
+    if (fabsf(cR[1]) > 1e-5f || fabsf(cR[2]) > 1e-5f || fabsf(cG[0]) > 1e-5f ||
+        fabsf(cG[2]) > 1e-5f || fabsf(cB[0]) > 1e-5f || fabsf(cB[1]) > 1e-5f)
+    {
+      is_scene_linear = false;
+      is_scene_linear_srgb = false;
+      break;
+    }
+    /* Make sure that the three primaries combine linearly. */
+    if (!compare_floats(cR[0], cW[0], 1e-6f, 64) || !compare_floats(cG[1], cW[1], 1e-6f, 64) ||
+        !compare_floats(cB[2], cW[2], 1e-6f, 64))
+    {
+      is_scene_linear = false;
+      is_scene_linear_srgb = false;
+      break;
+    }
+    /* Make sure that the three channels behave identically. */
+    if (!compare_floats(cW[0], cW[1], 1e-6f, 64) || !compare_floats(cW[1], cW[2], 1e-6f, 64)) {
+      is_scene_linear = false;
+      is_scene_linear_srgb = false;
+      break;
+    }
+
+    const float out_v = average(make_float3(cW[0], cW[1], cW[2]));
+    if (!compare_floats(v, out_v, 1e-6f, 64)) {
+      is_scene_linear = false;
+    }
+    if (!compare_floats(color_srgb_to_linear(v), out_v, 1e-4f, 64)) {
+      is_scene_linear_srgb = false;
+    }
+  }
+#else
+  (void)colorspace;
+  is_scene_linear = false;
+  is_scene_linear_srgb = false;
+#endif
+}
+
+#ifdef WITH_OCIO
+
+template<typename T> inline float4 cast_to_float4(T *data)
+{
+  return make_float4(util_image_cast_to_float(data[0]),
+                     util_image_cast_to_float(data[1]),
+                     util_image_cast_to_float(data[2]),
+                     util_image_cast_to_float(data[3]));
+}
+
+template<typename T> inline void cast_from_float4(T *data, const float4 value)
+{
+  data[0] = util_image_cast_from_float<T>(value.x);
+  data[1] = util_image_cast_from_float<T>(value.y);
+  data[2] = util_image_cast_from_float<T>(value.z);
+  data[3] = util_image_cast_from_float<T>(value.w);
+}
+
+/* Slower versions for other all data types, which needs to convert to float and back. */
+template<typename T, bool compress_as_srgb, bool expand_from_srgb>
+inline void processor_apply_pixels_rgba(const OCIO::Processor *processor,
+                                        T *pixels,
+                                        const int64_t width,
+                                        const int64_t height,
+                                        const int64_t y_stride,
+                                        const bool ignore_alpha)
+{
+  /* TODO: implement faster version for when we know the conversion
+   * is a simple matrix transform between linear spaces. In that case
+   * un-premultiply is not needed. */
+  const OCIO::ConstCPUProcessorRcPtr device_processor = (processor) ?
+                                                            processor->getDefaultCPUProcessor() :
+                                                            nullptr;
+
+  /* Process large images in chunks to keep temporary memory requirement down. */
+  const int64_t chunk_rows = divide_up(std::min((int64_t)(16 * 1024 * 1024), width * height),
+                                       width);
+  vector<float4> float_pixels(chunk_rows * width);
+
+  for (int64_t row = 0; row < height; row += chunk_rows) {
+    const int64_t num_rows = std::min(chunk_rows, height - row);
+
+    for (int64_t j = 0; j < num_rows; j++) {
+      T *pixel = pixels + (row + j) * y_stride;
+      float4 *float_pixel = float_pixels.data() + j * width;
+      for (int64_t i = 0; i < width; i++, pixel += 4, float_pixel++) {
+        float4 value = cast_to_float4(pixel);
+
+        if (!ignore_alpha && !(value.w <= 0.0f || value.w == 1.0f)) {
+          const float inv_alpha = 1.0f / value.w;
+          value.x *= inv_alpha;
+          value.y *= inv_alpha;
+          value.z *= inv_alpha;
+        }
+
+        if (expand_from_srgb) {
+          value = color_srgb_to_linear_v4(value);
+        }
+
+        *float_pixel = value;
+      }
+    }
+
+    if (processor) {
+      const OCIO::PackedImageDesc desc((float *)float_pixels.data(), num_rows * width, 1, 4);
+      device_processor->apply(desc);
+    }
+
+    for (int64_t j = 0; j < num_rows; j++) {
+      T *pixel = pixels + (row + j) * y_stride;
+      float4 *float_pixel = float_pixels.data() + j * width;
+      for (int64_t i = 0; i < width; i++, pixel += 4, float_pixel++) {
+        float4 value = *float_pixel;
+
+        if (compress_as_srgb) {
+          value = color_linear_to_srgb_v4(value);
+        }
+
+        if (!ignore_alpha && !(value.w <= 0.0f || value.w == 1.0f)) {
+          value.x *= value.w;
+          value.y *= value.w;
+          value.z *= value.w;
+        }
+
+        cast_from_float4(pixel, value);
+      }
+    }
+  }
+}
+
+template<typename T, bool compress_as_srgb, bool expand_from_srgb>
+inline void processor_apply_pixels_grayscale(const OCIO::Processor *processor,
+                                             T *pixels,
+                                             const int64_t width,
+                                             const int64_t height,
+                                             const int64_t y_stride)
+{
+  const OCIO::ConstCPUProcessorRcPtr device_processor = (processor) ?
+                                                            processor->getDefaultCPUProcessor() :
+                                                            nullptr;
+
+  /* Process large images in chunks to keep temporary memory requirement down. */
+  const int64_t chunk_rows = divide_up(std::min((int64_t)(16 * 1024 * 1024), width * height),
+                                       width);
+  vector<float> float_pixels(chunk_rows * width * 3);
+
+  for (int64_t row = 0; row < height; row += chunk_rows) {
+    const int64_t num_rows = std::min(chunk_rows, height - row);
+
+    /* Convert to 3 channels, since that's the minimum required by OpenColorIO. */
+    for (int64_t j = 0; j < num_rows; j++) {
+      T *pixel = pixels + (row + j) * y_stride;
+      float *float_pixel = float_pixels.data() + j * width * 3;
+      for (int64_t i = 0; i < width; i++, pixel++, float_pixel += 3) {
+        float f = util_image_cast_to_float<T>(*pixel);
+        if (expand_from_srgb) {
+          f = color_srgb_to_linear(f);
+        }
+        float_pixel[0] = f;
+        float_pixel[1] = f;
+        float_pixel[2] = f;
+      }
+    }
+
+    if (processor) {
+      const OCIO::PackedImageDesc desc((float *)float_pixels.data(), num_rows * width, 1, 3);
+      device_processor->apply(desc);
+    }
+
+    for (int64_t j = 0; j < num_rows; j++) {
+      T *pixel = pixels + (row + j) * y_stride;
+      float *float_pixel = float_pixels.data() + j * width * 3;
+      for (int64_t i = 0; i < width; i++, pixel++, float_pixel += 3) {
+        float f = average(make_float3(float_pixel[0], float_pixel[1], float_pixel[2]));
+        if (compress_as_srgb) {
+          f = color_linear_to_srgb(f);
+        }
+        *pixel = util_image_cast_from_float<T>(f);
+      }
+    }
+  }
+}
+
+template<typename T, bool compress_as_srgb, bool expand_from_srgb>
+inline void processor_apply_pixels(const OCIO::Processor *processor,
+                                   T *pixels,
+                                   const int64_t width,
+                                   const int64_t height,
+                                   const int64_t y_stride,
+                                   const bool is_rgba,
+                                   const bool ignore_alpha)
+{
+  if (is_rgba) {
+    processor_apply_pixels_rgba<T, compress_as_srgb, expand_from_srgb>(
+        processor, pixels, width, height, y_stride, ignore_alpha);
+  }
+  else {
+    processor_apply_pixels_grayscale<T, compress_as_srgb, expand_from_srgb>(
+        processor, pixels, width, height, y_stride);
+  }
+}
+
+#endif
+
+template<typename T>
+void ColorSpaceManager::to_scene_linear(ustring colorspace,
+                                        T *pixels,
+                                        const int64_t width,
+                                        const int64_t height,
+                                        const int64_t y_stride,
+                                        bool is_rgba,
+                                        bool compress_as_srgb,
+                                        bool ignore_alpha)
+{
+#ifdef WITH_OCIO
+  const OCIO::Processor *processor = (const OCIO::Processor *)get_processor(colorspace);
+
+  /* The processor for sRGB is only a matrix on the primaries, so the sRGB transfer
+   * function has to be undone before it. */
+  const bool expand_from_srgb = (colorspace == u_colorspace_srgb);
+
+  if (expand_from_srgb) {
+    if (compress_as_srgb) {
+      processor_apply_pixels<T, true, true>(
+          processor, pixels, width, height, y_stride, is_rgba, ignore_alpha);
+    }
+    else {
+      processor_apply_pixels<T, false, true>(
+          processor, pixels, width, height, y_stride, is_rgba, ignore_alpha);
+    }
+  }
+  else if (compress_as_srgb) {
+    /* Compress output as sRGB. */
+    processor_apply_pixels<T, true, false>(
+        processor, pixels, width, height, y_stride, is_rgba, ignore_alpha);
+  }
+  else {
+    /* Write output as scene linear directly. */
+    processor_apply_pixels<T, false, false>(
+        processor, pixels, width, height, y_stride, is_rgba, ignore_alpha);
+  }
+#else
+  (void)colorspace;
+  (void)pixels;
+  (void)width;
+  (void)height;
+  (void)y_stride;
+  (void)is_rgba;
+  (void)compress_as_srgb;
+  (void)ignore_alpha;
+#endif
+}
+
+void ColorSpaceManager::free_memory()
+{
+#ifdef WITH_OCIO
+  map_free_memory(cached_colorspaces);
+  map_free_memory(cache_processors);
+  cache_config.reset();
+#endif
+}
+
+void ColorSpaceManager::init_fallback_config()
+{
+#ifdef WITH_OCIO
+  OCIO::SetCurrentConfig(OCIO::Config::CreateRaw());
+#endif
+}
+
+#ifdef WITH_OCIO
+static bool to_scene_linear_transform(OCIO::ConstConfigRcPtr &config,
+                                      const char *colorspace,
+                                      Transform &to_scene_linear)
+{
+  OCIO::ConstProcessorRcPtr processor;
+  try {
+    processor = config->getProcessor("scene_linear", colorspace);
+  }
+  catch (OCIO::Exception &) {
+    return false;
+  }
+
+  if (!processor) {
+    return false;
+  }
+
+  const OCIO::ConstCPUProcessorRcPtr device_processor = processor->getDefaultCPUProcessor();
+  if (!device_processor) {
+    return false;
+  }
+
+  to_scene_linear = transform_identity();
+  device_processor->applyRGB(&to_scene_linear.x.x);
+  device_processor->applyRGB(&to_scene_linear.y.x);
+  device_processor->applyRGB(&to_scene_linear.z.x);
+  to_scene_linear = transform_transposed_inverse(to_scene_linear);
+  return true;
+}
+#endif
+
+Transform ColorSpaceManager::get_xyz_to_rec709()
+{
+  /* Default to ITU-BT.709 in case no appropriate transform found.
+   * Note XYZ here is defined as having a D65 white point.
+   *
+   * Dumped from OpenColorIO so it matches those transforms exactly, same as
+   * XYZ_TO_REC709 in Blender. */
+  return make_transform(3.2409699f,
+                        -1.5373832f,
+                        -0.4986108f,
+                        0.0f,
+                        -0.9692436f,
+                        1.8759675f,
+                        0.0415551f,
+                        0.0f,
+                        0.0556301f,
+                        -0.2039770f,
+                        1.0569715f,
+                        0.0f);
+}
+
+Transform ColorSpaceManager::get_xyz_to_rec2020()
+{
+  return make_transform(1.7166512f,
+                        -0.3556708f,
+                        -0.2533663f,
+                        0.0f,
+                        -0.6666844,
+                        1.6164812f,
+                        0.0157685f,
+                        0.0f,
+                        0.0176399f,
+                        -0.0427706f,
+                        0.9421031f,
+                        0.0f);
+}
+
+Transform ColorSpaceManager::get_xyz_to_acescg()
+{
+  return transform_inverse(make_transform(0.652238f,
+                                          0.128237f,
+                                          0.169983f,
+                                          0.0f,
+                                          0.267672f,
+                                          0.674340f,
+                                          0.057988f,
+                                          0.0f,
+                                          -0.005382f,
+                                          0.001369f,
+                                          1.093071f,
+                                          0.0f));
+}
+
+Transform ColorSpaceManager::get_xyz_to_scene_linear_rgb()
+{
+  Transform xyz_to_rgb = get_xyz_to_rec709();
+
+#ifdef WITH_OCIO
+  /* Get from OpenColorO config if it has the required roles. */
+  OCIO::ConstConfigRcPtr config = nullptr;
+  try {
+    config = OCIO::GetCurrentConfig();
+  }
+  catch (OCIO::Exception &exception) {
+    LOG_WARNING << "OCIO config error: " << exception.what();
+    return xyz_to_rgb;
+  }
+
+  if (!(config && config->hasRole("scene_linear"))) {
+    return xyz_to_rgb;
+  }
+
+  if (config->hasRole("aces_interchange")) {
+    /* Standard OpenColorIO role, defined as ACES AP0 (ACES2065-1). */
+    Transform aces_to_rgb;
+    if (!to_scene_linear_transform(config, "aces_interchange", aces_to_rgb)) {
+      return xyz_to_rgb;
+    }
+
+    /* This is the OpenColorIO builtin transform:
+     * UTILITY - ACES-AP0_to_CIE-XYZ-D65_BFD. */
+    const Transform ACES_AP0_to_xyz_D65 = make_transform(0.938280f,
+                                                         -0.004451f,
+                                                         0.016628f,
+                                                         0.000000f,
+                                                         0.337369f,
+                                                         0.729522f,
+                                                         -0.066890f,
+                                                         0.000000f,
+                                                         0.001174f,
+                                                         -0.003711f,
+                                                         1.091595f,
+                                                         0.000000f);
+    const Transform xyz_to_aces = transform_inverse(ACES_AP0_to_xyz_D65);
+    xyz_to_rgb = aces_to_rgb * xyz_to_aces;
+    return xyz_to_rgb;
+  }
+
+  if (config->hasRole("XYZ")) {
+    /* Custom role used before the standard existed. */
+    if (to_scene_linear_transform(config, "XYZ", xyz_to_rgb)) {
+      return xyz_to_rgb;
+    }
+  }
+
+  /* No reference role found to determine XYZ. */
+#endif
+
+  return xyz_to_rgb;
+}
+
+std::string ColorSpaceManager::get_xyz_to_scene_linear_rgb_string()
+{
+#ifdef WITH_OCIO
+  /* Clear the cached hash if the scene linear colorspace changed. */
+  check_invalidate_caches();
+#endif
+
+  /* NOTE: Be careful not to change existing hashes if at all possible, as this
+   * will cause all texture files to be regenerated with significantly increased
+   * disk usage. */
+  const thread_scoped_lock cache_lock(cache_xyz_to_scene_linear_mutex);
+
+  if (cache_xyz_to_scene_linear_hash.empty()) {
+    /* TODO: Verify this results in the same hash across platforms. */
+    const Transform xyz_to_rgb = get_xyz_to_scene_linear_rgb();
+    cache_xyz_to_scene_linear_hash = string_printf(
+        "%.4g_%.4g_%.4g_%.4g_%.4g_%.4g_%.4g_%.4g_%.4g_%.4g_%.4g_%.4g",
+        xyz_to_rgb.x.x,
+        xyz_to_rgb.x.y,
+        xyz_to_rgb.x.z,
+        xyz_to_rgb.x.w,
+        xyz_to_rgb.y.x,
+        xyz_to_rgb.y.y,
+        xyz_to_rgb.y.z,
+        xyz_to_rgb.y.w,
+        xyz_to_rgb.z.x,
+        xyz_to_rgb.z.y,
+        xyz_to_rgb.z.z,
+        xyz_to_rgb.z.w);
+  }
+
+  return cache_xyz_to_scene_linear_hash;
+}
+
+const char *ColorSpaceManager::get_scene_linear_interop_id(const bool srgb_encoded)
+{
+#ifdef WITH_OCIO
+  check_invalidate_caches();
+
+  const thread_scoped_lock cache_lock(cache_scene_linear_interop_id_mutex);
+
+  if (!cache_scene_linear_interop_id_done) {
+    const Transform xyz_to_rgb = get_xyz_to_scene_linear_rgb();
+
+    if (transform_equal_threshold(xyz_to_rgb, get_xyz_to_rec709(), 0.0001f)) {
+      cache_scene_linear_interop_id = "lin_rec709_scene";
+      cache_scene_linear_srgb_interop_id = "srgb_rec709_scene";
+    }
+    else if (transform_equal_threshold(xyz_to_rgb, get_xyz_to_rec2020(), 0.0001f)) {
+      cache_scene_linear_interop_id = "lin_rec2020_scene";
+      cache_scene_linear_srgb_interop_id = "srgb_rec2020_scene";
+    }
+    else if (transform_equal_threshold(xyz_to_rgb, get_xyz_to_acescg(), 0.0001f)) {
+      cache_scene_linear_interop_id = "lin_ap1_scene";
+      cache_scene_linear_srgb_interop_id = "srgb_ap1_scene";
+    }
+    else {
+      cache_scene_linear_interop_id = "unknown";
+      cache_scene_linear_srgb_interop_id = "unknown";
+    }
+
+    cache_scene_linear_interop_id_done = true;
+  }
+
+  return (srgb_encoded) ? cache_scene_linear_srgb_interop_id : cache_scene_linear_interop_id;
+#else
+  (void)srgb_encoded;
+  return "lin_rec709_scene";
+#endif
+}
+
+/* Template instantiations so we don't have to inline functions. */
+template void ColorSpaceManager::to_scene_linear(
+    ustring, uchar *, int64_t, int64_t, int64_t, bool, bool, bool);
+template void ColorSpaceManager::to_scene_linear(
+    ustring, ushort *, int64_t, int64_t, int64_t, bool, bool, bool);
+template void ColorSpaceManager::to_scene_linear(
+    ustring, half *, int64_t, int64_t, int64_t, bool, bool, bool);
+template void ColorSpaceManager::to_scene_linear(
+    ustring, float *, int64_t, int64_t, int64_t, bool, bool, bool);
+
+CCL_NAMESPACE_END

@@ -1,0 +1,506 @@
+/* SPDX-FileCopyrightText: 2023 Blender Authors
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later */
+
+/** \file
+ * \ingroup gpu
+ */
+
+#pragma once
+
+#include <atomic>
+#include <thread>
+
+#include "BLI_threads.hh"
+#include "BLI_utility_mixins.hh"
+#include "BLI_vector.hh"
+
+#include "render_graph/vk_render_graph.hh"
+#include "render_graph/vk_resource_state_tracker.hh"
+#include "vk_buffer.hh"
+#include "vk_common.hh"
+#include "vk_debug.hh"
+#include "vk_descriptor_pools.hh"
+#include "vk_descriptor_set_layouts.hh"
+#include "vk_memory_pool.hh"
+#include "vk_pipeline_pool.hh"
+#include "vk_resource_pool.hh"
+#include "vk_samplers.hh"
+#include "vk_vertex_attribute_object.hh"
+
+namespace blender::gpu {
+class VKBackend;
+
+struct VKExtensions {
+  /**
+   * Does the device support
+   * VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR::fragmentShaderBarycentric.
+   */
+  bool fragment_shader_barycentric = false;
+
+  /**
+   * Does the device support wide line rendering
+   * VkPhysicalDeviceFeatures::wideLines
+   */
+  bool wide_lines = false;
+
+  /**
+   * Does the device support VK_KHR_dynamic_rendering_local_read enabled.
+   */
+  bool dynamic_rendering_local_read = false;
+
+  /**
+   * Does the device support VK_EXT_dynamic_rendering_unused_attachments.
+   */
+  bool dynamic_rendering_unused_attachments = false;
+
+  /**
+   * Does the device support VK_EXT_external_memory_win32/VK_EXT_external_memory_fd
+   */
+  bool external_memory = false;
+
+  /** VK_KHR_maintenance4 */
+  bool maintenance4 = false;
+
+  /**
+   * Does the device support VK_EXT_memory_priority
+   */
+  bool memory_priority = false;
+
+  /**
+   * Does the device support VK_EXT_pageable_device_local_memory
+   */
+  bool pageable_device_local_memory = false;
+
+  /**
+   * Does the device support VK_EXT_graphics_pipeline_library
+   */
+  bool graphics_pipeline_library = false;
+
+  /**
+   * Does the device support VK_EXT_line_rasterization
+   */
+  bool line_rasterization = false;
+
+  /**
+   * Does the device support VK_EXT_extended_dynamic_state
+   */
+  bool extended_dynamic_state = false;
+
+  /**
+   * Does the device support VK_EXT_vertex_input_dynamic_state
+   */
+  bool vertex_input_dynamic_state = false;
+
+  /**
+   * Does the device support VK_EXT_provoking_vertex
+   */
+  bool provoking_vertex = false;
+
+  /**
+   * Does the device support VK_EXT_host_image_copy
+   */
+  bool host_image_copy = false;
+
+  /**
+   * Does the device support VK_EXT_shader_viewport_index_layer.
+   */
+  bool shader_viewport_index_layer = false;
+
+  /**
+   * Does the device support VK_KHR_spirv_1_4.
+   */
+  bool spirv_1_4 = false;
+
+  /**
+   * Does the device support VkPhysicalDeviceFeatures::multiDrawIndirect.
+   * When false, multi_draw_indirect is emulated with individual draw calls.
+   */
+  bool multi_draw_indirect = false;
+
+  /**
+   * Device supports `shaderClipDistance` feature.
+   */
+  bool shader_clip_distance = false;
+
+  /** Log enabled features and extensions. */
+  void log() const;
+};
+
+struct VKWorkarounds {
+  /**
+   * Some devices don't support pixel formats that are aligned to 24 and 48 bits.
+   * In this case we need to use a different texture format.
+   *
+   * If set to true we should work around this issue by using a different texture format.
+   */
+  bool not_aligned_pixel_formats = false;
+
+  /** Log enabled workarounds. */
+  void log() const;
+};
+
+/**
+ * Shared resources between contexts that run in the same thread.
+ */
+class VKThreadData : public NonCopyable, NonMovable {
+ public:
+  /** Thread ID this instance belongs to. */
+  pthread_t thread_id;
+  VKDescriptorPools descriptor_pools;
+  VKDescriptorSetTracker descriptor_set;
+
+  /**
+   * The current rendering depth.
+   *
+   * GPU_rendering_begin can be called multiple times forming a hierarchy. The same resource pool
+   * should be used for the whole hierarchy. rendering_depth is increased for every
+   * GPU_rendering_begin and decreased when GPU_rendering_end is called. Resources pools are cycled
+   * when the rendering_depth set to 0.
+   */
+  int32_t rendering_depth = 0;
+
+  VKThreadData(VKDevice &device, pthread_t thread_id);
+};
+
+class VKDevice : public NonCopyable {
+ private:
+  /** Copies of the handles owned by the GHOST context. */
+  VkInstance vk_instance_ = VK_NULL_HANDLE;
+  VkPhysicalDevice vk_physical_device_ = VK_NULL_HANDLE;
+  VkDevice vk_device_ = VK_NULL_HANDLE;
+  uint32_t vk_queue_family_ = 0;
+  VkQueue vk_queue_ = VK_NULL_HANDLE;
+  std::mutex *queue_mutex_ = nullptr;
+
+  bool is_initialized_ = false;
+  /**
+   * Sticky flag set when the logical device is lost (Windows TDR, CUDA/DLSS contention, etc.).
+   * Further Vulkan work is skipped so overlay/draw code cannot AV on UINT64_MAX timeline handles.
+   */
+  std::atomic<bool> is_lost_ = false;
+
+  /**
+   * Render graph submission thread.
+   *
+   * Multiple threads in Blender can build a render graph. All submitted
+   * render graphs are queued and consumed one at a time by this thread.
+   */
+  std::thread submission_thread_;
+  std::atomic<bool> submission_thread_should_exit_ = false;
+
+  /**
+   * All created render graphs.
+   */
+  Vector<render_graph::VKRenderGraph *> render_graphs_;
+  ThreadQueue *submitted_render_graphs_ = nullptr;
+  ThreadQueue *unused_render_graphs_ = nullptr;
+  VkSemaphore vk_timeline_semaphore_ = VK_NULL_HANDLE;
+  /**
+   * Last used timeline value.
+   *
+   * Must be externally synced by orphaned_data.mutex_get()
+   */
+  TimelineValue timeline_value_ = 0;
+
+  VKSamplers samplers_;
+  VKDescriptorSetLayouts descriptor_set_layouts_;
+
+  /**
+   * Available Contexts for this device.
+   *
+   * Device keeps track of each contexts. When buffers/images are freed they need to be removed
+   * from all contexts state managers.
+   *
+   * The contexts inside this list aren't owned by the VKDevice. Caller of `GPU_context_create`
+   * holds the ownership.
+   */
+  Vector<std::reference_wrapper<VKContext>> contexts_;
+
+  /** Allocator used for texture and buffers and other resources. */
+  VmaAllocator mem_allocator_ = VK_NULL_HANDLE;
+
+  /** Limits of the device linked to this context. */
+  VkPhysicalDeviceProperties vk_physical_device_properties_ = {};
+  VkPhysicalDeviceDriverProperties vk_physical_device_driver_properties_ = {};
+  VkPhysicalDeviceIDProperties vk_physical_device_id_properties_ = {};
+  VkPhysicalDeviceMemoryProperties vk_physical_device_memory_properties_ = {};
+  VkPhysicalDeviceMaintenance4Properties vk_physical_device_maintenance4_properties_ = {
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_PROPERTIES};
+  VkPhysicalDeviceGraphicsPipelineLibraryPropertiesEXT
+      vk_physical_device_graphics_pipeline_library_properties_ = {
+          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_PROPERTIES_EXT};
+  VkPhysicalDeviceAccelerationStructurePropertiesKHR
+      vk_physical_device_acceleration_structure_properties_ = {
+          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR};
+  /** Features support. */
+  VkPhysicalDeviceFeatures vk_physical_device_features_ = {};
+  VkPhysicalDeviceVulkan11Features vk_physical_device_vulkan_11_features_ = {};
+  VkPhysicalDeviceAccelerationStructureFeaturesKHR
+      vk_physical_device_acceleration_structure_features_ = {
+          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
+      };
+  Array<VkExtensionProperties> device_extensions_;
+
+  /** Functions of vk_ext_debugutils for this device/instance. */
+  debug::VKDebuggingTools debugging_tools_;
+
+  /* Workarounds */
+  VKWorkarounds workarounds_;
+  VKExtensions extensions_;
+
+  std::string glsl_vert_patch_;
+  std::string glsl_geom_patch_;
+  std::string glsl_frag_patch_;
+  std::string glsl_comp_patch_;
+  Vector<VKThreadData *> thread_data_;
+
+  Shader *vk_backbuffer_blit_sh_ = nullptr;
+
+ public:
+  render_graph::VKResourceStateTracker resources;
+  VKDiscardPool orphaned_data;
+  /** Discard pool for resources that could still be used during rendering. */
+  VKDiscardPool orphaned_data_render;
+  VKPipelinePool pipelines;
+  VKVertexInputDescriptionPool vertex_input_descriptions;
+
+  /** Buffer to bind to unbound resource locations. */
+  VKBuffer dummy_buffer;
+
+  VolkDeviceTable functions = {};
+
+  VKMemoryPools vma_pools;
+
+  const char *extension_name_get(int index) const
+  {
+    return device_extensions_[index].extensionName;
+  }
+
+  VkPhysicalDevice physical_device_get() const
+  {
+    return vk_physical_device_;
+  }
+
+  const VkPhysicalDeviceProperties &physical_device_properties_get() const
+  {
+    return vk_physical_device_properties_;
+  }
+
+  inline const VkPhysicalDeviceMaintenance4Properties &
+  physical_device_maintenance4_properties_get() const
+  {
+    return vk_physical_device_maintenance4_properties_;
+  }
+
+  const VkPhysicalDeviceIDProperties &physical_device_id_properties_get() const
+  {
+    return vk_physical_device_id_properties_;
+  }
+
+  inline const VkPhysicalDeviceGraphicsPipelineLibraryPropertiesEXT &
+  physical_device_graphics_pipeline_properties_get()
+  {
+    return vk_physical_device_graphics_pipeline_library_properties_;
+  }
+
+  inline const VkPhysicalDeviceAccelerationStructurePropertiesKHR &
+  physical_device_acceleration_structure_properties_get()
+  {
+    return vk_physical_device_acceleration_structure_properties_;
+  }
+
+  const VkPhysicalDeviceFeatures &physical_device_features_get() const
+  {
+    return vk_physical_device_features_;
+  }
+
+  inline const VkPhysicalDeviceAccelerationStructureFeaturesKHR &
+  physical_device_acceleration_structure_features_get() const
+  {
+    return vk_physical_device_acceleration_structure_features_;
+  }
+
+  VkInstance instance_get() const
+  {
+    return vk_instance_;
+  };
+
+  VkDevice vk_handle() const
+  {
+    return vk_device_;
+  }
+
+  uint32_t queue_family_get() const
+  {
+    return vk_queue_family_;
+  }
+
+  inline VmaAllocator mem_allocator_get() const
+  {
+    return mem_allocator_;
+  }
+
+  VKDescriptorSetLayouts &descriptor_set_layouts_get()
+  {
+    return descriptor_set_layouts_;
+  }
+
+  debug::VKDebuggingTools &debugging_tools_get()
+  {
+    return debugging_tools_;
+  }
+
+  const debug::VKDebuggingTools &debugging_tools_get() const
+  {
+    return debugging_tools_;
+  }
+
+  const VKSamplers &samplers() const
+  {
+    return samplers_;
+  }
+
+  void init(GHOST_IContext *ghost_context);
+  void reinit();
+  void deinit();
+  bool is_initialized() const
+  {
+    return is_initialized_;
+  }
+
+  bool is_lost() const
+  {
+    return is_lost_.load(std::memory_order_acquire);
+  }
+  /** Log once and refuse further Vulkan submissions. Safe to call from any thread. */
+  void mark_lost(const char *reason);
+
+  GPUDeviceType device_type() const;
+  GPUDriverType driver_type() const;
+  std::string vendor_name() const;
+  std::string driver_version() const;
+
+  /**
+   * Check if a specific extension is supported by the device.
+   *
+   * This should be called from vk_backend to set the correct capabilities and workarounds needed
+   * for this device.
+   */
+  bool supports_extension(const char *extension_name) const;
+
+  const VKWorkarounds &workarounds_get() const
+  {
+    return workarounds_;
+  }
+  inline const VKExtensions &extensions_get() const
+  {
+    return extensions_;
+  }
+
+  std::string glsl_vertex_patch_get(bool use_ray_query) const;
+  std::string glsl_geometry_patch_get() const;
+  std::string glsl_fragment_patch_get(bool use_ray_query) const;
+  std::string glsl_compute_patch_get(bool use_ray_query) const;
+  shader::GeneratedSource extensions_define(StringRefNull stage_define, bool use_ray_query) const;
+  uint32_t glsl_patch_version_get(bool use_ray_query) const;
+
+  /* -------------------------------------------------------------------- */
+  /** \name Render graph
+   * \{ */
+  static void submission_runner(VKDevice *device);
+  render_graph::VKRenderGraph *render_graph_new();
+
+  TimelineValue render_graph_submit(render_graph::VKRenderGraph *render_graph,
+                                    VKDiscardPool &context_discard_pool,
+                                    bool submit_to_device,
+                                    bool wait_for_submission,
+                                    bool wait_for_completion,
+                                    VkPipelineStageFlags wait_dst_stage_mask,
+                                    VkSemaphore wait_semaphore,
+                                    VkSemaphore signal_semaphore,
+                                    VkFence signal_fence);
+  void wait_for_timeline(TimelineValue timeline);
+  void wait_queue_idle();
+
+  /**
+   * Retrieve the last finished submission timeline.
+   */
+  TimelineValue submission_finished_timeline_get()
+  {
+    BLI_assert(vk_timeline_semaphore_ != VK_NULL_HANDLE);
+    if (is_lost()) {
+      return 0;
+    }
+    TimelineValue current_timeline = 0;
+    VkResult result = functions.vkGetSemaphoreCounterValueKHR(
+        vk_device_, vk_timeline_semaphore_, &current_timeline);
+    /* NVIDIA/Qualcomm report UINT64_MAX after a driver reset (TDR). Treating that as a completed
+     * timeline would destroy every discarded resource and crash overlay draws on 0xFFFFFFFFFFFFFFFF
+     * resource handles. */
+    if (result != VK_SUCCESS || current_timeline == UINT64_MAX) {
+      mark_lost((result == VK_ERROR_DEVICE_LOST || current_timeline == UINT64_MAX) ?
+                    "timeline semaphore after GPU reset" :
+                    "vkGetSemaphoreCounterValueKHR failed");
+      return 0;
+    }
+    return current_timeline;
+  }
+
+  /** \} */
+
+  /* -------------------------------------------------------------------- */
+  /** \name Resource management
+   * \{ */
+
+  /**
+   * Get or create current thread data.
+   */
+  VKThreadData &current_thread_data();
+
+  void context_register(VKContext &context);
+  void context_unregister(VKContext &context);
+  Span<std::reference_wrapper<VKContext>> contexts_get() const;
+
+  void memory_statistics_get(int *r_total_mem_kb, int *r_free_mem_kb) const;
+  void debug_print() const;
+
+  /** \} */
+
+  Shader *vk_backbuffer_blit_sh_get()
+  {
+    if (vk_backbuffer_blit_sh_ == nullptr) {
+      /* See #system_extended_srgb_transfer_function in libocio_display_processor.cc for
+       * details on this choice. */
+#if defined(_WIN32) || defined(__APPLE__)
+      vk_backbuffer_blit_sh_ = GPU_shader_create_from_info_name("vk_backbuffer_blit");
+#else
+      vk_backbuffer_blit_sh_ = GPU_shader_create_from_info_name("vk_backbuffer_blit_gamma22");
+#endif
+    }
+    return vk_backbuffer_blit_sh_;
+  }
+
+ private:
+  void init_physical_device_properties();
+  void init_physical_device_memory_properties();
+  void init_physical_device_features();
+  void init_physical_device_extensions();
+  void init_debug_callbacks();
+  void init_submission_thread();
+  void deinit_submission_thread();
+  /**
+   * Initialize the functions struct with extension specific function pointer.
+   */
+  void init_functions();
+
+  /**
+   * Initialize a dummy buffer that can be bound for missing attributes.
+   */
+  void init_dummy_buffer();
+
+  /* During initialization the backend requires access to update the workarounds. */
+  friend VKBackend;
+};
+
+}  // namespace blender::gpu

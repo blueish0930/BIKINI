@@ -1,0 +1,7 @@
+﻿# SPDX-FileCopyrightText: 2008 The Regents of the University of California
+# (Lawrence Berkeley National Laboratory). All rights reserved.
+#
+# Voro++: a three-dimensional Voronoi cell library in C++
+# Upstream: https://github.com/chr1shr/voro  (BSD-3-Clause / LBNL)
+# Used by Geometry Nodes Voronoi Fracture (exact cell half-spaces / polyhedra).
+# Vendored sources only under src/ — no CLI, examples, or docs.
