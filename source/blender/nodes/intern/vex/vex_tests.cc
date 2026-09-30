@@ -494,15 +494,40 @@ TEST(nodes_vex, static_sample_array_loop_is_fused)
       "  uv[i] = corner(0, \"UVMap\", corners[i]);\n"
       "  pos[i] = corner(0, \"P\", corners[i]);\n"
       "}\n"
+      "f@probe = uv[0].x + pos[1].y;\n"
       "v[]@uv_copy = uv;\n");
   ASSERT_TRUE(bool(compiled.program)) << compiled.error;
   ASSERT_EQ(compiled.program->gather_samples.size(), 1);
   EXPECT_EQ(compiled.program->gather_samples[0].output_locals.size(), 2);
+  ASSERT_EQ(compiled.program->gather_samples[0].materialize.size(), 2);
+  EXPECT_EQ(compiled.program->gather_samples[0].materialize[0], 1);
+  EXPECT_EQ(compiled.program->gather_samples[0].materialize[1], 0);
+  ASSERT_EQ(compiled.program->local_index_loads.size(), 2);
+  for (const Program::LocalIndexLoad &load : compiled.program->local_index_loads) {
+    EXPECT_GE(load.sample_slot, 0);
+    EXPECT_GE(load.sample_index_array_local, 0);
+  }
   int fused = 0;
   for (const Inst &in : compiled.program->code) {
     fused += in.op == Op::GatherSamples;
   }
   EXPECT_EQ(fused, 1);
+}
+
+TEST(nodes_vex, immutable_local_condition_removes_dead_branch)
+{
+  const CompileOutput compiled = compile(
+      "int enabled = 0; float value = 2.0;\n"
+      "if (enabled == 1) { value = sqrt(9.0) + length(set(1, 2, 3)); }\n"
+      "return int(value);\n");
+  ASSERT_TRUE(bool(compiled.program)) << compiled.error;
+  for (const Inst &in : compiled.program->code) {
+    EXPECT_NE(in.op, Op::SqrtF);
+    EXPECT_NE(in.op, Op::LengthV3);
+  }
+  const PureEvalOutput out = execute_pure(*compiled.program);
+  ASSERT_TRUE(out.ok) << out.error;
+  EXPECT_EQ(out.return_int, 2);
 }
 
 TEST(nodes_vex, local_array_and_member_loads_are_fused)
@@ -524,6 +549,40 @@ TEST(nodes_vex, local_array_and_member_loads_are_fused)
   const PureEvalOutput out = execute_pure(*compiled.program);
   ASSERT_TRUE(out.ok) << out.error;
   EXPECT_EQ(out.return_int, 15);
+}
+
+TEST(nodes_vex, common_typed_builtins_are_lowered_directly)
+{
+  const CompileOutput compiled = compile(
+      "vector a = set(1, 2, 3); vector b = set(4, 5, 6); int ids[] = array(1, 2, 3);\n"
+      "float x = length(a) + dot(a, b) + length(cross(a, b));\n"
+      "x += sqrt(4.0) + log(2.0) + abs(-1.0) + float(x);\n"
+      "return len(ids) + int(x);\n");
+  ASSERT_TRUE(bool(compiled.program)) << compiled.error;
+  int direct = 0;
+  int generic = 0;
+  for (const Inst &in : compiled.program->code) {
+    direct += ELEM(in.op,
+                   Op::LengthV3,
+                   Op::DotV3,
+                   Op::CrossV3,
+                   Op::SqrtF,
+                   Op::LogF,
+                   Op::AbsF,
+                   Op::ArrayLen);
+    generic += in.op == Op::Call &&
+               ELEM(Builtin(in.imm),
+                    Builtin::Length,
+                    Builtin::Dot,
+                    Builtin::Cross,
+                    Builtin::Sqrt,
+                    Builtin::Log,
+                    Builtin::Abs,
+                    Builtin::Len,
+                    Builtin::FloatFn);
+  }
+  EXPECT_EQ(direct, 8);
+  EXPECT_EQ(generic, 0);
 }
 
 TEST(nodes_vex, raycast_dir_attr_and_normalize_is_batched)

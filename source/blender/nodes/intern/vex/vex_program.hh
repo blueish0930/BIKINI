@@ -290,6 +290,17 @@ enum class Op : uint8_t {
   Sub,
   Mul,
   Div,
+  AddFF,
+  AddVV,
+  SubFF,
+  SubVV,
+  MulFF,
+  MulFV,
+  MulVF,
+  MulVV,
+  DivFF,
+  DivVF,
+  DivVV,
   Mod,
   Pow, /* a ** b */
   Neg,
@@ -305,6 +316,14 @@ enum class Op : uint8_t {
   Jmp,
   JmpIfFalse,
   JmpIfTrue,
+  /** Statically typed, allocation-free forms of common math/array builtins. */
+  LengthV3,
+  DotV3,
+  CrossV3,
+  SqrtF,
+  LogF,
+  AbsF,
+  ArrayLen,
   Call,
   /** Static point()/edge()/face()/corner()/curve()/instance() sample.
    * `imm` is an index into Program::element_samples. The low five bits of `a` store the number of
@@ -779,6 +798,9 @@ struct Program {
     Vector<int> output_locals;
     Vector<int> sample_slots;
     Vector<Type> output_types;
+    /** False when every consumer was lowered to a direct static-sample load. The VM still
+     * materializes when a computed/dynamic attribute has no bound span. */
+    Vector<uint8_t> materialize;
   };
   /** Static attribute gathers lowered from simple array traversal loops. */
   Vector<GatherSamples> gather_samples;
@@ -788,6 +810,9 @@ struct Program {
     int index = -1;
     int member = -1;
     bool index_is_const = false;
+    /** Optional direct source produced by a fused gather. */
+    int sample_slot = -1;
+    int sample_index_array_local = -1;
   };
   /** Peephole-lowered local array loads. Keeping the operands here avoids truncating local and
    * constant-pool indices to the compact instruction fields. */

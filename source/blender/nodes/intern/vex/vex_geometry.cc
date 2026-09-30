@@ -1059,6 +1059,10 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
       const GVArray &varray = reader.varray;
       switch (info.type) {
         case Type::Bool: {
+          if (varray.type().is<bool>() && varray.is_span()) {
+            a.rb = varray.get_internal_span().typed<bool>().data();
+            break;
+          }
           state.rb.append({});
           Array<bool> &buf = state.rb.last();
           buf.reinitialize(domain_size);
@@ -1069,6 +1073,10 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
           break;
         }
         case Type::Int: {
+          if (varray.type().is<int>() && varray.is_span()) {
+            a.ri = varray.get_internal_span().typed<int>().data();
+            break;
+          }
           state.ri.append({});
           Array<int> &buf = state.ri.last();
           buf.reinitialize(domain_size);
@@ -1079,6 +1087,10 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
           break;
         }
         case Type::Vector: {
+          if (varray.type().is<float3>() && varray.is_span()) {
+            a.rv = varray.get_internal_span().typed<float3>().data();
+            break;
+          }
           state.rv.append({});
           Array<float3> &buf = state.rv.last();
           buf.reinitialize(domain_size);
@@ -1089,6 +1101,10 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
           break;
         }
         case Type::Vector2: {
+          if (varray.type().is<float2>() && varray.is_span()) {
+            a.r2 = varray.get_internal_span().typed<float2>().data();
+            break;
+          }
           state.r2.append({});
           Array<float2> &buf = state.r2.last();
           buf.reinitialize(domain_size);
@@ -1099,6 +1115,10 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
           break;
         }
         case Type::Vector4: {
+          if (varray.type().is<float4>() && varray.is_span()) {
+            a.r4 = varray.get_internal_span().typed<float4>().data();
+            break;
+          }
           state.rv4.append({});
           Array<float4> &buf = state.rv4.last();
           buf.reinitialize(domain_size);
@@ -1109,6 +1129,11 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
           break;
         }
         case Type::Color: {
+          if (varray.type().is<ColorGeometry4f>() && varray.is_span()) {
+            a.r4 = reinterpret_cast<const float4 *>(
+                varray.get_internal_span().typed<ColorGeometry4f>().data());
+            break;
+          }
           state.rc.append({});
           Array<ColorGeometry4f> &buf = state.rc.last();
           buf.reinitialize(domain_size);
@@ -1119,6 +1144,10 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
           break;
         }
         case Type::Rotation: {
+          if (varray.type().is<math::Quaternion>() && varray.is_span()) {
+            a.rq = varray.get_internal_span().typed<math::Quaternion>().data();
+            break;
+          }
           state.rq.append({});
           Array<math::Quaternion> &buf = state.rq.last();
           buf.reinitialize(domain_size);
@@ -1129,6 +1158,10 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
           break;
         }
         case Type::Matrix: {
+          if (varray.type().is<float4x4>() && varray.is_span()) {
+            a.rm = varray.get_internal_span().typed<float4x4>().data();
+            break;
+          }
           state.rmats.append({});
           Array<float4x4> &buf = state.rmats.last();
           buf.reinitialize(domain_size);
@@ -1177,6 +1210,10 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
         }
         case Type::Float:
         default: {
+          if (varray.type().is<float>() && varray.is_span()) {
+            a.rf = varray.get_internal_span().typed<float>().data();
+            break;
+          }
           state.rf.append({});
           Array<float> &buf = state.rf.last();
           buf.reinitialize(domain_size);

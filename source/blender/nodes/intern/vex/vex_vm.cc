@@ -3837,6 +3837,41 @@ static Value load_static_sample(const int sample_slot,
   return env.load_sample(env.elem_user, sample_slot, index, r_error);
 }
 
+static inline Value typed_length_v3(const Value &a)
+{
+  return Value::from_float(math::length(a.as_vec()));
+}
+
+static inline Value typed_dot_v3(const Value &a, const Value &b)
+{
+  return Value::from_float(math::dot(a.as_vec(), b.as_vec()));
+}
+
+static inline Value typed_cross_v3(const Value &a, const Value &b)
+{
+  return Value::from_vec(math::cross(a.as_vec(), b.as_vec()));
+}
+
+static inline Value typed_sqrt_f(const Value &a)
+{
+  return Value::from_float(sqrtf(std::max(a.as_float(), 0.0f)));
+}
+
+static inline Value typed_log_f(const Value &a)
+{
+  return Value::from_float(logf(std::max(a.as_float(), 1e-30f)));
+}
+
+static inline Value typed_abs_f(const Value &a)
+{
+  return Value::from_float(fabsf(a.as_float()));
+}
+
+static inline Value typed_array_len(const Value &a)
+{
+  return Value::from_int(array_len(a));
+}
+
 static Value call_static_sample(const Inst &in,
                                 const Span<Value> args,
                                 VMEnv &env,
@@ -3882,13 +3917,30 @@ static bool gather_samples_direct(const Program &program,
     const AttrRT *sample = (sample_slot >= 0 && sample_slot < env.static_samples.size()) ?
                                &env.static_samples[sample_slot] :
                                nullptr;
+    const bool wants_materialized = item >= gather.materialize.size() ||
+                                    gather.materialize[item] != 0;
+    bool has_direct_span = false;
+    if (sample && sample->size > 0) {
+      if (gather.output_types[item] == Type::VecArray) {
+        has_direct_span = sample->wv || sample->rv;
+      }
+      else if (gather.output_types[item] == Type::FloatArray) {
+        has_direct_span = sample->wf || sample->rf;
+      }
+      else if (gather.output_types[item] == Type::IntArray) {
+        has_direct_span = sample->wi || sample->ri;
+      }
+    }
+    if (!wants_materialized && has_direct_span) {
+      continue;
+    }
     switch (gather.output_types[item]) {
       case Type::VecArray: {
+        const float3 *src = sample ? (sample->wv ? sample->wv : sample->rv) : nullptr;
         Value output;
         output.type = Type::VecArray;
         output.i = prepare_tls_array(tls_varr, tls_varr_used, size);
         Vector<float3> &values = tls_varr[output.i];
-        const float3 *src = sample ? (sample->wv ? sample->wv : sample->rv) : nullptr;
         for (int i = 0; i < size; i++) {
           const int index = contiguous_indices ? range_start + i :
                                                  get_index_value(indices, i).as_int();
@@ -3907,11 +3959,11 @@ static bool gather_samples_direct(const Program &program,
         break;
       }
       case Type::FloatArray: {
+        const float *src = sample ? (sample->wf ? sample->wf : sample->rf) : nullptr;
         Value output;
         output.type = Type::FloatArray;
         output.i = prepare_tls_array(tls_farr, tls_farr_used, size);
         Vector<float> &values = tls_farr[output.i];
-        const float *src = sample ? (sample->wf ? sample->wf : sample->rf) : nullptr;
         for (int i = 0; i < size; i++) {
           const int index = contiguous_indices ? range_start + i :
                                                  get_index_value(indices, i).as_int();
@@ -3930,11 +3982,11 @@ static bool gather_samples_direct(const Program &program,
         break;
       }
       case Type::IntArray: {
+        const int *src = sample ? (sample->wi ? sample->wi : sample->ri) : nullptr;
         Value output;
         output.type = Type::IntArray;
         output.i = prepare_tls_array(tls_iarr, tls_iarr_used, size);
         Vector<int> &values = tls_iarr[output.i];
-        const int *src = sample ? (sample->wi ? sample->wi : sample->ri) : nullptr;
         for (int i = 0; i < size; i++) {
           const int index = contiguous_indices ? range_start + i :
                                                  get_index_value(indices, i).as_int();
@@ -3963,7 +4015,8 @@ static bool gather_samples_direct(const Program &program,
 static Value load_local_index(const Program &program,
                               const Inst &in,
                               const Value *locals,
-                              const int local_n)
+                              const int local_n,
+                              VMEnv *env)
 {
   if (in.imm < 0 || in.imm >= program.local_index_loads.size()) {
     return Value::from_float(0.0f);
@@ -3984,6 +4037,29 @@ static Value load_local_index(const Program &program,
       return Value::from_float(0.0f);
     }
     index = locals[load.index].as_int();
+  }
+  if (env && load.sample_slot >= 0 && load.sample_slot < env->static_samples.size() &&
+      load.sample_index_array_local >= 0 && load.sample_index_array_local < local_n)
+  {
+    const AttrRT &sample = env->static_samples[load.sample_slot];
+    const Value &indices = locals[load.sample_index_array_local];
+    int range_start = 0, range_size = 0;
+    int element_index = -1;
+    if (int_array_range(indices, range_start, range_size)) {
+      if (index >= 0 && index < range_size) {
+        element_index = range_start + index;
+      }
+    }
+    else {
+      element_index = get_index_value(indices, index).as_int();
+    }
+    if (element_index >= 0 && element_index < sample.size) {
+      Value value = load_attr_value(sample, element_index, *env);
+      if (load.member >= 0) {
+        value = apply_get_member(value, load.member);
+      }
+      return value;
+    }
   }
   Value value = get_index_value(locals[load.array_local], index);
   if (load.member >= 0) {
@@ -4107,7 +4183,7 @@ static bool vm_interp(const Program &program,
         }
         break;
       case Op::PushLocalIndex:
-        push(load_local_index(program, in, loc, loc_n));
+        push(load_local_index(program, in, loc, loc_n, &env));
         break;
       case Op::PushLocalMember:
         if (in.imm >= 0 && in.imm < loc_n) {
@@ -4219,6 +4295,62 @@ static bool vm_interp(const Program &program,
         Value b = pop();
         Value a = pop();
         push(numeric_div(a, b));
+        break;
+      }
+      case Op::AddFF: {
+        const Value b = pop(), a = pop();
+        push(Value::from_float(a.v.x + b.v.x));
+        break;
+      }
+      case Op::AddVV: {
+        const Value b = pop(), a = pop();
+        push(Value::from_vec(float3(a.v.x + b.v.x, a.v.y + b.v.y, a.v.z + b.v.z)));
+        break;
+      }
+      case Op::SubFF: {
+        const Value b = pop(), a = pop();
+        push(Value::from_float(a.v.x - b.v.x));
+        break;
+      }
+      case Op::SubVV: {
+        const Value b = pop(), a = pop();
+        push(Value::from_vec(float3(a.v.x - b.v.x, a.v.y - b.v.y, a.v.z - b.v.z)));
+        break;
+      }
+      case Op::MulFF: {
+        const Value b = pop(), a = pop();
+        push(Value::from_float(a.v.x * b.v.x));
+        break;
+      }
+      case Op::MulFV: {
+        const Value b = pop(), a = pop();
+        push(Value::from_vec(float3(a.v.x * b.v.x, a.v.x * b.v.y, a.v.x * b.v.z)));
+        break;
+      }
+      case Op::MulVF: {
+        const Value b = pop(), a = pop();
+        push(Value::from_vec(float3(a.v.x * b.v.x, a.v.y * b.v.x, a.v.z * b.v.x)));
+        break;
+      }
+      case Op::MulVV: {
+        const Value b = pop(), a = pop();
+        push(Value::from_vec(float3(a.v.x * b.v.x, a.v.y * b.v.y, a.v.z * b.v.z)));
+        break;
+      }
+      case Op::DivFF: {
+        const Value b = pop(), a = pop();
+        push(Value::from_float(b.v.x != 0.0f ? a.v.x / b.v.x : 0.0f));
+        break;
+      }
+      case Op::DivVF: {
+        const Value b = pop(), a = pop();
+        const float inv = b.v.x != 0.0f ? 1.0f / b.v.x : 0.0f;
+        push(Value::from_vec(float3(a.v.x * inv, a.v.y * inv, a.v.z * inv)));
+        break;
+      }
+      case Op::DivVV: {
+        const Value b = pop(), a = pop();
+        push(Value::from_vec(float3(a.v.x / b.v.x, a.v.y / b.v.y, a.v.z / b.v.z)));
         break;
       }
       case Op::Mod: {
@@ -4339,6 +4471,33 @@ static bool vm_interp(const Program &program,
           pc = in.imm;
           continue;
         }
+        break;
+      case Op::LengthV3:
+        push(typed_length_v3(pop()));
+        break;
+      case Op::DotV3: {
+        const Value b = pop();
+        const Value a = pop();
+        push(typed_dot_v3(a, b));
+        break;
+      }
+      case Op::CrossV3: {
+        const Value b = pop();
+        const Value a = pop();
+        push(typed_cross_v3(a, b));
+        break;
+      }
+      case Op::SqrtF:
+        push(typed_sqrt_f(pop()));
+        break;
+      case Op::LogF:
+        push(typed_log_f(pop()));
+        break;
+      case Op::AbsF:
+        push(typed_abs_f(pop()));
+        break;
+      case Op::ArrayLen:
+        push(typed_array_len(pop()));
         break;
       case Op::Call: {
         const int nargs = int(in.a);
@@ -4576,7 +4735,8 @@ void optimize_program(Program &program)
     Vector<Inst> &c = program.code;
     for (int pc = 0; pc < int(c.size()); pc++) {
       if (pc + 5 < int(c.size()) && c[pc].op == Op::PushAttr && c[pc + 1].op == Op::GetMember &&
-          (c[pc + 2].op == Op::PushF || c[pc + 2].op == Op::PushI) && c[pc + 3].op == Op::Add &&
+          (c[pc + 2].op == Op::PushF || c[pc + 2].op == Op::PushI) &&
+          ELEM(c[pc + 3].op, Op::Add, Op::AddFF) &&
           c[pc + 4].op == Op::SetMember && c[pc + 5].op == Op::StoreAttr &&
           c[pc].imm == c[pc + 5].imm && c[pc + 1].imm == c[pc + 4].imm &&
           (c[pc + 1].imm >> 8) == 0)
@@ -4617,7 +4777,8 @@ void optimize_program(Program &program)
       }
       if (pc + 3 < int(c.size()) && c[pc].op == Op::PushAttr &&
           ELEM(c[pc + 1].op, Op::PushV, Op::PushF, Op::PushI, Op::PushLocal) &&
-          c[pc + 2].op == Op::Add && c[pc + 3].op == Op::StoreAttr && c[pc].imm == c[pc + 3].imm)
+          ELEM(c[pc + 2].op, Op::Add, Op::AddFF, Op::AddVV) &&
+          c[pc + 3].op == Op::StoreAttr && c[pc].imm == c[pc + 3].imm)
       {
         c[pc].op = Op::Nop;
         c[pc + 2].op = Op::AttrAdd;
@@ -4625,6 +4786,329 @@ void optimize_program(Program &program)
         c[pc + 3].op = Op::Nop;
         pc += 3;
         continue;
+      }
+    }
+  }
+
+  /* A fused gather overwrites its output arrays before their first read. Remove the compiler's
+   * default `array(); StoreLocal` initialization so every lane does not allocate empty TLS arrays
+   * that are immediately discarded. */
+  {
+    Vector<Inst> &c = program.code;
+    for (int gather_pc = 0; gather_pc < int(c.size()); gather_pc++) {
+      if (c[gather_pc].op != Op::GatherSamples || c[gather_pc].imm < 0 ||
+          c[gather_pc].imm >= program.gather_samples.size())
+      {
+        continue;
+      }
+      for (const int local : program.gather_samples[c[gather_pc].imm].output_locals) {
+        int store_pc = -1;
+        for (int pc = gather_pc - 1; pc >= 0; pc--) {
+          if (c[pc].op == Op::PushLocal && c[pc].imm == local) {
+            break;
+          }
+          if (c[pc].op == Op::StoreLocal && c[pc].imm == local) {
+            store_pc = pc;
+            break;
+          }
+        }
+        if (store_pc <= 0 || c[store_pc - 1].op != Op::Call || c[store_pc - 1].a != 0) {
+          continue;
+        }
+        const Builtin builtin = Builtin(c[store_pc - 1].imm);
+        if (!ELEM(builtin,
+                  Builtin::ArrayFn,
+                  Builtin::ArrayInt,
+                  Builtin::ArrayFloat,
+                  Builtin::ArrayVec,
+                  Builtin::ArrayStr,
+                  Builtin::ArrayMat,
+                  Builtin::ArrayRay))
+        {
+          continue;
+        }
+        c[store_pc - 1] = Inst{};
+        c[store_pc] = Inst{};
+      }
+    }
+  }
+
+  /* Propagate immutable scalar locals initialized in the entry block. VEX source commonly uses
+   * ordinary locals as compile-time switches (for example `int normalize = 0`). Keeping those as
+   * runtime locals prevents the following conditional and its entire dead arm from being removed,
+   * so every geometry element used to interpret code which could never run.
+   *
+   * Restrict candidates to literal stores before the first control-flow instruction and require a
+   * single write in the complete program. This makes the transformation valid for loops,
+   * conditionals and user functions without needing a full SSA construction. */
+  {
+    Vector<Inst> &c = program.code;
+    const int local_n = std::max(program.local_count, 0);
+    Array<int> write_counts(local_n, 0);
+    Array<int> literal_pc(local_n, -1);
+    Array<int> store_pc(local_n, -1);
+    Array<uint8_t> is_target(c.size(), 0);
+    int entry_end = int(c.size());
+
+    for (int pc = 0; pc < int(c.size()); pc++) {
+      const Inst &in = c[pc];
+      if (ELEM(in.op, Op::Jmp, Op::JmpIfFalse, Op::JmpIfTrue)) {
+        entry_end = std::min(entry_end, pc);
+        if (in.imm >= 0 && in.imm < c.size()) {
+          is_target[in.imm] = 1;
+        }
+      }
+      if (in.op == Op::StoreLocal && in.imm >= 0 && in.imm < local_n) {
+        write_counts[in.imm]++;
+        store_pc[in.imm] = pc;
+      }
+      else if (ELEM(in.op, Op::IncLocal, Op::DecLocal) && in.imm >= 0 && in.imm < local_n) {
+        /* Two writes is enough to reject the slot. */
+        write_counts[in.imm] += 2;
+      }
+    }
+    for (const UserFn &fn : program.user_fns) {
+      if (fn.entry >= 0 && fn.entry < c.size()) {
+        is_target[fn.entry] = 1;
+      }
+    }
+
+    for (int slot = 0; slot < local_n; slot++) {
+      const int dst_pc = store_pc[slot];
+      if (write_counts[slot] != 1 || dst_pc <= 0 || dst_pc >= entry_end) {
+        continue;
+      }
+      const Inst &source = c[dst_pc - 1];
+      if (!ELEM(source.op, Op::PushF, Op::PushI, Op::PushV, Op::PushB, Op::PushS) ||
+          is_target[dst_pc - 1] || is_target[dst_pc])
+      {
+        continue;
+      }
+      literal_pc[slot] = dst_pc - 1;
+    }
+
+    for (int pc = 0; pc < int(c.size()); pc++) {
+      Inst &in = c[pc];
+      if (in.op != Op::PushLocal || in.imm < 0 || in.imm >= local_n) {
+        continue;
+      }
+      const int src_pc = literal_pc[in.imm];
+      if (src_pc >= 0) {
+        in = c[src_pc];
+      }
+    }
+    for (int slot = 0; slot < local_n; slot++) {
+      if (literal_pc[slot] >= 0) {
+        c[literal_pc[slot]] = Inst{};
+        c[store_pc[slot]] = Inst{};
+      }
+    }
+
+    auto numeric_literal = [&](const Inst &in, float &r_value) -> bool {
+      if (in.op == Op::PushI && in.imm >= 0 && in.imm < program.const_i.size()) {
+        r_value = float(program.const_i[in.imm]);
+        return true;
+      }
+      if (in.op == Op::PushF && in.imm >= 0 && in.imm < program.const_f.size()) {
+        r_value = program.const_f[in.imm];
+        return true;
+      }
+      if (in.op == Op::PushB) {
+        r_value = in.imm != 0 ? 1.0f : 0.0f;
+        return true;
+      }
+      return false;
+    };
+
+    bool changed = true;
+    while (changed) {
+      changed = false;
+      for (int pc = 0; pc + 2 < int(c.size()); pc++) {
+        float a = 0.0f, b = 0.0f;
+        if (is_target[pc + 1] || is_target[pc + 2] || !numeric_literal(c[pc], a) ||
+            !numeric_literal(c[pc + 1], b) ||
+            !ELEM(c[pc + 2].op, Op::Lt, Op::Le, Op::Gt, Op::Ge, Op::Eq, Op::Ne))
+        {
+          continue;
+        }
+        bool result = false;
+        switch (c[pc + 2].op) {
+          case Op::Lt:
+            result = a < b;
+            break;
+          case Op::Le:
+            result = a <= b;
+            break;
+          case Op::Gt:
+            result = a > b;
+            break;
+          case Op::Ge:
+            result = a >= b;
+            break;
+          case Op::Eq:
+            result = a == b;
+            break;
+          case Op::Ne:
+            result = a != b;
+            break;
+          default:
+            BLI_assert_unreachable();
+            break;
+        }
+        c[pc].op = Op::PushB;
+        c[pc].imm = result ? 1 : 0;
+        c[pc].a = 0;
+        c[pc + 1] = Inst{};
+        c[pc + 2] = Inst{};
+        changed = true;
+      }
+      for (int pc = 0; pc + 1 < int(c.size()); pc++) {
+        if (c[pc].op != Op::PushB || is_target[pc]) {
+          continue;
+        }
+        int jump_pc = pc + 1;
+        while (jump_pc < int(c.size()) && c[jump_pc].op == Op::Nop && !is_target[jump_pc]) {
+          jump_pc++;
+        }
+        if (jump_pc >= int(c.size()) || is_target[jump_pc] ||
+            !ELEM(c[jump_pc].op, Op::JmpIfFalse, Op::JmpIfTrue))
+        {
+          continue;
+        }
+        const bool value = c[pc].imm != 0;
+        const bool take = c[jump_pc].op == Op::JmpIfTrue ? value : !value;
+        c[pc] = Inst{};
+        if (take) {
+          c[jump_pc].op = Op::Jmp;
+          c[jump_pc].a = 0;
+        }
+        else {
+          c[jump_pc] = Inst{};
+        }
+        changed = true;
+      }
+    }
+
+    /* Mark reachable byte-code from the main entry and every user-function entry. Constant jump
+     * folding above turns dead conditional arms into ordinary unreachable regions. */
+    Array<uint8_t> reachable(c.size(), 0);
+    Vector<int> pending;
+    if (!c.is_empty()) {
+      pending.append(0);
+    }
+    for (const UserFn &fn : program.user_fns) {
+      if (fn.entry >= 0 && fn.entry < c.size()) {
+        pending.append(fn.entry);
+      }
+    }
+    while (!pending.is_empty()) {
+      const int pc = pending.pop_last();
+      if (pc < 0 || pc >= c.size() || reachable[pc]) {
+        continue;
+      }
+      reachable[pc] = 1;
+      const Inst &in = c[pc];
+      if (in.op == Op::Jmp) {
+        pending.append(in.imm);
+      }
+      else if (ELEM(in.op, Op::JmpIfFalse, Op::JmpIfTrue)) {
+        pending.append(in.imm);
+        pending.append(pc + 1);
+      }
+      else if (in.op != Op::Return) {
+        pending.append(pc + 1);
+      }
+    }
+    for (int pc = 0; pc < int(c.size()); pc++) {
+      if (!reachable[pc]) {
+        c[pc] = Inst{};
+      }
+    }
+  }
+
+  /* Small counted loops are unrolled by the front-end, but their induction variable and
+   * expressions such as `(k + 1) % 3` used to remain runtime byte-code. Propagate integer locals
+   * within a single basic block so array-index fusion below receives constants. Control-flow
+   * boundaries clear the facts; this is deliberately a local, dominance-safe optimization rather
+   * than speculative global constant propagation. */
+  {
+    Vector<Inst> &c = program.code;
+    Array<uint8_t> is_target(c.size(), 0);
+    for (const Inst &in : c) {
+      if (ELEM(in.op, Op::Jmp, Op::JmpIfFalse, Op::JmpIfTrue) && in.imm >= 0 &&
+          in.imm < c.size())
+      {
+        is_target[in.imm] = 1;
+      }
+    }
+    Array<int> known_value(std::max(program.local_count, 0), 0);
+    Array<uint8_t> known(std::max(program.local_count, 0), 0);
+    auto clear_known = [&]() { known.fill(0); };
+    auto int_literal = [&](const Inst &in, int &r_value) -> bool {
+      if (in.op != Op::PushI || in.imm < 0 || in.imm >= program.const_i.size()) {
+        return false;
+      }
+      r_value = program.const_i[in.imm];
+      return true;
+    };
+    auto make_int_literal = [&](Inst &in, const int value) {
+      in.op = Op::PushI;
+      in.a = 0;
+      in.imm = int(program.const_i.size());
+      program.const_i.append(value);
+    };
+
+    for (int pc = 0; pc < int(c.size()); pc++) {
+      if (is_target[pc]) {
+        clear_known();
+      }
+      Inst &in = c[pc];
+      if (in.op == Op::PushLocal && in.imm >= 0 && in.imm < known.size() && known[in.imm]) {
+        make_int_literal(in, known_value[in.imm]);
+      }
+
+      /* Fold the exact integer ring-index shape emitted by common fixed-size array loops. */
+      if (pc + 5 < int(c.size()) && !is_target[pc + 1] && !is_target[pc + 2] &&
+          !is_target[pc + 3] && !is_target[pc + 4] && !is_target[pc + 5])
+      {
+        int a = 0, b = 0, divisor = 0;
+        if (int_literal(c[pc], a) && int_literal(c[pc + 1], b) &&
+            c[pc + 2].op == Op::Add && int_literal(c[pc + 3], divisor) &&
+            c[pc + 4].op == Op::Mod && c[pc + 5].op == Op::StoreLocal && divisor != 0 &&
+            c[pc + 5].imm >= 0 && c[pc + 5].imm < known.size())
+        {
+          const int value = (a + b) % divisor;
+          make_int_literal(c[pc], value);
+          c[pc + 1] = Inst{};
+          c[pc + 2] = Inst{};
+          c[pc + 3] = Inst{};
+          c[pc + 4] = Inst{};
+          known[c[pc + 5].imm] = 1;
+          known_value[c[pc + 5].imm] = value;
+          pc += 4;
+          continue;
+        }
+      }
+
+      if (in.op == Op::StoreLocal && in.imm >= 0 && in.imm < known.size()) {
+        int value = 0;
+        if (pc > 0 && int_literal(c[pc - 1], value)) {
+          known[in.imm] = 1;
+          known_value[in.imm] = value;
+        }
+        else {
+          known[in.imm] = 0;
+        }
+      }
+      else if (ELEM(in.op, Op::IncLocal, Op::DecLocal) && in.imm >= 0 &&
+               in.imm < known.size())
+      {
+        if (known[in.imm]) {
+          known_value[in.imm] += in.op == Op::IncLocal ? 1 : -1;
+        }
+      }
+      if (ELEM(in.op, Op::Jmp, Op::JmpIfFalse, Op::JmpIfTrue, Op::Return)) {
+        clear_known();
       }
     }
   }
@@ -4681,6 +5165,54 @@ void optimize_program(Program &program)
         c[pc].op = Op::PushLocalMember;
         c[pc].a = uint8_t(c[pc + 1].imm);
         c[pc + 1] = Inst{};
+      }
+    }
+
+    /* Connect fused local-index loads back to the static attribute span that produced the local
+     * array. This avoids a second indirection through a tiny TLS Vector for every `values[k]`.
+     * Output arrays with no remaining whole-array consumer do not need to be materialized at all;
+     * computed attributes without a span still materialize at runtime as a correctness fallback. */
+    if (!program.gather_samples.is_empty() && program.local_count > 0) {
+      Array<int> gather_for_local(program.local_count, -1);
+      Array<int> item_for_local(program.local_count, -1);
+      for (const int gather_index : program.gather_samples.index_range()) {
+        Program::GatherSamples &gather = program.gather_samples[gather_index];
+        gather.materialize.reinitialize(gather.output_locals.size());
+        gather.materialize.fill(0);
+        for (const int item : gather.output_locals.index_range()) {
+          const int local = gather.output_locals[item];
+          if (local >= 0 && local < program.local_count) {
+            gather_for_local[local] = gather_index;
+            item_for_local[local] = item;
+          }
+        }
+      }
+      for (Program::LocalIndexLoad &load : program.local_index_loads) {
+        if (load.array_local < 0 || load.array_local >= program.local_count) {
+          continue;
+        }
+        const int gather_index = gather_for_local[load.array_local];
+        const int item = item_for_local[load.array_local];
+        if (gather_index < 0 || item < 0) {
+          continue;
+        }
+        const Program::GatherSamples &gather = program.gather_samples[gather_index];
+        if (item < gather.sample_slots.size()) {
+          load.sample_slot = gather.sample_slots[item];
+          load.sample_index_array_local = gather.index_array_local;
+        }
+      }
+      for (const Inst &in : c) {
+        if (!ELEM(in.op, Op::PushLocal, Op::PushLocalMember) || in.imm < 0 ||
+            in.imm >= program.local_count)
+        {
+          continue;
+        }
+        const int gather_index = gather_for_local[in.imm];
+        const int item = item_for_local[in.imm];
+        if (gather_index >= 0 && item >= 0) {
+          program.gather_samples[gather_index].materialize[item] = 1;
+        }
       }
     }
 
@@ -4872,6 +5404,20 @@ static void infer_spatial_kernel(Program &program)
         }
         break;
       }
+      case Op::LengthV3:
+      case Op::SqrtF:
+      case Op::LogF:
+      case Op::AbsF:
+      case Op::ArrayLen:
+        push(pop());
+        break;
+      case Op::DotV3:
+      case Op::CrossV3: {
+        const SpatSym b = pop();
+        const SpatSym a = pop();
+        push(spat_through(a, b));
+        break;
+      }
       case Op::Call: {
         const Builtin b = Builtin(in.imm);
         const int n = int(in.a);
@@ -4956,6 +5502,17 @@ static void infer_spatial_kernel(Program &program)
       case Op::Sub:
       case Op::Mul:
       case Op::Div:
+      case Op::AddFF:
+      case Op::AddVV:
+      case Op::SubFF:
+      case Op::SubVV:
+      case Op::MulFF:
+      case Op::MulFV:
+      case Op::MulVF:
+      case Op::MulVV:
+      case Op::DivFF:
+      case Op::DivVF:
+      case Op::DivVV:
       case Op::Mod:
       case Op::Pow:
       case Op::Lt:
@@ -5066,12 +5623,582 @@ bool program_has_jumps(const Program &program)
   return false;
 }
 
-/* Straight-line map: one opcode, then a tight loop over a tile of the length-n
- * arrays. No native-node Field eval, no per-index vm_run call. */
-bool vm_run_tiles(const Program &program,
-                  VMEnv &env,
-                  const IndexMask &mask,
-                  std::string &r_error)
+static int vm_lane_grain(const int code_size)
+{
+  if (const char *override_value = std::getenv("BLENDER_VEX_GRAIN")) {
+    const int value = std::atoi(override_value);
+    if (value > 0) {
+      return std::clamp(value, 1, 1 << 20);
+    }
+  }
+  /* Target roughly tens of microseconds per scheduled chunk. Tiny grains create thousands of TBB
+   * tasks for medium meshes and cost more than the interpreted work they distribute. */
+  return code_size >= 128 ? 64 : (code_size >= 32 ? 256 : 512);
+}
+
+static bool program_can_wavefront_exec(const Program &program)
+{
+  if (!program.user_fns.is_empty() || program.max_stack > 48 || program.local_count > 48) {
+    return false;
+  }
+  for (const Inst &in : program.code) {
+    switch (in.op) {
+      case Op::Nop:
+      case Op::PushF:
+      case Op::PushI:
+      case Op::PushV:
+      case Op::PushB:
+      case Op::PushS:
+      case Op::PushLocal:
+      case Op::StoreLocal:
+      case Op::Dup:
+      case Op::Pop:
+      case Op::PushAttr:
+      case Op::StoreAttr:
+      case Op::AttrAdd:
+      case Op::AttrMulAdd:
+      case Op::IncLocal:
+      case Op::DecLocal:
+      case Op::PushIndex:
+      case Op::PushNpoints:
+      case Op::PushNedges:
+      case Op::PushNfaces:
+      case Op::PushNcorners:
+      case Op::Add:
+      case Op::Sub:
+      case Op::Mul:
+      case Op::Div:
+      case Op::AddFF:
+      case Op::AddVV:
+      case Op::SubFF:
+      case Op::SubVV:
+      case Op::MulFF:
+      case Op::MulFV:
+      case Op::MulVF:
+      case Op::MulVV:
+      case Op::DivFF:
+      case Op::DivVF:
+      case Op::DivVV:
+      case Op::Mod:
+      case Op::Pow:
+      case Op::Neg:
+      case Op::Lt:
+      case Op::Le:
+      case Op::Gt:
+      case Op::Ge:
+      case Op::Eq:
+      case Op::Ne:
+      case Op::And:
+      case Op::Or:
+      case Op::Not:
+      case Op::Jmp:
+      case Op::JmpIfFalse:
+      case Op::JmpIfTrue:
+      case Op::LengthV3:
+      case Op::DotV3:
+      case Op::CrossV3:
+      case Op::SqrtF:
+      case Op::LogF:
+      case Op::AbsF:
+      case Op::ArrayLen:
+      case Op::Call:
+      case Op::SampleElem:
+      case Op::FaceCorners:
+      case Op::GatherSamples:
+      case Op::PushLocalIndex:
+      case Op::PushLocalMember:
+      case Op::GetMember:
+      case Op::SetMember:
+      case Op::MakeVec:
+      case Op::GetIndex:
+      case Op::SetIndex:
+      case Op::Return:
+      case Op::PushHitPos:
+      case Op::WhileCmpAdd:
+        break;
+      case Op::CallUser:
+        return false;
+    }
+  }
+  return true;
+}
+
+/* Execute one byte-code instruction for all lanes currently at the same program counter. This
+ * amortizes the large switch/dispatch cost over a 32-element wave while retaining independent
+ * stacks, locals and control flow. Divergent branches are routed through per-PC lane masks and
+ * reconverge naturally; loops revisit their target block without falling back to scalar dispatch. */
+static bool vm_run_wavefront(const Program &program,
+                             VMEnv &env,
+                             const IndexMask &mask,
+                             std::string &r_error)
+{
+  constexpr int TILE = 32;
+  constexpr int ST = 48;
+  std::atomic<bool> ok{true};
+  std::mutex err_mutex;
+  const Span<Inst> code = program.code;
+  const int code_n = int(code.size());
+  const int local_n = std::max(program.local_count, 1);
+  const int lane_grain = vm_lane_grain(code_n);
+
+  mask.foreach_segment(
+      [&](const index_mask::IndexMaskSegment segment) {
+        if (!ok.load(std::memory_order_relaxed)) {
+          return;
+        }
+        for (int64_t off = 0; off < segment.size(); off += TILE) {
+          const int n = int(std::min<int64_t>(TILE, segment.size() - off));
+          tls_arrays_begin();
+          Value stacks[TILE][ST];
+          Value locals[TILE][ST];
+          uint8_t stack_size[TILE] = {};
+          int64_t jumps[TILE] = {};
+          VMEnv lanes[TILE];
+          for (int lane = 0; lane < n; lane++) {
+            lanes[lane] = env;
+            lanes[lane].const_s = program.const_s.as_span();
+            lanes[lane].index = int(segment[off + lane]);
+            lanes[lane].rand_seq = 0;
+            for (int i = 0; i < local_n; i++) {
+              locals[lane][i] = Value{};
+            }
+          }
+
+          Array<uint32_t> pc_masks(code_n + 1, 0);
+          Array<uint8_t> queued(code_n + 1, 0);
+          Vector<int> work;
+          auto enqueue = [&](const int pc, const uint32_t bits) {
+            if (bits == 0 || pc < 0 || pc > code_n) {
+              return;
+            }
+            pc_masks[pc] |= bits;
+            if (!queued[pc]) {
+              queued[pc] = 1;
+              work.append(pc);
+            }
+          };
+          auto for_lanes = [&](const uint32_t bits, const auto &fn) {
+            for (int lane = 0; lane < n; lane++) {
+              if (bits & (uint32_t(1) << lane)) {
+                fn(lane);
+              }
+            }
+          };
+          auto push = [&](const int lane, const Value &value) {
+            if (stack_size[lane] < ST) {
+              stacks[lane][stack_size[lane]++] = value;
+            }
+          };
+          auto pop = [&](const int lane) -> Value {
+            if (stack_size[lane] == 0) {
+              return Value::from_float(0.0f);
+            }
+            return stacks[lane][--stack_size[lane]];
+          };
+          std::string tile_error;
+          enqueue(0, n == 32 ? 0xffffffffu : ((uint32_t(1) << n) - 1u));
+
+          while (!work.is_empty() && tile_error.empty()) {
+            const int pc = work.pop_last();
+            queued[pc] = 0;
+            const uint32_t bits = pc_masks[pc];
+            pc_masks[pc] = 0;
+            if (bits == 0 || pc == code_n) {
+              continue;
+            }
+            const Inst &in = code[pc];
+            bool route_next = true;
+            switch (in.op) {
+              case Op::Nop:
+                break;
+              case Op::PushF:
+                for_lanes(bits, [&](const int l) { push(l, Value::from_float(program.const_f[in.imm])); });
+                break;
+              case Op::PushI:
+                for_lanes(bits, [&](const int l) { push(l, Value::from_int(program.const_i[in.imm])); });
+                break;
+              case Op::PushV:
+                for_lanes(bits, [&](const int l) { push(l, Value::from_vec(program.const_v[in.imm])); });
+                break;
+              case Op::PushB:
+                for_lanes(bits, [&](const int l) { push(l, Value::from_bool(in.imm != 0)); });
+                break;
+              case Op::PushS:
+                for_lanes(bits, [&](const int l) { push(l, Value::from_str_i(in.imm)); });
+                break;
+              case Op::PushLocal:
+                for_lanes(bits, [&](const int l) {
+                  push(l, in.imm >= 0 && in.imm < local_n ? locals[l][in.imm] : Value{});
+                });
+                break;
+              case Op::PushLocalIndex:
+                for_lanes(bits, [&](const int l) {
+                  push(l, load_local_index(program, in, locals[l], local_n, &lanes[l]));
+                });
+                break;
+              case Op::PushLocalMember:
+                for_lanes(bits, [&](const int l) {
+                  push(l,
+                       in.imm >= 0 && in.imm < local_n ?
+                           apply_get_member(locals[l][in.imm], int(in.a)) :
+                           Value{});
+                });
+                break;
+              case Op::StoreLocal:
+                for_lanes(bits, [&](const int l) {
+                  const Value value = pop(l);
+                  if (in.imm >= 0 && in.imm < local_n) {
+                    locals[l][in.imm] = value;
+                  }
+                });
+                break;
+              case Op::IncLocal:
+              case Op::DecLocal:
+                for_lanes(bits, [&](const int l) {
+                  if (in.imm >= 0 && in.imm < local_n) {
+                    Value &value = locals[l][in.imm];
+                    value.type = Type::Int;
+                    value.i += in.op == Op::IncLocal ? 1 : -1;
+                    value.v.x = float(value.i);
+                  }
+                });
+                break;
+              case Op::Dup:
+                for_lanes(bits, [&](const int l) {
+                  if (stack_size[l] > 0) {
+                    push(l, stacks[l][stack_size[l] - 1]);
+                  }
+                });
+                break;
+              case Op::Pop:
+                for_lanes(bits, [&](const int l) {
+                  if (stack_size[l] > 0) {
+                    stack_size[l]--;
+                  }
+                });
+                break;
+              case Op::PushAttr:
+                for_lanes(bits, [&](const int l) {
+                  push(l,
+                       in.imm >= 0 && in.imm < lanes[l].attrs.size() ?
+                           load_attr_value(lanes[l].attrs[in.imm], lanes[l].index, lanes[l]) :
+                           Value{});
+                });
+                break;
+              case Op::StoreAttr:
+                for_lanes(bits, [&](const int l) {
+                  const Value value = pop(l);
+                  if (in.imm >= 0 && in.imm < lanes[l].attrs.size()) {
+                    store_attr_value(lanes[l].attrs[in.imm], lanes[l].index, value, lanes[l]);
+                  }
+                });
+                break;
+              case Op::AttrAdd:
+                for_lanes(bits, [&](const int l) {
+                  const Value value = pop(l);
+                  if (in.imm >= 0 && in.imm < lanes[l].attrs.size()) {
+                    attr_add_inplace(lanes[l].attrs[in.imm], lanes[l].index, value);
+                  }
+                });
+                break;
+              case Op::AttrMulAdd:
+                for_lanes(bits, [&](const int l) {
+                  const Value k = pop(l), b = pop(l);
+                  if (in.imm >= 0 && in.imm < lanes[l].attrs.size()) {
+                    attr_add_inplace(lanes[l].attrs[in.imm], lanes[l].index, scale_value(b, k.as_int()));
+                  }
+                });
+                break;
+              case Op::PushIndex:
+                for_lanes(bits, [&](const int l) { push(l, Value::from_int(lanes[l].index)); });
+                break;
+              case Op::PushNpoints:
+                for_lanes(bits, [&](const int l) { push(l, Value::from_int(lanes[l].npoints)); });
+                break;
+              case Op::PushNedges:
+                for_lanes(bits, [&](const int l) { push(l, Value::from_int(lanes[l].nedges)); });
+                break;
+              case Op::PushNfaces:
+                for_lanes(bits, [&](const int l) { push(l, Value::from_int(lanes[l].nfaces)); });
+                break;
+              case Op::PushNcorners:
+                for_lanes(bits, [&](const int l) { push(l, Value::from_int(lanes[l].ncorners)); });
+                break;
+              case Op::PushHitPos:
+                for_lanes(bits, [&](const int l) { push(l, Value::from_vec(lanes[l].hit_pos)); });
+                break;
+              case Op::Add:
+                for_lanes(bits, [&](const int l) {
+                  const Value b = pop(l);
+                  if (stack_size[l] > 0) {
+                    add_inplace(stacks[l][stack_size[l] - 1], b);
+                  }
+                });
+                break;
+              case Op::Sub:
+              case Op::Mul:
+              case Op::Div:
+                for_lanes(bits, [&](const int l) {
+                  const Value b = pop(l), a = pop(l);
+                  push(l,
+                       in.op == Op::Sub ? numeric_sub(a, b) :
+                       in.op == Op::Mul ? numeric_mul(a, b, nullptr) : numeric_div(a, b));
+                });
+                break;
+              case Op::AddFF:
+              case Op::SubFF:
+              case Op::MulFF:
+              case Op::DivFF:
+                for_lanes(bits, [&](const int l) {
+                  const Value b = pop(l), a = pop(l);
+                  const float value = in.op == Op::AddFF ? a.v.x + b.v.x :
+                                      in.op == Op::SubFF ? a.v.x - b.v.x :
+                                      in.op == Op::MulFF ? a.v.x * b.v.x :
+                                                          (b.v.x != 0.0f ? a.v.x / b.v.x : 0.0f);
+                  push(l, Value::from_float(value));
+                });
+                break;
+              case Op::AddVV:
+              case Op::SubVV:
+              case Op::MulVV:
+              case Op::DivVV:
+                for_lanes(bits, [&](const int l) {
+                  const Value b = pop(l), a = pop(l);
+                  const float3 av = a.as_vec(), bv = b.as_vec();
+                  push(l,
+                       Value::from_vec(in.op == Op::AddVV ? av + bv :
+                                       in.op == Op::SubVV ? av - bv :
+                                       in.op == Op::MulVV ? av * bv : av / bv));
+                });
+                break;
+              case Op::MulFV:
+              case Op::MulVF:
+              case Op::DivVF:
+                for_lanes(bits, [&](const int l) {
+                  const Value b = pop(l), a = pop(l);
+                  if (in.op == Op::MulFV) {
+                    push(l, Value::from_vec(a.v.x * b.as_vec()));
+                  }
+                  else {
+                    const float factor = in.op == Op::DivVF ?
+                                             (b.v.x != 0.0f ? 1.0f / b.v.x : 0.0f) :
+                                             b.v.x;
+                    push(l, Value::from_vec(a.as_vec() * factor));
+                  }
+                });
+                break;
+              case Op::Mod:
+              case Op::Pow:
+                for_lanes(bits, [&](const int l) {
+                  const Value b = pop(l), a = pop(l);
+                  if (in.op == Op::Pow) {
+                    push(l, Value::from_float(powf(a.as_float(), b.as_float())));
+                  }
+                  else if (a.type == Type::Int && b.type == Type::Int) {
+                    const int d = b.as_int();
+                    push(l, Value::from_int(d != 0 ? a.as_int() % d : 0));
+                  }
+                  else {
+                    const float d = b.as_float();
+                    push(l, Value::from_float(d != 0.0f ? fmodf(a.as_float(), d) : 0.0f));
+                  }
+                });
+                break;
+              case Op::Neg:
+                for_lanes(bits, [&](const int l) {
+                  Value a = pop(l);
+                  if (a.type == Type::Vector) {
+                    push(l, Value::from_vec(-a.as_vec()));
+                  }
+                  else if (a.type == Type::Vector2) {
+                    push(l, Value::from_vec2(-a.as_vec2()));
+                  }
+                  else if (a.type == Type::Int) {
+                    push(l, Value::from_int(-a.as_int()));
+                  }
+                  else {
+                    push(l, Value::from_float(-a.as_float()));
+                  }
+                });
+                break;
+              case Op::Lt:
+              case Op::Le:
+              case Op::Gt:
+              case Op::Ge:
+              case Op::Eq:
+              case Op::Ne:
+                for_lanes(bits, [&](const int l) {
+                  const float b = pop(l).as_float(), a = pop(l).as_float();
+                  const bool value = in.op == Op::Lt ? a < b :
+                                     in.op == Op::Le ? a <= b :
+                                     in.op == Op::Gt ? a > b :
+                                     in.op == Op::Ge ? a >= b :
+                                     in.op == Op::Eq ? a == b : a != b;
+                  push(l, Value::from_bool(value));
+                });
+                break;
+              case Op::And:
+              case Op::Or:
+                for_lanes(bits, [&](const int l) {
+                  const bool b = pop(l).as_bool(), a = pop(l).as_bool();
+                  push(l, Value::from_bool(in.op == Op::And ? a && b : a || b));
+                });
+                break;
+              case Op::Not:
+                for_lanes(bits, [&](const int l) { push(l, Value::from_bool(!pop(l).as_bool())); });
+                break;
+              case Op::Jmp:
+                for_lanes(bits, [&](const int l) {
+                  if (++jumps[l] > 100000000) {
+                    tile_error = "Instruction limit exceeded (infinite loop?)";
+                  }
+                });
+                enqueue(in.imm, bits);
+                route_next = false;
+                break;
+              case Op::JmpIfFalse:
+              case Op::JmpIfTrue: {
+                uint32_t taken = 0, fallthrough = 0;
+                for_lanes(bits, [&](const int l) {
+                  if (++jumps[l] > 100000000) {
+                    tile_error = "Instruction limit exceeded (infinite loop?)";
+                    return;
+                  }
+                  const bool value = pop(l).as_bool();
+                  const bool take = in.op == Op::JmpIfTrue ? value : !value;
+                  (take ? taken : fallthrough) |= uint32_t(1) << l;
+                });
+                enqueue(in.imm, taken);
+                enqueue(pc + 1, fallthrough);
+                route_next = false;
+                break;
+              }
+              case Op::LengthV3:
+              case Op::SqrtF:
+              case Op::LogF:
+              case Op::AbsF:
+              case Op::ArrayLen:
+                for_lanes(bits, [&](const int l) {
+                  const Value a = pop(l);
+                  push(l,
+                       in.op == Op::LengthV3 ? typed_length_v3(a) :
+                       in.op == Op::SqrtF ? typed_sqrt_f(a) :
+                       in.op == Op::LogF ? typed_log_f(a) :
+                       in.op == Op::AbsF ? typed_abs_f(a) : typed_array_len(a));
+                });
+                break;
+              case Op::DotV3:
+              case Op::CrossV3:
+                for_lanes(bits, [&](const int l) {
+                  const Value b = pop(l), a = pop(l);
+                  push(l, in.op == Op::DotV3 ? typed_dot_v3(a, b) : typed_cross_v3(a, b));
+                });
+                break;
+              case Op::Call:
+              case Op::SampleElem:
+              case Op::FaceCorners:
+                for_lanes(bits, [&](const int l) {
+                  const int nargs = in.op == Op::SampleElem ? int(in.a & 0x1f) : int(in.a);
+                  Value args[32];
+                  const int na = std::min(nargs, 32);
+                  for (int a = na - 1; a >= 0; a--) {
+                    args[a] = pop(l);
+                  }
+                  std::string error;
+                  Value value;
+                  if (in.op == Op::Call) {
+                    value = call_builtin(Builtin(in.imm), Span<Value>(args, na), lanes[l], error);
+                  }
+                  else if (in.op == Op::SampleElem) {
+                    value = call_static_sample(in, Span<Value>(args, na), lanes[l], error);
+                  }
+                  else {
+                    value = face_corners_direct(in, Span<Value>(args, na), lanes[l]);
+                  }
+                  if (!error.empty()) {
+                    tile_error = error;
+                  }
+                  push(l, value);
+                });
+                break;
+              case Op::GatherSamples:
+                for_lanes(bits, [&](const int l) {
+                  std::string error;
+                  if (!gather_samples_direct(program, in, locals[l], local_n, lanes[l], error)) {
+                    tile_error = error;
+                  }
+                });
+                break;
+              case Op::GetMember:
+                for_lanes(bits, [&](const int l) { push(l, apply_get_member(pop(l), in.imm)); });
+                break;
+              case Op::SetMember:
+                for_lanes(bits, [&](const int l) {
+                  const Value obj = pop(l), member = pop(l);
+                  push(l, apply_set_member(obj, member, in.imm));
+                });
+                break;
+              case Op::GetIndex:
+                for_lanes(bits, [&](const int l) {
+                  const int index = pop(l).as_int();
+                  push(l, get_index_value(pop(l), index));
+                });
+                break;
+              case Op::SetIndex:
+                for_lanes(bits, [&](const int l) {
+                  const int index = pop(l).as_int();
+                  const Value array = pop(l), elem = pop(l);
+                  push(l, set_index_value(array, index, elem, lanes[l]));
+                });
+                break;
+              case Op::MakeVec:
+                for_lanes(bits, [&](const int l) {
+                  float values[4] = {};
+                  for (int i = std::min(in.imm, 4) - 1; i >= 0; i--) {
+                    values[i] = pop(l).as_float();
+                  }
+                  push(l, make_vec_value(in.imm, values[0], values[1], values[2], values[3]));
+                });
+                break;
+              case Op::WhileCmpAdd:
+                for_lanes(bits, [&](const int l) {
+                  if (in.imm >= 0 && in.imm < program.while_adds.size()) {
+                    while_cmp_add_one(lanes[l].attrs, program.while_adds[in.imm], lanes[l].index);
+                  }
+                });
+                break;
+              case Op::Return:
+                route_next = false;
+                break;
+              case Op::CallUser:
+                BLI_assert_unreachable();
+                tile_error = "Unsupported wavefront user function";
+                route_next = false;
+                break;
+            }
+            if (route_next) {
+              enqueue(pc + 1, bits);
+            }
+          }
+          if (!tile_error.empty()) {
+            bool expected = true;
+            if (ok.compare_exchange_strong(expected, false, std::memory_order_relaxed)) {
+              std::lock_guard lock(err_mutex);
+              r_error = tile_error;
+            }
+            return;
+          }
+        }
+      },
+      exec_mode::grain_size(lane_grain));
+  return ok.load();
+}
+
+/* Scalar fixed-storage fallback for programs which cannot enter the wavefront executor. */
+static bool vm_run_tiles_scalar(const Program &program,
+                                VMEnv &env,
+                                const IndexMask &mask,
+                                std::string &r_error)
 {
   constexpr int TILE = 64;
   constexpr int ST = 48;
@@ -5080,7 +6207,7 @@ bool vm_run_tiles(const Program &program,
   const Span<Inst> code = program.code;
   const int code_n = int(code.size());
   const int local_n = std::max(program.local_count, 1);
-  const int lane_grain = code_n >= 96 ? 16 : (code_n >= 32 ? 64 : 256);
+  const int lane_grain = vm_lane_grain(code_n);
 
   mask.foreach_segment(
       [&](const index_mask::IndexMaskSegment segment) {
@@ -5156,7 +6283,7 @@ bool vm_run_tiles(const Program &program,
                                                            Value::from_float(0.0f));
                   break;
                 case Op::PushLocalIndex:
-                  push(load_local_index(program, in, locals_s, local_n));
+                  push(load_local_index(program, in, locals_s, local_n, &local));
                   break;
                 case Op::PushLocalMember:
                   if (in.imm >= 0 && in.imm < local_n) {
@@ -5269,6 +6396,62 @@ bool vm_run_tiles(const Program &program,
                   Value b = pop();
                   Value a = pop();
                   push(numeric_div(a, b));
+                  break;
+                }
+                case Op::AddFF: {
+                  const Value b = pop(), a = pop();
+                  push(Value::from_float(a.v.x + b.v.x));
+                  break;
+                }
+                case Op::AddVV: {
+                  const Value b = pop(), a = pop();
+                  push(Value::from_vec(float3(a.v.x + b.v.x, a.v.y + b.v.y, a.v.z + b.v.z)));
+                  break;
+                }
+                case Op::SubFF: {
+                  const Value b = pop(), a = pop();
+                  push(Value::from_float(a.v.x - b.v.x));
+                  break;
+                }
+                case Op::SubVV: {
+                  const Value b = pop(), a = pop();
+                  push(Value::from_vec(float3(a.v.x - b.v.x, a.v.y - b.v.y, a.v.z - b.v.z)));
+                  break;
+                }
+                case Op::MulFF: {
+                  const Value b = pop(), a = pop();
+                  push(Value::from_float(a.v.x * b.v.x));
+                  break;
+                }
+                case Op::MulFV: {
+                  const Value b = pop(), a = pop();
+                  push(Value::from_vec(float3(a.v.x * b.v.x, a.v.x * b.v.y, a.v.x * b.v.z)));
+                  break;
+                }
+                case Op::MulVF: {
+                  const Value b = pop(), a = pop();
+                  push(Value::from_vec(float3(a.v.x * b.v.x, a.v.y * b.v.x, a.v.z * b.v.x)));
+                  break;
+                }
+                case Op::MulVV: {
+                  const Value b = pop(), a = pop();
+                  push(Value::from_vec(float3(a.v.x * b.v.x, a.v.y * b.v.y, a.v.z * b.v.z)));
+                  break;
+                }
+                case Op::DivFF: {
+                  const Value b = pop(), a = pop();
+                  push(Value::from_float(b.v.x != 0.0f ? a.v.x / b.v.x : 0.0f));
+                  break;
+                }
+                case Op::DivVF: {
+                  const Value b = pop(), a = pop();
+                  const float inv = b.v.x != 0.0f ? 1.0f / b.v.x : 0.0f;
+                  push(Value::from_vec(float3(a.v.x * inv, a.v.y * inv, a.v.z * inv)));
+                  break;
+                }
+                case Op::DivVV: {
+                  const Value b = pop(), a = pop();
+                  push(Value::from_vec(float3(a.v.x / b.v.x, a.v.y / b.v.y, a.v.z / b.v.z)));
                   break;
                 }
                 case Op::Mod: {
@@ -5392,6 +6575,33 @@ bool vm_run_tiles(const Program &program,
                     pc = in.imm;
                     continue;
                   }
+                  break;
+                case Op::LengthV3:
+                  push(typed_length_v3(pop()));
+                  break;
+                case Op::DotV3: {
+                  const Value b = pop();
+                  const Value a = pop();
+                  push(typed_dot_v3(a, b));
+                  break;
+                }
+                case Op::CrossV3: {
+                  const Value b = pop();
+                  const Value a = pop();
+                  push(typed_cross_v3(a, b));
+                  break;
+                }
+                case Op::SqrtF:
+                  push(typed_sqrt_f(pop()));
+                  break;
+                case Op::LogF:
+                  push(typed_log_f(pop()));
+                  break;
+                case Op::AbsF:
+                  push(typed_abs_f(pop()));
+                  break;
+                case Op::ArrayLen:
+                  push(typed_array_len(pop()));
                   break;
                 case Op::Call: {
                   const int nargs = int(in.a);
@@ -5546,6 +6756,32 @@ bool vm_run_tiles(const Program &program,
   return ok.load();
 }
 
+static bool vm_run_tiles(const Program &program,
+                         VMEnv &env,
+                         const IndexMask &mask,
+                         std::string &r_error)
+{
+  /* Keep this tier opt-in until array-heavy workloads consistently beat the fixed scalar lane
+   * executor. The implementation is retained for profiling and further SIMD work, but a new tier
+   * must not become the default on the strength of instruction-dispatch theory alone. */
+  const bool wavefront = std::getenv("BLENDER_VEX_ENABLE_WAVEFRONT") != nullptr &&
+                         program_can_wavefront_exec(program);
+  if (std::getenv("BLENDER_VEX_PROFILE") != nullptr) {
+    std::fprintf(stderr,
+                 "VEX_VM_EXEC path=%s code=%lld locals=%d stack=%d gathers=%lld\n",
+                 wavefront ? "wavefront" : "scalar",
+                 static_cast<long long>(program.code.size()),
+                 program.local_count,
+                 program.max_stack,
+                 static_cast<long long>(program.gather_samples.size()));
+  }
+  if (wavefront)
+  {
+    return vm_run_wavefront(program, env, mask, r_error);
+  }
+  return vm_run_tiles_scalar(program, env, mask, r_error);
+}
+
 bool vm_run_lanes(const Program &program,
                   VMEnv &env,
                   const IndexMask &mask,
@@ -5559,8 +6795,7 @@ bool vm_run_lanes(const Program &program,
   }
   std::atomic<bool> ok{true};
   std::mutex err_mutex;
-  const int lane_grain = program.code.size() >= 96 ? 16 :
-                         (program.code.size() >= 32 ? 64 : 256);
+  const int lane_grain = vm_lane_grain(program.code.size());
   mask.foreach_segment(
       [&](const index_mask::IndexMaskSegment segment) {
         if (!ok.load(std::memory_order_relaxed)) {
@@ -5744,6 +6979,68 @@ static bool try_broadcast_uniform_stores(const Program &program,
         }
         else if (in.imm >= 0 && in.imm < env.attrs.size()) {
           attr_store_mask(env.attrs[in.imm], s.v, mask, env);
+        }
+        break;
+      }
+      case Op::LengthV3:
+      case Op::SqrtF:
+      case Op::LogF:
+      case Op::AbsF:
+      case Op::ArrayLen: {
+        Slot a = pop();
+        add_in(pc, a);
+        if (a.varying) {
+          must_run[pc] = 1;
+          mark_feed(a);
+          const Value zero = in.op == Op::ArrayLen ? Value::from_int(0) :
+                                                     Value::from_float(0.0f);
+          push({zero, pc, true});
+        }
+        else {
+          Value result;
+          switch (in.op) {
+            case Op::LengthV3:
+              result = typed_length_v3(a.v);
+              break;
+            case Op::SqrtF:
+              result = typed_sqrt_f(a.v);
+              break;
+            case Op::LogF:
+              result = typed_log_f(a.v);
+              break;
+            case Op::AbsF:
+              result = typed_abs_f(a.v);
+              break;
+            case Op::ArrayLen:
+              result = typed_array_len(a.v);
+              break;
+            default:
+              BLI_assert_unreachable();
+              result = Value::from_float(0.0f);
+              break;
+          }
+          push({result, pc, false});
+        }
+        break;
+      }
+      case Op::DotV3:
+      case Op::CrossV3: {
+        Slot b = pop();
+        Slot a = pop();
+        add_in(pc, a);
+        add_in(pc, b);
+        if (a.varying || b.varying) {
+          must_run[pc] = 1;
+          mark_feed(a);
+          mark_feed(b);
+          const Value zero = in.op == Op::CrossV3 ? Value::from_vec(float3(0.0f)) :
+                                                    Value::from_float(0.0f);
+          push({zero, pc, true});
+        }
+        else {
+          const Value result = in.op == Op::CrossV3 ? typed_cross_v3(a.v, b.v) :
+                                                      typed_dot_v3(a.v, b.v);
+          push({result, pc, false});
         }
         break;
       }
@@ -6012,7 +7309,7 @@ bool vm_run_array(const Program &program,
         }
         break;
       case Op::PushLocalIndex:
-        push(load_local_index(program, in, locals, local_n));
+        push(load_local_index(program, in, locals, local_n, &env));
         break;
       case Op::PushLocalMember:
         if (in.imm >= 0 && in.imm < local_n) {
@@ -6114,6 +7411,62 @@ bool vm_run_array(const Program &program,
         Value b = pop();
         Value a = pop();
         push(numeric_div(a, b));
+        break;
+      }
+      case Op::AddFF: {
+        const Value b = pop(), a = pop();
+        push(Value::from_float(a.v.x + b.v.x));
+        break;
+      }
+      case Op::AddVV: {
+        const Value b = pop(), a = pop();
+        push(Value::from_vec(float3(a.v.x + b.v.x, a.v.y + b.v.y, a.v.z + b.v.z)));
+        break;
+      }
+      case Op::SubFF: {
+        const Value b = pop(), a = pop();
+        push(Value::from_float(a.v.x - b.v.x));
+        break;
+      }
+      case Op::SubVV: {
+        const Value b = pop(), a = pop();
+        push(Value::from_vec(float3(a.v.x - b.v.x, a.v.y - b.v.y, a.v.z - b.v.z)));
+        break;
+      }
+      case Op::MulFF: {
+        const Value b = pop(), a = pop();
+        push(Value::from_float(a.v.x * b.v.x));
+        break;
+      }
+      case Op::MulFV: {
+        const Value b = pop(), a = pop();
+        push(Value::from_vec(float3(a.v.x * b.v.x, a.v.x * b.v.y, a.v.x * b.v.z)));
+        break;
+      }
+      case Op::MulVF: {
+        const Value b = pop(), a = pop();
+        push(Value::from_vec(float3(a.v.x * b.v.x, a.v.y * b.v.x, a.v.z * b.v.x)));
+        break;
+      }
+      case Op::MulVV: {
+        const Value b = pop(), a = pop();
+        push(Value::from_vec(float3(a.v.x * b.v.x, a.v.y * b.v.y, a.v.z * b.v.z)));
+        break;
+      }
+      case Op::DivFF: {
+        const Value b = pop(), a = pop();
+        push(Value::from_float(b.v.x != 0.0f ? a.v.x / b.v.x : 0.0f));
+        break;
+      }
+      case Op::DivVF: {
+        const Value b = pop(), a = pop();
+        const float inv = b.v.x != 0.0f ? 1.0f / b.v.x : 0.0f;
+        push(Value::from_vec(float3(a.v.x * inv, a.v.y * inv, a.v.z * inv)));
+        break;
+      }
+      case Op::DivVV: {
+        const Value b = pop(), a = pop();
+        push(Value::from_vec(float3(a.v.x / b.v.x, a.v.y / b.v.y, a.v.z / b.v.z)));
         break;
       }
       case Op::Mod: {
@@ -6278,6 +7631,33 @@ bool vm_run_array(const Program &program,
         }
         break;
       }
+      case Op::LengthV3:
+        push(typed_length_v3(pop()));
+        break;
+      case Op::DotV3: {
+        const Value b = pop();
+        const Value a = pop();
+        push(typed_dot_v3(a, b));
+        break;
+      }
+      case Op::CrossV3: {
+        const Value b = pop();
+        const Value a = pop();
+        push(typed_cross_v3(a, b));
+        break;
+      }
+      case Op::SqrtF:
+        push(typed_sqrt_f(pop()));
+        break;
+      case Op::LogF:
+        push(typed_log_f(pop()));
+        break;
+      case Op::AbsF:
+        push(typed_abs_f(pop()));
+        break;
+      case Op::ArrayLen:
+        push(typed_array_len(pop()));
+        break;
       case Op::Call: {
         const int nargs = int(in.a);
         Value args_buf[32];

@@ -2827,18 +2827,28 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
     case ExprKind::Binary: {
       const Type ta = compile_expr(e->a);
       const Type tb = compile_expr(e->b);
-      (void)tb;
       if (e->op == "+") {
-        emit(Op::Add);
+        emit(ta == Type::Float && tb == Type::Float ? Op::AddFF :
+             ta == Type::Vector && tb == Type::Vector ? Op::AddVV :
+                                                        Op::Add);
       }
       else if (e->op == "-") {
-        emit(Op::Sub);
+        emit(ta == Type::Float && tb == Type::Float ? Op::SubFF :
+             ta == Type::Vector && tb == Type::Vector ? Op::SubVV :
+                                                        Op::Sub);
       }
       else if (e->op == "*") {
-        emit(Op::Mul);
+        emit(ta == Type::Float && tb == Type::Float ? Op::MulFF :
+             ta == Type::Float && tb == Type::Vector ? Op::MulFV :
+             ta == Type::Vector && tb == Type::Float ? Op::MulVF :
+             ta == Type::Vector && tb == Type::Vector ? Op::MulVV :
+                                                        Op::Mul);
       }
       else if (e->op == "/") {
-        emit(Op::Div);
+        emit(ta == Type::Float && tb == Type::Float ? Op::DivFF :
+             ta == Type::Vector && tb == Type::Float ? Op::DivVF :
+             ta == Type::Vector && tb == Type::Vector ? Op::DivVV :
+                                                        Op::Div);
       }
       else if (e->op == "%") {
         emit(Op::Mod);
@@ -3675,6 +3685,46 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
         }
         emit(Op::SampleElem, static_sample_i);
         prog.code.last().a = uint8_t((n_in & 0x1f) | ((index_arg + 1) << 5));
+      }
+      else if (builtin == Builtin::Length && n_in == 1 && e->args[0] &&
+               e->args[0]->type == Type::Vector)
+      {
+        emit(Op::LengthV3);
+      }
+      else if (builtin == Builtin::Dot && n_in == 2 && e->args[0] && e->args[1] &&
+               e->args[0]->type == Type::Vector && e->args[1]->type == Type::Vector)
+      {
+        emit(Op::DotV3);
+      }
+      else if (builtin == Builtin::Cross && n_in == 2 && e->args[0] && e->args[1] &&
+               e->args[0]->type == Type::Vector && e->args[1]->type == Type::Vector)
+      {
+        emit(Op::CrossV3);
+      }
+      else if (builtin == Builtin::Sqrt && n_in == 1 && e->args[0] &&
+               e->args[0]->type == Type::Float)
+      {
+        emit(Op::SqrtF);
+      }
+      else if (builtin == Builtin::Log && n_in == 1 && e->args[0] &&
+               e->args[0]->type == Type::Float)
+      {
+        emit(Op::LogF);
+      }
+      else if (builtin == Builtin::Abs && n_in == 1 && e->args[0] &&
+               e->args[0]->type == Type::Float)
+      {
+        emit(Op::AbsF);
+      }
+      else if ((builtin == Builtin::Len || builtin == Builtin::Length) && n_in == 1 &&
+               e->args[0] && type_is_array(e->args[0]->type))
+      {
+        emit(Op::ArrayLen);
+      }
+      else if (builtin == Builtin::FloatFn && n_in == 1 && e->args[0] &&
+               e->args[0]->type == Type::Float)
+      {
+        /* A statically known float cast is an identity. The argument is already on the stack. */
       }
       else {
         emit(Op::Call, call_id);
@@ -4651,19 +4701,30 @@ Type Compiler::compile_assign(Expr *e, const bool as_stmt)
     }
   }
   if (e->op != "=") {
-    compile_expr(e->a);
-    compile_expr(e->b);
+    const Type ta = compile_expr(e->a);
+    const Type tb = compile_expr(e->b);
     if (e->op == "+=") {
-      emit(Op::Add);
+      emit(ta == Type::Float && tb == Type::Float ? Op::AddFF :
+             ta == Type::Vector && tb == Type::Vector ? Op::AddVV :
+                                                        Op::Add);
     }
     else if (e->op == "-=") {
-      emit(Op::Sub);
+      emit(ta == Type::Float && tb == Type::Float ? Op::SubFF :
+             ta == Type::Vector && tb == Type::Vector ? Op::SubVV :
+                                                        Op::Sub);
     }
     else if (e->op == "*=") {
-      emit(Op::Mul);
+      emit(ta == Type::Float && tb == Type::Float ? Op::MulFF :
+             ta == Type::Float && tb == Type::Vector ? Op::MulFV :
+             ta == Type::Vector && tb == Type::Float ? Op::MulVF :
+             ta == Type::Vector && tb == Type::Vector ? Op::MulVV :
+                                                        Op::Mul);
     }
     else if (e->op == "/=") {
-      emit(Op::Div);
+      emit(ta == Type::Float && tb == Type::Float ? Op::DivFF :
+             ta == Type::Vector && tb == Type::Float ? Op::DivVF :
+             ta == Type::Vector && tb == Type::Vector ? Op::DivVV :
+                                                        Op::Div);
     }
   }
   else {
@@ -8221,6 +8282,11 @@ static CompileOutput compile_impl(const StringRef source, const bool shader_mate
         return;
       case StmtKind::Return:
         c.compile_stmt(s);
+        return;
+      case StmtKind::FnDef:
+        /* Function bodies are emitted in the dedicated pass below, after the main-script Return.
+         * Treating a parsed definition as a main statement would duplicate it and also made this
+         * switch silently incomplete when new diagnostic paths visited the AST. */
         return;
     }
   };
