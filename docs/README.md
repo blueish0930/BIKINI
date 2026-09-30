@@ -10,4 +10,4 @@ GitHub Pages 根目录。语言切换三页共用（`localStorage`）。
 | [vex.html](vex.html) | VEX 语言介绍（类型、循环、分支） |
 | [vex-functions.html](vex-functions.html) | VEX 内置函数清单 |
 
-本地直接打开 `index.html` 即可。第三方库与许可证见包根目录 `README.md`。
+本地直接打开 `index.html` 即可。第三方库与许可证见仓库根目录 [NOTICES.md](https://github.com/blueish0930/BIKINI/blob/main/NOTICES.md)。
