@@ -158,7 +158,11 @@ target_compile_definitions(bf_intern_luxcore_kernel
 )
 
 if(MSVC)
-  target_compile_options(bf_intern_luxcore_kernel PRIVATE
+  # luxcore.cpp includes OpenImageIO before any other fmt header. OIIO then
+  # compiles fmt header-only into that one object. See bikini_fmt_compiled.h.
+  set_source_files_properties("${LUXCORE_SOURCE_DIR}/src/luxcore/luxcore.cpp"
+    PROPERTIES COMPILE_OPTIONS "/FIbikini_fmt_compiled.h")
+  target_compile_options(bf_intern_luxcore_kernel PRIVATE)
     /bigobj
     /EHsc
     /arch:AVX

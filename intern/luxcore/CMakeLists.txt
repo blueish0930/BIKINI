@@ -74,8 +74,6 @@ add_dependencies(bf_intern_luxcore bf_rna)
 if(TARGET bf_intern_luxcore_kernel)
   add_dependencies(bf_intern_luxcore bf_intern_luxcore_kernel)
   set_property(TARGET bf_intern_luxcore PROPERTY CXX_STANDARD 20)
-  # fmt v12 is instantiated both in the kernel TUs and in blender's fmt.lib.
-  target_link_options(bf_intern_luxcore INTERFACE "/FORCE:MULTIPLE")
   if(EXISTS "${LIBDIR}/imath/lib/Imath.lib")
     target_link_libraries(bf_intern_luxcore PUBLIC "${LIBDIR}/imath/lib/Imath.lib")
   endif()
