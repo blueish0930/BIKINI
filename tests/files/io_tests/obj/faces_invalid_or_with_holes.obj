@@ -1,3 +1,81 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:5e0b83116d84700df75f8004faf4fae5e07afb0aeb458b4b74800b463cbdb039
-size 1117
+# Test various face configurations that are normally
+# "invalid" for Blender (i.e. contain duplicate vertex
+# indices). Some software represents faces with holes
+# this way.
+#
+# Each object vertex layout:
+#  2-----3
+#  | 6-7 |
+#  | 5-8 |
+#  1-----4
+
+o FaceWithHole_BecomesTwoFacesFormingAHole
+v -2 0 -2
+v -2 0 2
+v 2 0 2
+v 2 0 -2
+v -1 0 -1
+v -1 0 1
+v 1 0 1
+v 1 0 -1
+f 1 2 3 4 1 5 6 7 8 5
+
+o FaceQuadDupSomeVerts_BecomesOneQuadUsing4Verts
+v 3 0 -2
+v 3 0 2
+v 7 0 2
+v 7 0 -2
+v 4 0 -1
+v 4 0 1
+v 6 0 1
+v 6 0 -1
+f 9 10 11 12 9 10
+
+o FaceTriDupVert_Becomes1Tri
+v -2 0 3
+v -2 0 7
+v 2 0 7
+v 2 0 3
+v -1 0 4
+v -1 0 6
+v 1 0 6
+v 1 0 4
+f 17 18 19 17
+
+o FaceAllVertsDup_CancelsOut
+v 3 0 3
+v 3 0 7
+v 7 0 7
+v 7 0 3
+v 4 0 4
+v 4 0 6
+v 6 0 6
+v 6 0 4
+f 25 26 27 28 29 30 31 32 25 26 27 28 29 30 31 32
+
+o FaceAllVerts_BecomesOneOverlappingFaceUsingAllVerts
+v 8 0 -2
+v 8 0 2
+v 12 0 2
+v 12 0 -2
+v 9 0 -1
+v 9 0 1
+v 11 0 1
+v 11 0 -1
+f 33 34 35 36 37 38 39 40
+
+o FaceJustTwoVerts_IsSkipped
+v 8 0 3
+v 8 0 7
+v 12 0 7
+v 12 0 3
+v 9 0 4
+v 9 0 6
+v 11 0 6
+v 11 0 4
+f 41 42
+
+# exception in python importer
+#o FaceOutOfBoundsVerts
+#f 10000 20000 -10000
+

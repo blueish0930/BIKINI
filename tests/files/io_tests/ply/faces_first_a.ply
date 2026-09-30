@@ -1,3 +1,17 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:fae6fc43d9757296e7242ca0f79b88412f967b8b4bf7a0280d608b66eb599dbd
-size 280
+ply
+format ascii 1.0
+element face 1
+property list int int vertex_indices
+element vertex 4
+property float x
+property float y
+property float z
+property float red
+property float green
+property float blue
+end_header
+4 0 1 2 3
+1 0 1 1 0 0
+1 0 -1 0 1 0
+-1 0 -1 0 0 1
+-1 0 1 0.5 0.5 0.5

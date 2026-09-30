@@ -1,3 +1,18 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:88f95449b395c9a3975f1d9d44903cc884426d67d0a2efcc46521cad596b9306
-size 343
+ply
+format ascii 1.0
+comment Malformed face indices reference vertices and UVs that do not exist.
+element vertex 4
+property float x
+property float y
+property float z
+property float s
+property float t
+element face 2
+property list uchar uint vertex_indices
+end_header
+0 0 0 0.1 0.2
+1 0 0 0.3 0.4
+1 1 0 0.5 0.6
+0 1 0 0.7 0.8
+3 0 1 2
+3 99 100 101
