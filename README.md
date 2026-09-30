@@ -4,7 +4,6 @@
 
 - 文档：[主页](https://blueish0930.github.io/BIKINI/) · [手册](https://blueish0930.github.io/BIKINI/manual.html) · [更新日志](https://blueish0930.github.io/BIKINI/changelog.html) · 本仓库 `docs/`
 - 源码：本仓库 [github.com/blueish0930/BIKINI](https://github.com/blueish0930/BIKINI)
-- 上游对照：[projects.blender.org/blueish/BIKINI](https://projects.blender.org/blueish/BIKINI)
 
 节点参数、各版改动写在 `docs/`（手册与更新日志）。本文件只说明项目目标和引用的资源。本地编出的 Windows 便携包不在这个 git 仓库里。
 
