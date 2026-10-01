@@ -12888,6 +12888,15 @@ static void rna_def_nodetree(BlenderRNA *brna)
       prop, "Color Tag", "Color tag of the node group which influences the header color");
   RNA_def_property_update(prop, NC_NODE, nullptr);
 
+  prop = RNA_def_property(srna, "is_recursive", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, nullptr, "flag", NTREE_GEOMETRY_RECURSIVE);
+  RNA_def_property_ui_text(
+      prop,
+      "Recursive",
+      "Allow this geometry node group to call itself. Each call is a separate branch; use the "
+      "Recursive Calls panel to inspect one path");
+  RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_NodeTree_update");
+
   prop = RNA_def_property(srna, "default_group_node_width", PROP_INT, PROP_NONE);
   RNA_def_property_int_default(prop, bke::NodeWidth::Default);
   RNA_def_property_range(prop, bke::NodeWidth::GroupMin, bke::NodeWidth::DefaultMax);

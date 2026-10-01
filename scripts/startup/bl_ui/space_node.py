@@ -1215,6 +1215,7 @@ class NODE_PT_node_tree_properties(Panel):
         row.operator("node.default_group_width_set", text="", icon='NODE')
 
         if group.bl_idname == "GeometryNodeTree":
+            col.prop(group, "is_recursive")
             row = col.row()
             row.active = group.is_modifier
             row.prop(group, "show_modifier_manage_panel")

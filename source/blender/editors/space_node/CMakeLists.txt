@@ -46,6 +46,7 @@ set(SRC
   node_group.cc
   node_modal_keymap_ui.cc
   node_ops.cc
+  node_recursive_tree_ui.cc
   node_relationships.cc
   node_select.cc
   node_select_elements_edit.cc

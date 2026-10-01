@@ -179,6 +179,13 @@ bool node_editor_is_for_geometry_nodes_modifier(const SpaceNode &snode,
     const SpaceNode &snode, bke::ComputeContextCache &compute_context_cache);
 
 /**
+ * Same as #compute_context_for_edittree, without the recursive-call inspection override.
+ * The Recursive Calls panel uses this as the root of the call tree.
+ */
+[[nodiscard]] const ComputeContext *compute_context_for_edittree_base(
+    const SpaceNode &snode, bke::ComputeContextCache &compute_context_cache);
+
+/**
  * Get the active compute context for the given socket in the current edittree.
  */
 [[nodiscard]] const ComputeContext *compute_context_for_edittree_socket(

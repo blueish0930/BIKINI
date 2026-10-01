@@ -72,6 +72,7 @@ struct FlipSolverSettings {
 
   int pressure_max_iterations = 500;
   float pressure_tolerance = 1.0e-5f;
+  bool use_multigrid_preconditioner = false;
 
   float viscosity = 0.0f;
   int viscosity_max_iterations = 200;
@@ -95,6 +96,9 @@ struct FlipPerformanceStats {
 
   double particle_binning_ms = 0.0;
   double reseeding_ms = 0.0;
+  double reseed_cull_ms = 0.0;
+  double reseed_seed_ms = 0.0;
+  double reseed_balance_ms = 0.0;
   double collider_ms = 0.0;
 
   double p2g_ms = 0.0;

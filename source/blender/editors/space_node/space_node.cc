@@ -10,6 +10,7 @@
 
 #include <cstring>
 #include <limits>
+#include <ostream>
 
 #include "BKE_node_socket_value.hh"
 #include "BLI_listbase.hh"
@@ -916,7 +917,28 @@ static const ComputeContext *get_node_editor_root_compute_context(
   return nullptr;
 }
 
-[[nodiscard]] const ComputeContext *compute_context_for_edittree(
+class RecursiveInspectionComputeContext : public ComputeContext {
+  ComputeContextHash hash_;
+
+ public:
+  RecursiveInspectionComputeContext(const ComputeContext *parent, const ComputeContextHash hash)
+      : ComputeContext(parent), hash_(hash)
+  {
+  }
+
+ private:
+  ComputeContextHash compute_hash() const override
+  {
+    return hash_;
+  }
+
+  void print_current_in_line(std::ostream &stream) const override
+  {
+    stream << "Recursive inspection";
+  }
+};
+
+[[nodiscard]] const ComputeContext *compute_context_for_edittree_base(
     const SpaceNode &snode, bke::ComputeContextCache &compute_context_cache)
 {
   if (!snode.edittree) {
@@ -940,6 +962,31 @@ static const ComputeContext *get_node_editor_root_compute_context(
   const ComputeContext *edittree_context =
       compute_context_for_tree_path(snode, compute_context_cache, root_context).value_or(nullptr);
   return edittree_context;
+}
+
+[[nodiscard]] const ComputeContext *compute_context_for_edittree(
+    const SpaceNode &snode, bke::ComputeContextCache &compute_context_cache)
+{
+  const ComputeContext *base = compute_context_for_edittree_base(snode, compute_context_cache);
+  if (base == nullptr || snode.runtime == nullptr || snode.edittree == nullptr) {
+    return base;
+  }
+  if (snode.edittree->type != NTREE_GEOMETRY ||
+      (snode.edittree->flag & NTREE_GEOMETRY_RECURSIVE) == 0)
+  {
+    return base;
+  }
+  if (!snode.runtime->recursive_inspection_hash.has_value()) {
+    return base;
+  }
+  if (snode.runtime->recursive_inspection_tree_uid != snode.edittree->id.session_uid) {
+    return base;
+  }
+  if (*snode.runtime->recursive_inspection_hash == base->hash()) {
+    return base;
+  }
+  return &compute_context_cache.for_any_uncached<RecursiveInspectionComputeContext>(
+      base, *snode.runtime->recursive_inspection_hash);
 }
 
 const ComputeContext *compute_context_for_edittree_socket(
@@ -3444,6 +3491,7 @@ void ED_spacetype_node()
 
   node_tree_interface_panel_register(art);
   node_modal_keymap_panel_register(art);
+  node_recursive_call_panel_register(art);
 
   /* regions: toolbar */
   art = MEM_new_zeroed<ARegionType>("spacetype view3d tools region");

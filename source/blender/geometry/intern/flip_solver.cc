@@ -8,7 +8,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <functional>
 #include <limits>
+#include <memory>
 
 #include "BLI_array.hh"
 #include "BLI_index_range.hh"
@@ -144,7 +148,8 @@ static PcgResult pcg_solve(const Span<float> b,
                            ApplyOperator &&apply_A,
                            const int max_iterations,
                            const float tolerance,
-                           LinearSolverScratch &scratch)
+                           LinearSolverScratch &scratch,
+                           const std::function<void(Span<float>, MutableSpan<float>)> &apply_custom_M = {})
 {
   PcgResult result;
   if (b.is_empty()) {
@@ -161,10 +166,16 @@ static PcgResult pcg_solve(const Span<float> b,
   threading::parallel_for(b.index_range(), 4096, [&](const IndexRange range) {
     for (const int i : range) {
       r[i] = b[i] - q[i];
-      z[i] = r[i] * inverse_diagonal[i];
-      d[i] = z[i];
+      if (!apply_custom_M) {
+        z[i] = r[i] * inverse_diagonal[i];
+        d[i] = z[i];
+      }
     }
   });
+  if (apply_custom_M) {
+    apply_custom_M(r, z);
+    d.copy_from(z);
+  }
   const double b_norm = std::sqrt(dot_product(b, b));
   result.initial_residual = std::sqrt(dot_product(r, r));
   result.final_residual = result.initial_residual;
@@ -214,19 +225,26 @@ static PcgResult pcg_solve(const Span<float> b,
       result.converged = true;
       return result;
     }
-    const double next_rz = threading::parallel_reduce(
-        r.index_range(),
-        4096,
-        0.0,
-        [&](const IndexRange range, const double init) {
-          double sum = init;
-          for (const int i : range) {
-            z[i] = r[i] * inverse_diagonal[i];
-            sum += double(r[i]) * double(z[i]);
-          }
-          return sum;
-        },
-        std::plus<double>());
+    double next_rz;
+    if (apply_custom_M) {
+      apply_custom_M(r, z);
+      next_rz = dot_product(r, z);
+    }
+    else {
+      next_rz = threading::parallel_reduce(
+          r.index_range(),
+          4096,
+          0.0,
+          [&](const IndexRange range, const double init) {
+            double sum = init;
+            for (const int i : range) {
+              z[i] = r[i] * inverse_diagonal[i];
+              sum += double(r[i]) * double(z[i]);
+            }
+            return sum;
+          },
+          std::plus<double>());
+    }
     if (!std::isfinite(next_rz) || std::abs(rz) <= solver_epsilon) {
       result.breakdown = true;
       return result;
@@ -241,6 +259,178 @@ static PcgResult pcg_solve(const Span<float> b,
   }
   return result;
 }
+
+struct MgStencil {
+  int neighbors[6] = {-1, -1, -1, -1, -1, -1};
+  float weights[6] = {};
+  float diagonal = 0.0f;
+};
+
+struct MgLevel {
+  int3 dimensions;
+  Vector<int3> coordinates;
+  Array<MgStencil> stencils;
+  Array<int> fine_to_coarse;
+  Array<float> x;
+  Array<float> b;
+  Array<float> ax;
+
+  void allocate_vectors()
+  {
+    x.reinitialize(coordinates.size());
+    b.reinitialize(coordinates.size());
+    ax.reinitialize(coordinates.size());
+  }
+};
+
+/** Experimental Galerkin hierarchy for the FLIP pressure matrix. Each coarse unknown represents
+ * a 2x2x2 aggregate of the previous level's active cells. */
+class PressureMultigrid {
+ private:
+  Vector<MgLevel> levels_;
+
+  static void apply_matrix(const MgLevel &level, const Span<float> x, MutableSpan<float> ax)
+  {
+    threading::parallel_for(level.coordinates.index_range(), 4096, [&](const IndexRange range) {
+      for (const int row : range) {
+        const MgStencil &stencil = level.stencils[row];
+        float value = stencil.diagonal * x[row];
+        for (const int slot : IndexRange(6)) {
+          const int neighbor = stencil.neighbors[slot];
+          if (neighbor >= 0) {
+            value -= stencil.weights[slot] * x[neighbor];
+          }
+        }
+        ax[row] = value;
+      }
+    });
+  }
+
+  static void smooth(MgLevel &level, const int sweeps)
+  {
+    for ([[maybe_unused]] const int sweep : IndexRange(sweeps)) {
+      apply_matrix(level, level.x, level.ax);
+      threading::parallel_for(level.coordinates.index_range(), 4096, [&](const IndexRange range) {
+        for (const int row : range) {
+          level.x[row] += 0.7f * (level.b[row] - level.ax[row]) /
+                          std::max(level.stencils[row].diagonal, solver_epsilon);
+        }
+      });
+    }
+  }
+
+  void v_cycle(const int level_index)
+  {
+    MgLevel &level = levels_[level_index];
+    if (level_index == levels_.size() - 1) {
+      smooth(level, 20);
+      return;
+    }
+    smooth(level, 1);
+    apply_matrix(level, level.x, level.ax);
+    MgLevel &coarse = levels_[level_index + 1];
+    coarse.b.fill(0.0f);
+    coarse.x.fill(0.0f);
+    for (const int row : level.coordinates.index_range()) {
+      coarse.b[level.fine_to_coarse[row]] += level.b[row] - level.ax[row];
+    }
+    v_cycle(level_index + 1);
+    threading::parallel_for(level.coordinates.index_range(), 4096, [&](const IndexRange range) {
+      for (const int row : range) {
+        level.x[row] += coarse.x[level.fine_to_coarse[row]];
+      }
+    });
+    smooth(level, 1);
+  }
+
+ public:
+  PressureMultigrid(const Span<PressureStencil> fine_stencils,
+                    const Span<int3> fine_coordinates,
+                    const int3 dimensions,
+                    const float3 dx)
+  {
+    MgLevel fine;
+    fine.dimensions = dimensions;
+    for (const int3 coordinates : fine_coordinates) {
+      fine.coordinates.append(coordinates);
+    }
+    fine.stencils.reinitialize(fine_stencils.size());
+    const float coefficients[3] = {1.0f / (dx.x * dx.x),
+                                   1.0f / (dx.y * dx.y),
+                                   1.0f / (dx.z * dx.z)};
+    for (const int row : fine_stencils.index_range()) {
+      const PressureStencil &input = fine_stencils[row];
+      MgStencil &output = fine.stencils[row];
+      output.diagonal = input.diagonal;
+      const int neighbors[6] = {input.xm, input.xp, input.ym, input.yp, input.zm, input.zp};
+      for (const int slot : IndexRange(6)) {
+        output.neighbors[slot] = neighbors[slot];
+        output.weights[slot] = neighbors[slot] >= 0 ? coefficients[slot / 2] : 0.0f;
+      }
+    }
+    fine.allocate_vectors();
+    levels_.append(std::move(fine));
+
+    for (const int level_index : IndexRange(8)) {
+      MgLevel &parent = levels_[level_index];
+      if (parent.coordinates.size() <= 64) {
+        break;
+      }
+      MgLevel coarse;
+      coarse.dimensions = int3((parent.dimensions.x + 1) / 2,
+                               (parent.dimensions.y + 1) / 2,
+                               (parent.dimensions.z + 1) / 2);
+      Array<int> cell_to_row(int64_t(coarse.dimensions.x) * coarse.dimensions.y *
+                                 coarse.dimensions.z,
+                             -1);
+      parent.fine_to_coarse.reinitialize(parent.coordinates.size());
+      for (const int row : parent.coordinates.index_range()) {
+        const int3 cell = parent.coordinates[row];
+        const int3 coarse_cell(cell.x / 2, cell.y / 2, cell.z / 2);
+        const int index = coarse_cell.x + coarse.dimensions.x *
+                                              (coarse_cell.y + coarse.dimensions.y * coarse_cell.z);
+        int &coarse_row = cell_to_row[index];
+        if (coarse_row < 0) {
+          coarse_row = coarse.coordinates.size();
+          coarse.coordinates.append(coarse_cell);
+        }
+        parent.fine_to_coarse[row] = coarse_row;
+      }
+      coarse.stencils.reinitialize(coarse.coordinates.size());
+      for (const int row : parent.coordinates.index_range()) {
+        const int coarse_row = parent.fine_to_coarse[row];
+        const MgStencil &fine_stencil = parent.stencils[row];
+        MgStencil &coarse_stencil = coarse.stencils[coarse_row];
+        coarse_stencil.diagonal += fine_stencil.diagonal;
+        for (const int slot : IndexRange(6)) {
+          const int fine_neighbor = fine_stencil.neighbors[slot];
+          if (fine_neighbor < 0) {
+            continue;
+          }
+          const int coarse_neighbor = parent.fine_to_coarse[fine_neighbor];
+          if (coarse_neighbor == coarse_row) {
+            coarse_stencil.diagonal -= fine_stencil.weights[slot];
+          }
+          else {
+            coarse_stencil.neighbors[slot] = coarse_neighbor;
+            coarse_stencil.weights[slot] += fine_stencil.weights[slot];
+          }
+        }
+      }
+      coarse.allocate_vectors();
+      levels_.append(std::move(coarse));
+    }
+  }
+
+  void apply(const Span<float> residual, MutableSpan<float> correction)
+  {
+    MgLevel &fine = levels_.first();
+    fine.b.as_mutable_span().copy_from(residual);
+    fine.x.fill(0.0f);
+    v_cycle(0);
+    correction.copy_from(fine.x.as_span());
+  }
+};
 
 enum class FlipCellType : uint8_t {
   Air,
@@ -353,7 +543,6 @@ struct MacGrid {
   Array<uint8_t> v_blocked;
   Array<uint8_t> w_blocked;
   Array<FlipCellType> cell_type;
-  Array<float> cell_phi;
   Array<int> cell_particle_count;
   Array<int> cell_offsets;
   Array<int> particle_indices;
@@ -394,7 +583,6 @@ struct MacGrid {
         v_blocked(v.size(), 0),
         w_blocked(w.size(), 0),
         cell_type(int64_t(nx) * ny * nz, FlipCellType::Air),
-        cell_phi(cell_type.size(), std::numeric_limits<float>::infinity()),
         cell_particle_count(cell_type.size(), 0),
         cell_offsets(cell_type.size() + 1, 0),
         pressure(cell_type.size(), 0.0f),
@@ -459,7 +647,9 @@ class FlipSolverCore {
   IndexBounds active_cells_;
   IndexBounds collider_cells_;
   Array<float> pressure_warm_;
+  int pressure_solve_count_ = 0;
   Array<int> bin_cursor_;
+  Array<float3> particle_grid_positions_;
   Array<float> extrap_values_;
   Array<uint8_t> extrap_valid_;
   Array<int> viscosity_face_to_row_;
@@ -1001,13 +1191,14 @@ class FlipSolverCore {
   void classify_cells_particle_sdf(const Span<float3> positions)
   {
     grid_.cell_type.fill(FlipCellType::Air);
-    grid_.cell_phi.fill(std::numeric_limits<float>::infinity());
     if (active_cells_.is_empty()) {
       return;
     }
     const float min_dx = std::min({grid_.dx.x, grid_.dx.y, grid_.dx.z});
     const float radius = std::clamp(settings_.classification_radius_scale, 0.0f, 1.0f) * min_dx;
-    const int search_cells = std::max(1, int(std::ceil(radius / min_dx)) + 1);
+    /* A particle two cells away is at least 1.5 cell widths from this cell's center. Since the
+     * classification radius never exceeds the smallest cell width, only immediate neighbors can
+     * affect the fluid classification. */
     threading::parallel_for(
         IndexRange(active_cells_.z_min, active_cells_.z_max - active_cells_.z_min + 1),
         1,
@@ -1017,38 +1208,37 @@ class FlipSolverCore {
               for (int x = active_cells_.x_min; x <= active_cells_.x_max; x++) {
                 const int3 cell(x, y, z);
                 const int cell_index = grid_.cell_index(x, y, z);
-                const float3 center = this->cell_center(cell);
-                float phi = std::numeric_limits<float>::infinity();
-                for (int k = std::max(0, cell.z - search_cells);
-                     k <= std::min(grid_.nz - 1, cell.z + search_cells);
-                     k++)
-                {
-                  for (int j = std::max(0, cell.y - search_cells);
-                       j <= std::min(grid_.ny - 1, cell.y + search_cells);
-                       j++)
+                bool is_fluid = grid_.cell_particle_count[cell_index] > 0;
+                if (!is_fluid && radius > 0.0f) {
+                  const float3 center = this->cell_center(cell);
+                  for (int k = std::max(0, z - 1); k <= std::min(grid_.nz - 1, z + 1) && !is_fluid;
+                       k++)
                   {
-                    for (int i = std::max(0, cell.x - search_cells);
-                         i <= std::min(grid_.nx - 1, cell.x + search_cells);
-                         i++)
+                    for (int j = std::max(0, y - 1); j <= std::min(grid_.ny - 1, y + 1) && !is_fluid;
+                         j++)
                     {
-                      const int neighbor = grid_.cell_index(i, j, k);
-                      for (int offset = grid_.cell_offsets[neighbor];
-                           offset < grid_.cell_offsets[neighbor + 1];
-                           offset++)
+                      for (int i = std::max(0, x - 1);
+                           i <= std::min(grid_.nx - 1, x + 1) && !is_fluid;
+                           i++)
                       {
-                        const float3 delta = center - positions[grid_.particle_indices[offset]];
-                        const float distance = std::sqrt(delta.x * delta.x + delta.y * delta.y +
-                                                         delta.z * delta.z);
-                        phi = std::min(phi, distance - radius);
+                        const int neighbor = grid_.cell_index(i, j, k);
+                        for (int offset = grid_.cell_offsets[neighbor];
+                             offset < grid_.cell_offsets[neighbor + 1];
+                             offset++)
+                        {
+                          const float3 delta = center - positions[grid_.particle_indices[offset]];
+                          const float distance = std::sqrt(delta.x * delta.x + delta.y * delta.y +
+                                                           delta.z * delta.z);
+                          if (distance < radius) {
+                            is_fluid = true;
+                            break;
+                          }
+                        }
                       }
                     }
                   }
                 }
-                grid_.cell_phi[cell_index] = phi;
-                FlipCellType type = FlipCellType::Air;
-                if (phi < 0.0f || grid_.cell_particle_count[cell_index] > 0) {
-                  type = FlipCellType::Fluid;
-                }
+                FlipCellType type = is_fluid ? FlipCellType::Fluid : FlipCellType::Air;
                 if (grid_.solid_cell_phi[cell_index] < 0.0f) {
                   type = FlipCellType::Solid;
                 }
@@ -1096,6 +1286,7 @@ class FlipSolverCore {
 
   void reseed_and_cull_particles(FlipParticleData &particles, FlipSolverStats *stats)
   {
+    timeit::TimePoint phase_start = timeit::Clock::now();
     const int input_particle_count = particles.positions.size();
     const bool preserve_particle_budget = input_particle_count >=
                                           settings_.target_particles_per_cell;
@@ -1144,6 +1335,268 @@ class FlipSolverCore {
       }
     }
     const int retained_particle_count = result.positions.size();
+    if (stats != nullptr) {
+      stats->performance.reseed_cull_ms +=
+          std::chrono::duration<double, std::milli>(timeit::Clock::now() - phase_start).count();
+    }
+    phase_start = timeit::Clock::now();
+
+    /* Defer construction of new markers until after the budget selection. The virtual ordering
+     * and IDs below match the original append-then-balance path exactly, so discarded candidates
+     * never need positions, velocities, attribute copies, or particle-array storage. */
+    if (preserve_particle_budget &&
+        (collider_query_ == nullptr || !collider_query_->is_built()))
+    {
+      struct Candidate {
+        int cell_index;
+        int slot;
+        int parent;
+        int64_t id;
+      };
+      Vector<Candidate> candidates;
+      Array<int> candidate_parents(grid_.cell_type.size(), -1);
+      threading::parallel_for(grid_.cell_type.index_range(), 1024, [&](const IndexRange range) {
+        for (const int cell_index : range) {
+          if (grid_.cell_type[cell_index] != FlipCellType::Fluid) {
+            continue;
+          }
+          const int count = grid_.cell_particle_count[cell_index];
+          if (count >= settings_.min_particles_per_cell) {
+            continue;
+          }
+          const int3 cell = this->cell_coordinates(cell_index);
+          if (count == 0) {
+            const int neighbors[6][3] = {{cell.x - 1, cell.y, cell.z},
+                                         {cell.x + 1, cell.y, cell.z},
+                                         {cell.x, cell.y - 1, cell.z},
+                                         {cell.x, cell.y + 1, cell.z},
+                                         {cell.x, cell.y, cell.z - 1},
+                                         {cell.x, cell.y, cell.z + 1}};
+            bool is_surface_cell = false;
+            for (const auto &neighbor : neighbors) {
+              if (grid_.cell_type_at(neighbor[0], neighbor[1], neighbor[2]) !=
+                  FlipCellType::Fluid)
+              {
+                is_surface_cell = true;
+                break;
+              }
+            }
+            if (is_surface_cell) {
+              continue;
+            }
+          }
+          candidate_parents[cell_index] = this->nearest_source_particle(cell,
+                                                                         particles.positions);
+        }
+      });
+      for (const int cell_index : candidate_parents.index_range()) {
+        const int parent = candidate_parents[cell_index];
+        if (parent >= 0) {
+          for (int slot = grid_.cell_particle_count[cell_index];
+               slot < settings_.target_particles_per_cell;
+               slot++)
+          {
+            candidates.append({cell_index, slot, parent, next_id++});
+          }
+        }
+      }
+      const timeit::TimePoint balance_start = timeit::Clock::now();
+      const int virtual_count = retained_particle_count + candidates.size();
+      const auto virtual_id = [&](const int index) -> int64_t {
+        return index < retained_particle_count ? result.ids[index] :
+                                                 candidates[index - retained_particle_count].id;
+      };
+      Array<uint8_t> remove(virtual_count, 0);
+      if (virtual_count > input_particle_count) {
+        Array<int> cell_counts(grid_.cell_type.size(), 0);
+        for (const float3 position : result.positions) {
+          const int3 cell = this->position_to_cell(position);
+          cell_counts[grid_.cell_index(cell.x, cell.y, cell.z)]++;
+        }
+        for (const Candidate &candidate : candidates) {
+          cell_counts[candidate.cell_index]++;
+        }
+        Array<int> cell_offsets(cell_counts.size() + 1, 0);
+        for (const int cell : cell_counts.index_range()) {
+          cell_offsets[cell + 1] = cell_offsets[cell] + cell_counts[cell];
+        }
+        Array<int> cell_particle_indices(virtual_count);
+        Array<int> cursor(cell_counts.size());
+        cursor.as_mutable_span().copy_from(cell_offsets.as_span().drop_back(1));
+        for (const int particle : result.positions.index_range()) {
+          const int3 cell = this->position_to_cell(result.positions[particle]);
+          const int cell_index = grid_.cell_index(cell.x, cell.y, cell.z);
+          cell_particle_indices[cursor[cell_index]++] = particle;
+        }
+        for (const int candidate : candidates.index_range()) {
+          const int cell_index = candidates[candidate].cell_index;
+          cell_particle_indices[cursor[cell_index]++] = retained_particle_count + candidate;
+        }
+
+        Vector<int> removable;
+        removable.reserve(virtual_count - input_particle_count);
+        threading::parallel_for(cell_counts.index_range(), 1024, [&](const IndexRange range) {
+          for (const int cell : range) {
+            const int removable_in_cell = std::max(
+                0, cell_counts[cell] - settings_.min_particles_per_cell);
+            if (removable_in_cell == 0) {
+              continue;
+            }
+            const int cell_start = cell_offsets[cell];
+            const int cell_end = cell_offsets[cell + 1];
+            const auto compare_cell_particles = [&](const int a, const int b) {
+              const bool a_spawned = a >= retained_particle_count;
+              const bool b_spawned = b >= retained_particle_count;
+              if (a_spawned != b_spawned) {
+                return a_spawned;
+              }
+              const uint32_t ha = hash_u32(uint32_t(virtual_id(a)) ^ uint32_t(cell));
+              const uint32_t hb = hash_u32(uint32_t(virtual_id(b)) ^ uint32_t(cell));
+              if (ha != hb) {
+                return ha < hb;
+              }
+              return virtual_id(a) == virtual_id(b) ? a < b : virtual_id(a) < virtual_id(b);
+            };
+            std::sort(cell_particle_indices.begin() + cell_start,
+                      cell_particle_indices.begin() + cell_end,
+                      compare_cell_particles);
+          }
+        });
+        for (const int cell : cell_counts.index_range()) {
+          const int removable_in_cell = std::max(
+              0, cell_counts[cell] - settings_.min_particles_per_cell);
+          for (int offset = cell_offsets[cell];
+               offset < cell_offsets[cell] + removable_in_cell;
+               offset++)
+          {
+            removable.append(cell_particle_indices[offset]);
+          }
+        }
+        int excess = virtual_count - input_particle_count;
+        if (excess < removable.size()) {
+          std::nth_element(removable.begin(),
+                           removable.begin() + excess,
+                           removable.end(),
+                           [&](const int a, const int b) {
+                             const uint32_t ha = hash_u32(uint32_t(virtual_id(a)));
+                             const uint32_t hb = hash_u32(uint32_t(virtual_id(b)));
+                             if (ha != hb) {
+                               return ha < hb;
+                             }
+                             return virtual_id(a) == virtual_id(b) ? a < b : virtual_id(a) <
+                                                                                 virtual_id(b);
+                           });
+        }
+        for (const int particle : removable) {
+          if (excess == 0) {
+            break;
+          }
+          remove[particle] = 1;
+          excess--;
+        }
+        if (excess > 0) {
+          Vector<int> fallback;
+          fallback.reserve(virtual_count - removable.size());
+          for (const int particle : IndexRange(virtual_count)) {
+            if (!remove[particle]) {
+              fallback.append(particle);
+            }
+          }
+          if (excess < fallback.size()) {
+            std::nth_element(fallback.begin(),
+                             fallback.begin() + excess,
+                             fallback.end(),
+                             [&](const int a, const int b) {
+                               const bool a_spawned = a >= retained_particle_count;
+                               const bool b_spawned = b >= retained_particle_count;
+                               if (a_spawned != b_spawned) {
+                                 return a_spawned;
+                               }
+                               const uint32_t ha = hash_u32(uint32_t(virtual_id(a)));
+                               const uint32_t hb = hash_u32(uint32_t(virtual_id(b)));
+                               if (ha != hb) {
+                                 return ha < hb;
+                               }
+                               return virtual_id(a) == virtual_id(b) ? a < b : virtual_id(a) <
+                                                                                   virtual_id(b);
+                             });
+          }
+          for (int i = 0; i < excess; i++) {
+            remove[fallback[i]] = 1;
+          }
+        }
+      }
+      if (stats != nullptr) {
+        stats->performance.reseed_balance_ms +=
+            std::chrono::duration<double, std::milli>(timeit::Clock::now() - balance_start)
+                .count();
+      }
+      const timeit::TimePoint materialize_start = timeit::Clock::now();
+      FlipParticleData balanced;
+      balanced.positions.reserve(std::min(virtual_count, input_particle_count));
+      balanced.velocities.reserve(std::min(virtual_count, input_particle_count));
+      balanced.ids.reserve(std::min(virtual_count, input_particle_count));
+      balanced.source_indices.reserve(std::min(virtual_count, input_particle_count));
+      int culled_existing = 0;
+      for (const int particle : result.positions.index_range()) {
+        if (remove[particle]) {
+          culled_existing++;
+          continue;
+        }
+        balanced.positions.append(result.positions[particle]);
+        balanced.velocities.append(result.velocities[particle]);
+        balanced.ids.append(result.ids[particle]);
+        balanced.source_indices.append(result.source_indices[particle]);
+      }
+      int seeded = 0;
+      int cached_cell = -1;
+      float3 average_velocity(0.0f);
+      for (const int candidate_index : candidates.index_range()) {
+        if (remove[retained_particle_count + candidate_index]) {
+          continue;
+        }
+        const Candidate &candidate = candidates[candidate_index];
+        if (cached_cell != candidate.cell_index) {
+          cached_cell = candidate.cell_index;
+          average_velocity = float3(0.0f);
+          int samples = 0;
+          for (int offset = grid_.cell_offsets[cached_cell];
+               offset < grid_.cell_offsets[cached_cell + 1];
+               offset++)
+          {
+            average_velocity += particles.velocities[grid_.particle_indices[offset]];
+            samples++;
+          }
+          average_velocity = samples > 0 ? average_velocity / float(samples) :
+                                           particles.velocities[candidate.parent];
+        }
+        const int3 cell = this->cell_coordinates(candidate.cell_index);
+        const float3 cell_min = grid_.domain_min + float3(float(cell.x) * grid_.dx.x,
+                                                          float(cell.y) * grid_.dx.y,
+                                                          float(cell.z) * grid_.dx.z);
+        const uint32_t seed = uint32_t(candidate.slot * 24);
+        const float3 local(0.1f + 0.8f * hash_unit(uint32_t(candidate.cell_index), seed),
+                           0.1f + 0.8f * hash_unit(uint32_t(candidate.cell_index), seed + 1),
+                           0.1f + 0.8f * hash_unit(uint32_t(candidate.cell_index), seed + 2));
+        balanced.positions.append(cell_min + float3(local.x * grid_.dx.x,
+                                                    local.y * grid_.dx.y,
+                                                    local.z * grid_.dx.z));
+        balanced.velocities.append(average_velocity);
+        balanced.ids.append(candidate.id);
+        balanced.source_indices.append(particles.source_indices[candidate.parent]);
+        seeded++;
+      }
+      particles = std::move(balanced);
+      if (stats != nullptr) {
+        stats->performance.reseed_seed_ms +=
+            std::chrono::duration<double, std::milli>(balance_start - phase_start).count() +
+            std::chrono::duration<double, std::milli>(timeit::Clock::now() - materialize_start)
+                .count();
+        stats->particles_seeded += seeded;
+        stats->particles_culled += culled + culled_existing;
+      }
+      return;
+    }
 
     int seeded = 0;
     for (const int cell_index : grid_.cell_type.index_range()) {
@@ -1228,6 +1681,11 @@ class FlipSolverCore {
       }
     }
 
+    if (stats != nullptr) {
+      stats->performance.reseed_seed_ms +=
+          std::chrono::duration<double, std::milli>(timeit::Clock::now() - phase_start).count();
+    }
+    phase_start = timeit::Clock::now();
     /* Once the current marker set reaches the minimum sampling density, reseeding should
      * redistribute markers rather than continuously increasing their global number whenever a
      * moving free surface straddles a new cell. Bootstrap genuinely undersampled inputs, but
@@ -1254,19 +1712,16 @@ class FlipSolverCore {
 
       Array<uint8_t> remove(result.positions.size(), 0);
       Vector<int> removable;
+      removable.reserve(result.positions.size() - input_particle_count);
       for (const int cell : result_cell_counts.index_range()) {
         const int removable_in_cell = std::max(
             0, result_cell_counts[cell] - settings_.min_particles_per_cell);
         if (removable_in_cell == 0) {
           continue;
         }
-        Vector<int> cell_particles;
-        for (int offset = result_cell_offsets[cell]; offset < result_cell_offsets[cell + 1];
-             offset++)
-        {
-          cell_particles.append(result_particle_indices[offset]);
-        }
-        std::sort(cell_particles.begin(), cell_particles.end(), [&](const int a, const int b) {
+        const int cell_start = result_cell_offsets[cell];
+        const int cell_end = result_cell_offsets[cell + 1];
+        const auto compare_cell_particles = [&](const int a, const int b) {
           const bool a_spawned = a >= retained_particle_count;
           const bool b_spawned = b >= retained_particle_count;
           if (a_spawned != b_spawned) {
@@ -1274,17 +1729,34 @@ class FlipSolverCore {
           }
           const uint32_t ha = hash_u32(uint32_t(result.ids[a]) ^ uint32_t(cell));
           const uint32_t hb = hash_u32(uint32_t(result.ids[b]) ^ uint32_t(cell));
-          return ha == hb ? result.ids[a] < result.ids[b] : ha < hb;
-        });
-        removable.extend(cell_particles.as_span().take_front(removable_in_cell));
+          if (ha != hb) {
+            return ha < hb;
+          }
+          return result.ids[a] == result.ids[b] ? a < b : result.ids[a] < result.ids[b];
+        };
+        std::sort(result_particle_indices.begin() + cell_start,
+                  result_particle_indices.begin() + cell_end,
+                  compare_cell_particles);
+        for (int offset = cell_start; offset < cell_start + removable_in_cell; offset++) {
+          removable.append(result_particle_indices[offset]);
+        }
       }
-      std::sort(removable.begin(), removable.end(), [&](const int a, const int b) {
-        const uint32_t ha = hash_u32(uint32_t(result.ids[a]));
-        const uint32_t hb = hash_u32(uint32_t(result.ids[b]));
-        return ha == hb ? result.ids[a] < result.ids[b] : ha < hb;
-      });
-
       int excess = result.positions.size() - input_particle_count;
+      /* Only the selected set matters: survivors keep their original particle order below. */
+      if (excess < removable.size()) {
+        std::nth_element(removable.begin(),
+                         removable.begin() + excess,
+                         removable.end(),
+                         [&](const int a, const int b) {
+                           const uint32_t ha = hash_u32(uint32_t(result.ids[a]));
+                           const uint32_t hb = hash_u32(uint32_t(result.ids[b]));
+                           if (ha != hb) {
+                             return ha < hb;
+                           }
+                           return result.ids[a] == result.ids[b] ? a < b :
+                                                                    result.ids[a] < result.ids[b];
+                         });
+      }
       for (const int particle : removable) {
         if (excess == 0) {
           break;
@@ -1298,27 +1770,33 @@ class FlipSolverCore {
        * markers for the remaining deterministic removals. */
       if (excess > 0) {
         Vector<int> fallback;
+        fallback.reserve(result.positions.size() - removable.size());
         for (const int particle : result.positions.index_range()) {
           if (!remove[particle]) {
             fallback.append(particle);
           }
         }
-        std::sort(fallback.begin(), fallback.end(), [&](const int a, const int b) {
-          const bool a_spawned = a >= retained_particle_count;
-          const bool b_spawned = b >= retained_particle_count;
-          if (a_spawned != b_spawned) {
-            return a_spawned;
-          }
-          const uint32_t ha = hash_u32(uint32_t(result.ids[a]));
-          const uint32_t hb = hash_u32(uint32_t(result.ids[b]));
-          return ha == hb ? result.ids[a] < result.ids[b] : ha < hb;
-        });
-        for (const int particle : fallback) {
-          if (excess == 0) {
-            break;
-          }
-          remove[particle] = 1;
-          excess--;
+        if (excess < fallback.size()) {
+          std::nth_element(fallback.begin(),
+                           fallback.begin() + excess,
+                           fallback.end(),
+                           [&](const int a, const int b) {
+                             const bool a_spawned = a >= retained_particle_count;
+                             const bool b_spawned = b >= retained_particle_count;
+                             if (a_spawned != b_spawned) {
+                               return a_spawned;
+                             }
+                             const uint32_t ha = hash_u32(uint32_t(result.ids[a]));
+                             const uint32_t hb = hash_u32(uint32_t(result.ids[b]));
+                             if (ha != hb) {
+                               return ha < hb;
+                             }
+                             return result.ids[a] == result.ids[b] ? a < b :
+                                                                      result.ids[a] < result.ids[b];
+                           });
+        }
+        for (int i = 0; i < excess; i++) {
+          remove[fallback[i]] = 1;
         }
       }
 
@@ -1340,6 +1818,8 @@ class FlipSolverCore {
     }
     particles = std::move(result);
     if (stats != nullptr) {
+      stats->performance.reseed_balance_ms +=
+          std::chrono::duration<double, std::milli>(timeit::Clock::now() - phase_start).count();
       stats->particles_seeded += seeded;
       stats->particles_culled += culled;
     }
@@ -1380,6 +1860,13 @@ class FlipSolverCore {
     return distance < 1.0f ? 1.0f - distance : 0.0f;
   }
 
+  float3 position_to_grid_coordinates(const float3 position) const
+  {
+    return float3((position.x - grid_.domain_min.x) / grid_.dx.x,
+                  (position.y - grid_.domain_min.y) / grid_.dx.y,
+                  (position.z - grid_.domain_min.z) / grid_.dx.z);
+  }
+
   /**
    * Staggered trilinear kernel support, in particle cell indices.
    * Along the face normal the support is two cells; the tangential axes are three.
@@ -1403,7 +1890,9 @@ class FlipSolverCore {
     r_z1 = axis == 2 ? k : k + 1;
   }
 
-  void gather_component(const int axis, const Span<float3> positions, const Span<float3> velocities)
+  void gather_component(const int axis,
+                        const Span<float3> grid_positions,
+                        const Span<float3> velocities)
   {
     if (particle_cells_.is_empty()) {
       return;
@@ -1448,10 +1937,7 @@ class FlipSolverCore {
                    offset++)
               {
                 const int particle = grid_.particle_indices[offset];
-                const float3 position = positions[particle];
-                float3 sample((position.x - grid_.domain_min.x) / grid_.dx.x,
-                              (position.y - grid_.domain_min.y) / grid_.dx.y,
-                              (position.z - grid_.domain_min.z) / grid_.dx.z);
+                 float3 sample = grid_positions[particle];
                 if (axis != 0) {
                   sample.x -= 0.5f;
                 }
@@ -1482,9 +1968,18 @@ class FlipSolverCore {
 
   void particle_to_grid(const Span<float3> positions, const Span<float3> velocities)
   {
+    if (particle_grid_positions_.size() != positions.size()) {
+      particle_grid_positions_.reinitialize(positions.size());
+    }
+    threading::parallel_for(positions.index_range(), 4096, [&](const IndexRange range) {
+      for (const int particle : range) {
+        const float3 position = positions[particle];
+        particle_grid_positions_[particle] = this->position_to_grid_coordinates(position);
+      }
+    });
     /* Face-centric gather: each face is written once, so U/V/W can run in parallel. */
     for (const int axis : IndexRange(3)) {
-      this->gather_component(axis, positions, velocities);
+      this->gather_component(axis, particle_grid_positions_, velocities);
     }
   }
 
@@ -2006,10 +2501,13 @@ class FlipSolverCore {
 
   bool solve_pressure(const float dt, FlipSolverStats *stats, std::string &r_error)
   {
+    const bool trace_pressure = std::getenv("BLENDER_FLIP_PRESSURE_TRACE") != nullptr;
     Array<uint8_t> gauges;
     Array<float> pressure;
+    Array<float> pressure_initial;
     Array<float> rhs;
     Array<float> inverse_diagonal;
+    std::unique_ptr<PressureMultigrid> multigrid;
     {
       ScopedPerformanceTimer timer(stats ? &stats->performance.pressure_build_ms : nullptr);
       this->build_fluid_rows();
@@ -2050,8 +2548,24 @@ class FlipSolverCore {
         diagonal[row] = stencils[row].diagonal;
         inverse_diagonal[row] = 1.0f / std::max(diagonal[row], solver_epsilon);
       }
+      if (settings_.use_multigrid_preconditioner ||
+          std::getenv("BLENDER_FLIP_MG_PROTOTYPE") != nullptr)
+      {
+        multigrid = std::make_unique<PressureMultigrid>(
+            stencils, grid_.row_to_cell, int3(grid_.nx, grid_.ny, grid_.nz), grid_.dx);
+        pressure_initial.reinitialize(rows_num);
+        pressure_initial.as_mutable_span().copy_from(pressure.as_span());
+      }
+    }
+    const double rhs_norm = trace_pressure ? std::sqrt(dot_product(rhs, rhs)) : 0.0;
+    std::function<void(Span<float>, MutableSpan<float>)> apply_custom_M;
+    if (multigrid) {
+      apply_custom_M = [&](const Span<float> residual, MutableSpan<float> correction) {
+        multigrid->apply(residual, correction);
+      };
     }
     PcgResult result;
+    bool multigrid_fallback = false;
     {
       ScopedPerformanceTimer timer(stats ? &stats->performance.pressure_solve_ms : nullptr);
       result = pcg_solve(
@@ -2061,9 +2575,24 @@ class FlipSolverCore {
           [&](const Span<float> x, MutableSpan<float> y) {
             this->apply_pressure_matrix(x, y);
           },
-          settings_.pressure_max_iterations,
-          settings_.pressure_tolerance,
-          linear_scratch_);
+           settings_.pressure_max_iterations,
+           settings_.pressure_tolerance,
+           linear_scratch_,
+           apply_custom_M);
+      if (multigrid && (!result.converged || result.breakdown)) {
+        multigrid_fallback = true;
+        pressure.as_mutable_span().copy_from(pressure_initial.as_span());
+        result = pcg_solve(
+            rhs.as_span(),
+            pressure.as_mutable_span(),
+            inverse_diagonal.as_span(),
+            [&](const Span<float> x, MutableSpan<float> y) {
+              this->apply_pressure_matrix(x, y);
+            },
+            settings_.pressure_max_iterations,
+            settings_.pressure_tolerance,
+            linear_scratch_);
+      }
     }
     if (stats != nullptr) {
       stats->pressure_iterations += result.iterations;
@@ -2071,6 +2600,20 @@ class FlipSolverCore {
       stats->pressure_converged = stats->pressure_converged && result.converged;
       stats->pressure_breakdown = stats->pressure_breakdown || result.breakdown;
     }
+    if (trace_pressure) {
+      std::fprintf(stderr,
+                   "FLIP_PRESSURE_TRACE solve=%d rows=%lld warm=%d mg=%d mg_fallback=%d initial_rel=%.6g "
+                   "final_rel=%.6g iterations=%d\n",
+                   pressure_solve_count_,
+                   static_cast<long long>(grid_.row_to_cell.size()),
+                   int(pressure_solve_count_ > 0),
+                   int(bool(multigrid)),
+                   int(multigrid_fallback),
+                   result.initial_residual / std::max(rhs_norm, double(solver_epsilon)),
+                   result.relative_residual,
+                   result.iterations);
+    }
+    pressure_solve_count_++;
     if (result.breakdown) {
       r_error = "FLIP pressure solver broke down";
       return false;
@@ -2128,12 +2671,9 @@ class FlipSolverCore {
     }
   }
 
-  float sample_component(const Span<float> values, const float3 position, const int axis) const
+  float sample_component(const Span<float> values, const float3 grid_position, const int axis) const
   {
-    const float3 q((position.x - grid_.domain_min.x) / grid_.dx.x,
-                   (position.y - grid_.domain_min.y) / grid_.dx.y,
-                   (position.z - grid_.domain_min.z) / grid_.dx.z);
-    float3 sample_position = q;
+    float3 sample_position = grid_position;
     if (axis != 0) {
       sample_position.x -= 0.5f;
     }
@@ -2173,18 +2713,18 @@ class FlipSolverCore {
     return result;
   }
 
-  float3 sample_velocity(const float3 position) const
+  float3 sample_velocity_grid(const float3 grid_position) const
   {
-    return float3(sample_component(grid_.u.as_span(), position, 0),
-                  sample_component(grid_.v.as_span(), position, 1),
-                  sample_component(grid_.w.as_span(), position, 2));
+    return float3(sample_component(grid_.u.as_span(), grid_position, 0),
+                  sample_component(grid_.v.as_span(), grid_position, 1),
+                  sample_component(grid_.w.as_span(), grid_position, 2));
   }
 
-  float3 sample_old_velocity(const float3 position) const
+  float3 sample_old_velocity_grid(const float3 grid_position) const
   {
-    return float3(sample_component(grid_.u_old.as_span(), position, 0),
-                  sample_component(grid_.v_old.as_span(), position, 1),
-                  sample_component(grid_.w_old.as_span(), position, 2));
+    return float3(sample_component(grid_.u_old.as_span(), grid_position, 0),
+                  sample_component(grid_.v_old.as_span(), grid_position, 1),
+                  sample_component(grid_.w_old.as_span(), grid_position, 2));
   }
 
   void constrain_particle(float3 &position, float3 &velocity) const
@@ -2231,16 +2771,17 @@ class FlipSolverCore {
             float3 &position = particles.positions[index];
             float3 &velocity = particles.velocities[index];
             const float3 old_position = position;
-            const float3 pic_velocity = sample_velocity(position);
-            const float3 grid_delta = pic_velocity - sample_old_velocity(position);
+            const float3 grid_position = particle_grid_positions_[index];
+            const float3 pic_velocity = sample_velocity_grid(grid_position);
+            const float3 grid_delta = pic_velocity - sample_old_velocity_grid(grid_position);
             const float3 flip_velocity = velocity + grid_delta;
             velocity = pic_velocity * (1.0f - settings_.flip_ratio) +
                        flip_velocity * settings_.flip_ratio;
             if (!is_finite(velocity)) {
               velocity = float3(0.0f);
             }
-            const float3 midpoint = position + sample_velocity(position) * (0.5f * dt);
-            position += sample_velocity(midpoint) * dt;
+            const float3 midpoint = position + pic_velocity * (0.5f * dt);
+            position += sample_velocity_grid(this->position_to_grid_coordinates(midpoint)) * dt;
             if (collide) {
               count += resolve_flip_particle_collision(*collider_query_,
                                                        old_position,

@@ -552,6 +552,12 @@ class NodeTreeLog {
   NodeLog *find_node_log(int32_t identifier) const;
   NodeLog &lookup_or_add_node_log(const int32_t identifier);
 
+  /** Group or zone node that entered this compute context, when logging recorded one. */
+  std::optional<int32_t> caller_node_id() const;
+  /** Original node-tree session uid this log belongs to, when known. */
+  std::optional<uint32_t> tree_session_uid() const;
+  void foreach_child_context_hash(FunctionRef<void(ComputeContextHash)> fn) const;
+
   ValueLog *find_socket_value_log(const bNodeSocket &query_socket);
   [[nodiscard]] bool try_convert_primitive_socket_value(const GenericValueLog &value_log,
                                                         const CPPType &dst_type,
@@ -638,6 +644,8 @@ class NodesEvalLog {
                                            bke::ComputeContextCache &compute_context_cache);
 
   static ContextualNodeTreeLogs get_contextual_tree_logs(const SpaceNode &snode);
+  /** Evaluation log for the node editor's current geometry/compositor/image context. */
+  static NodesEvalLog *from_space_node(const SpaceNode &snode);
   static const ViewerNodeLog *find_viewer_node_log_for_path(const ViewerPath &viewer_path);
 
   /** Calls \a fn for every guide-geometry log produced by this evaluation. */

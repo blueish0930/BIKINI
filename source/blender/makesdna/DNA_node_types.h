@@ -308,6 +308,11 @@ enum eNodeTree_Type : int {
 enum eNodeTree_Flag : int {
   /** For animation editors. */
   NTREE_DS_EXPAND = 1 << 0,
+  /**
+   * Geometry node group may contain a group node that calls this same tree.
+   * Evaluation re-enters the group at runtime instead of inlining it.
+   */
+  NTREE_GEOMETRY_RECURSIVE = 1 << 1,
   /** Two pass. */
   NTREE_UNUSED_2 = 1 << 2, /* cleared */
   /** Use a border for viewer nodes. */

@@ -349,6 +349,14 @@ struct SpaceNode_Runtime {
   VectorSet<unsigned int> unlocked_tree_session_uids;
   /** Avoid repeatedly opening the password dialog for a locked edit tree. */
   bool password_prompt_shown = false;
+
+  /**
+   * Selected recursive invocation to inspect. The hash is the compute context of that call,
+   * so a Fibonacci split (two group nodes at the same depth) can be told apart.
+   * Cleared when it does not belong to #recursive_inspection_tree_uid.
+   */
+  uint32_t recursive_inspection_tree_uid = 0;
+  std::optional<ComputeContextHash> recursive_inspection_hash;
 };
 
 enum NodeResizeDirection {
@@ -767,6 +775,7 @@ void build_socket_tooltip(ui::TooltipData &tip_data,
 
 void node_tree_interface_panel_register(ARegionType *art);
 void node_modal_keymap_panel_register(ARegionType *art);
+void node_recursive_call_panel_register(ARegionType *art);
 void NODE_OT_modal_keymap_item_add(wmOperatorType *ot);
 void NODE_OT_modal_keymap_item_remove(wmOperatorType *ot);
 

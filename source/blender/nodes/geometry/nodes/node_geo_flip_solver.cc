@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <limits>
 
 #include "BKE_attribute.hh"
@@ -147,6 +149,7 @@ static void node_declare(NodeDeclarationBuilder &b)
         .min(1)
         .max(10000);
     panel.add_input<decl::Float>("Pressure Tolerance"_ustr).default_value(1.0e-5f).min(1.0e-9f);
+    panel.add_input<decl::Bool>("Use Multigrid Preconditioner"_ustr).default_value(false);
   }
   {
     auto &panel = b.add_panel("Viscosity"_ustr).default_closed(true);
@@ -268,6 +271,8 @@ static geometry::FlipSolverSettings extract_settings(GeoNodeExecParams &params,
   settings.pressure_max_iterations = std::clamp(
       params.extract_input<int>("Max Pressure Iterations"_ustr), 1, 10000);
   settings.pressure_tolerance = params.extract_input<float>("Pressure Tolerance"_ustr);
+  settings.use_multigrid_preconditioner = params.extract_input<bool>(
+      "Use Multigrid Preconditioner"_ustr);
   settings.viscosity = params.extract_input<float>("Viscosity"_ustr);
   settings.viscosity_max_iterations = std::clamp(
       params.extract_input<int>("Max Viscosity Iterations"_ustr), 1, 10000);
@@ -407,6 +412,49 @@ static void report_warnings(GeoNodeExecParams &params, const geometry::FlipSolve
   }
 }
 
+static void report_profile_if_requested(const geometry::FlipSolverStats &stats)
+{
+  if (std::getenv("BLENDER_FLIP_PROFILE") == nullptr) {
+    return;
+  }
+  const geometry::FlipPerformanceStats &time = stats.performance;
+  std::fprintf(stderr,
+               "FLIP_PROFILE particles=%d grid=%dx%dx%d fluid_cells=%d substeps=%d "
+               "pressure_iterations=%d pressure_residual=%.6g seeded=%d culled=%d "
+               "total_ms=%.3f bin_ms=%.3f reseed_ms=%.3f reseed_cull_ms=%.3f "
+               "reseed_seed_ms=%.3f reseed_balance_ms=%.3f collider_ms=%.3f "
+               "p2g_ms=%.3f extrap_ms=%.3f gravity_ms=%.3f viscosity_ms=%.3f "
+               "pressure_build_ms=%.3f pressure_solve_ms=%.3f pressure_project_ms=%.3f "
+               "g2p_ms=%.3f advection_ms=%.3f output_ms=%.3f\n",
+               stats.particle_count,
+               stats.grid_x,
+               stats.grid_y,
+               stats.grid_z,
+               stats.fluid_cells,
+               stats.internal_substeps,
+               stats.pressure_iterations,
+               stats.pressure_relative_residual,
+               stats.particles_seeded,
+               stats.particles_culled,
+               time.total_ms,
+               time.particle_binning_ms,
+               time.reseeding_ms,
+               time.reseed_cull_ms,
+               time.reseed_seed_ms,
+               time.reseed_balance_ms,
+               time.collider_ms,
+               time.p2g_ms,
+               time.extrapolation_ms,
+               time.gravity_ms,
+               time.viscosity_ms,
+               time.pressure_build_ms,
+               time.pressure_solve_ms,
+               time.pressure_project_ms,
+               time.g2p_ms,
+               time.advection_ms,
+               time.output_geometry_ms);
+}
+
 static void node_geo_exec(GeoNodeExecParams params)
 {
   bke::GeometrySet geometry = params.extract_input<bke::GeometrySet>("Particles"_ustr);
@@ -468,6 +516,7 @@ static void node_geo_exec(GeoNodeExecParams params)
       std::chrono::duration<double, std::milli>(timeit::Clock::now() - output_start).count();
   stats.performance.total_ms += stats.performance.output_geometry_ms;
   geometry.replace_pointcloud(output);
+  report_profile_if_requested(stats);
   report_warnings(params, stats);
   params.set_output("Particles"_ustr, std::move(geometry));
 }

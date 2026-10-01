@@ -179,6 +179,11 @@ std::string node_group_ui_description(const bNode &node)
   return group->description;
 }
 
+static bool node_group_allows_recursive_call(const bNodeTree &grouptree)
+{
+  return grouptree.type == NTREE_GEOMETRY && (grouptree.flag & NTREE_GEOMETRY_RECURSIVE);
+}
+
 bool bke::node_group_poll(const bNodeTree *nodetree,
                           const bNodeTree *grouptree,
                           const char **r_disabled_hint)
@@ -190,11 +195,26 @@ bool bke::node_group_poll(const bNodeTree *nodetree,
     return true;
   }
 
-  if (nodetree == grouptree) {
+  /* Groups currently being validated. A recursive geometry group is allowed to reach itself
+   * again; walking those nodes another time would recurse forever. */
+  static thread_local Set<const bNodeTree *> poll_stack;
+
+  const auto reject_cycle = [&]() {
     if (r_disabled_hint) {
-      *r_disabled_hint = RPT_("Nesting a node group inside of itself is not allowed");
+      *r_disabled_hint = (grouptree->type == NTREE_GEOMETRY) ?
+                             RPT_(
+                                 "Nesting a node group inside of itself is not allowed. Enable "
+                                 "Recursive in the group properties.") :
+                             RPT_("Nesting a node group inside of itself is not allowed");
     }
     return false;
+  };
+
+  if (nodetree == grouptree || poll_stack.contains(grouptree)) {
+    if (node_group_allows_recursive_call(*grouptree)) {
+      return true;
+    }
+    return reject_cycle();
   }
   if (nodetree->type != grouptree->type) {
     if (r_disabled_hint) {
@@ -203,14 +223,18 @@ bool bke::node_group_poll(const bNodeTree *nodetree,
     return false;
   }
 
+  poll_stack.add(grouptree);
+  bool ok = true;
   for (const bNode *node : grouptree->all_nodes()) {
     if (node->typeinfo->poll_instance &&
         !node->typeinfo->poll_instance(node, nodetree, r_disabled_hint))
     {
-      return false;
+      ok = false;
+      break;
     }
   }
-  return true;
+  poll_stack.remove(grouptree);
+  return ok;
 }
 
 namespace nodes {

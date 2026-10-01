@@ -759,6 +759,33 @@ void NodeTreeLog::ensure_node_image_previews()
   reduced_node_image_previews_ = true;
 }
 
+std::optional<int32_t> NodeTreeLog::caller_node_id() const
+{
+  for (const NodeTreeLogger *logger : tree_loggers_) {
+    if (logger->parent_node_id) {
+      return logger->parent_node_id;
+    }
+  }
+  return std::nullopt;
+}
+
+std::optional<uint32_t> NodeTreeLog::tree_session_uid() const
+{
+  for (const NodeTreeLogger *logger : tree_loggers_) {
+    if (logger->tree_orig_session_uid) {
+      return logger->tree_orig_session_uid;
+    }
+  }
+  return std::nullopt;
+}
+
+void NodeTreeLog::foreach_child_context_hash(const FunctionRef<void(ComputeContextHash)> fn) const
+{
+  for (const ComputeContextHash &hash : children_hashes_) {
+    fn(hash);
+  }
+}
+
 NodeLog *NodeTreeLog::find_node_log(const int32_t identifier) const
 {
   const destruct_ptr<NodeLog> *node_log = this->nodes.lookup_ptr(identifier);
@@ -1244,6 +1271,11 @@ static NodesEvalLog *get_root_log(const SpaceNode &snode)
   }
 
   return nullptr;
+}
+
+NodesEvalLog *NodesEvalLog::from_space_node(const SpaceNode &snode)
+{
+  return get_root_log(snode);
 }
 
 ContextualNodeTreeLogs NodesEvalLog::get_contextual_tree_logs(const SpaceNode &snode)

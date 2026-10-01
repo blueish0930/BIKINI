@@ -36,6 +36,7 @@
 #include <optional>
 
 #include "BKE_colortools.hh"
+#include "BKE_geometry_nodes_reference_set.hh"
 
 #include "BLI_array_utils.hh"
 #include "BLI_color_types.hh"
@@ -1633,6 +1634,329 @@ bool should_log_verbose_in_context(const GeoNodesUserData &user_data,
   }
   return true;
 }
+
+static Vector<const bNodeTree *> &geometry_nodes_lf_build_stack()
+{
+  static thread_local Vector<const bNodeTree *> stack;
+  return stack;
+}
+
+static bool geometry_nodes_same_tree(const bNodeTree &a, const bNodeTree &b)
+{
+  if (&a == &b) {
+    return true;
+  }
+  const bNodeTree *a_orig = DEG_get_original(&a);
+  const bNodeTree *b_orig = DEG_get_original(&b);
+  if (a_orig == nullptr) {
+    a_orig = &a;
+  }
+  if (b_orig == nullptr) {
+    b_orig = &b;
+  }
+  return a_orig == b_orig;
+}
+
+static bool geometry_nodes_tree_is_being_built(const bNodeTree &tree)
+{
+  for (const bNodeTree *building : geometry_nodes_lf_build_stack()) {
+    if (geometry_nodes_same_tree(*building, tree)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+struct GeometryNodesLazyFunctionBuildScope {
+  int pushed = 0;
+
+  explicit GeometryNodesLazyFunctionBuildScope(const bNodeTree &tree)
+  {
+    Vector<const bNodeTree *> &stack = geometry_nodes_lf_build_stack();
+    stack.append(&tree);
+    pushed++;
+    if (const bNodeTree *orig = DEG_get_original(&tree)) {
+      if (orig != &tree) {
+        stack.append(orig);
+        pushed++;
+      }
+    }
+  }
+
+  ~GeometryNodesLazyFunctionBuildScope()
+  {
+    Vector<const bNodeTree *> &stack = geometry_nodes_lf_build_stack();
+    for (int i = 0; i < pushed; i++) {
+      stack.pop_last();
+    }
+  }
+};
+
+/**
+ * Runs a geometry node group that is already on the lazy-function build stack.
+ * The group graph cannot be inlined here: building it is what reached this node.
+ * At execution time the graph is finished, and each call gets its own compute context,
+ * so two calls from the same invocation (a Fibonacci split) stay distinct.
+ */
+class LazyFunctionForRecursiveGroupNode : public LazyFunction {
+ private:
+  const bNode &group_node_;
+  int main_inputs_num_ = 0;
+  int main_outputs_num_ = 0;
+  IndexRange output_usage_inputs_;
+  IndexRange input_usage_outputs_;
+  /** Interface output index for each geometry reference-set input, in input order. */
+  Vector<int> geometry_output_indices_;
+
+  struct Storage {
+    LinearAllocator<> allocator;
+    void *group_storage = nullptr;
+    const GeometryNodesGroupFunction *group_fn = nullptr;
+  };
+
+  class CallParams : public lf::Params {
+   private:
+    lf::Params &outer_;
+    Span<int> input_to_outer_;
+    Span<int> output_to_outer_;
+    mutable bke::GeometryNodesReferenceSet empty_reference_set_;
+
+   public:
+    CallParams(const LazyFunction &fn,
+               lf::Params &outer,
+               const Span<int> input_to_outer,
+               const Span<int> output_to_outer)
+        : lf::Params(fn, false),
+          outer_(outer),
+          input_to_outer_(input_to_outer),
+          output_to_outer_(output_to_outer)
+    {
+    }
+
+   private:
+    void *try_get_input_data_ptr_impl(const int index) const override
+    {
+      const int outer_index = input_to_outer_[index];
+      if (outer_index == -1) {
+        if (fn_.inputs()[index].type == &CPPType::get<bke::GeometryNodesReferenceSet>()) {
+          return const_cast<bke::GeometryNodesReferenceSet *>(&empty_reference_set_);
+        }
+        return nullptr;
+      }
+      return outer_.try_get_input_data_ptr(outer_index);
+    }
+
+    void *try_get_input_data_ptr_or_request_impl(const int index) override
+    {
+      const int outer_index = input_to_outer_[index];
+      if (outer_index == -1) {
+        if (fn_.inputs()[index].type == &CPPType::get<bke::GeometryNodesReferenceSet>()) {
+          return &empty_reference_set_;
+        }
+        return nullptr;
+      }
+      return outer_.try_get_input_data_ptr_or_request(outer_index);
+    }
+
+    void *get_output_data_ptr_impl(const int index) override
+    {
+      return outer_.get_output_data_ptr(output_to_outer_[index]);
+    }
+
+    void output_set_impl(const int index) override
+    {
+      outer_.output_set(output_to_outer_[index]);
+    }
+
+    bool output_was_set_impl(const int index) const override
+    {
+      return outer_.output_was_set(output_to_outer_[index]);
+    }
+
+    lf::ValueUsage get_output_usage_impl(const int index) const override
+    {
+      return outer_.get_output_usage(output_to_outer_[index]);
+    }
+
+    void set_input_unused_impl(const int index) override
+    {
+      const int outer_index = input_to_outer_[index];
+      if (outer_index != -1) {
+        outer_.set_input_unused(outer_index);
+      }
+    }
+
+    bool try_enable_multi_threading_impl() override
+    {
+      return outer_.try_enable_multi_threading();
+    }
+  };
+
+ public:
+  LazyFunctionForRecursiveGroupNode(const bNode &group_node,
+                                    GeometryNodesLazyFunctionGraphInfo &own_lf_graph_info)
+      : group_node_(group_node)
+  {
+    debug_name_ = "Recursive Group";
+    allow_missing_requested_inputs_ = true;
+
+    for ([[maybe_unused]] const bNodeSocket *socket : group_node.input_sockets()) {
+      inputs_.append({"Value", CPPType::get<SocketValueVariant>(), lf::ValueUsage::Maybe});
+    }
+    main_inputs_num_ = group_node.input_sockets().size();
+
+    const int usage_in_start = inputs_.size();
+    for (const int i : group_node.output_sockets().index_range()) {
+      inputs_.append({"Usage", CPPType::get<bool>(), lf::ValueUsage::Maybe});
+      own_lf_graph_info.mapping.lf_input_index_for_output_bsocket_usage
+          [group_node.output_socket(i).index_in_all_outputs()] = usage_in_start + i;
+    }
+    output_usage_inputs_ = IndexRange::from_begin_size(usage_in_start,
+                                                       group_node.output_sockets().size());
+
+    for (const int i : group_node.output_sockets().index_range()) {
+      const bNodeSocket &socket = group_node.output_socket(i);
+      if (socket.type != SOCK_GEOMETRY) {
+        continue;
+      }
+      geometry_output_indices_.append(i);
+      inputs_.append({"Reference Set",
+                      CPPType::get<bke::GeometryNodesReferenceSet>(),
+                      lf::ValueUsage::Maybe});
+      own_lf_graph_info.mapping.lf_input_index_for_reference_set_for_output
+          [socket.index_in_all_outputs()] = inputs_.size() - 1;
+    }
+
+    for ([[maybe_unused]] const bNodeSocket *socket : group_node.output_sockets()) {
+      outputs_.append({"Value", CPPType::get<SocketValueVariant>()});
+    }
+    main_outputs_num_ = group_node.output_sockets().size();
+
+    const int usage_out_start = outputs_.size();
+    for ([[maybe_unused]] const int i : IndexRange(main_inputs_num_)) {
+      outputs_.append({"Usage", CPPType::get<bool>()});
+    }
+    input_usage_outputs_ = IndexRange::from_begin_size(usage_out_start, main_inputs_num_);
+  }
+
+  void *init_storage(LinearAllocator<> &allocator) const override
+  {
+    return allocator.construct<Storage>().release();
+  }
+
+  void destruct_storage(void *storage) const override
+  {
+    Storage *s = static_cast<Storage *>(storage);
+    if (s->group_fn != nullptr && s->group_fn->function != nullptr && s->group_storage != nullptr)
+    {
+      s->group_fn->function->destruct_storage(s->group_storage);
+    }
+    std::destroy_at(s);
+  }
+
+  void execute_impl(lf::Params &params, const lf::Context &context) const override
+  {
+    auto &local_user_data = *static_cast<GeoNodesLocalUserData *>(context.local_user_data);
+    GeoNodesUserData *user_data = dynamic_cast<GeoNodesUserData *>(context.user_data);
+    BLI_assert(user_data != nullptr);
+
+    const auto set_fallback_outputs = [&]() {
+      for (const int i : IndexRange(main_outputs_num_)) {
+        set_default_value_for_output_socket(params, i, group_node_.output_socket(i));
+      }
+      for (const int lf_output : input_usage_outputs_) {
+        params.set_output(lf_output, false);
+      }
+    };
+
+    const bNodeTree *group_btree = reinterpret_cast<const bNodeTree *>(group_node_.id);
+    if (group_btree == nullptr) {
+      set_fallback_outputs();
+      return;
+    }
+
+    if (user_data->is_stack_limit_reached()) {
+      if (eval_log::NodeTreeLogger *tree_logger = local_user_data.try_get_tree_logger(*user_data))
+      {
+        tree_logger->node_warnings.append(
+            *tree_logger->allocator,
+            {group_node_.identifier,
+             {NodeWarningType::Error, TIP_("Stack limit reached. Group node is ignored.")}});
+      }
+      set_fallback_outputs();
+      return;
+    }
+
+    lazy_threading::send_hint();
+
+    Storage *storage = static_cast<Storage *>(context.storage);
+    if (storage->group_fn == nullptr) {
+      const std::shared_ptr<const GeometryNodesLazyFunctionGraphInfo> &info =
+          ensure_geometry_nodes_lazy_function_graph(*group_btree);
+      if (!info || info->function.function == nullptr) {
+        set_fallback_outputs();
+        return;
+      }
+      if (info->function.inputs.main.size() != main_inputs_num_ ||
+          info->function.outputs.main.size() != main_outputs_num_ ||
+          info->function.inputs.output_usages.size() != output_usage_inputs_.size() ||
+          info->function.outputs.input_usages.size() != input_usage_outputs_.size())
+      {
+        set_fallback_outputs();
+        return;
+      }
+      storage->group_fn = &info->function;
+      storage->group_storage = info->function.function->init_storage(storage->allocator);
+    }
+
+    const GeometryNodesGroupFunction &group_fn = *storage->group_fn;
+    Array<int> input_to_outer(group_fn.function->inputs().size(), -1);
+    Array<int> output_to_outer(group_fn.function->outputs().size(), -1);
+    for (const int i : group_fn.inputs.main.index_range()) {
+      input_to_outer[group_fn.inputs.main[i]] = i;
+    }
+    for (const int i : group_fn.inputs.output_usages.index_range()) {
+      input_to_outer[group_fn.inputs.output_usages[i]] = output_usage_inputs_[i];
+    }
+    for (const int i : group_fn.inputs.references_to_propagate.geometry_outputs.index_range()) {
+      const int output_index = group_fn.inputs.references_to_propagate.geometry_outputs[i];
+      const int local = geometry_output_indices_.as_span().first_index_try(output_index);
+      if (local != -1) {
+        input_to_outer[group_fn.inputs.references_to_propagate.range[i]] =
+            output_usage_inputs_.one_after_last() + local;
+      }
+    }
+    for (const int i : group_fn.outputs.main.index_range()) {
+      output_to_outer[group_fn.outputs.main[i]] = i;
+    }
+    for (const int i : group_fn.outputs.input_usages.index_range()) {
+      output_to_outer[group_fn.outputs.input_usages[i]] = input_usage_outputs_[i];
+    }
+
+    const ScopedNodeTimer node_timer{context, group_node_};
+    bke::GroupNodeComputeContext compute_context{
+        user_data->compute_context, group_node_.identifier, &group_node_.owner_tree()};
+    GeoNodesUserData group_user_data = *user_data;
+    group_user_data.compute_context = &compute_context;
+    group_user_data.verbose_log = should_log_verbose_in_context(*user_data,
+                                                                compute_context.hash());
+    GeoNodesLocalUserData group_local_user_data{group_user_data};
+    lf::Context group_context{
+        storage->group_storage, &group_user_data, &group_local_user_data};
+
+    CallParams call_params{*group_fn.function, params, input_to_outer, output_to_outer};
+    ScopedComputeContextTimer timer(group_context);
+    group_fn.function->execute(call_params, group_context);
+    (void)node_timer.elapsed_ns();
+  }
+
+  std::string name() const override
+  {
+    return fmt::format(fmt::runtime(TIP_("Recursive group '{}' ({})")),
+                       group_node_.id ? group_node_.id->name + 2 : "",
+                       group_node_.name);
+  }
+};
 
 /**
  * This lazy-function wraps a group node. Internally it just executes the lazy-function graph of
@@ -4035,10 +4359,63 @@ struct GeometryNodesLazyFunctionBuilder {
     }
   }
 
+  void build_recursive_group_node(const bNode &bnode, BuildGraphParams &graph_params)
+  {
+    auto &lazy_function = scope_.construct<LazyFunctionForRecursiveGroupNode>(bnode,
+                                                                             *lf_graph_info_);
+    lf::FunctionNode &lf_node = graph_params.lf_graph.add_function(lazy_function);
+    for (const int i : bnode.input_sockets().index_range()) {
+      this->add_to_socket_map(graph_params, bnode.input_socket(i), lf_node.input(i));
+    }
+    for (const int i : bnode.output_sockets().index_range()) {
+      this->add_to_socket_map(
+          graph_params, bnode.output_socket(i), lf_node.output(i));
+    }
+    mapping_->group_node_map.add(bnode.identifier, &lf_node);
+    lf_graph_info_->num_inline_nodes_approximate += 1;
+
+    const int input_usage_output_start = bnode.output_sockets().size();
+    for (const bNodeSocket *input_bsocket : bnode.input_sockets()) {
+      graph_params.usage_by_bsocket.add(
+          input_bsocket, &lf_node.output(input_usage_output_start + input_bsocket->index()));
+    }
+    static const bool static_false = false;
+    for (const bNodeSocket *output_bsocket : bnode.output_sockets()) {
+      const int lf_input_index =
+          mapping_
+              ->lf_input_index_for_output_bsocket_usage[output_bsocket->index_in_all_outputs()];
+      if (lf_input_index == -1) {
+        continue;
+      }
+      lf::InputSocket &lf_socket = lf_node.input(lf_input_index);
+      if (lf::OutputSocket *lf_output_is_used = graph_params.usage_by_bsocket.lookup_default(
+              output_bsocket, nullptr))
+      {
+        graph_params.lf_graph.add_link(*lf_output_is_used, lf_socket);
+      }
+      else {
+        lf_socket.set_default_value(&static_false);
+      }
+      graph_params.socket_usage_inputs.add(&lf_socket);
+      const int reference_index =
+          mapping_->lf_input_index_for_reference_set_for_output[output_bsocket->index_in_all_outputs()];
+      if (reference_index != -1) {
+        graph_params.lf_reference_set_input_by_output.add(output_bsocket,
+                                                          &lf_node.input(reference_index));
+      }
+    }
+  }
+
   void build_group_node(const bNode &bnode, BuildGraphParams &graph_params)
   {
     const bNodeTree *group_btree = reinterpret_cast<bNodeTree *>(bnode.id);
     if (group_btree == nullptr) {
+      return;
+    }
+    if (geometry_nodes_tree_is_being_built(*group_btree)) {
+      if (group_btree->type == NTREE_GEOMETRY && (group_btree->flag & NTREE_GEOMETRY_RECURSIVE)) {
+        this->build_recursive_group_node(bnode, graph_params);
+      }
       return;
     }
     const std::shared_ptr<const GeometryNodesLazyFunctionGraphInfo> &group_lf_graph_info =
@@ -5570,6 +5947,7 @@ ensure_geometry_nodes_lazy_function_graph_impl(const bNodeTree &btree)
 
   btree_copy->runtime->self_geometry_nodes_lazy_function_graph_info = lf_graph_info.get();
 
+  const GeometryNodesLazyFunctionBuildScope build_scope{btree};
   GeometryNodesLazyFunctionBuilder builder{lf_graph_info};
   builder.build();
   return lf_graph_info;
