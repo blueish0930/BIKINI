@@ -1,0 +1,140 @@
+/* SPDX-FileCopyrightText: 2009 Blender Authors
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later */
+
+/** \file
+ * \ingroup editors
+ */
+
+#pragma once
+
+namespace blender {
+
+struct ARegion;
+struct ID;
+struct Main;
+struct Scene;
+struct SpaceNode;
+struct wmWindow;
+struct Tex;
+struct View2D;
+struct ViewLayer;
+struct bContext;
+struct bNode;
+struct bNodeTree;
+namespace bke {
+struct bNodeTreeType;
+struct bNodeType;
+struct bNodeSocketType;
+}  // namespace bke
+
+#define NODE_GRID_UNIT 20.0f
+#define NODE_GRID_STEP_SIZE (NODE_GRID_UNIT * UI_SCALE_FAC) /* Size of node snap grid. */
+#define NODE_EDGE_PAN_INSIDE_PAD 2
+#define NODE_EDGE_PAN_OUTSIDE_PAD 0 /* Disable clamping for node panning, use whole screen. */
+#define NODE_EDGE_PAN_SPEED_RAMP 1
+#define NODE_EDGE_PAN_MAX_SPEED 26 /* In UI units per second, slower than default. */
+#define NODE_EDGE_PAN_DELAY 0.5f
+#define NODE_EDGE_PAN_ZOOM_INFLUENCE 0.5f
+
+/* `space_node.cc` */
+
+void ED_node_cursor_location_get(const SpaceNode *snode, float value[2]);
+void ED_node_cursor_location_set(SpaceNode *snode, const float value[2]);
+
+int ED_node_tree_path_length(SpaceNode *snode);
+/**
+ * \param value: The path output at least the size of `ED_node_tree_path_length(snode) + 1`.
+ */
+void ED_node_tree_path_get(SpaceNode *snode, char *value);
+
+void ED_node_tree_start(ARegion *region, SpaceNode *snode, bNodeTree *ntree, ID *id, ID *from);
+void ED_node_tree_push(ARegion *region, SpaceNode *snode, bNodeTree *ntree, bNode *gnode);
+void ED_node_tree_pop(ARegion *region, SpaceNode *snode);
+/**
+ * True when the current edit tree is password-locked and has not been unlocked in this editor.
+ * Node contents should not be drawn or edited until the password is entered.
+ */
+bool ED_node_edit_tree_is_lock_blocked(const SpaceNode *snode);
+/** Invoke the password dialog if the current edit tree is locked and not yet unlocked. */
+void ED_node_tree_password_prompt_if_needed(bContext *C);
+/**
+ * After opening a .blend, ask for the lock password so sealed node groups can
+ * evaluate. Does not grant editor access; viewing internals still requires a password.
+ */
+void ED_node_lock_prompt_after_file_load(bContext *C);
+int ED_node_tree_depth(SpaceNode *snode);
+bNodeTree *ED_node_tree_get(SpaceNode *snode, int level);
+
+void ED_node_set_active_viewer_key(SpaceNode *snode);
+
+/**
+ * Remember the active Image Process node group so switching editor/tree type and back can restore
+ * it (selected_node_group is shared with Geometry tools and gets cleared).
+ */
+void ED_node_image_process_group_remember(const SpaceNode *snode);
+/** Lookup the last remembered Image Process group in #bmain (session uid). */
+bNodeTree *ED_node_image_process_group_restore(Main *bmain);
+
+/* `drawnode.cc` */
+
+void ED_node_init_butfuncs();
+void ED_init_custom_node_type(bke::bNodeType *ntype);
+void ED_init_custom_node_socket_type(bke::bNodeSocketType *stype);
+void ED_init_standard_node_socket_type(bke::bNodeSocketType *stype);
+void ED_init_node_socket_type_virtual(bke::bNodeSocketType *stype);
+void ED_node_sample_set(const float col[4]);
+void ED_node_type_draw_color(const char *idname, float *r_color);
+
+/* `node_edit.cc` */
+
+void ED_node_set_tree_type(SpaceNode *snode, bke::bNodeTreeType *typeinfo);
+bool ED_node_is_compositor(const SpaceNode *snode);
+bool ED_node_is_shader(SpaceNode *snode);
+bool ED_node_is_texture(SpaceNode *snode);
+bool ED_node_is_geometry(const SpaceNode *snode);
+bool ED_node_is_image(const SpaceNode *snode);
+bool ED_node_is_object(const SpaceNode *snode);
+/** True when the editor can show Viewer Node output as a backdrop (Compositor scene or Image). */
+bool ED_node_uses_viewer_backdrop(const SpaceNode *snode);
+bool ED_node_supports_preview(SpaceNode *snode);
+
+/**
+ * Assumes nothing being done in ntree yet, sets the default in/out node.
+ * Called from shading buttons or header.
+ */
+void ED_node_texture_default(const bContext *C, Tex *tex);
+void ED_node_post_apply_transform(bContext *C, bNodeTree *ntree);
+void ED_node_set_active(
+    Main *bmain, SpaceNode *snode, bNodeTree *ntree, bNode *node, bool *r_active_texture_changed);
+
+/* `node_compositor_job.cc` */
+
+/**
+ * Launch a compositor job for the given scene and view layer. Triggered by user indicates whether
+ * the compositor is executing due to the user making a modification or if it is executing due to
+ * playback or rendering. */
+void ED_node_compositor_job(Main *bmain,
+                            Scene *scene,
+                            ViewLayer *view_layer,
+                            bool triggered_by_user);
+
+/* `node_ops.cc` */
+
+void ED_operatormacros_node();
+
+/* `node_view.cc` */
+
+/**
+ * Returns mouse position in image space.
+ */
+bool ED_space_node_get_position(
+    Main *bmain, SpaceNode *snode, ARegion *region, const int mval[2], float fpos[2]);
+/**
+ * Returns color in linear space, matching #ED_space_image_color_sample().
+ * And here we've got recursion in the comments tips...
+ */
+bool ED_space_node_color_sample(
+    Main *bmain, SpaceNode *snode, ARegion *region, const int mval[2], float r_col[3]);
+
+}  // namespace blender

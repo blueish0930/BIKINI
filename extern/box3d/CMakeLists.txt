@@ -1,0 +1,40 @@
+﻿# SPDX-FileCopyrightText: 2026 Blender Authors
+#
+# SPDX-License-Identifier: MIT
+#
+# Box3D (Erin Catto) core only for Blender Geometry Nodes.
+
+if((CMAKE_C_COMPILER_ID STREQUAL "GNU") OR (CMAKE_C_COMPILER_ID MATCHES "Clang"))
+  remove_c_and_cxx_flag("-Wextra" "-Wall" "-Wunused")
+endif()
+if(WIN32)
+  add_definitions(-D_USE_MATH_DEFINES)
+  add_definitions(-DNOMINMAX)
+endif()
+
+set(INC include src)
+set(INC_SYS)
+set(SRC
+  src/aabb.c src/arena_allocator.c src/bitset.c src/block_allocator.c src/body.c
+  src/broad_phase.c src/capsule.c src/compound.c src/constraint_graph.c
+  src/contact.c src/contact_solver.c src/convex_manifold.c src/core.c
+  src/distance.c src/distance_joint.c src/dynamic_tree.c src/height_field.c
+  src/hull.c src/id_pool.c src/island.c src/joint.c src/manifold.c
+  src/math_functions.c src/mesh.c src/mesh_contact.c src/motor_joint.c src/mover.c
+  src/name_cache.c src/parallel_for.c src/parallel_joint.c src/physics_world.c
+  src/prismatic_joint.c src/recording.c src/recording_replay.c src/revolute_joint.c
+  src/scheduler.c src/sensor.c src/shape.c src/simd.c src/solver.c src/solver_set.c
+  src/sphere.c src/spherical_joint.c src/table.c src/timer.c src/triangle_manifold.c
+  src/types.c src/weld_joint.c src/wheel_joint.c src/world_snapshot.c
+  include/box3d/base.h include/box3d/box3d.h include/box3d/collision.h
+  include/box3d/config.h include/box3d/constants.h include/box3d/id.h
+  include/box3d/math_functions.h include/box3d/types.h
+)
+set(LIB)
+blender_add_lib(extern_box3d "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
+add_library(bf::extern::box3d ALIAS extern_box3d)
+set_target_properties(extern_box3d PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED YES C_EXTENSIONS YES)
+if(MSVC)
+  target_compile_options(extern_box3d PRIVATE /wd4244 /wd4267 /wd4305 /wd4018 /wd4820 /wd5045)
+endif()
+target_include_directories(extern_box3d PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)

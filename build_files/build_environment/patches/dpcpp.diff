@@ -1,0 +1,143 @@
+diff --git a/libdevice/cmake/modules/SYCLLibdevice.cmake b/libdevice/cmake/modules/SYCLLibdevice.cmake
+index 4f7d06e66..c7b8eef17 100644
+--- a/libdevice/cmake/modules/SYCLLibdevice.cmake
++++ b/libdevice/cmake/modules/SYCLLibdevice.cmake
+@@ -17,6 +17,10 @@ else()
+   set(bc_dir "lib${LLVM_LIBDIR_SUFFIX}/dpcpp-${DPCPP_VERSION_MAJOR}/sycl")
+   set(install_dest_bc ${bc_dir})
+   set(bc_binary_dir "${CMAKE_BINARY_DIR}/${bc_dir}")
++  # The nested lib/dpcpp-<major>/sycl directory is not created by any target,
++  # and clang does not create output directories itself. Create it at configure
++  # time, matching how obj_binary_dir/libdevice is handled below.
++  file(MAKE_DIRECTORY ${bc_binary_dir})
+ endif()
+
+ string(CONCAT sycl_targets_opt
+@@ -74,7 +78,7 @@ if (WIN32)
+   list(APPEND compile_opts -D_ALLOW_ITERATOR_DEBUG_LEVEL_MISMATCH)
+ endif()
+
+-add_custom_target(libsycldevice)
++add_custom_target(libsycldevice ALL)
+
+ set(filetypes bc)
+
+@@ -149,6 +153,7 @@ function(compile_lib_ext filename)
+
+   add_custom_command(
+     OUTPUT ${devicelib-file}
++    COMMAND ${CMAKE_COMMAND} -E make_directory ${${ARG_FILETYPE}_binary_dir}
+     COMMAND ${clang_exe} -I ${PROJECT_BINARY_DIR}/include
+             ${ARG_OPTS}
+             ${CMAKE_CURRENT_SOURCE_DIR}/${ARG_SRC} -o ${devicelib-file}
+@@ -717,6 +722,7 @@ function(add_lib_imf name)
+
+   add_custom_command(
+     OUTPUT ${ARG_DIR}/${name}.${${ARG_FTYPE}-suffix}
++    COMMAND ${CMAKE_COMMAND} -E make_directory ${ARG_DIR}
+     COMMAND ${clang_exe} ${compile_opts} ${ARG_EXTRA_OPTS}
+             -I ${CMAKE_CURRENT_SOURCE_DIR}/imf
+             ${imf_${ARG_DTYPE}_fallback_src}
+diff --git a/sycl/cmake/modules/BuildUnifiedRuntime.cmake b/sycl/cmake/modules/BuildUnifiedRuntime.cmake
+index 646ca364a..566d4a082 100644
+--- a/sycl/cmake/modules/BuildUnifiedRuntime.cmake
++++ b/sycl/cmake/modules/BuildUnifiedRuntime.cmake
+@@ -193,6 +193,43 @@ if(CMAKE_SYSTEM_NAME STREQUAL Windows)
+   set(URD_BINARY_DIR ${CMAKE_BINARY_DIR}/unified-runtimed)
+   set(URD_INSTALL_DIR ${URD_BINARY_DIR}/install)
+
++  # Verify that required variables are available before forwarding them
++  # to the unified-runtimed sub-build. If any are missing, it means the
++  # parent build did not receive them (e.g., from Blender's dpcpp.cmake).
++  if(NOT DEFINED XPTIFW_PARALLEL_HASHMAP_HEADERS)
++    message(FATAL_ERROR "XPTIFW_PARALLEL_HASHMAP_HEADERS is not defined. Cannot forward to unified-runtimed sub-build.")
++  endif()
++  if(NOT DEFINED Python3_ROOT_DIR)
++    message(FATAL_ERROR "Python3_ROOT_DIR is not defined. Cannot forward to unified-runtimed sub-build.")
++  endif()
++  if(NOT DEFINED Python3_EXECUTABLE)
++    message(FATAL_ERROR "Python3_EXECUTABLE is not defined. Cannot forward to unified-runtimed sub-build.")
++  endif()
++  if(NOT DEFINED PYTHON_EXECUTABLE)
++    message(FATAL_ERROR "PYTHON_EXECUTABLE is not defined. Cannot forward to unified-runtimed sub-build.")
++  endif()
++  if(NOT DEFINED LEVEL_ZERO_LIBRARY)
++    message(FATAL_ERROR "LEVEL_ZERO_LIBRARY is not defined. Cannot forward to unified-runtimed sub-build.")
++  endif()
++  if(NOT DEFINED LEVEL_ZERO_INCLUDE_DIR)
++    message(FATAL_ERROR "LEVEL_ZERO_INCLUDE_DIR is not defined. Cannot forward to unified-runtimed sub-build.")
++  endif()
++  if(NOT DEFINED FETCHCONTENT_SOURCE_DIR_UNIFIED-MEMORY-FRAMEWORK)
++    message(FATAL_ERROR "FETCHCONTENT_SOURCE_DIR_UNIFIED-MEMORY-FRAMEWORK is not defined. Cannot forward to unified-runtimed sub-build.")
++  endif()
++  if(NOT DEFINED FETCHCONTENT_SOURCE_DIR_HWLOC_TARG)
++    message(FATAL_ERROR "FETCHCONTENT_SOURCE_DIR_HWLOC_TARG is not defined. Cannot forward to unified-runtimed sub-build.")
++  endif()
++  if(NOT DEFINED CMAKE_PREFIX_PATH)
++    message(FATAL_ERROR "CMAKE_PREFIX_PATH is not defined. Cannot forward to unified-runtimed sub-build.")
++  endif()
++  if(NOT DEFINED XPTIFW_PARALLEL_HASHMAP_HEADERS)
++    message(FATAL_ERROR "XPTIFW_PARALLEL_HASHMAP_HEADERS is not defined. Cannot forward to unified-runtimed sub-build.")
++  endif()
++  if(NOT DEFINED PHMAP_LOC)
++    message(FATAL_ERROR "PHMAP_LOC is not defined. Cannot forward to unified-runtimed sub-build.")
++  endif()
++
+   # This creates a subbuild which can be used in dependencies with the
+   # unified-runtimed target. It invokes the install-unified-runtime-libraries
+   # target to install the UR runtime libraries.
+@@ -226,9 +263,29 @@ if(CMAKE_SYSTEM_NAME STREQUAL Windows)
+       -DUMF_BUILD_EXAMPLES:BOOL=${UMF_BUILD_EXAMPLES}
+       -DUMF_BUILD_SHARED_LIBRARY:BOOL=${UMF_BUILD_SHARED_LIBRARY}
+       -DUMF_LINK_HWLOC_STATICALLY:BOOL=${UMF_LINK_HWLOC_STATICALLY}
+-      -DUMF_DISABLE_HWLOC:BOOL=${UMF_DISABLE_HWLOC}
+       # Enable d suffix in UMF
+       -DUMF_USE_DEBUG_POSTFIX:BOOL=ON
++      # Prevent network access during the debug sub-build. ExternalProject_Add
++      # uses a separate CMake invocation that does not inherit the parent cache,
++      # so FETCHCONTENT_FULLY_DISCONNECTED must be forwarded explicitly.
++      -DFETCHCONTENT_FULLY_DISCONNECTED:BOOL=ON
++      # These variables must be explicitly forwarded to the inner ExternalProject
++      # build on Windows because it uses a separate CMake invocation via
++      # ExternalProject_Add, which does not inherit the parent's cache. Without
++      # forwarding, the sub-build falls back to system defaults and fails to
++      # find Blender's bundled Python and parallel hashmap headers.
++      -DXPTIFW_PARALLEL_HASHMAP_HEADERS:STRING=${XPTIFW_PARALLEL_HASHMAP_HEADERS}
++      -DPython3_ROOT_DIR:STRING=${Python3_ROOT_DIR}
++      -DPython3_EXECUTABLE:STRING=${Python3_EXECUTABLE}
++      -DPYTHON_EXECUTABLE:STRING=${PYTHON_EXECUTABLE}
++      -DLEVEL_ZERO_LIBRARY:STRING=${LEVEL_ZERO_LIBRARY}
++      -DLEVEL_ZERO_INCLUDE_DIR:STRING=${LEVEL_ZERO_INCLUDE_DIR}
++      -DUR_COMPUTE_RUNTIME_FETCH_REPO:BOOL=OFF
++      -DFETCHCONTENT_SOURCE_DIR_UNIFIED-MEMORY-FRAMEWORK:STRING=${FETCHCONTENT_SOURCE_DIR_UNIFIED-MEMORY-FRAMEWORK}
++      -DFETCHCONTENT_SOURCE_DIR_HWLOC_TARG:STRING=${FETCHCONTENT_SOURCE_DIR_HWLOC_TARG}
++      -DCMAKE_PREFIX_PATH:STRING=${CMAKE_PREFIX_PATH}
++      -DXPTIFW_PARALLEL_HASHMAP_HEADERS:STRING=${XPTIFW_PARALLEL_HASHMAP_HEADERS}
++      -DPHMAP_LOC:STRING=${PHMAP_LOC}
+   )
+
+   # Copy the debug UR runtime libraries to <build>/bin & <build>/lib for use in
+diff --git a/unified-runtime/cmake/FetchLevelZero.cmake b/unified-runtime/cmake/FetchLevelZero.cmake
+index b9f747b59..ecfe854ce 100644
+--- a/unified-runtime/cmake/FetchLevelZero.cmake
++++ b/unified-runtime/cmake/FetchLevelZero.cmake
+@@ -150,6 +150,7 @@ message(STATUS "Level Zero Adapter: Using Level Zero headers from ${COMPUTE_RUNT
+ target_include_directories(ComputeRuntimeLevelZero-Headers
+     INTERFACE "$<BUILD_INTERFACE:${COMPUTE_RUNTIME_LEVEL_ZERO_INCLUDE}>"
+               "$<BUILD_INTERFACE:${COMPUTE_RUNTIME_REPO_PATH}>"
++              "$<BUILD_INTERFACE:${LEVEL_ZERO_INCLUDE_DIR}/..>"
+               "$<INSTALL_INTERFACE:${LEVEL_ZERO_TARGET_INCLUDE_DIR}>"
+ )
+
+diff --git a/xptifw/src/CMakeLists.txt b/xptifw/src/CMakeLists.txt
+index c8a126283..875568091 100644
+--- a/xptifw/src/CMakeLists.txt
++++ b/xptifw/src/CMakeLists.txt
+@@ -69,6 +69,7 @@ function(add_xpti_library LIB_NAME)
+     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+     PRIVATE
+     $<BUILD_INTERFACE:${XPTIFW_PARALLEL_HASHMAP_HEADERS}>
++    $<BUILD_INTERFACE:${XPTIFW_PARALLEL_HASHMAP_HEADERS}/..>
+   )
+
+   add_dependencies(${LIB_NAME} xpti)

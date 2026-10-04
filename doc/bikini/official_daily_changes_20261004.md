@@ -1,0 +1,265 @@
+# 官方 Blender 每日版更新
+
+- 对比基线：852006fe9e16（上次合并的官方父提交）
+- 目标每日版：bbfc8f3ec2ec（Blender 5.3 Alpha，2026-10-03）
+- 范围：236 个提交；1219 个文件变动，20313 行新增，14272 行删除。
+- 本地合并提交：45ed58fcbb61；后续兼容修复：ba12f03c610f、d16b0a9d6121。
+
+## 主要更新
+
+- Compositor：Bloom 节点资产、节点组缺失时的崩溃修复、区间输入和值日志改进。
+- glTF：高斯泼溅导入及打包、读取相关修复。
+- Cycles：DLSS alpha 放大修复、OptiX SDK 9、CUDA 状态管理和点云 Bump 等修复。
+- 色彩管理：每项目 OCIO 相关改动、Apple 设备使用的 Rec.709-A 色彩空间。
+- Windows 构建：Blender 5.3 依赖库更新，包括 Jolt 等库。
+- 另含 EEVEE、Grease Pencil、几何节点、导出器和用户界面修复。
+
+## 完整提交列表
+
+- `45612c7f98bf` 2026-09-24 Mesh: Merge: Replace WeldCorner struct with an array of indices
+- `4c1e4c5a70af` 2026-09-24 Mesh: Merge: Parallelize finding collapsed and duplicate edges
+- `d819cb95b14e` 2026-09-24 Mesh: Merge: Parallelize building weld faces
+- `79f5c26253a8` 2026-09-24 Mesh: Merge: Collapse and split faces in parallel
+- `b6159c869bed` 2026-09-26 Cleanup: Mesh: Use generic sampling functions in sample function
+- `1335607d55ee` 2026-09-26 Refactor: Geometry: Compare attributes one component at a time
+- `7e9e9704f5b9` 2026-09-26 Refactor: Mesh: Boolean: Avoid to_static_type in corner propagation
+- `35a2d9dfd0ad` 2026-09-26 Refactor: Mesh: Bevel: Avoid to_static_type in corner propagation
+- `225feec14984` 2026-09-27 Mesh: Merge: Build result faces and corners in parallel
+- `388952d3b867` 2026-09-24 Mesh: Merge: Only build source groups for merged vertices and edges
+- `6580c5fc43a3` 2026-09-27 Geometry Nodes: Avoid attribute type dispatch in Extrude Mesh node
+- `c654ff9c1512` 2026-09-28 Fix: Missing 's' in the name 'Developer Extras' in API documentation
+- `cc91a7923894` 2026-09-27 Docs: Update RNA to user manual URL mapping
+- `81201b25e10b` 2026-09-28 Fix #164041: Outliner does not display certain modifier references
+- `4d76ccfcc380` 2026-09-28 Fix: EEVEE: Undefined behavior in lightprobe shadow
+- `d77f2fcd6607` 2026-09-26 Cleanup: EEVEE: Shaders: Remove unused headers
+- `0eb48c85c94e` 2026-09-26 Cleanup: EEVEE: Avoid compilation warnings
+- `27f8df29580b` 2026-09-26 Cleanup: DRW: Avoid compilation warning
+- `e2aaab991bfb` 2026-09-28 Outliner: "Show Users Column" in View Layer and Scenes mode
+- `ce82b288052c` 2026-09-28 Fix #164171: GSplat: Remove half precision radiance packing workaround
+- `9b46f00fb9d2` 2026-09-28 UI: Always create nested menus for move to collection
+- `ea62f9ea1d40` 2026-09-28 Fix: EEVEE: Zero initialize world sun resource_id
+- `36f98bf708d9` 2026-09-28 Compositor: Skip data conversion before pixel operations
+- `4fd636b72141` 2026-09-28 Fix: Shader Nodes: Missing LightIndex links handling
+- `b2e7faa4b20a` 2026-09-28 Fix: Missing link error for Light Attribute node
+- `d6ae48a6b129` 2026-09-28 Fix: stereo 3D viewport display compositing the wrong buffers
+- `58083a941fc2` 2026-09-28 Fix: Shader lighting node link error appears only every other update
+- `2c381a909b40` 2026-09-28 Cleanup: OpenGL: Remove unused function
+- `802a9e5cbdd8` 2026-09-28 UI: Overlay: Tint boolean attributes viewer text
+- `2120b1d203c7` 2026-09-28 Fix #164146: Overlay: Edit points vanishes with negative radius attrib
+- `5ce66a846e23` 2026-09-28 Fix #162948: Vulkan: Math work around for SPIR-V compiler bug
+- `d50d0205d2d4` 2026-09-28 Workbench: Enable BSL 5.3
+- `4fc163140ae5` 2026-09-28 DRW: Port manager shaders to BSL
+- `e19f2c16dc2e` 2026-09-28 Fix #164401: Overlay: Bind missing `globals_buf` in `ImagePrepass`
+- `98e452b04adb` 2026-09-28 Cleanup: Spelling in source/blender/draw directory
+- `babb60703e7f` 2026-09-28 Fix #164433: Crash using Bake operator in viewport with hidden object
+- `1b20a88e9797` 2026-09-21 Fix: Cycles: oneAPI: Performance regression from DPC++ upgrade
+- `0ae04d3e782c` 2026-09-29 Cleanup: Spelling in docs directory
+- `3c582b471991` 2026-09-29 Fix #159219: Selectability & Visibility viewport toggles inconsistent
+- `bc463a80f335` 2026-09-29 Core: improve handling of "Trusted Source" and command-line overrides
+- `2ceb76079c6c` 2026-09-29 UI: Make `textbox()` behave more like a string `prop()`
+- `1e422e4ecd1e` 2026-09-29 Fix: Grease Pencil: Layer transform ignored by the transform panel
+- `a5d2d415d030` 2026-09-29 Fix #163673: Grease Pencil: Crazy Space for editing broken
+- `c4065222897c` 2026-09-29 Fix #164368: Geometry Node tool on pointcloud crashes...
+- `cd135abc53f0` 2026-09-29 Fix: Geometry Node tool misses update if the output is empty
+- `6bfad123d562` 2026-09-29 Fix #164026: Select Linked doesn't work on hair curves after Grow Selection
+- `cd32f469e65b` 2026-09-29 Fix: Move to Collection "Move Inside" label not translated
+- `767d20e010a9` 2026-09-29 Cleanup: Spelling in intern/ghost directory
+- `af9136b2ba7d` 2026-09-29 Cleanup: Spelling in source/blender/gpu directory
+- `d02b5437d78f` 2026-09-29 Compositor: Support value logging for zones
+- `370d35fce618` 2026-09-29 Cleanup: make format
+- `87b841bcd61c` 2026-09-29 Fix #164051: Correctly clamp texture coordinates for texture 'Extend' mode
+- `b5077ecfdbd9` 2026-09-29 Compositor: Pass repeat zone inputs through for invalid iterations
+- `7adad41baf2c` 2026-09-29 Grease Pencil: Color Ramp Gradient
+- `94649ea60be6` 2026-09-29 Grease Pencil: Port VFX shaders to BSL
+- `3b5223070d2c` 2026-09-29 GPU: Python: Bypass SSBO tests on Metal
+- `06fe9a1a6adb` 2026-09-29 EEVEE: Metal: Remove MTLBackend macOS >= 10.15 version check
+- `85589958de5f` 2026-09-29 Cleanup: Remove legacy GP modifier code from outliner
+- `363df9dfc827` 2026-09-29 make.bat: Improve make showhash
+- `7ca56b26d0f4` 2026-09-29 Fix #164458: masklayer.splines.new() has 1st point not fully initialized
+- `58239a81d848` 2026-09-29 EEVEE: Give Lightprobes a "fake" boundingbox
+- `5898ea24ab9d` 2026-09-29 DRW: Port curves shader to BSL
+- `b9de5b55d186` 2026-09-29 Fix #164389: EEVEE: Derive panoramic sensor size correctly
+- `27f2ed5fb4ad` 2026-09-29 EEVEE: Allow reference spheres to scale down with camera zoom
+- `9b02ae8a5941` 2026-09-29 Fix: Grease Pencil: Carver tool locked materials
+- `e30e1064854a` 2026-09-29 Vulkan: Increase frame_data_ reservation to 6
+- `1e007b08af8b` 2026-09-29 UI: Asset Browser: Adjust refresh operators in menu
+- `876db7c2513d` 2026-09-29 Cycles: Fix jump table generation not being enabled for sm_121
+- `ff5ede981396` 2026-09-29 Cleanup: Spelling in source/blender/nodes directory
+- `f83711205a67` 2026-09-29 UI: Extensions: Use link widget for website/feedback
+- `eb1fd248600d` 2026-09-14 Color Management: Show active OpenColorIO config source and path
+- `a9b7eeddcf2b` 2026-09-14 Refactor: Color Management: Use candidates list in OCIO config loading
+- `53c91abebab0` 2026-08-09 Color Management: Per-project OpenColorIO configuration
+- `c92951606d05` 2026-09-22 Color Management: Show message when project config failed to load
+- `e40c950d3c3b` 2026-09-22 Color Management: Add button to reload blend file for config changes
+- `dd5da995c550` 2026-09-29 Color Management: Add enum to choose between Blender/ACES/Path in project
+- `da59531b8d7a` 2026-09-28 Refactor: ImBuf: Add byte_colorspace() and float_colorspace()
+- `b203cb5a0e37` 2026-09-29 Fix: VSE: Wrong colorspace on float video file thumbnails
+- `9790a2118082` 2026-09-29 Fix: VSE: Wrong colorspace with stereo image buffer
+- `7e6d592b83e7` 2026-09-28 Fix #164336: VSE blending and effects not performed in sequencer space
+- `3ddd350de866` 2026-09-28 Color Management: Revert Rec.709 video default change, add optional role
+- `294a47a2dc4c` 2026-09-26 Color Management: Add Rec.709-A colorspace to match Apple devices
+- `46eacf32b2e2` 2026-09-29 Cleanup: Spelling in functions and variable names in intern/cycles directory
+- `37fb25541b84` 2026-09-24 BLI: Add utility to find compact indices for group IDs
+- `522a193f744b` 2026-09-26 Geometry Nodes: Sample Curve: Use IndexMask::from_group_ids
+- `24872d50d9fd` 2026-09-29 Cleanup: Spelling in source/blender/render directory
+- `e5acfb811ba6` 2026-09-29 Cleanup: Spelling in source/blender/imbuf directory
+- `3a4ce16ca3b7` 2026-09-29 Cleanup: Spelling of "ELLIPSOID" in internal enums
+- `75e20e7560db` 2026-09-29 Fix: Color Management: Failed config should only mark path with red alert
+- `40c9451b4249` 2026-09-30 Mesh: Merge: Optimize face duplicate lookup, share with mesh_validate.cc
+- `5ad83573ec4f` 2026-09-30 VSE: Use strip type icon for missing media thumbnail
+- `8c212489abec` 2026-09-30 Modeling: add selected dimensions to the edit-mode transform panel
+- `ffc28a37ab21` 2026-09-30 Fix: VSE: Quiet UBSan report for multiview property
+- `c928ea1f231d` 2026-09-30 Cleanup: comment formatting
+- `de1d87569ef0` 2026-09-30 Cleanup: resolve missing-declarations warning
+- `71ccea0b6d90` 2026-09-30 Fix: Gray out disabled link buttons
+- `e25072e48316` 2026-09-30 Cleanup: spelling (make check_spelling_*)
+- `a61c7412cfff` 2026-09-30 Cleanup: correct & update spelling
+- `c5ab6c688727` 2026-09-30 Mesh: Flatten data on GPU instead of CPU
+- `eb4315b607e2` 2026-09-24 Geometry Nodes: Index of Nearest: Use grouped indices instead of masks
+- `47a353407337` 2026-09-29 Geometry Nodes: Index of Nearest: Run lookups in internal tree order
+- `c9177f334dea` 2026-09-30 Node Wrangler: Add `Geometry to Instance` option to `Merge Nodes` operator
+- `c0a02f4df345` 2026-09-30 Fix: Node Wrangler: `Connect to Output` inside node groups fails for certain socket types
+- `0d1b5bce07ae` 2026-09-30 GPU: Remove unused create info sampler state
+- `12fa6935da03` 2026-09-30 Fix #164040: Scrubbing transfers playback timer to the scrubbed scene
+- `a535ce0428d6` 2026-09-30 Cleanup: Remove unnecessary tile lookup
+- `911edb233cb6` 2026-09-30 Node Wrangler: Various improvements to `Change Factor` operator
+- `ee8a943fe36f` 2026-09-30 Fix: GPU: Compilation error
+- `b2de70cf991f` 2026-09-30 Fix: GPU: Shader Tool: Error in AST accessor function
+- `6d255857468b` 2026-09-30 Fix: GPU: Shader Tool: Error in nameless array arguments
+- `06e66393d3fc` 2026-09-30 Assets: Show info label in asset shelf when empty
+- `e10ba2dde9ea` 2026-09-30 Geometry Nodes: Test file for XPBD tag filter feature
+- `bf38fccdb0b8` 2026-09-30 Cleanup: Deduplicate Texture Mask panel drawing code
+- `e339452b5441` 2026-09-30 Refactor: Color Management: Use interop IDs for detecting sRGB
+- `35f582f0759c` 2026-09-30 Fix: VSE: Wrong text colors with non-sRGB sequencer space
+- `c61eaece9dc2` 2026-09-30 Fix: VSE: Crash with Gaussian Blur on byte strips in some colorspaces
+- `8bcafea1bdde` 2026-09-30 Fix: Color Management: Project config failure alert lost after save
+- `cb87201494a4` 2026-09-30 Cycles: Optimize integrator state allocations on integrated CUDA GPUs
+- `30eeec5b3c57` 2026-09-30 API Docs: Add warning about modifying `Library::filepath` RNA property.
+- `36e0fba4dbf9` 2026-09-30 Fix #164190: Cycles CUDA: Texture cache error with distributed memory
+- `a258de2983ae` 2026-09-30 Cleanup: Spelling in source/blender/makesrna directory
+- `f8f0f0429fc3` 2026-09-30 Fix #163757: Image Undo can sometimes restore incorrect tiles
+- `4b1cb8582592` 2026-09-30 Cycles: Upgrade to OptiX SDK 9.0 on buildbot
+- `86a8d6f812cf` 2026-09-30 Tests: Convert texture paint test to general "Undo History" test
+- `97f76794a028` 2026-09-30 Subdiv: Port shaders to BSL
+- `af4cd6a84c40` 2026-09-30 Camera: Square Format Presets
+- `b3f791e87017` 2026-09-30 DRW: Port libs to BSL
+- `f2649cf5930b` 2026-09-30 DRW: Port view & resource finalize shaders to BSL
+- `c343c0cd5071` 2026-09-30 Fix #164326: Cycles: Bump node not working on point clouds
+- `7936055a1e57` 2026-09-30 Mesh: Draw: Specialize shaders for flattening attribute sizes
+- `4676deff60a2` 2026-09-30 Fix: USD: Check gsplat half-float attributes for time varying data
+- `4cd2145bb78c` 2026-09-30 Fix: USD: Check primvars:normals attribute for time varying data
+- `68609be8e23b` 2026-09-30 Fix: USD: Set custom mesh normals for 'varying' interpolation
+- `ced1e3183de4` 2026-10-01 GHOST/Wayland: Fix building on OpenBSD by removing malloc.h
+- `a20531b1d2f1` 2026-10-01 Fix #164486: Crash overriding the contexts window & screen with None
+- `2553a92327b7` 2026-10-01 Cleanup: de-duplicate calculating enabled & pending extensions
+- `06dd19a93ce2` 2026-10-01 Fix #164227: updating extensions removed wheels used by other extensions
+- `b3d3c1f6f400` 2026-10-01 Fix #164371: USD export omits scene playback FPS metadata
+- `b6a786c9044d` 2026-10-01 Updated CODEOWNERS
+- `a0c427300df4` 2026-10-01 Fix: Return delayed the default button when highlighted in a popup
+- `f2134b772e35` 2026-10-01 UI: open mouse-placed popups with the default button under the cursor
+- `5977018ecf24` 2026-10-01 UI: reduce the width of the blend-file drop popup
+- `9307e6f2a0eb` 2026-10-01 Fix #164125: Compositor crashes with missing node group
+- `3f0b068d70e7` 2026-09-30 Cleanup: Curves: Remove unused curve_to_point_map creation
+- `b9f33eaf2ea8` 2026-10-01 Curves: Remove redundant type counts update
+- `cdc8f776dead` 2026-10-01 Fix: Assert using zones in a material
+- `4b27d281ced1` 2026-10-01 Nodes: Add `Both` option to `Set Grease Pencil Color` node
+- `fa38b8e7d0a8` 2026-10-01 Fix #163842: File-browser dir stuck editing if it contained `/` on WIN32
+- `7165589c1c38` 2026-10-01 Fix: GSplat: Round values when packing to uint
+- `ec072459d713` 2026-10-01 Fix: copy pasting world space not accounting for parent inverse
+- `b006eb9b1893` 2026-10-01 Nodes: Use multiline textbox for descriptions
+- `9591d7a92dc0` 2026-10-01 Python API: Add optional name parameter to constraints.new()
+- `e0d25a1b3c1b` 2026-10-01 GPU: Shader Tool: Resolve implicit `this` in symbol lookup
+- `6aea5d515bc3` 2026-10-01 GPU: Shader Tool: Do not mangle non-class-enum values
+- `c3b6a73118a2` 2026-10-01 Fix: GPU: Shader Tool: Missing comma in designated initializer list
+- `1f3b63169dc0` 2026-10-01 Fix #164155: Annotations do not show up in viewport renders/playblasts
+- `b5987ae1cf3b` 2026-10-01 Fix: Compositor crashes if a node group is missing
+- `f835b7003221` 2026-10-01 Fix #164260: glTF: Fix checking glTF Output Node name(s)
+- `089079982606` 2026-10-01 Fix #164105 - glTF: Fix UDIM export with inline material node tree
+- `096a90280869` 2026-10-01 Cleanup: make format
+- `14928335828e` 2026-10-01 Modeling: Curve From looptools
+- `80480fa508ce` 2026-10-01 Fix: world space copy paste minor issues
+- `dfbcb45b8f88` 2026-10-01 Fix #162536: Crash adding Grease Pencil Opacity modifier
+- `70626ac295dc` 2026-10-01 Fix #163276: Assert on copy-paste asset.
+- `4010d5cbccc7` 2026-10-01 Fix: Matrix logic in world space copy paste
+- `946fea666edb` 2026-10-01 glTF: Fix Vertex Color Export
+- `25123b8fe245` 2026-09-30 DRW: Port draw debug display to BSL
+- `5c9d52c8a508` 2026-10-01 DRW: Enable BSL 5.3 compiler
+- `d73e2817bb2e` 2026-10-01 glTF: Gaussian Splatting import
+- `cd754c5ccc40` 2026-10-01 Deps: Library changes for Blender 5.3
+- `821362744add` 2026-10-01 Cleanup: make format
+- `21eaf3492df3` 2026-10-01 Release: Update license.md
+- `d4b7c4722580` 2026-10-01 Build: Tweak path to the system Python
+- `f311104a74d7` 2026-10-01 Cycles: Increase concurrent states grow maximum for CUDA
+- `e6daff445c23` 2026-09-30 Cleanup: Compiler warning about parentheses
+- `ce4bf254ad50` 2026-09-30 Tests: Render: Excessive samples and resolution in some tests
+- `9c33739940c8` 2026-09-30 Refactor: Color Management: Slightly speed up config loading
+- `752466d4a5b2` 2026-09-30 Refactor: Color Management: Avoid deep copying color spaces on load
+- `79d757ce3d5c` 2026-10-01 Fix: Cycles: Wrong MultiDevice::is_shared for peer memory
+- `18d5ef59d52c` 2026-10-01 Refactor: Cycles: CUDA: Use jump table flag for all sm_120 and newer
+- `15154967849c` 2026-10-01 GPU: Shader Tool: Add array runtime capacity
+- `8197e5df5dc1` 2026-10-01 EEVEE: Use new `capacity` attribute for `ClosureStack`
+- `64d181010e0d` 2026-10-01 EEVEE: Use new capacity attribute for gbuffer packing
+- `59d9609b821e` 2026-10-02 Fix #162310: Joining group inputs hides unconnected sockets
+- `f7153e8c137d` 2026-10-02 Fix #164054: Selecting objects in the 3D Viewport does not deselect Collections
+- `1796f2619858` 2026-10-02 Refactor: GPU: Move saturate and limits to compat layer
+- `7852f5dd4558` 2026-10-02 Fix #163292: GreasePencil Lasso/Box Delete crash in Multiframe mode
+- `9be00367a62f` 2026-10-02 GPU: Include Vulkan pipeline compilation in shader compilation status
+- `8931427c0a55` 2026-10-02 Fix #164323: UV Edge Ring Select hangs in select-sync & vertex selection
+- `8bfe607c774c` 2026-10-02 Fix #164563: Image Coordinates node doubles input transforms
+- `5a1dcfef47c7` 2026-10-02 Fix: EEVEE missing texture binds on forward transparent materials
+- `c748e5f1a5b9` 2026-10-02 Fix: half pixel offset in drawing gizmos
+- `449fbc6b3940` 2026-10-02 Compositor: Alt+LMB to connect to Group Output
+- `7a16cbfbd43b` 2026-10-02 Fix: Geometry Nodes: `Duplicate Hair Curves` Outputting Duplicate IDs
+- `a3889bb09e4f` 2026-10-02 Fix  #163701: crash during viewport garbage collector
+- `27ef2403b0d5` 2026-10-02 GPU: Shader Tool: Lint condition attribute usage
+- `db9cabaac6d1` 2026-10-02 I18n: Add a few translation contexts
+- `b09f4919a633` 2026-10-02 Fix #164596: Texture paint Options menu too small
+- `107a6b614cea` 2026-10-02 Fix: CPU and GPU implicit conversion differs
+- `95ef16436631` 2026-10-02 GPU: Shader Tool: Add linting for compilation constant redefinition
+- `c4c7164693df` 2026-10-02 Cleanup: EEVEE: Remove unneeded resource registration in forward pipeline
+- `1fb7b50fefaf` 2026-10-02 Fix: EEVEE: Incorrect offsets on ARM devices
+- `b6085cc8a136` 2026-10-02 Rigify: expose B-Bone segment count for spine and head rig types
+- `91482a60ac29` 2026-10-02 Assets: Compositor: Add Bloom asset
+- `4816883bd49b` 2026-10-02 Subdiv: Simplify/remove converter and MeshTopology abstractions
+- `cdfb7f157894` 2026-10-02 Fix #162997: Cycles viewport stutters when cursor wrapping occurs
+- `14f2708fe10a` 2026-10-02 Refactor: Anim/VSE: Add function to query scene context based on space
+- `8cfd7333d841` 2026-10-02 Fix #161827: Audio mixdown from scripts produces bad output
+- `2a9953734f70` 2026-10-02 Cleanup: Subdiv: Remove a few simple unnecessary callbacks
+- `a3ef79e8f156` 2026-10-02 Fix #163419: Avoid invalid aligned Fillet Curve handles
+- `b56d48431d67` 2026-10-02 Build: Enable DLSS in arm64 release builds
+- `cd41a9d878d5` 2026-10-02 EEVEE: Switch hashed transparency to PCG
+- `c4f8ca0395fc` 2026-10-02 Fix #164122: Crash selecting mesh with Curve to Mesh
+- `4f818c743632` 2026-10-02 CMake: Windows: Remove debug as a valid alternative for a release config
+- `1bf5e1568c3b` 2026-10-02 CODEOWNERS: Adding myself to new nodes for Geometry Nodes
+- `6fd7adc36c65` 2026-09-30 BLI: Free ImplicitSharedValue data when only weak users remain
+- `ac77b3021257` 2026-09-30 Refactor: Attributes: Use ImplicitSharedValue<GArray> for attribute data
+- `72a8a26ccaea` 2026-09-30 Refactor: Geometry Nodes: Use ImplicitSharedValue<GArray> for list data
+- `662905e45c10` 2026-09-30 Refactor: Attributes: Remove AttributeInitMoveArray
+- `67a27a523614` 2026-09-30 Fix: Mesh: Memory leak of multires data when removing invalid faces
+- `924065510214` 2026-09-30 Refactor: BLI: Check data type in implicit_sharing::info_for_mem_free
+- `bee7af13782c` 2026-09-30 Refactor: Legacy Curve: Avoid separate allocations in curve decimation
+- `2ccb83abf24f` 2026-09-30 Refactor: BMesh: Free connect pair path states with their type
+- `8cee9c2e6704` 2026-10-02 Refactor: DNA: Only support trivial types in ListBase::free_no_destruct
+- `b1750897950a` 2026-10-02 Fix: Cycles: Alpha upscaling with DLSS
+- `9e4812417e2c` 2026-10-02 Collectiom Import: Remove confirmation on deletion.
+- `a603833830ed` 2026-10-02 Fix: Grease Pencil: Missing triangles from fills
+- `d79d62ec5ffe` 2026-10-02 Fix: Deps: Add missing KTX files on macOS/Linux for 5.3 libs upgrade
+- `a32f72cb3ee2` 2026-10-02 Fix: GPU: Shader Tool: Workaround shader preprocessor bug
+- `95082b0cc0f8` 2026-09-29 Fix: Alembic: crash when exporting an attribute which changes types
+- `c79eda1678d1` 2026-09-29 Fix: Alembic: crash exporting attributes with invalid names
+- `381e26387af9` 2026-10-01 Fix: Build: Missing KTX dependency on zstd
+- `d20cba13085c` 2026-10-01 Fix: Build: Wrong OpenTimelineIO target name on Unix
+- `938a8d913449` 2026-10-01 Fix: Build: Hardcoded x86_64 arch in rocky8 script, make generic
+- `33c47ea6229f` 2026-10-01 Fix: Build: USD Python module copy failure with make lite on Windows
+- `bbfc8f3ec2ec` 2026-10-03 Docs: Update GitHub mirror docs link for moved page
+
+## 本地合并与验证
+
+- 合并提交：`45ed58fcbb61`；版本迁移适配：`ba12f03c610f`；Jolt 构建适配：`d16b0a9d6121`；节点界面 API 适配：`f516c01f8ff7`。
+- 完整 Release 构建和 `cmake --install` 成功；目标 `blender.exe` 报告 Blender 5.3.0 Alpha，构建哈希 `f516c01f8ff7`。
+- Bloom 资产在源码和安装目录中的 SHA-256 一致，且可以从实际程序读取到 `Bloom` 节点组。
+- 合成的一点高斯泼溅 glTF 成功导入为 `GAUSSIAN_SPLAT` Point Cloud，alpha 值验证为 0.75。
+- 本地 Geometry Nodes 直接及间接递归测试通过。
+- 构建使用官方依赖提交 `aa0c5db72fa9` 的独立检出 `E:\Blender_Libs_5_3_daily`，并复制了本地 Spectra 头文件。
+- 原子模块目录遗留锁文件未能通过自动审批移除；其工作区仍显示修改。现有 CMakeCache 指向独立依赖检出。
+- 当前官方依赖检出不含 `dpcpp/lib/ocloc`；oneAPI 预编译内核未生成，oneAPI JIT 编译已通过。DLSS/OptiX 实机渲染未在本次通用合并验证中测试。

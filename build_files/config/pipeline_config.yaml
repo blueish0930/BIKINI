@@ -1,0 +1,11 @@
+#
+# Buildbot only configs
+#
+buildbot:
+    gcc:
+        version: '14.2.1'
+    xcode:
+        version: '26.1.1'
+    msvc:
+        version: '2022'
+        use_clang_cl: true

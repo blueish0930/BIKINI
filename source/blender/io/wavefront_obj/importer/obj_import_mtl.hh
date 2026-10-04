@@ -1,0 +1,27 @@
+/* SPDX-FileCopyrightText: 2023 Blender Authors
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later */
+
+/** \file
+ * \ingroup obj
+ */
+
+#pragma once
+
+namespace blender {
+
+struct bNodeTree;
+struct Main;
+struct Material;
+
+namespace io::obj {
+
+struct MTLMaterial;
+
+bNodeTree *create_mtl_node_tree(Main *bmain,
+                                const MTLMaterial &mtl_mat,
+                                Material *mat,
+                                bool relative_paths);
+
+}  // namespace io::obj
+}  // namespace blender

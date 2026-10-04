@@ -1,0 +1,115 @@
+/* SPDX-FileCopyrightText: 2023 Blender Authors
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later */
+
+/** \file
+ * \ingroup spoutliner
+ */
+
+#include <cstring>
+
+#include "BLI_listbase_wrapper.hh"
+#include "BLI_utildefines.hh"
+
+#include "DNA_sequence_types.h"
+#include "DNA_space_types.h"
+#include "DNA_workspace_types.h"
+
+#include "SEQ_sequencer.hh"
+
+#include "../outliner_intern.hh"
+#include "tree_display.hh"
+#include "tree_element_seq.hh"
+
+namespace blender::ed::outliner {
+
+template<typename T> using List = ListBaseWrapper<T>;
+
+TreeDisplaySequencer::TreeDisplaySequencer(SpaceOutliner &space_outliner)
+    : AbstractTreeDisplay(space_outliner)
+{
+}
+
+ListBaseT<TreeElement> TreeDisplaySequencer::build_tree(const TreeSourceData &source_data)
+{
+  ListBaseT<TreeElement> tree = {nullptr};
+  Scene *sequencer_scene = source_data.workspace->sequencer_scene;
+  if (!sequencer_scene) {
+    return tree;
+  }
+
+  Editing *ed = seq::editing_get(sequencer_scene);
+  if (ed == nullptr) {
+    return tree;
+  }
+
+  for (Strip *strip : List<Strip>(ed->current_strips())) {
+    StripAddOp op = need_add_strip_dup(strip);
+    if (op == StripAddOp::None) {
+      add_element<TreeElementStrip>({.lb = &tree}, *strip);
+    }
+    else if (op == StripAddOp::Add) {
+      TreeElement *te = add_element<TreeElementStripDuplicate>({.lb = &tree}, *strip);
+      add_strip_dup(strip, te, 0);
+    }
+  }
+
+  return tree;
+}
+
+StripAddOp TreeDisplaySequencer::need_add_strip_dup(Strip *strip) const
+{
+  if ((!strip->data) || (!strip->data->stripdata)) {
+    return StripAddOp::None;
+  }
+
+  /*
+   * First check backward, if we found a duplicate
+   * sequence before this, don't need it, just return.
+   */
+  Strip *p = strip->prev;
+  while (p) {
+    if ((!p->data) || (!p->data->stripdata)) {
+      p = p->prev;
+      continue;
+    }
+
+    if (STREQ(p->data->stripdata->filename, strip->data->stripdata->filename)) {
+      return StripAddOp::Noop;
+    }
+    p = p->prev;
+  }
+
+  p = strip->next;
+  while (p) {
+    if ((!p->data) || (!p->data->stripdata)) {
+      p = p->next;
+      continue;
+    }
+
+    if (STREQ(p->data->stripdata->filename, strip->data->stripdata->filename)) {
+      return StripAddOp::Add;
+    }
+    p = p->next;
+  }
+
+  return StripAddOp::None;
+}
+
+void TreeDisplaySequencer::add_strip_dup(Strip *strip, TreeElement *te, short index)
+{
+  Strip *p = strip;
+  while (p) {
+    if ((!p->data) || (!p->data->stripdata) || (p->data->stripdata->filename[0] == '\0')) {
+      p = p->next;
+      continue;
+    }
+
+    if (STREQ(p->data->stripdata->filename, strip->data->stripdata->filename)) {
+      add_element<TreeElementStrip>({.parent = te, .index = index}, *p);
+    }
+    p = p->next;
+  }
+}
+
+}  // namespace blender::ed::outliner

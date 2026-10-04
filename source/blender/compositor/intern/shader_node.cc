@@ -1,0 +1,147 @@
+/* SPDX-FileCopyrightText: 2023 Blender Authors
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later */
+
+#include "BLI_math_vector_c.hh"
+#include "BLI_string_ref.hh"
+
+#include "DNA_node_types.h"
+
+#include "BKE_node.hh"
+#include "BKE_node_runtime.hh"
+
+#include "GPU_material.hh"
+
+#include "COM_shader_node.hh"
+#include "COM_utilities.hh"
+
+namespace blender::compositor {
+
+ShaderNode::ShaderNode(const bNode &node) : node_(node)
+{
+  this->populate_inputs();
+  this->populate_outputs();
+}
+
+void ShaderNode::compile(GPUMaterial *material)
+{
+  node_.typeinfo->gpu_fn(
+      material, const_cast<bNode *>(&node_), nullptr, inputs_.data(), outputs_.data());
+}
+
+GPUNodeStack &ShaderNode::get_input(const StringRef identifier)
+{
+  return GPU_node_get_input(node_, inputs_.data(), identifier);
+}
+
+GPUNodeStack &ShaderNode::get_output(const StringRef identifier)
+{
+  return GPU_node_get_output(node_, outputs_.data(), identifier);
+}
+
+static GPUType gpu_type_from_socket(const bNodeSocket &socket)
+{
+  switch (socket.type) {
+    case SOCK_FLOAT:
+      return GPU_FLOAT;
+    case SOCK_INT:
+      return GPU_INT;
+    case SOCK_BOOLEAN:
+      return GPU_BOOL;
+    case SOCK_VECTOR: {
+      const bNodeSocketValueVector *value = socket.default_value_typed<bNodeSocketValueVector>();
+      const int dimensions = is_plausible_pointer(value) ? value->dimensions : 3;
+      switch (dimensions) {
+        case 2:
+          return GPU_VEC2;
+        case 3:
+          return GPU_VEC3;
+        case 4:
+          return GPU_VEC4;
+        default:
+          return GPU_VEC3;
+      }
+    }
+    case SOCK_INT_VECTOR: {
+      const bNodeSocketValueIntVector *value =
+          socket.default_value_typed<bNodeSocketValueIntVector>();
+      const int dimensions = is_plausible_pointer(value) ? value->dimensions : 3;
+      switch (dimensions) {
+        case 2:
+          return GPU_INT2;
+        case 3:
+          return GPU_INT3;
+        default:
+          return GPU_INT3;
+      }
+    }
+    case SOCK_RGBA:
+    case SOCK_ROTATION:
+      return GPU_VEC4;
+    case SOCK_MATRIX:
+      return GPU_MAT4;
+    case SOCK_MENU:
+      return GPU_INT;
+    case SOCK_STRING:
+    case SOCK_OBJECT:
+    case SOCK_IMAGE:
+    case SOCK_FONT:
+    case SOCK_SCENE:
+    case SOCK_TEXT_ID:
+    case SOCK_MASK:
+    case SOCK_BUNDLE:
+      /* Single only types do not support GPU code path. */
+      BLI_assert(Result::is_single_value_only_type(get_node_socket_result_type(&socket)));
+      BLI_assert_unreachable();
+      return GPU_NONE;
+    default:
+      /* The GPU material compiler will skip unsupported sockets if GPU_NONE is provided. So this
+       * is an appropriate and a valid type for unsupported sockets. */
+      return GPU_NONE;
+  }
+}
+
+static void populate_gpu_node_stack(const bNodeSocket &socket, GPUNodeStack &stack)
+{
+  /* Make sure this stack is not marked as the end of the stack array. */
+  stack.end = false;
+  /* This will be initialized later by the GPU material compiler or the compile method. */
+  stack.link = nullptr;
+
+  stack.sockettype = socket.type;
+  stack.type = gpu_type_from_socket(socket);
+
+  /* This will be initialized by the GPU material compiler if needed. */
+  stack.value = GPU_node_stack_default_value(stack.type);
+
+  stack.hasinput = socket.is_logically_linked();
+  stack.hasoutput = socket.is_logically_linked();
+}
+
+void ShaderNode::populate_inputs()
+{
+  /* Reserve a stack for each input in addition to an extra stack at the end to mark the end of the
+   * array, as this is what the GPU module functions expect. */
+  const int num_input_sockets = node_.input_sockets().size();
+  inputs_.resize(num_input_sockets + 1);
+  inputs_.last().end = true;
+
+  for (int i = 0; i < num_input_sockets; i++) {
+    populate_gpu_node_stack(node_.input_socket(i), inputs_[i]);
+  }
+}
+
+void ShaderNode::populate_outputs()
+{
+  /* Reserve a stack for each output in addition to an extra stack at the end to mark the end of
+   * the array, as this is what the GPU module functions expect. */
+  const int num_output_sockets = node_.output_sockets().size();
+  outputs_.resize(num_output_sockets + 1);
+  outputs_.last().end = true;
+
+  for (int i = 0; i < num_output_sockets; i++) {
+    populate_gpu_node_stack(node_.output_socket(i), outputs_[i]);
+  }
+}
+
+}  // namespace blender::compositor

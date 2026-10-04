@@ -1,0 +1,1279 @@
+/* SPDX-FileCopyrightText: 2023 Blender Authors
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later */
+
+/** \file
+ * \ingroup spimage
+ *
+ * Overview
+ * ========
+ *
+ * - Each undo step is a #ImageUndoStep
+ * - Each #ImageUndoStep stores a list of #UndoImageHandle
+ *   - Each #UndoImageHandle stores a list of #UndoImageBuf
+ *     (this is the undo systems equivalent of an #ImBuf).
+ *     - Each #UndoImageBuf stores an array of #UndoImageTile
+ *       The tiles are shared between #UndoImageBuf's to avoid duplication.
+ *
+ * When the undo system manages an image, there will always be a full copy
+ * (as a #UndoImageBuf) each new undo step only stores modified tiles.
+ *
+ * Changeset IDs are used to track the correspondence between image buffers used
+ * in the main database and in the undo stack. An ImBuf may be allocated, freed,
+ * reloaded or resized as part of global memfile undo steps. A matching changeset
+ * ID means that it's the same image buffer and individual tiles can be restored,
+ * rather than having to do a full image buffer restore.
+ */
+
+#include "CLG_log.h"
+
+#include "MEM_guardedalloc.h"
+
+#include "BLI_index_range.hh"
+#include "BLI_listbase.hh"
+#include "BLI_map.hh"
+#include "BLI_math_base_c.hh"
+#include "BLI_math_vector.hh"
+#include "BLI_mutex.hh"
+#include "BLI_rect.hh"
+#include "BLI_string.hh"
+#include "BLI_task.hh"
+#include "BLI_threads.hh"
+#include "BLI_utildefines.hh"
+
+#include "DNA_image_types.h"
+#include "DNA_object_types.h"
+#include "DNA_screen_types.h"
+#include "DNA_space_types.h"
+#include "DNA_userdef_types.h"
+#include "DNA_windowmanager_types.h"
+
+#include "IMB_imbuf.hh"
+#include "IMB_imbuf_types.hh"
+#include "IMB_partial_update.hh"
+
+#include "BKE_context.hh"
+#include "BKE_image.hh"
+#include "BKE_image_paint_layers.hh"
+#include "BKE_image_gpu.hh"
+#include "BKE_paint.hh"
+#include "BKE_paint_types.hh"
+#include "BKE_undo_system.hh"
+
+#include "DEG_depsgraph.hh"
+
+#include "ED_object.hh"
+#include "ED_paint.hh"
+#include "ED_undo.hh"
+#include "ED_util.hh"
+
+#include "WM_api.hh"
+
+namespace blender {
+
+static CLG_LogRef LOG = {"undo.image"};
+
+/* -------------------------------------------------------------------- */
+/** \name Paint Tiles
+ *
+ * Created on demand while painting,
+ * use to access the previous state for some paint operations.
+ *
+ * These buffers are also used for undo when available.
+ *
+ * \{ */
+
+static void calc_tile_rect(
+    const ImBuf &ibuf, const int x_tile, const int y_tile, int2 &r_tile_pos, int2 &r_tile_size)
+{
+  r_tile_pos = int2(x_tile * ED_IMAGE_UNDO_TILE_SIZE, y_tile * ED_IMAGE_UNDO_TILE_SIZE);
+  r_tile_size = math::min(int2(ibuf.x, ibuf.y), r_tile_pos + int2(ED_IMAGE_UNDO_TILE_SIZE)) -
+                r_tile_pos;
+}
+
+static rcti calc_tile_region(const ImBuf &ibuf, const int x_tile, const int y_tile)
+{
+  int2 tile_pos;
+  int2 tile_size;
+  calc_tile_rect(ibuf, x_tile, y_tile, tile_pos, tile_size);
+
+  rcti region;
+  BLI_rcti_init(
+      &region, tile_pos.x, tile_pos.x + tile_size.x, tile_pos.y, tile_pos.y + tile_size.y);
+  return region;
+}
+
+struct PaintTileKey {
+  int x_tile, y_tile;
+  Image *image;
+  ImBuf *ibuf;
+  /* Copied from iuser.tile in PaintTile. */
+  int iuser_tile;
+  int layer_index;
+  int mask_index;
+
+  uint64_t hash() const
+  {
+    return get_default_hash(
+        x_tile, y_tile, image, ibuf, get_default_hash(iuser_tile, layer_index, mask_index));
+  }
+  bool operator==(const PaintTileKey &other) const
+  {
+    return x_tile == other.x_tile && y_tile == other.y_tile && image == other.image &&
+           ibuf == other.ibuf && iuser_tile == other.iuser_tile &&
+           layer_index == other.layer_index && mask_index == other.mask_index;
+  }
+};
+
+struct PaintTile {
+  Image *image = nullptr;
+  ImBuf *ibuf = nullptr;
+  /* For 2D image painting the ImageUser uses most of the values.
+   * Even though views and passes are stored they are currently not supported for painting.
+   * For 3D projection painting this only uses a tile & frame number.
+   * The scene pointer must be cleared (or temporarily set it as needed, but leave cleared). */
+  ImageUser iuser;
+  ImBuf *ptile_ibuf = nullptr;
+  uint16_t *mask = nullptr;
+  bool valid = false;
+  bool use_float = false;
+  int x_tile = 0, y_tile = 0;
+  int layer_index = -1;
+  int mask_index = -1;
+  /** #ImBuf::full_update_changeset_id before the tile was modified. */
+  imbuf::ChangesetID ibuf_full_update_changeset_id = -1;
+  blender::Mutex mutex;
+};
+
+static void ptile_free(PaintTile *ptile)
+{
+  IMB_freeImBuf(ptile->ptile_ibuf);
+  if (ptile->mask) {
+    MEM_delete(ptile->mask);
+  }
+  MEM_delete(ptile);
+}
+
+struct PaintTileMap {
+  blender::Mutex mutex;
+  Map<PaintTileKey, PaintTile *> map;
+
+  ~PaintTileMap()
+  {
+    for (PaintTile *ptile : map.values()) {
+      ptile_free(ptile);
+    }
+  }
+};
+
+static void ptile_invalidate_map(PaintTileMap *paint_tile_map)
+{
+  for (PaintTile *ptile : paint_tile_map->map.values()) {
+    ptile->valid = false;
+  }
+}
+
+const ImBuf *ED_image_paint_tile_find(PaintTileMap *paint_tile_map,
+                                      Image *image,
+                                      ImBuf *ibuf,
+                                      ImageUser *iuser,
+                                      int x_tile,
+                                      int y_tile,
+                                      ushort **r_mask,
+                                      bool validate)
+{
+  PaintTileKey key;
+  key.ibuf = ibuf;
+  key.image = image;
+  key.iuser_tile = iuser->tile;
+  key.x_tile = x_tile;
+  key.y_tile = y_tile;
+  PaintTile **pptile = paint_tile_map->map.lookup_ptr(key);
+  if (pptile == nullptr) {
+    return nullptr;
+  }
+  PaintTile *ptile = *pptile;
+  if (r_mask) {
+    /* allocate mask if requested. */
+    if (!ptile->mask) {
+      ptile->mask = MEM_new_array_zeroed<uint16_t>(square_i(ED_IMAGE_UNDO_TILE_SIZE),
+                                                   "UndoImageTile.mask");
+    }
+    *r_mask = ptile->mask;
+  }
+  if (validate) {
+    ptile->valid = true;
+  }
+  return ptile->ptile_ibuf;
+}
+
+const ImBuf *ED_image_paint_tile_push(PaintTileMap *paint_tile_map,
+                                      Image *image,
+                                      ImBuf *ibuf,
+                                      ImageUser *iuser,
+                                      int x_tile,
+                                      int y_tile,
+                                      ushort **r_mask,
+                                      bool **r_valid)
+{
+  const bool has_float = (ibuf->float_data() != nullptr);
+
+  PaintTileKey key = {};
+  key.ibuf = ibuf;
+  key.image = image;
+  key.iuser_tile = iuser->tile;
+  key.x_tile = x_tile;
+  key.y_tile = y_tile;
+  BKE_image_paint_layers_find_ibuf(*image, ibuf, &key.layer_index, &key.mask_index);
+
+  /* Allocate the tile if it does not exist yet. */
+  PaintTile *ptile = nullptr;
+  bool created = false;
+  {
+    std::scoped_lock map_lock(paint_tile_map->mutex);
+    paint_tile_map->map.add_or_modify(
+        key,
+        [&](PaintTile **pptile) {
+          ptile = MEM_new<PaintTile>("PaintTile");
+          ptile->image = image;
+          ptile->ibuf = ibuf;
+          ptile->iuser = *iuser;
+          ptile->iuser.scene = nullptr;
+          ptile->x_tile = x_tile;
+          ptile->y_tile = y_tile;
+          ptile->layer_index = key.layer_index;
+          ptile->mask_index = key.mask_index;
+          ptile->use_float = has_float;
+          ptile->ibuf_full_update_changeset_id = ibuf->full_update_changeset_id;
+          ptile->mutex.lock();
+          *pptile = ptile;
+          created = true;
+        },
+        [&](PaintTile **pptile) { ptile = *pptile; });
+  }
+
+  if (created) {
+    /* This thread created the tile, allocate it and copy pixels. */
+    int2 tile_pos;
+    int2 tile_copy_size;
+    calc_tile_rect(*ibuf, x_tile, y_tile, tile_pos, tile_copy_size);
+
+    ImBuf *ptile_ibuf;
+    if (ibuf->float_data()) {
+      ptile_ibuf = IMB_allocImBuf(ED_IMAGE_UNDO_TILE_SIZE,
+                                  ED_IMAGE_UNDO_TILE_SIZE,
+                                  ImBufFlags::FloatData | ImBufFlags::UninitializedPixels);
+      IMB_copy_rect(ptile_ibuf->float_data_for_write(),
+                    int2(ED_IMAGE_UNDO_TILE_SIZE),
+                    ibuf->float_data(),
+                    int2(ibuf->x, ibuf->y),
+                    ibuf->channels,
+                    tile_pos,
+                    int2(0, 0),
+                    tile_copy_size);
+    }
+    else {
+      ptile_ibuf = IMB_allocImBuf(ED_IMAGE_UNDO_TILE_SIZE,
+                                  ED_IMAGE_UNDO_TILE_SIZE,
+                                  ImBufFlags::ByteData | ImBufFlags::UninitializedPixels);
+      IMB_copy_rect(ptile_ibuf->byte_data_for_write(),
+                    int2(ED_IMAGE_UNDO_TILE_SIZE),
+                    ibuf->byte_data(),
+                    int2(ibuf->x, ibuf->y),
+                    tile_pos,
+                    int2(0, 0),
+                    tile_copy_size);
+    }
+
+    ptile->ptile_ibuf = ptile_ibuf;
+  }
+  else {
+    /* Other threads wait until the creator is finished and unlocks the mutex. */
+    ptile->mutex.lock();
+  }
+
+  /* Set up the mask on demand. */
+  ptile->valid = true;
+  if (r_mask) {
+    if (!ptile->mask) {
+      ptile->mask = MEM_new_array_zeroed<uint16_t>(square_i(ED_IMAGE_UNDO_TILE_SIZE),
+                                                   "PaintTile.mask");
+    }
+    *r_mask = ptile->mask;
+  }
+  if (r_valid) {
+    *r_valid = &ptile->valid;
+  }
+
+  ptile->mutex.unlock();
+  return ptile->ptile_ibuf;
+}
+
+static void ptile_restore_runtime_map(PaintTileMap *paint_tile_map)
+{
+  for (PaintTile *ptile : paint_tile_map->map.values()) {
+    Image *image = ptile->image;
+    ImBuf *ibuf = BKE_image_acquire_ibuf(image, &ptile->iuser, nullptr);
+
+    int2 tile_pos;
+    int2 tile_copy_size;
+    calc_tile_rect(*ibuf, ptile->x_tile, ptile->y_tile, tile_pos, tile_copy_size);
+
+    if (ibuf->float_data()) {
+      IMB_copy_rect(ibuf->float_data_for_write(),
+                    int2(ibuf->x, ibuf->y),
+                    ptile->ptile_ibuf->float_data(),
+                    int2(ED_IMAGE_UNDO_TILE_SIZE),
+                    ibuf->channels,
+                    int2(0, 0),
+                    tile_pos,
+                    tile_copy_size);
+    }
+    else {
+      IMB_copy_rect(ibuf->byte_data_for_write(),
+                    int2(ibuf->x, ibuf->y),
+                    ptile->ptile_ibuf->byte_data(),
+                    int2(ED_IMAGE_UNDO_TILE_SIZE),
+                    int2(0, 0),
+                    tile_pos,
+                    tile_copy_size);
+    }
+
+    IMB_partial_update_mark_region(ibuf, calc_tile_region(*ibuf, ptile->x_tile, ptile->y_tile));
+
+    BKE_image_release_ibuf(image, ibuf, nullptr);
+  }
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Image Undo Tile
+ * \{ */
+
+static uint32_t index_from_xy(uint32_t tile_x, uint32_t tile_y, const uint32_t tiles_dims[2])
+{
+  BLI_assert(tile_x < tiles_dims[0] && tile_y < tiles_dims[1]);
+  return (tile_y * tiles_dims[0]) + tile_x;
+}
+
+struct UndoImageTile {
+  ImBuf *ibuf;
+  int users;
+};
+
+static UndoImageTile *utile_alloc(bool has_float)
+{
+  UndoImageTile *utile = MEM_new_zeroed<UndoImageTile>("ImageUndoTile");
+  utile->ibuf = IMB_allocImBuf(ED_IMAGE_UNDO_TILE_SIZE,
+                               ED_IMAGE_UNDO_TILE_SIZE,
+                               has_float ? ImBufFlags::FloatData : ImBufFlags::ByteData);
+  return utile;
+}
+
+static void utile_init_from_imbuf(UndoImageTile *utile,
+                                  const int x_tile,
+                                  const int y_tile,
+                                  const ImBuf *ibuf)
+{
+  int2 tile_pos;
+  int2 tile_copy_size;
+  calc_tile_rect(*ibuf, x_tile, y_tile, tile_pos, tile_copy_size);
+  if (ibuf->float_data()) {
+    IMB_copy_rect(utile->ibuf->float_data_for_write(),
+                  int2(ED_IMAGE_UNDO_TILE_SIZE),
+                  ibuf->float_data(),
+                  int2(ibuf->x, ibuf->y),
+                  ibuf->channels,
+                  tile_pos,
+                  int2(0, 0),
+                  tile_copy_size);
+  }
+  else {
+    IMB_copy_rect(utile->ibuf->byte_data_for_write(),
+                  int2(ED_IMAGE_UNDO_TILE_SIZE),
+                  ibuf->byte_data(),
+                  int2(ibuf->x, ibuf->y),
+                  tile_pos,
+                  int2(0, 0),
+                  tile_copy_size);
+  }
+}
+
+static void utile_restore(const UndoImageTile *utile,
+                          const int x_tile,
+                          const int y_tile,
+                          ImBuf *ibuf)
+{
+  int2 tile_pos;
+  int2 tile_copy_size;
+  calc_tile_rect(*ibuf, x_tile, y_tile, tile_pos, tile_copy_size);
+  if (ibuf->float_data()) {
+    IMB_copy_rect(ibuf->float_data_for_write(),
+                  int2(ibuf->x, ibuf->y),
+                  utile->ibuf->float_data(),
+                  int2(ED_IMAGE_UNDO_TILE_SIZE),
+                  ibuf->channels,
+                  int2(0, 0),
+                  tile_pos,
+                  tile_copy_size);
+  }
+  else {
+    IMB_copy_rect(ibuf->byte_data_for_write(),
+                  int2(ibuf->x, ibuf->y),
+                  utile->ibuf->byte_data(),
+                  int2(ED_IMAGE_UNDO_TILE_SIZE),
+                  int2(0, 0),
+                  tile_pos,
+                  tile_copy_size);
+  }
+}
+
+static void utile_decref(UndoImageTile *utile)
+{
+  utile->users -= 1;
+  BLI_assert(utile->users >= 0);
+  if (utile->users == 0) {
+    IMB_freeImBuf(utile->ibuf);
+    MEM_delete(utile);
+  }
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Image Undo Buffer
+ * \{ */
+
+struct UndoImageBuf {
+  UndoImageBuf *next = nullptr, *prev = nullptr;
+
+  /**
+   * The buffer after the undo step has executed.
+   */
+  UndoImageBuf *post = nullptr;
+
+  std::string ibuf_filepath;
+  int ibuf_fileframe = 0;
+  /** #ImBuf::full_update_changeset_id when this state was stored. */
+  imbuf::ChangesetID ibuf_full_update_changeset_id = -1;
+
+  /**
+   * Tiles for this state of the image.
+   * \note Unmodified tiles are shared with #UndoImageBuf::post,
+   * so pointer comparison can detect tiles that don't need restoring.
+   */
+  UndoImageTile **tiles = nullptr;
+
+  /** Can calculate these from dims, just for convenience. */
+  uint32_t tiles_len = 0;
+  uint32_t tiles_dims[2] = {};
+
+  uint32_t image_dims[2] = {};
+
+  /** Store variables from the image. */
+  struct {
+    short source;
+    bool use_float;
+  } image_state = {};
+};
+
+static UndoImageBuf *ubuf_from_image_no_tiles(Image *image, const ImBuf *ibuf)
+{
+  UndoImageBuf *ubuf = MEM_new<UndoImageBuf>(__func__);
+
+  ubuf->image_dims[0] = ibuf->x;
+  ubuf->image_dims[1] = ibuf->y;
+
+  ubuf->tiles_dims[0] = ED_IMAGE_UNDO_TILE_NUMBER(ubuf->image_dims[0]);
+  ubuf->tiles_dims[1] = ED_IMAGE_UNDO_TILE_NUMBER(ubuf->image_dims[1]);
+
+  ubuf->tiles_len = ubuf->tiles_dims[0] * ubuf->tiles_dims[1];
+  ubuf->tiles = MEM_new_array_zeroed<UndoImageTile *>(ubuf->tiles_len, __func__);
+
+  ubuf->ibuf_filepath = ibuf->filepath;
+  ubuf->ibuf_fileframe = ibuf->fileframe;
+  ubuf->ibuf_full_update_changeset_id = ibuf->full_update_changeset_id;
+  ubuf->image_state.source = image->source;
+  ubuf->image_state.use_float = ibuf->float_data() != nullptr;
+
+  return ubuf;
+}
+
+static void ubuf_from_image_all_tiles(UndoImageBuf *ubuf, const ImBuf *ibuf)
+{
+  const bool has_float = ibuf->float_data();
+  int i = 0;
+  for (uint y_tile = 0; y_tile < ubuf->tiles_dims[1]; y_tile += 1) {
+    for (uint x_tile = 0; x_tile < ubuf->tiles_dims[0]; x_tile += 1) {
+
+      BLI_assert(ubuf->tiles[i] == nullptr);
+      UndoImageTile *utile = utile_alloc(has_float);
+      utile->users = 1;
+      utile_init_from_imbuf(utile, x_tile, y_tile, ibuf);
+      ubuf->tiles[i] = utile;
+
+      i += 1;
+    }
+  }
+
+  BLI_assert(i == ubuf->tiles_len);
+}
+
+/**
+ * Ensure we can copy the ubuf into the ibuf.
+ * \returns true if the pixel buffers were replaced.
+ */
+[[nodiscard]] static bool ubuf_ensure_compat_ibuf(const UndoImageBuf *ubuf, ImBuf *ibuf)
+{
+  bool replaced = false;
+
+  /* We could have both float and rect buffers,
+   * in this case free the float buffer if it's unused. */
+  if ((ibuf->float_data() != nullptr) && (ubuf->image_state.use_float == false)) {
+    IMB_free_float_pixels(ibuf);
+    replaced = true;
+  }
+
+  if (ibuf->x == ubuf->image_dims[0] && ibuf->y == ubuf->image_dims[1] &&
+      (ubuf->image_state.use_float ? static_cast<void *>(ibuf->float_data_for_write()) :
+                                     static_cast<void *>(ibuf->byte_data_for_write())))
+  {
+    return replaced;
+  }
+
+  IMB_free_all_data(ibuf);
+  IMB_rect_size_set(ibuf, ubuf->image_dims);
+
+  if (ubuf->image_state.use_float) {
+    IMB_alloc_float_pixels(ibuf, 4);
+  }
+  else {
+    IMB_alloc_byte_pixels(ibuf);
+  }
+
+  return true;
+}
+
+static void ubuf_free(UndoImageBuf *ubuf)
+{
+  UndoImageBuf *ubuf_post = ubuf->post;
+  for (uint i = 0; i < ubuf->tiles_len; i++) {
+    UndoImageTile *utile = ubuf->tiles[i];
+    utile_decref(utile);
+  }
+  MEM_delete(ubuf->tiles);
+  MEM_delete(ubuf);
+  if (ubuf_post) {
+    ubuf_free(ubuf_post);
+  }
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Image Undo Handle
+ * \{ */
+
+struct UndoImageHandle {
+  UndoImageHandle *next, *prev;
+
+  /** Each undo handle refers to a single image which may have multiple buffers. */
+  UndoRefID_Image image_ref;
+
+  /**
+   * Each tile of a tiled image has its own UndoImageHandle.
+   * The tile number of this IUser is used to distinguish them.
+   */
+  ImageUser iuser;
+  int layer_index = -1;
+  int mask_index = -1;
+
+  /**
+   * List of #UndoImageBuf's to support multiple buffers per image.
+   */
+  ListBaseT<UndoImageBuf> buffers;
+};
+
+enum class RestoreMode {
+  /** Restore only tiles this undo step changed. */
+  Changed,
+  /** Restore image buffers regenerated outside of image undo by memfile undo. */
+  FullUpdateChanged,
+  /** Restore all tiles (for debugging). */
+  All,
+};
+
+/**
+ * Copy the tiles of every #UndoImageBuf back into the image buffers.
+ *
+ * \param use_init: Restore the state before the undo step, instead of the state after it.
+ */
+static ImBuf *undo_acquire_paint_ibuf(Image *image,
+                                      ImageUser *iuser,
+                                      int layer_index,
+                                      int mask_index)
+{
+  if (layer_index < 0 || !BKE_image_paint_layers_has_stack(*image)) {
+    return BKE_image_acquire_ibuf(image, iuser, nullptr);
+  }
+  const int saved_layer = image->active_paint_layer_index;
+  image->active_paint_layer_index = layer_index;
+  ImagePaintLayer *layer = BKE_image_paint_layers_active(*image);
+  const eImagePaintLayer_Flag saved_flag = layer ? layer->flag : eImagePaintLayer_Flag(0);
+  const int saved_mask = layer ? layer->active_mask_index : 0;
+  if (layer) {
+    if (mask_index >= 0) {
+      layer->active_mask_index = mask_index;
+      layer->flag = eImagePaintLayer_Flag(layer->flag | IMA_PAINT_LAYER_PAINT_MASK);
+    }
+    else {
+      layer->flag = eImagePaintLayer_Flag(layer->flag & ~IMA_PAINT_LAYER_PAINT_MASK);
+    }
+  }
+  ImBuf *ibuf = BKE_image_paint_acquire_paint_ibuf(image, iuser, nullptr);
+  image->active_paint_layer_index = saved_layer;
+  if (layer) {
+    layer->flag = saved_flag;
+    layer->active_mask_index = saved_mask;
+  }
+  return ibuf;
+}
+
+static void uhandle_restore_list(ListBaseT<UndoImageHandle> *undo_handles,
+                                 const bool use_init,
+                                 const RestoreMode mode = RestoreMode::Changed)
+{
+  for (UndoImageHandle &uh : *undo_handles) {
+    /* Tiles only added to second set of tiles. */
+    Image *image = uh.image_ref.ptr;
+
+    ImBuf *ibuf = undo_acquire_paint_ibuf(image, &uh.iuser, uh.layer_index, uh.mask_index);
+    if (ibuf == nullptr) [[unlikely]] {
+      CLOG_ERROR(&LOG, "Unable to get buffer for image '%s'", image->id.name + 2);
+      continue;
+    }
+    bool changed = false;
+    for (UndoImageBuf &ubuf_iter : uh.buffers) {
+      UndoImageBuf *ubuf = use_init ? &ubuf_iter : ubuf_iter.post;
+      const UndoImageBuf *ubuf_other = use_init ? ubuf_iter.post : &ubuf_iter;
+
+      /* Skip image buffers without a full update, restore all tiles of others. */
+      if (mode == RestoreMode::FullUpdateChanged &&
+          ibuf->full_update_changeset_id == ubuf->ibuf_full_update_changeset_id)
+      {
+        continue;
+      }
+
+      /* Check if we need to restore all because of modified image dimensions or image
+       * buffer, or if we can do a partial restore and update. */
+      const bool ibuf_reallocated = ubuf_ensure_compat_ibuf(ubuf, ibuf);
+      const bool restore_all = ibuf_reallocated || mode != RestoreMode::Changed ||
+                               ubuf_other == nullptr ||
+                               ubuf_other->tiles_dims[0] != ubuf->tiles_dims[0] ||
+                               ubuf_other->tiles_dims[1] != ubuf->tiles_dims[1] ||
+                               ibuf->full_update_changeset_id !=
+                                   ubuf_other->ibuf_full_update_changeset_id;
+
+      int i = 0;
+      for (uint y_tile = 0; y_tile < ubuf->tiles_dims[1]; y_tile += 1) {
+        for (uint x_tile = 0; x_tile < ubuf->tiles_dims[0]; x_tile += 1) {
+          if (restore_all || ubuf->tiles[i] != ubuf_other->tiles[i]) {
+            utile_restore(ubuf->tiles[i], x_tile, y_tile, ibuf);
+            IMB_partial_update_mark_region(ibuf, calc_tile_region(*ibuf, x_tile, y_tile));
+            changed = true;
+          }
+          i += 1;
+        }
+      }
+
+      /* Copy undo step changeset ID back to the image buffer. */
+      ibuf->full_update_changeset_id = ubuf->ibuf_full_update_changeset_id;
+    }
+
+    if (changed) {
+      IMB_mark_dirty(ibuf);
+      rcti full;
+      BLI_rcti_init(&full, 0, ibuf->x, 0, ibuf->y);
+      BKE_image_paint_layers_notify_written(image, &uh.iuser, full);
+
+      DEG_id_tag_update(&image->id, 0);
+    }
+    BKE_image_release_ibuf(image, ibuf, nullptr);
+  }
+}
+
+static void uhandle_free_list(ListBaseT<UndoImageHandle> *undo_handles)
+{
+  for (UndoImageHandle &uh : undo_handles->items_mutable()) {
+    for (UndoImageBuf &ubuf : uh.buffers.items_mutable()) {
+      ubuf_free(&ubuf);
+    }
+    MEM_delete(&uh);
+  }
+  undo_handles->clear_no_delete();
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Image Undo Internal Utilities
+ * \{ */
+
+/** #UndoImageHandle utilities */
+
+static UndoImageBuf *uhandle_lookup_ubuf(UndoImageHandle *uh,
+                                         const Image * /*image*/,
+                                         const StringRef ibuf_filepath,
+                                         const int ibuf_fileframe)
+{
+  for (UndoImageBuf &ubuf : uh->buffers) {
+    if (ubuf.ibuf_filepath == ibuf_filepath && ubuf.ibuf_fileframe == ibuf_fileframe) {
+      return &ubuf;
+    }
+  }
+  return nullptr;
+}
+
+static UndoImageBuf *uhandle_add_ubuf(UndoImageHandle *uh, Image *image, ImBuf *ibuf)
+{
+  BLI_assert(uhandle_lookup_ubuf(uh, image, ibuf->filepath, ibuf->fileframe) == nullptr);
+  UndoImageBuf *ubuf = ubuf_from_image_no_tiles(image, ibuf);
+  BLI_addtail(&uh->buffers, ubuf);
+
+  ubuf->post = nullptr;
+
+  return ubuf;
+}
+
+static UndoImageBuf *uhandle_ensure_ubuf(UndoImageHandle *uh, Image *image, ImBuf *ibuf)
+{
+  UndoImageBuf *ubuf = uhandle_lookup_ubuf(uh, image, ibuf->filepath, ibuf->fileframe);
+  if (ubuf == nullptr) {
+    ubuf = uhandle_add_ubuf(uh, image, ibuf);
+  }
+  return ubuf;
+}
+
+static UndoImageHandle *uhandle_lookup_by_name(ListBaseT<UndoImageHandle> *undo_handles,
+                                               const Image *image,
+                                               int tile_number,
+                                               int layer_index,
+                                               int mask_index)
+{
+  for (UndoImageHandle &uh : *undo_handles) {
+    if (STREQ(image->id.name + 2, uh.image_ref.name + 2) && uh.iuser.tile == tile_number &&
+        uh.layer_index == layer_index && uh.mask_index == mask_index)
+    {
+      return &uh;
+    }
+  }
+  return nullptr;
+}
+
+static UndoImageHandle *uhandle_lookup(ListBaseT<UndoImageHandle> *undo_handles,
+                                       const Image *image,
+                                       int tile_number,
+                                       int layer_index,
+                                       int mask_index)
+{
+  for (UndoImageHandle &uh : *undo_handles) {
+    if (image == uh.image_ref.ptr && uh.iuser.tile == tile_number &&
+        uh.layer_index == layer_index && uh.mask_index == mask_index)
+    {
+      return &uh;
+    }
+  }
+  return nullptr;
+}
+
+static UndoImageHandle *uhandle_add(ListBaseT<UndoImageHandle> *undo_handles,
+                                    Image *image,
+                                    ImageUser *iuser,
+                                    int layer_index,
+                                    int mask_index)
+{
+  BLI_assert(uhandle_lookup(undo_handles, image, iuser->tile, layer_index, mask_index) == nullptr);
+  UndoImageHandle *uh = MEM_new<UndoImageHandle>(__func__);
+  uh->image_ref.ptr = image;
+  uh->iuser = *iuser;
+  uh->iuser.scene = nullptr;
+  uh->layer_index = layer_index;
+  uh->mask_index = mask_index;
+  BLI_addtail(undo_handles, uh);
+  return uh;
+}
+
+static UndoImageHandle *uhandle_ensure(ListBaseT<UndoImageHandle> *undo_handles,
+                                       Image *image,
+                                       ImageUser *iuser,
+                                       int layer_index,
+                                       int mask_index)
+{
+  UndoImageHandle *uh = uhandle_lookup(
+      undo_handles, image, iuser->tile, layer_index, mask_index);
+  if (uh == nullptr) {
+    uh = uhandle_add(undo_handles, image, iuser, layer_index, mask_index);
+  }
+  return uh;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Implements ED Undo System
+ * \{ */
+
+struct ImageUndoStep {
+  UndoStep step;
+
+  ListBaseT<UndoImageHandle> handles;
+
+  /**
+   * #PaintTile
+   * Run-time only data (active during a paint stroke).
+   */
+  PaintTileMap *paint_tile_map;
+
+  bool is_encode_init;
+  PaintMode paint_mode;
+};
+
+/**
+ * Find the previous undo buffer from this one.
+ * \note We could look into undo steps even further back.
+ */
+static UndoImageBuf *ubuf_lookup_from_reference(ImageUndoStep *us_prev,
+                                                const Image *image,
+                                                int tile_number,
+                                                int layer_index,
+                                                int mask_index,
+                                                const UndoImageBuf *ubuf)
+{
+  /* Use name lookup because the pointer is cleared for previous steps. */
+  UndoImageHandle *uh_prev = uhandle_lookup_by_name(
+      &us_prev->handles, image, tile_number, layer_index, mask_index);
+  if (uh_prev != nullptr) {
+    UndoImageBuf *ubuf_reference = uhandle_lookup_ubuf(
+        uh_prev, image, ubuf->ibuf_filepath, ubuf->ibuf_fileframe);
+    if (ubuf_reference) {
+      ubuf_reference = ubuf_reference->post;
+      if ((ubuf_reference->image_dims[0] == ubuf->image_dims[0]) &&
+          (ubuf_reference->image_dims[1] == ubuf->image_dims[1]) &&
+          (ubuf_reference->ibuf_full_update_changeset_id == ubuf->ibuf_full_update_changeset_id))
+      {
+        return ubuf_reference;
+      }
+    }
+  }
+  return nullptr;
+}
+
+static void image_undosys_step_encode_init(bContext * /*C*/, UndoStep *us_p)
+{
+  ImageUndoStep *us = reinterpret_cast<ImageUndoStep *>(us_p);
+  /* dummy, memory is cleared anyway. */
+  us->is_encode_init = true;
+  us->handles.clear_no_delete();
+  us->paint_tile_map = MEM_new<PaintTileMap>(__func__);
+}
+
+static bool image_undosys_step_encode(bContext *C, Main * /*bmain*/, UndoStep *us_p)
+{
+  /* Encoding is done along the way by adding tiles
+   * to the current 'ImageUndoStep' added by encode_init.
+   *
+   * This function ensures there are previous and current states of the image in the undo buffer.
+   */
+  ImageUndoStep *us = reinterpret_cast<ImageUndoStep *>(us_p);
+
+  BLI_assert(us->step.data_size == 0);
+
+  if (us->is_encode_init) {
+
+    ImageUndoStep *us_reference = reinterpret_cast<ImageUndoStep *>(
+        ED_undo_stack_get()->step_active);
+    while (us_reference && us_reference->step.type != BKE_UNDOSYS_TYPE_IMAGE) {
+      us_reference = reinterpret_cast<ImageUndoStep *>(us_reference->step.prev);
+    }
+
+    /* Initialize undo tiles from paint-tiles (if they exist). */
+    for (PaintTile *ptile : us->paint_tile_map->map.values()) {
+      if (ptile->valid) {
+        UndoImageHandle *uh = uhandle_ensure(
+            &us->handles, ptile->image, &ptile->iuser, ptile->layer_index, ptile->mask_index);
+        UndoImageBuf *ubuf_pre = uhandle_ensure_ubuf(uh, ptile->image, ptile->ibuf);
+
+        /* Use the state before the stroke, which may itself have done a full update. */
+        ubuf_pre->ibuf_full_update_changeset_id = std::min(ubuf_pre->ibuf_full_update_changeset_id,
+                                                           ptile->ibuf_full_update_changeset_id);
+
+        UndoImageTile *utile = MEM_new_zeroed<UndoImageTile>("UndoImageTile");
+        utile->users = 1;
+        utile->ibuf = ptile->ptile_ibuf;
+        ptile->ptile_ibuf = nullptr;
+        const uint tile_index = index_from_xy(ptile->x_tile, ptile->y_tile, ubuf_pre->tiles_dims);
+
+        BLI_assert(ubuf_pre->tiles[tile_index] == nullptr);
+        ubuf_pre->tiles[tile_index] = utile;
+      }
+      ptile_free(ptile);
+    }
+    us->paint_tile_map->map.clear();
+
+    for (UndoImageHandle &uh : us->handles) {
+      for (UndoImageBuf &ubuf_pre : uh.buffers) {
+
+        Image *image = uh.image_ref.ptr;
+        ImBuf *ibuf = undo_acquire_paint_ibuf(image, &uh.iuser, uh.layer_index, uh.mask_index);
+
+        const bool has_float = ibuf->float_data();
+
+        BLI_assert(ubuf_pre.post == nullptr);
+        ubuf_pre.post = ubuf_from_image_no_tiles(uh.image_ref.ptr, ibuf);
+        UndoImageBuf *ubuf_post = ubuf_pre.post;
+
+        if (ubuf_pre.image_dims[0] != ubuf_post->image_dims[0] ||
+            ubuf_pre.image_dims[1] != ubuf_post->image_dims[1])
+        {
+          ubuf_from_image_all_tiles(ubuf_post, ibuf);
+        }
+        else {
+          /* Search for the previous buffer, matching the state before this step. */
+          UndoImageBuf *ubuf_reference =
+              (us_reference ? ubuf_lookup_from_reference(us_reference,
+                                                         uh.image_ref.ptr,
+                                                         uh.iuser.tile,
+                                                         uh.layer_index,
+                                                         uh.mask_index,
+                                                         ubuf_post) :
+                              nullptr);
+
+          const uint tiles_dims_x = ubuf_pre.tiles_dims[0];
+          threading::parallel_for(
+              IndexRange(ubuf_pre.tiles_len), 1024, [&](const IndexRange range) {
+                for (const int64_t i : range) {
+                  const uint x_tile = uint(i) % tiles_dims_x;
+                  const uint y_tile = uint(i) / tiles_dims_x;
+
+                  if ((ubuf_reference != nullptr) &&
+                      ((ubuf_pre.tiles[i] == nullptr) ||
+                       /* In this case the paint stroke as has added a tile
+                        * which we have a duplicate reference available. */
+                       (ubuf_pre.tiles[i]->users == 1)))
+                  {
+                    if (ubuf_pre.tiles[i] != nullptr) {
+                      /* If we have a reference, re-use this single use tile for the post state. */
+                      BLI_assert(ubuf_pre.tiles[i]->users == 1);
+                      ubuf_post->tiles[i] = ubuf_pre.tiles[i];
+                      ubuf_pre.tiles[i] = nullptr;
+                      utile_init_from_imbuf(ubuf_post->tiles[i], x_tile, y_tile, ibuf);
+                    }
+                    else {
+                      BLI_assert(ubuf_post->tiles[i] == nullptr);
+                      ubuf_post->tiles[i] = ubuf_reference->tiles[i];
+                      ubuf_post->tiles[i]->users += 1;
+                    }
+                    BLI_assert(ubuf_pre.tiles[i] == nullptr);
+                    ubuf_pre.tiles[i] = ubuf_reference->tiles[i];
+                    ubuf_pre.tiles[i]->users += 1;
+
+                    BLI_assert(ubuf_pre.tiles[i] != nullptr);
+                    BLI_assert(ubuf_post->tiles[i] != nullptr);
+                  }
+                  else {
+                    UndoImageTile *utile = utile_alloc(has_float);
+                    utile_init_from_imbuf(utile, x_tile, y_tile, ibuf);
+
+                    if (ubuf_pre.tiles[i] != nullptr) {
+                      ubuf_post->tiles[i] = utile;
+                      utile->users = 1;
+                    }
+                    else {
+                      ubuf_pre.tiles[i] = utile;
+                      ubuf_post->tiles[i] = utile;
+                      utile->users = 2;
+                    }
+                  }
+                  BLI_assert(ubuf_pre.tiles[i] != nullptr);
+                  BLI_assert(ubuf_post->tiles[i] != nullptr);
+                }
+              });
+        }
+        BKE_image_release_ibuf(uh.image_ref.ptr, ibuf, nullptr);
+      }
+    }
+
+    /* Useful to debug tiles are stored correctly. */
+    if (false) {
+      uhandle_restore_list(&us->handles, false, RestoreMode::All);
+    }
+  }
+  else {
+    BLI_assert(C != nullptr);
+    /* Happens when switching modes. */
+    PaintMode paint_mode = BKE_paintmode_get_active_from_context(C);
+    BLI_assert(ELEM(paint_mode, PaintMode::Texture2D, PaintMode::Texture3D));
+    us->paint_mode = paint_mode;
+  }
+
+  us_p->is_applied = true;
+
+  return true;
+}
+
+static void image_undosys_step_decode_undo_impl(ImageUndoStep *us)
+{
+  BLI_assert(us->step.is_applied == true);
+  uhandle_restore_list(&us->handles, true);
+  us->step.is_applied = false;
+}
+
+static void image_undosys_step_decode_redo_impl(ImageUndoStep *us)
+{
+  BLI_assert(us->step.is_applied == false);
+  uhandle_restore_list(&us->handles, false);
+  us->step.is_applied = true;
+}
+
+static void image_undosys_step_decode_undo(ImageUndoStep *us, bool is_final)
+{
+  /* Walk forward over any applied steps of same type,
+   * then walk back in the next loop, un-applying them. */
+  ImageUndoStep *us_iter = us;
+  while (us_iter->step.next && (us_iter->step.next->type == us_iter->step.type)) {
+    if (us_iter->step.next->is_applied == false) {
+      break;
+    }
+    us_iter = reinterpret_cast<ImageUndoStep *>(us_iter->step.next);
+  }
+  while (us_iter != us || (!is_final && us_iter == us)) {
+    BLI_assert(us_iter->step.type == us->step.type); /* Previous loop ensures this. */
+    image_undosys_step_decode_undo_impl(us_iter);
+    if (us_iter == us) {
+      break;
+    }
+    us_iter = reinterpret_cast<ImageUndoStep *>(us_iter->step.prev);
+  }
+}
+
+static void image_undosys_step_decode_redo(ImageUndoStep *us)
+{
+  ImageUndoStep *us_iter = us;
+  while (us_iter->step.prev && (us_iter->step.prev->type == us_iter->step.type)) {
+    if (us_iter->step.prev->is_applied == true) {
+      break;
+    }
+    us_iter = reinterpret_cast<ImageUndoStep *>(us_iter->step.prev);
+  }
+  while (us_iter && (us_iter->step.is_applied == false)) {
+    image_undosys_step_decode_redo_impl(us_iter);
+    if (us_iter == us) {
+      break;
+    }
+    us_iter = reinterpret_cast<ImageUndoStep *>(us_iter->step.next);
+  }
+}
+
+static void image_undosys_step_decode(
+    bContext *C, Main *bmain, UndoStep *us_p, const eUndoStepDir dir, bool is_final)
+{
+  /* NOTE: behavior for undo/redo closely matches sculpt undo. */
+  BLI_assert(dir != STEP_INVALID);
+
+  ImageUndoStep *us = reinterpret_cast<ImageUndoStep *>(us_p);
+  if (dir == STEP_UNDO) {
+    image_undosys_step_decode_undo(us, is_final);
+  }
+  else if (dir == STEP_REDO) {
+    image_undosys_step_decode_redo(us);
+  }
+
+  /* A memfile undo step decoded before this step may have regenerated the image buffer,
+   * e.g. when undoing image pack. Already applied steps must be restored again then. */
+  if (us->step.is_applied) {
+    uhandle_restore_list(&us->handles, false, RestoreMode::FullUpdateChanged);
+  }
+
+  if (us->paint_mode == PaintMode::Texture3D) {
+    ed::object::mode_set_ex(C, OB_MODE_TEXTURE_PAINT, false, nullptr);
+  }
+
+  /* Ideally, we shouldn't have to tag the object as needing to be recalculated if using this paint
+   * mode, however, because the image isn't connected as part of the shader nodes, the draw code
+   * is unaware of the corresponding image tag. See #150957 for more details. */
+  const Scene *scene = CTX_data_scene(C);
+  Object *object = CTX_data_active_object(C);
+  if (object && object->type == OB_MESH && scene &&
+      scene->toolsettings->imapaint.mode == IMAGEPAINT_MODE_IMAGE)
+  {
+    DEG_id_tag_update(&object->id, ID_RECALC_SHADING);
+  }
+
+  /* Refresh texture slots. */
+  ED_editors_init_for_undo(bmain);
+}
+
+static void image_undosys_step_free(UndoStep *us_p)
+{
+  ImageUndoStep *us = reinterpret_cast<ImageUndoStep *>(us_p);
+  uhandle_free_list(&us->handles);
+
+  /* Typically this map will have been cleared. */
+  MEM_delete(us->paint_tile_map);
+  us->paint_tile_map = nullptr;
+}
+
+static void image_undosys_foreach_ID_ref(UndoStep *us_p,
+                                         UndoTypeForEachIDRefFn foreach_ID_ref_fn,
+                                         void *user_data)
+{
+  ImageUndoStep *us = reinterpret_cast<ImageUndoStep *>(us_p);
+  for (UndoImageHandle &uh : us->handles) {
+    foreach_ID_ref_fn(user_data, (reinterpret_cast<UndoRefID *>(&uh.image_ref)));
+  }
+}
+
+void ED_image_undosys_type(UndoType *ut)
+{
+  ut->identifier = "IMAGE";
+  /* Note, we do not need the `poll` method overridden because of the `step_encode_init` callback
+   * and exposed #ED_image_undo_push_begin/end calls. */
+  ut->step_encode_init = image_undosys_step_encode_init;
+  ut->step_encode = image_undosys_step_encode;
+  ut->step_decode = image_undosys_step_decode;
+  ut->step_free = image_undosys_step_free;
+
+  ut->step_foreach_ID_ref = image_undosys_foreach_ID_ref;
+
+  /* NOTE: this is actually a confusing case, since it expects a valid context, but only in a
+   * specific case, see `image_undosys_step_encode` code. We cannot specify
+   * `UNDOTYPE_FLAG_NEED_CONTEXT_FOR_ENCODE` though, as it can be called with a null context by
+   * current code. */
+  ut->flags = UNDOTYPE_FLAG_DECODE_ACTIVE_STEP;
+
+  ut->step_size = sizeof(ImageUndoStep);
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Utilities
+ *
+ * \note image undo exposes #ED_image_undo_push_begin, #ED_image_undo_push_end
+ * which must be called by the operator directly.
+ *
+ * Unlike most other undo stacks this is needed:
+ * - So we can always access the state before the image was painted onto,
+ *   which is needed if previous undo states aren't image-type.
+ * - So operators can access the pixel-data before the stroke was applied, at run-time.
+ * \{ */
+
+PaintTileMap *ED_image_paint_tile_map_get()
+{
+  UndoStack *ustack = ED_undo_stack_get();
+  UndoStep *us_prev = ustack->step_init;
+  UndoStep *us_p = BKE_undosys_stack_init_or_active_with_type(ustack, BKE_UNDOSYS_TYPE_IMAGE);
+  ImageUndoStep *us = reinterpret_cast<ImageUndoStep *>(us_p);
+  /* We should always have an undo push started when accessing tiles,
+   * not doing this means we won't have paint_mode correctly set. */
+  BLI_assert(us_p == us_prev);
+  if (us_p != us_prev) {
+    /* Fallback value until we can be sure this never happens. */
+    us->paint_mode = PaintMode::Texture2D;
+  }
+  return us->paint_tile_map;
+}
+
+void ED_image_undo_restore(UndoStep *us)
+{
+  PaintTileMap *paint_tile_map = reinterpret_cast<ImageUndoStep *>(us)->paint_tile_map;
+  ptile_restore_runtime_map(paint_tile_map);
+  ptile_invalidate_map(paint_tile_map);
+}
+
+static ImageUndoStep *image_undo_push_begin(const char *name, PaintMode paint_mode)
+{
+  UndoStack *ustack = ED_undo_stack_get();
+  bContext *C = nullptr; /* special case, we never read from this. */
+  UndoStep *us_p = BKE_undosys_step_push_init_with_type(ustack, C, name, BKE_UNDOSYS_TYPE_IMAGE);
+  ImageUndoStep *us = reinterpret_cast<ImageUndoStep *>(us_p);
+  BLI_assert(ELEM(paint_mode, PaintMode::Texture2D, PaintMode::Texture3D, PaintMode::Sculpt));
+  us->paint_mode = paint_mode;
+  return us;
+}
+
+void ED_image_undo_push_begin(const char *name, PaintMode paint_mode)
+{
+  image_undo_push_begin(name, paint_mode);
+}
+
+void ED_image_undo_push_begin_with_image(const char *name,
+                                         Image *image,
+                                         ImBuf *ibuf,
+                                         ImageUser *iuser)
+{
+  ImageUndoStep *us = image_undo_push_begin(name, PaintMode::Texture2D);
+
+  ED_image_undo_push(image, ibuf, iuser, us);
+}
+
+void ED_image_undo_push_begin_with_image_all_udims(const char *name,
+                                                   Image *image,
+                                                   ImageUser *iuser)
+{
+  ImageUndoStep *us = image_undo_push_begin(name, PaintMode::Texture2D);
+
+  for (ImageTile &current_tile : image->tiles) {
+    iuser->tile = current_tile.tile_number;
+    ImBuf *ibuf = BKE_image_acquire_ibuf(image, iuser, nullptr);
+
+    ED_image_undo_push(image, ibuf, iuser, us);
+
+    /* Release the image buffer to avoid leaking memory. */
+    BKE_image_release_ibuf(image, ibuf, nullptr);
+  }
+}
+
+void ED_image_undo_push(Image *image, ImBuf *ibuf, ImageUser *iuser, ImageUndoStep *us)
+{
+  BLI_assert(BKE_image_get_tile(image, iuser->tile));
+  int layer_index = -1;
+  int mask_index = -1;
+  BKE_image_paint_layers_find_ibuf(*image, ibuf, &layer_index, &mask_index);
+  UndoImageHandle *uh = uhandle_ensure(&us->handles, image, iuser, layer_index, mask_index);
+  UndoImageBuf *ubuf_pre = uhandle_ensure_ubuf(uh, image, ibuf);
+  BLI_assert(ubuf_pre->post == nullptr);
+
+  ImageUndoStep *us_reference = reinterpret_cast<ImageUndoStep *>(
+      ED_undo_stack_get()->step_active);
+  while (us_reference && us_reference->step.type != BKE_UNDOSYS_TYPE_IMAGE) {
+    us_reference = reinterpret_cast<ImageUndoStep *>(us_reference->step.prev);
+  }
+  UndoImageBuf *ubuf_reference = (us_reference ? ubuf_lookup_from_reference(
+                                                     us_reference, image, iuser->tile, layer_index, mask_index, ubuf_pre) :
+                                                 nullptr);
+
+  if (ubuf_reference) {
+    memcpy(ubuf_pre->tiles, ubuf_reference->tiles, sizeof(*ubuf_pre->tiles) * ubuf_pre->tiles_len);
+    for (uint32_t i = 0; i < ubuf_pre->tiles_len; i++) {
+      UndoImageTile *utile = ubuf_pre->tiles[i];
+      utile->users += 1;
+    }
+  }
+  else {
+    ubuf_from_image_all_tiles(ubuf_pre, ibuf);
+  }
+}
+
+void ED_image_undo_push_end()
+{
+  UndoStack *ustack = ED_undo_stack_get();
+  BKE_undosys_step_push(ustack, nullptr, nullptr, UndoEncodeHints::None);
+  BKE_undosys_stack_limit_steps_and_memory_defaults(ustack);
+  WM_file_tag_modified();
+}
+
+/** \} */
+
+}  // namespace blender

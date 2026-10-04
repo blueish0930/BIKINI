@@ -1,0 +1,637 @@
+/* SPDX-FileCopyrightText: 2009 by Nicholas Bishop. All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later */
+
+#pragma once
+
+/** \file
+ * \ingroup bke
+ */
+
+#include <variant>
+
+#include "BKE_paint_types.hh"
+
+#include "BLI_array.hh"
+#include "BLI_bit_vector.hh"
+#include "BLI_enum_flags.hh"
+#include "BLI_math_matrix_types.hh"
+#include "BLI_math_vector_types.hh"
+#include "BLI_offset_indices.hh"
+#include "BLI_ordered_edge.hh"
+#include "BLI_set.hh"
+#include "BLI_shared_cache.hh"
+#include "BLI_string_ref.hh"
+#include "BLI_utility_mixins.hh"
+#include "BLI_vector.hh"
+
+#include "BKE_paint_types.hh"
+
+#include "DNA_brush_enums.h"
+#include "DNA_meshdata_types.h"
+#include "DNA_object_enums.h"
+#include "DNA_scene_types.h"
+
+namespace blender {
+
+struct AssetWeakReference;
+struct BMFace;
+struct BMLog;
+struct BMVert;
+struct BMesh;
+struct BlendDataReader;
+struct BlendWriter;
+struct Brush;
+struct BrushColorJitterSettings;
+struct CurveMapping;
+struct Depsgraph;
+struct EnumPropertyItem;
+namespace bke {
+enum class AttrDomain : int8_t;
+namespace pbvh {
+class Tree;
+}
+}  // namespace bke
+namespace ed::sculpt_paint {
+namespace expand {
+struct Cache;
+}
+namespace filter {
+struct Cache;
+}
+struct StrokeCache;
+}  // namespace ed::sculpt_paint
+struct GHash;
+struct GridPaintMask;
+struct Image;
+struct ImagePool;
+struct ImageUser;
+struct KeyBlock;
+struct Main;
+struct Mesh;
+struct MDeformVert;
+struct MultiresModifierData;
+struct Object;
+struct Paint;
+struct PaintCurve;
+enum class PaintMode : int8_t;
+struct PaintModeSettings;
+struct Palette;
+struct PaletteColor;
+struct RegionView3D;
+struct Scene;
+struct Sculpt;
+struct SculptSession;
+struct SubdivCCG;
+struct Tex;
+struct ToolSettings;
+struct UnifiedPaintSettings;
+struct View3D;
+struct ViewLayer;
+struct bContext;
+struct bToolRef;
+
+/* overlay invalidation */
+/**
+ * Defines 8 areas resulting of splitting the object space by the XYZ axis planes. This is used to
+ * flip or mirror transform values depending on where the vertex is and where the transform
+ * operation started to support XYZ symmetry on those operations in a predictable way.
+ */
+#define PAINT_SYMM_AREA_DEFAULT 0
+
+enum ePaintSymmetryAreas {
+  PAINT_SYMM_AREA_X = (1 << 0),
+  PAINT_SYMM_AREA_Y = (1 << 1),
+  PAINT_SYMM_AREA_Z = (1 << 2),
+};
+ENUM_OPERATORS(ePaintSymmetryAreas);
+
+#define PAINT_SYMM_AREAS 8
+
+namespace bke::paint {
+void invalidate_overlay_tex(Scene &scene, const Tex *tex);
+void invalidate_cursor_overlay(Scene &scene, CurveMapping *curve);
+void invalidate_overlay_all(Scene &scene);
+void invalidate_overlay_all(Paint &paint);
+eOverlayControlFlags get_overlay_flags(const Paint &paint);
+void reset_overlay_flag(Paint &paint, eOverlayControlFlags flag);
+void set_overlay_brush_override(Paint &paint, eOverlayFlags flag);
+void cursor_reinitialize_textures(Paint &paint);
+}  // namespace bke::paint
+
+/* Palettes. */
+
+Palette *BKE_palette_add(Main *bmain, const char *name);
+PaletteColor *BKE_palette_color_add(Palette *palette);
+/**
+ * Remove color from palette. Must be certain color is inside the palette!
+ */
+void BKE_palette_color_remove(Palette *palette, PaletteColor *color);
+void BKE_palette_clear(Palette *palette);
+
+void BKE_palette_color_set(PaletteColor *color, const float rgb[3]);
+void BKE_palette_color_sync_legacy(PaletteColor *color);
+
+/* Paint curves. */
+
+PaintCurve *BKE_paint_curve_add(Main *bmain, const char *name);
+
+/**
+ * Call when entering each respective paint mode.
+ */
+bool BKE_paint_ensure(ToolSettings *ts, Paint **r_paint);
+/**
+ * \param ensure_brushes: Call #BKE_paint_brushes_ensure().
+ */
+void BKE_paint_init(Main *bmain, Scene *sce, PaintMode mode, bool ensure_brushes = true);
+void BKE_paint_free(Paint *paint);
+/**
+ * Called when copying scene settings, so even if 'src' and 'tar' are the same still do a
+ * #id_us_plus(), rather than if we were copying between 2 existing scenes where a matching
+ * value should decrease the existing user count as with #paint_brush_set()
+ */
+void BKE_paint_copy(const Paint *src, Paint *dst, int flag);
+
+/**
+ * Iterate over all paint settings in a scene.
+ */
+void BKE_paint_settings_foreach_mode(ToolSettings *ts, FunctionRef<void(Paint &paint)> fn);
+
+void BKE_paint_cavity_curve_preset(Paint *paint, int preset);
+
+void BKE_paint_mesh_automasking_settings_ensure(Paint &paint);
+
+eObjectMode BKE_paint_object_mode_from_paintmode(PaintMode mode);
+bool BKE_paint_ensure_from_paintmode(Scene *sce, PaintMode mode);
+Paint *BKE_paint_get_active_from_paintmode(Scene *sce, PaintMode mode);
+const EnumPropertyItem *BKE_paint_get_tool_enum_from_paintmode(PaintMode mode);
+std::optional<int> BKE_paint_get_brush_type_from_obmode(const Brush *brush, eObjectMode ob_mode);
+std::optional<int> BKE_paint_get_brush_type_from_paintmode(const Brush *brush, PaintMode mode);
+Paint *BKE_paint_get_active(const Main &bmain, Scene *sce, ViewLayer *view_layer);
+Paint *BKE_paint_get_active_from_context(const bContext *C);
+PaintMode BKE_paintmode_get_active_from_context(const bContext *C);
+PaintMode BKE_paintmode_get_from_tool(const bToolRef *tref);
+
+/* Paint brush retrieval and assignment. */
+
+Brush *BKE_paint_brush(Paint *paint);
+const Brush *BKE_paint_brush_for_read(const Paint *paint);
+Brush *BKE_paint_brush_from_essentials(Main *bmain,
+                                       bke::paint::AssetCategory asset_category,
+                                       const char *name);
+
+/**
+ * Check if brush \a brush may be set/activated for \a paint. Passing null for \a brush will return
+ * true.
+ */
+bool BKE_paint_can_use_brush(const Paint *paint, const Brush *brush);
+
+/**
+ * Activates \a brush for painting, and updates #Paint.brush_asset_reference so the brush can be
+ * restored after file read. No change is done if #BKE_paint_brush_poll() returns false.
+ *
+ * \return True on success. If \a brush is already active, this is considered a success (the brush
+ * asset reference will still be updated).
+ *
+ * \note #WM_toolsystem_activate_brush_and_tool() might be the preferable way to change the active
+ * brush. It also lets the tool-system decide if the active tool should be changed given the type
+ * of brush, and it updates the "last used brush" for the previous tool.
+ * #BKE_paint_brush_set() should only be called to force a brush to be active,
+ * circumventing the tool system.
+ */
+bool BKE_paint_brush_set(Paint *paint, Brush *brush);
+/**
+ * Version of #BKE_paint_brush_set() that takes an asset reference instead of a brush, importing
+ * the brush if necessary.
+ *
+ * \return False if unable to set the brush to the provided asset reference. True otherwise.
+ */
+bool BKE_paint_brush_set(Main *bmain,
+                         Paint *paint,
+                         const AssetWeakReference &brush_asset_reference);
+bool BKE_paint_brush_set_default(Main *bmain, Paint *paint);
+bool BKE_paint_brush_set_essentials(Main *bmain, Paint *paint, const char *name);
+void BKE_paint_previous_asset_reference_set(Paint *paint,
+                                            AssetWeakReference &&asset_weak_reference);
+void BKE_paint_previous_asset_reference_clear(Paint *paint);
+void BKE_paint_foreach_asset_weak_reference(Paint &paint,
+                                            FunctionRef<void(AssetWeakReference &weak_ref)> fn);
+
+std::optional<AssetWeakReference> BKE_paint_brush_type_default_reference(
+    bke::paint::AssetCategory asset_category, std::optional<int> brush_type);
+void BKE_paint_brushes_set_default_references(ToolSettings *ts);
+/**
+ * Make sure the active brush asset is available as active brush, importing it if necessary. If
+ * there is no user set active brush, the default one is used/imported from the essentials asset
+ * library.
+ *
+ * It's good to avoid this until the user actually shows intentions to use brushes, to avoid unused
+ * brushes in files. E.g. use this when entering a paint mode, but not for versioning.
+ *
+ * Also handles the active eraser brush asset.
+ */
+void BKE_paint_brushes_ensure(Main *bmain, Paint *paint);
+void BKE_paint_brushes_validate(Main *bmain, Paint *paint);
+
+/* Paint palette. */
+
+Palette *BKE_paint_palette(Paint *paint);
+void BKE_paint_palette_set(Paint *paint, Palette *palette);
+void BKE_paint_curve_clamp_endpoint_add_index(PaintCurve *pc, int add_index);
+
+/**
+ * Return true when in vertex/weight/texture paint + face-select mode?
+ */
+bool BKE_paint_select_face_test(const Object *ob);
+/**
+ * Return true when in vertex/weight paint + vertex-select mode?
+ */
+bool BKE_paint_select_vert_test(const Object *ob);
+/**
+ * Return true when in grease pencil sculpt mode.
+ */
+bool BKE_paint_select_grease_pencil_test(const Object *ob);
+/**
+ * used to check if selection is possible
+ * (when we don't care if its face or vert)
+ */
+bool BKE_paint_select_elem_test(const Object *ob);
+/**
+ * Checks if face/vertex hiding is always applied in the current mode.
+ * Returns true in vertex/weight paint.
+ */
+bool BKE_paint_always_hide_test(const Object *ob);
+
+/* Partial visibility. */
+
+/**
+ * Returns whether any of the corners of the grid face whose inner corner is at (x, y) are hidden.
+ */
+bool BKE_paint_is_grid_face_hidden(BoundedBitSpan grid_hidden, int gridsize, int x, int y);
+/**
+ * Return true if all vertices in the face are visible, false otherwise.
+ */
+bool BKE_paint_is_bmesh_face_hidden(const BMFace *f);
+
+/* Paint masks. */
+
+float BKE_paint_grid_paint_mask(const GridPaintMask *gpm, uint level, uint x, uint y);
+
+void BKE_paint_face_set_overlay_color_get(int face_set, int seed, uchar r_color[4]);
+
+/* Stroke related. */
+
+namespace bke::paint {
+bool supports_scene_size(PaintMode paint_mode, const Brush &brush);
+bool supports_symmetry_tiling(PaintMode paint_mode, const Brush &brush);
+}  // namespace bke::paint
+
+/* Random values are generated on each new stroke so each stroke
+ * gets a different starting point in the perlin noise. */
+float3 BKE_paint_seed_hsv_jitter();
+
+bool BKE_paint_calculate_rake_rotation(Paint &paint,
+                                       const Brush &brush,
+                                       const float mouse_pos[2],
+                                       PaintMode paint_mode,
+                                       bool in_stroke,
+                                       bool is_first_dab);
+void BKE_paint_update_brush_rake_rotation(Paint &paint, const Brush &brush, float rotation);
+
+namespace bke::paint {
+float3 stroke_get_average(const Paint *paint, const Object *ob);
+void paint_stroke_reset_location(Paint &paint);
+void stroke_track_location(Paint &paint, float3 location);
+void stroke_set_location(Paint &paint, float3 location);
+}  // namespace bke::paint
+
+float3 BKE_paint_randomize_color(const BrushColorJitterSettings &color_jitter,
+                                 const float3 &initial_hsv_jitter,
+                                 const float distance,
+                                 const float pressure,
+                                 const float3 &color);
+
+/* .blend I/O */
+
+void BKE_paint_blend_write(BlendWriter *writer, Paint *paint);
+void BKE_paint_blend_read_data(BlendDataReader *reader, const Scene *scene, Paint *paint);
+
+/* Data used for displaying extra visuals while using the Pose brush */
+struct SculptPoseIKChainPreview {
+  Array<float3> initial_orig_coords;
+  Array<float3> initial_head_coords;
+};
+
+struct SculptBoundaryInfoCache {
+  /* Indexed by base mesh vertex index.
+   *
+   * TODO: Evaluate whether a BitVector or a Set works better for memory footprint and lookup. */
+  BitVector<> verts;
+
+  Set<OrderedEdge> edges;
+};
+
+/* Data used for displaying extra visuals while using the Boundary brush. */
+struct SculptBoundaryPreview {
+  Vector<std::pair<float3, float3>> edges;
+  float3 pivot_position;
+  float3 initial_vert_position;
+};
+
+struct SculptFakeNeighbors {
+  /* Max distance used to calculate neighborhood information. */
+  float current_max_distance;
+
+  /* Indexed by vertex, stores the vertex index of its fake neighbor if available. */
+  Array<int> fake_neighbor_index;
+};
+
+struct SculptTopologyIslandCache {
+  /**
+   * An ID for the island containing each geometry vertex. Will be empty if there is only a single
+   * island.
+   */
+  Array<uint8_t> vert_island_ids;
+};
+
+using ActiveVert = std::variant<std::monostate, int, BMVert *>;
+
+/* Helper return struct for associated data. */
+struct PersistentMultiresData {
+  Span<float3> positions;
+  Span<float3> normals;
+  MutableSpan<float> displacements;
+};
+
+struct SculptSession : NonCopyable, NonMovable {
+  /* The current active shapekey for the mesh. Only non-null for Type::Mesh */
+  KeyBlock *shapekey_active = nullptr;
+
+  /* Edges to adjacent faces. */
+  Array<int> edge_to_face_offsets;
+  Array<int> edge_to_face_indices;
+  GroupedSpan<int> edge_to_face_map;
+
+  /* Vertices to adjacent edges. */
+  Array<int> vert_to_edge_offsets;
+  Array<int> vert_to_edge_indices;
+  GroupedSpan<int> vert_to_edge_map;
+
+  /* BMesh for dynamic topology sculpting */
+  BMesh *bm = nullptr;
+  /* Undo/redo log for dynamic topology sculpting */
+  BMLog *bm_log = nullptr;
+
+  MultiresModifierData *multires_modifier = nullptr;
+  /* Limit surface/grids. */
+  SubdivCCG *subdiv_ccg = nullptr;
+
+  /* BVH tree acceleration structure */
+  std::unique_ptr<bke::pbvh::Tree> pbvh;
+
+  /* Object is deformed with some modifiers. */
+  bool deform_modifiers_active = false;
+  /* Coords of deformed mesh but without stroke displacement. */
+  Array<float3, 0> deform_cos;
+  /* Crazy-space deformation matrices. */
+  Array<float3x3, 0> deform_imats;
+
+  /**
+   * Normals corresponding to the #deform_cos evaluated/deform positions. Stored as a #SharedCache
+   * for consistency with mesh caches in #MeshRuntime::vert_normals_cache.
+   */
+  SharedCache<Vector<float3>> vert_normals_deform;
+  SharedCache<Vector<float3>> face_normals_deform;
+
+  /* Pool for texture evaluations. */
+  ImagePool *tex_pool = nullptr;
+
+  ed::sculpt_paint::StrokeCache *cache = nullptr;
+  ed::sculpt_paint::filter::Cache *filter_cache = nullptr;
+  ed::sculpt_paint::expand::Cache *expand_cache = nullptr;
+
+  /* Cursor data and active vertex for tools */
+  std::optional<int> active_face_index;
+  std::optional<int> active_grid_index;
+
+  /* When active, the cursor draws with faded colors, indicating that there is an action
+   * enabled.
+   */
+  bool draw_faded_cursor = false;
+  float cursor_radius = 0.0f;
+  float3 cursor_location;
+  float3 cursor_normal;
+  std::optional<float3> cursor_sampled_normal;
+  float3 cursor_view_normal;
+
+  /* TODO(jbakker): Replace rv3d and v3d with ViewContext */
+  RegionView3D *rv3d = nullptr;
+  View3D *v3d = nullptr;
+
+  /* Dynamic mesh preview */
+  Array<int> preview_verts;
+
+  /* Pose Brush Preview */
+  std::unique_ptr<SculptPoseIKChainPreview> pose_ik_chain_preview;
+
+  /* Boundary Brush Preview */
+  std::unique_ptr<SculptBoundaryPreview> boundary_preview;
+
+  /* "Persistent" positions and normals for multires. (For mesh the
+   * ".sculpt_persistent_co" attribute is used, etc.). */
+  struct {
+    Array<float3> sculpt_persistent_co;
+    Array<float3> sculpt_persistent_no;
+    Array<float> sculpt_persistent_disp;
+
+    /* The stored state for the SubdivCCG at the time of attribute population, used to roughly
+     * determine if the topology when accessed at a current point in time is equivalent to when
+     * it was originally stored. */
+    int grids_num = -1;
+    int grid_size = -1;
+  } persistent;
+
+  /* Contains information used by tools and brushes that require different logic based on boundary
+   * elements. Typically used for anything which needs to consider neighbor values.
+   *
+   * Not used for Dyntopo */
+  std::unique_ptr<SculptBoundaryInfoCache> boundary_info_cache;
+  SculptFakeNeighbors fake_neighbors = {};
+
+  /* Transform operator */
+  float3 pivot_pos = {};
+  /* TODO: Switch this and other `pivot_rot` to C++, so this can be `Quaternion::identity` */
+  float4 pivot_rot = float4(1.0f, 0.0f, 0.0f, 0.0f);
+  float3 pivot_scale = {};
+
+  float3 init_pivot_pos = {};
+  float4 init_pivot_rot = float4(1.0f, 0.0f, 0.0f, 0.0f);
+  float3 init_pivot_scale = {};
+
+  float3 prev_pivot_pos = {};
+  float4 prev_pivot_rot = float4(1.0f, 0.0f, 0.0f, 0.0f);
+  float3 prev_pivot_scale = {};
+
+  eObjectMode mode_type = OB_MODE_OBJECT;
+
+  /**
+   * ID data is older than sculpt-mode data.
+   * Set #Main.is_memfile_undo_flush_needed when enabling.
+   */
+  bool needs_flush_to_id = false;
+
+  /**
+   * Some tools follows the shading chosen by the last used tool canvas.
+   * When not set the viewport shading color would be used.
+   *
+   * NOTE: This setting is temporarily until paint mode is added.
+   */
+  bool sticky_shading_color = false;
+
+  /**
+   * Last used painting canvas key.
+   */
+  std::optional<std::string> last_paint_canvas_key = {};
+  float3 last_normal;
+
+  std::unique_ptr<SculptTopologyIslandCache> topology_island_cache;
+
+ private:
+  /* In general, this value is expected to be valid (non-empty) as long as the cursor is over the
+   * mesh. Changing the underlying mesh type (e.g. enabling dyntopo, changing multires levels)
+   * should invalidate this value.
+   */
+  ActiveVert active_vert_ = {};
+
+  /* This value should always exist except when the cursor has never been over the mesh, or when
+   * the underlying mesh type has changed and the last `active_vert_` value no longer corresponds
+   * to a value that can be correctly interpreted */
+  ActiveVert last_active_vert_ = {};
+
+ public:
+  SculptSession();
+  ~SculptSession();
+
+  ActiveVert active_vert() const;
+
+  ActiveVert last_active_vert() const;
+
+  /**
+   * Retrieves the corresponding index of the ActiveVert inside a mesh-sized array.
+   *
+   * Helpful in generic cases where we are unlikely to already be processing data in a backing-type
+   * specific manner.
+   *
+   * \note For BMesh, a call to SCULPT_vertex_random_access_ensure is needed to get valid results.
+   * \returns -1 if there is no currently active vertex.
+   */
+  int active_vert_index() const;
+  int last_active_vert_index() const;
+
+  /**
+   * Retrieves the active vertex position.
+   *
+   * This method should be avoided if already working with the relevant position-backing structures
+   * for each of the mesh types. In cases where we want more generic code, this abstraction helps
+   * to remove boilerplate.
+   *
+   * \returns float3 at negative infinity if there is no currently active vertex
+   */
+  float3 active_vert_position(const Depsgraph &depsgraph, const Object &object) const;
+
+  void set_active_vert(ActiveVert vert);
+  void clear_active_elements(bool persist_last_active);
+
+  /**
+   * Retrieves the current persistent multires data.
+   *
+   * Potentially used for the layer and cloth brushes.
+   *
+   * \returns an empty optional if the current data cannot be used
+   */
+  std::optional<PersistentMultiresData> persistent_multires_data();
+};
+
+void BKE_sculptsession_free(Object *ob);
+void BKE_sculptsession_free_deformMats(SculptSession *ss);
+void BKE_sculptsession_free_pbvh(Object &object);
+void BKE_sculptsession_bm_to_me(Object *ob);
+
+/**
+ * \warning Expects a fully evaluated depsgraph.
+ */
+void BKE_sculptsession_update_for_edit(Depsgraph *depsgraph, Object *ob_orig, bool is_paint_tool);
+void BKE_sculptsession_update_before_eval(Object *ob_eval);
+void BKE_sculptsession_update_after_eval(Depsgraph *depsgraph, Object *ob_eval);
+
+/**
+ * Test if bke::pbvh::Tree can be used directly for drawing, which is faster than
+ * drawing the mesh and all updates that come with it.
+ */
+bool BKE_sculptsession_use_pbvh_draw(const Object *ob, const RegionView3D *rv3d);
+
+/**
+ * Create new color layer on object if it doesn't have one and if experimental feature set has
+ * sculpt vertex color enabled. Returns truth if new layer has been added, false otherwise.
+ */
+void BKE_sculpt_color_layer_create_if_needed(Object *object);
+
+/**
+ * Sculpt mode handles multi-res differently from regular meshes, but only if
+ * it's the last modifier on the stack and it is not on the first level.
+ */
+MultiresModifierData *BKE_sculpt_multires_active(const Scene *scene, Object *ob);
+int BKE_sculpt_get_grid_num_verts(const Object &object);
+int BKE_sculpt_get_grid_num_faces(const Object &object);
+
+/**
+ * Ensures a mask layer exists. If depsgraph and bmain are non-null,
+ * a mask doesn't exist and the object has a multi-resolution modifier
+ * then the scene depsgraph will be evaluated to update the runtime
+ * subdivision data.
+ *
+ * \note always call *before* #BKE_sculptsession_update_for_edit.
+ */
+void BKE_sculpt_mask_layers_ensure(Depsgraph *depsgraph,
+                                   Main *bmain,
+                                   Object *ob,
+                                   MultiresModifierData *mmd);
+
+void BKE_sculpt_sync_face_visibility_to_grids(const Mesh &mesh, SubdivCCG &subdiv_ccg);
+
+namespace bke::object {
+
+pbvh::Tree &pbvh_ensure(Depsgraph &depsgraph, Object &object);
+
+/**
+ * Access the acceleration structure for ray-casting,
+ * nearest queries, and spatially contiguous mesh updates and drawing.
+ * The BVH tree is used by sculpt, vertex paint, and weight paint object modes.
+ * This just accesses the BVH, to ensure it's built, use #pbvh_ensure.
+ */
+pbvh::Tree *pbvh_get(Object &object);
+const pbvh::Tree *pbvh_get(const Object &object);
+
+}  // namespace bke::object
+bool BKE_object_sculpt_use_dyntopo(const Object *object);
+
+/* paint_canvas.cc */
+
+using CanvasImageUser = std::variant<ImageUser, ImageUser *>;
+using CanvasImageData = std::pair<Image *, CanvasImageUser>;
+
+/**
+ * Create a key that can be used to compare with previous ones to identify changes.
+ * The resulting 'string' is owned by the caller.
+ */
+std::string BKE_paint_canvas_key_get(ImagePaintSettings &settings, Object *ob);
+
+std::optional<CanvasImageData> BKE_paint_canvas_image_get(const ImagePaintSettings &settings,
+                                                          Object &object);
+std::optional<StringRef> BKE_paint_canvas_uvmap_name_get(const ImagePaintSettings &settings,
+                                                         Object *ob);
+CurveMapping *BKE_sculpt_default_cavity_curve();
+CurveMapping *BKE_paint_default_curve();
+CurveMapping *BKE_paint_default_curve_inverted();
+
+}  // namespace blender

@@ -1,0 +1,575 @@
+/* SPDX-FileCopyrightText: 2024 Blender Authors
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later */
+
+#include <memory>
+#include <string>
+
+#include "BLI_assert.hh"
+#include "BLI_compute_context.hh"
+#include "BLI_cpp_type.hh"
+#include "BLI_generic_span.hh"
+#include "BLI_index_mask.hh"
+#include "BLI_map.hh"
+#include "BLI_math_base.hh"
+#include "BLI_math_euler.hh"
+#include "BLI_math_rotation_types.hh"
+#include "BLI_math_vector_types.hh"
+#include "BLI_string_ref.hh"
+#include "BLI_vector.hh"
+#include "BLI_vector_set.hh"
+
+#include "FN_multi_function.hh"
+#include "FN_multi_function_builder.hh"
+#include "FN_multi_function_context.hh"
+#include "FN_multi_function_data_type.hh"
+#include "FN_multi_function_procedure.hh"
+#include "FN_multi_function_procedure_builder.hh"
+#include "FN_multi_function_procedure_executor.hh"
+#include "FN_multi_function_procedure_optimization.hh"
+
+#include "DNA_node_types.h"
+
+#include "BKE_node.hh"
+#include "BKE_node_enum.hh"
+#include "BKE_node_runtime.hh"
+#include "BKE_type_conversions.hh"
+
+#include "NOD_multi_function.hh"
+
+#include "COM_context.hh"
+#include "COM_domain.hh"
+#include "COM_input_descriptor.hh"
+#include "COM_multi_function_procedure_operation.hh"
+#include "COM_node_tree_evaluator.hh"
+#include "COM_pixel_operation.hh"
+#include "COM_result.hh"
+#include "COM_scheduler.hh"
+#include "COM_utilities.hh"
+
+namespace blender::compositor {
+
+MultiFunctionProcedureOperation::MultiFunctionProcedureOperation(
+    Context &context,
+    NodeTreeEvaluator &node_tree_evaluator,
+    const bool is_single_value,
+    const ComputeContext &compute_context)
+    : PixelOperation(context, node_tree_evaluator, compute_context, is_single_value),
+      procedure_builder_(procedure_)
+{
+  this->build_procedure();
+  procedure_executor_ = std::make_unique<mf::ProcedureExecutor>(procedure_);
+}
+
+void MultiFunctionProcedureOperation::execute()
+{
+  const Domain domain = is_single_value_ ? Domain(int2(1)) : this->compute_domain();
+  const int64_t size = int64_t(domain.data_size.x) * domain.data_size.y;
+  const IndexMask mask = IndexMask(size);
+  mf::ParamsBuilder parameter_builder{*procedure_executor_, &mask};
+
+  /* For each of the parameters, either add an input or an output depending on its interface type,
+   * allocating the outputs when needed. */
+  for (int i = 0; i < procedure_.params().size(); i++) {
+    if (procedure_.params()[i].type == mf::ParamType::InterfaceType::Input) {
+      const Result &input = get_input(parameter_identifiers_[i]);
+      if (input.is_single_value()) {
+        parameter_builder.add_readonly_single_input(input.single_value());
+      }
+      else {
+        if (is_single_value_) {
+          /* The operation is operating on single values but an image is provided, so add a default
+           * single value as a fallback. */
+          parameter_builder.add_readonly_single_input(
+              GPointer(input.get_cpp_type(), input.get_cpp_type().default_value()));
+        }
+        else {
+          parameter_builder.add_readonly_single_input(input.cpu_data());
+        }
+      }
+    }
+    else {
+      Result &output = get_result(parameter_identifiers_[i]);
+      if (is_single_value_) {
+        output.allocate_single_value();
+        parameter_builder.add_uninitialized_single_output(
+            GMutableSpan(output.get_cpp_type(), output.single_value().get(), 1));
+      }
+      else {
+        output.allocate_texture(domain);
+        parameter_builder.add_uninitialized_single_output(output.cpu_data_for_write());
+      }
+    }
+  }
+
+  mf::ContextBuilder context_builder;
+  procedure_executor_->call_auto(mask, parameter_builder, context_builder);
+}
+
+void MultiFunctionProcedureOperation::build_procedure()
+{
+  for (const bNode *node : node_tree_evaluator_.pixel_compile_unit()) {
+    /* Get the multi-function of the node. */
+    auto &multi_function_builder = *node_multi_functions_.lookup_or_add_cb(node, [&]() {
+      return std::make_unique<nodes::NodeMultiFunctionBuilder>(*node, node->owner_tree());
+    });
+    node->typeinfo->build_multi_function(multi_function_builder);
+    const mf::MultiFunction &multi_function = multi_function_builder.function();
+
+    /* Get the variables of the inputs of the node, creating inputs to the operation/procedure if
+     * needed. */
+    Vector<mf::Variable *> input_variables = this->get_input_variables(*node, multi_function);
+
+    /* Call the node multi-function, getting the variables for its outputs. */
+    Vector<mf::Variable *> output_variables = procedure_builder_.add_call(multi_function,
+                                                                          input_variables);
+
+    /* Assign the output variables to the node's respective outputs, creating outputs for the
+     * operation/procedure if needed. */
+    this->assign_output_variables(*node, output_variables);
+  }
+
+  /* Add destructor calls for the variables. */
+  for (const auto &item : output_to_variable_map_.items()) {
+    /* Variables that are used by the outputs should not be destructed. */
+    if (!output_variables_.contains(item.value)) {
+      procedure_builder_.add_destruct(*item.value);
+    }
+  }
+  for (mf::Variable *variable : implicit_variables_) {
+    /* Variables that are used by the outputs should not be destructed. */
+    if (!output_variables_.contains(variable)) {
+      procedure_builder_.add_destruct(*variable);
+    }
+  }
+  for (mf::Variable *variable : implicit_input_to_variable_map_.values()) {
+    procedure_builder_.add_destruct(*variable);
+  }
+
+  mf::ReturnInstruction &return_instruction = procedure_builder_.add_return();
+  procedure_.prepare_for_execution();
+  mf::procedure_optimization::move_destructs_up(procedure_, return_instruction);
+  BLI_assert(procedure_.validate());
+}
+
+Vector<mf::Variable *> MultiFunctionProcedureOperation::get_input_variables(
+    const bNode &node, const mf::MultiFunction &multi_function)
+{
+  int available_inputs_index = 0;
+  Vector<mf::Variable *> input_variables;
+  for (const bNodeSocket *input : node.input_sockets()) {
+    if (!is_socket_available(input)) {
+      continue;
+    }
+
+    const mf::ParamType parameter_type = multi_function.param_type(available_inputs_index);
+    available_inputs_index++;
+
+    /* Curve and Color Ramp are single pointers, not image results. */
+    if (input->type == SOCK_CURVE || input->type == SOCK_COLOR_RAMP) {
+      input_variables.append(this->get_constant_input_variable(*input));
+      continue;
+    }
+
+    if (node_tree_evaluator_.schedule().unneeded_inputs.contains(input)) {
+      input_variables.append(this->get_default_value_variable(parameter_type.data_type()));
+      continue;
+    }
+
+    const bNodeSocket *output = get_output_linked_to_input(*input);
+    if (!output) {
+      const InputDescriptor input_descriptor = input_descriptor_from_input_socket(input);
+      if (!input_descriptor.implicit_input.has_value()) {
+        /* No implicit input, so get a constant variable that holds the socket value. */
+        input_variables.append(this->get_constant_input_variable(*input));
+      }
+      else {
+        input_variables.append(this->get_implicit_input_variable(*input));
+      }
+    }
+    else {
+      /* If the source node is part of the multi-function procedure operation, then the output has
+       * an existing variable for it. */
+      if (node_tree_evaluator_.pixel_compile_unit().contains(&output->owner_node())) {
+        input_variables.append(output_to_variable_map_.lookup(output));
+      }
+      else {
+        /* Otherwise, the source node is not part of the multi-function procedure operation, and a
+         * variable that represents an input to the multi-function procedure operation is used. */
+        input_variables.append(this->get_multi_function_input_variable(*input, *output));
+      }
+    }
+
+    /* Implicitly convert the variable type to the expected parameter type if needed. */
+    input_variables.last() = this->convert_variable(input_variables.last(),
+                                                    parameter_type.data_type());
+  }
+
+  return input_variables;
+}
+
+mf::Variable *MultiFunctionProcedureOperation::get_constant_input_variable(
+    const bNodeSocket &input)
+{
+  const mf::MultiFunction *constant_function = nullptr;
+  switch (input.type) {
+    case SOCK_FLOAT: {
+      const bNodeSocketValueFloat *storage = input.default_value_typed<bNodeSocketValueFloat>();
+      const float value = is_plausible_pointer(storage) ? storage->value : 0.0f;
+      constant_function = &procedure_.construct_function<mf::CustomMF_Constant<float>>(value);
+      break;
+    }
+    case SOCK_INT: {
+      const bNodeSocketValueInt *storage = input.default_value_typed<bNodeSocketValueInt>();
+      const int value = is_plausible_pointer(storage) ? storage->value : 0;
+      constant_function = &procedure_.construct_function<mf::CustomMF_Constant<int32_t>>(value);
+      break;
+    }
+    case SOCK_BOOLEAN: {
+      const bNodeSocketValueBoolean *storage = input.default_value_typed<bNodeSocketValueBoolean>();
+      const bool value = is_plausible_pointer(storage) ? storage->value : false;
+      constant_function = &procedure_.construct_function<mf::CustomMF_Constant<bool>>(value);
+      break;
+    }
+    case SOCK_VECTOR: {
+      const bNodeSocketValueVector *storage = input.default_value_typed<bNodeSocketValueVector>();
+      const int dimensions = is_plausible_pointer(storage) ? storage->dimensions : 3;
+      switch (dimensions) {
+        case 2: {
+          const float2 value = is_plausible_pointer(storage) ? float2(storage->value) : float2(0.0f);
+          constant_function = &procedure_.construct_function<mf::CustomMF_Constant<float2>>(value);
+          break;
+        }
+        case 4: {
+          const float4 value = is_plausible_pointer(storage) ? float4(storage->value) :
+                                                               float4(0.0f);
+          constant_function = &procedure_.construct_function<mf::CustomMF_Constant<float4>>(value);
+          break;
+        }
+        default: {
+          const float3 value = is_plausible_pointer(storage) ? float3(storage->value) : float3(0.0f);
+          constant_function = &procedure_.construct_function<mf::CustomMF_Constant<float3>>(value);
+          break;
+        }
+      }
+      break;
+    }
+    case SOCK_INT_VECTOR: {
+      const bNodeSocketValueIntVector *storage =
+          input.default_value_typed<bNodeSocketValueIntVector>();
+      const int dimensions = is_plausible_pointer(storage) ? storage->dimensions : 3;
+      if (dimensions == 2) {
+        const int2 value = is_plausible_pointer(storage) ? int2(storage->value) : int2(0);
+        constant_function = &procedure_.construct_function<mf::CustomMF_Constant<int2>>(value);
+      }
+      else {
+        const int3 value = is_plausible_pointer(storage) ? int3(storage->value) : int3(0);
+        constant_function = &procedure_.construct_function<mf::CustomMF_Constant<int3>>(value);
+      }
+      break;
+    }
+    case SOCK_RGBA: {
+      const bNodeSocketValueRGBA *storage = input.default_value_typed<bNodeSocketValueRGBA>();
+      const Color value = is_plausible_pointer(storage) ? Color(storage->value) :
+                                                               Color(0.0f, 0.0f, 0.0f, 1.0f);
+      constant_function = &procedure_.construct_function<mf::CustomMF_Constant<float4>>(value);
+      break;
+    }
+    case SOCK_MATRIX: {
+      const float4x4 value = float4x4::identity();
+      constant_function = &procedure_.construct_function<mf::CustomMF_Constant<float4x4>>(value);
+      break;
+    }
+    case SOCK_MENU: {
+      const bNodeSocketValueMenu *storage = input.default_value_typed<bNodeSocketValueMenu>();
+      const bool plausible = is_plausible_pointer(storage);
+      const bool multi = plausible &&
+                         (storage->runtime_flag & bke::NODE_MENU_MULTI_SELECTION) != 0;
+      const nodes::MenuValue value(plausible ? storage->value : 0, multi);
+      constant_function = &procedure_.construct_function<mf::CustomMF_Constant<nodes::MenuValue>>(
+          value);
+      break;
+    }
+    case SOCK_STRING: {
+      const bNodeSocketValueString *storage = input.default_value_typed<bNodeSocketValueString>();
+      const std::string value = is_plausible_pointer(storage) ? storage->value : "";
+      constant_function = &procedure_.construct_function<mf::CustomMF_Constant<std::string>>(
+          value);
+      break;
+    }
+    case SOCK_ROTATION: {
+      const bNodeSocketValueRotation *rotation =
+          input.default_value_typed<bNodeSocketValueRotation>();
+      const math::Quaternion value = is_plausible_pointer(rotation) ?
+                                          math::to_quaternion(math::EulerXYZ(float3(rotation->value_euler))) :
+                                          math::Quaternion::identity();
+      constant_function = &procedure_.construct_function<mf::CustomMF_Constant<math::Quaternion>>(
+          value);
+      break;
+    }
+    case SOCK_OBJECT: {
+      const bNodeSocketValueObject *storage = input.default_value_typed<bNodeSocketValueObject>();
+      Object *value = is_plausible_pointer(storage) ? storage->value : nullptr;
+      constant_function = &procedure_.construct_function<mf::CustomMF_Constant<Object *>>(value);
+      break;
+    }
+    case SOCK_IMAGE: {
+      const bNodeSocketValueImage *storage = input.default_value_typed<bNodeSocketValueImage>();
+      Image *value = is_plausible_pointer(storage) ? storage->value : nullptr;
+      constant_function = &procedure_.construct_function<mf::CustomMF_Constant<Image *>>(value);
+      break;
+    }
+    case SOCK_FONT: {
+      const bNodeSocketValueFont *storage = input.default_value_typed<bNodeSocketValueFont>();
+      VFont *value = is_plausible_pointer(storage) ? storage->value : nullptr;
+      constant_function = &procedure_.construct_function<mf::CustomMF_Constant<VFont *>>(value);
+      break;
+    }
+    case SOCK_SCENE: {
+      const bNodeSocketValueScene *storage = input.default_value_typed<bNodeSocketValueScene>();
+      Scene *value = is_plausible_pointer(storage) ? storage->value : nullptr;
+      constant_function = &procedure_.construct_function<mf::CustomMF_Constant<Scene *>>(value);
+      break;
+    }
+    case SOCK_TEXT_ID: {
+      const bNodeSocketValueText *storage = input.default_value_typed<bNodeSocketValueText>();
+      Text *value = is_plausible_pointer(storage) ? storage->value : nullptr;
+      constant_function = &procedure_.construct_function<mf::CustomMF_Constant<Text *>>(value);
+      break;
+    }
+    case SOCK_MASK: {
+      const bNodeSocketValueMask *storage = input.default_value_typed<bNodeSocketValueMask>();
+      Mask *value = is_plausible_pointer(storage) ? storage->value : nullptr;
+      constant_function = &procedure_.construct_function<mf::CustomMF_Constant<Mask *>>(value);
+      break;
+    }
+    case SOCK_CURVE: {
+      CurveMapping *curve = bke::node_socket_curve_resolved(input);
+      constant_function = &procedure_.construct_function<mf::CustomMF_Constant<CurveMapping *>>(
+          curve);
+      break;
+    }
+    case SOCK_COLOR_RAMP: {
+      ColorBand *band = const_cast<ColorBand *>(bke::node_socket_color_band_resolved(input));
+      constant_function = &procedure_.construct_function<mf::CustomMF_Constant<ColorBand *>>(band);
+      break;
+    }
+    case SOCK_BUNDLE:
+    default:
+      constant_function = &procedure_.construct_function<mf::CustomMF_Constant<float>>(0.0f);
+      break;
+  }
+
+  mf::Variable *constant_variable = procedure_builder_.add_call<1>(*constant_function)[0];
+  implicit_variables_.append(constant_variable);
+  return constant_variable;
+}
+
+mf::Variable *MultiFunctionProcedureOperation::get_implicit_input_variable(
+    const bNodeSocket &input)
+{
+  const InputDescriptor input_descriptor = input_descriptor_from_input_socket(&input);
+  const ImplicitInputType implicit_input = input_descriptor.implicit_input.value();
+
+  /* An input was already declared for that implicit input, so no need to declare it again and we
+   * just return its variable. */
+  if (implicit_input_to_variable_map_.contains(implicit_input)) {
+    /* But first we update the domain priority of the input descriptor to be the higher priority of
+     * the existing descriptor and the descriptor of the new input socket. That's because the same
+     * implicit input might be used in inputs inside the multi-function procedure operation which
+     * have different priorities. */
+    InputDescriptor &existing_input_descriptor = this->get_input_descriptor(
+        implicit_inputs_to_input_identifiers_map_.lookup(implicit_input));
+    existing_input_descriptor.domain_priority = math::min(
+        existing_input_descriptor.domain_priority, input_descriptor.domain_priority);
+
+    return implicit_input_to_variable_map_.lookup(implicit_input);
+  }
+
+  const int implicit_input_index = implicit_inputs_to_input_identifiers_map_.size();
+  const std::string input_identifier = "implicit_input" + std::to_string(implicit_input_index);
+  declare_input_descriptor(input_identifier, input_descriptor);
+
+  /* Map the implicit input to the identifier of the operation input that was declared for it. */
+  implicit_inputs_to_input_identifiers_map_.add_new(implicit_input, input_identifier);
+
+  mf::Variable &variable = procedure_builder_.add_input_parameter(
+      mf::DataType::ForSingle(Result::cpp_type(input_descriptor.type)), input_identifier);
+  parameter_identifiers_.append(input_identifier);
+
+  /* Map the implicit input to the variable that was created for it. */
+  implicit_input_to_variable_map_.add(implicit_input, &variable);
+
+  return &variable;
+}
+
+mf::Variable *MultiFunctionProcedureOperation::get_multi_function_input_variable(
+    const bNodeSocket &input_socket, const bNodeSocket &output_socket)
+{
+  /* The output is a single value, so create a constant variable instead of declaring an input for
+   * it, it follows that the result needs to be released since it will no longer be referenced by
+   * the operation.*/
+  Result &result = node_tree_evaluator_.get_result_from_output_socket(output_socket);
+  if (result.is_single_value()) {
+    const mf::MultiFunction &constant_function =
+        procedure_.construct_function<mf::CustomMF_GenericConstant>(
+            *result.single_value().type(), result.single_value().get(), true);
+    mf::Variable *constant_variable = procedure_builder_.add_call<1>(constant_function)[0];
+    implicit_variables_.append(constant_variable);
+    result.release();
+    return constant_variable;
+  }
+
+  /* An input was already declared for that same output socket, so no need to declare it again and
+   * we just return its variable. */
+  if (output_to_variable_map_.contains(&output_socket)) {
+    /* But first we update the domain priority of the input descriptor to be the higher priority of
+     * the existing descriptor and the descriptor of the new input socket. That's because the same
+     * output might be connected to multiple inputs inside the multi-function procedure operation
+     * which have different priorities. */
+    const std::string input_identifier = outputs_to_declared_inputs_map_.lookup(&output_socket);
+    InputDescriptor &input_descriptor = this->get_input_descriptor(input_identifier);
+    input_descriptor.domain_priority = math::min(
+        input_descriptor.domain_priority,
+        input_descriptor_from_input_socket(&input_socket).domain_priority);
+
+    /* Increment the input's reference count. */
+    inputs_to_reference_counts_map_.lookup(input_identifier)++;
+
+    return output_to_variable_map_.lookup(&output_socket);
+  }
+
+  const int input_index = inputs_to_linked_outputs_map_.size();
+  const std::string input_identifier = "input" + std::to_string(input_index);
+
+  /* Declare the input descriptor for this input and prefer to declare its type to be the same as
+   * the type of the output because doing type conversion in the multi-function procedure is
+   * cheaper. */
+  InputDescriptor input_descriptor = input_descriptor_from_input_socket(&input_socket);
+  input_descriptor.type = result.type();
+  declare_input_descriptor(input_identifier, input_descriptor);
+
+  mf::Variable &variable = procedure_builder_.add_input_parameter(
+      mf::DataType::ForSingle(Result::cpp_type(input_descriptor.type)), input_identifier);
+  parameter_identifiers_.append(input_identifier);
+
+  /* Map the output socket to the variable that was created for it. */
+  output_to_variable_map_.add(&output_socket, &variable);
+
+  /* Map the identifier of the operation input to the output socket it is linked to. */
+  inputs_to_linked_outputs_map_.add_new(input_identifier, &output_socket);
+
+  /* Map the output socket to the identifier of the operation input that was declared for it. */
+  outputs_to_declared_inputs_map_.add_new(&output_socket, input_identifier);
+
+  /* Map the identifier of the operation input to a reference count of 1, this will later be
+   * incremented if that same output was referenced again. */
+  inputs_to_reference_counts_map_.add_new(input_identifier, 1);
+
+  return &variable;
+}
+
+void MultiFunctionProcedureOperation::assign_output_variables(const bNode &node,
+                                                              Vector<mf::Variable *> &variables)
+{
+  const bool should_log_outputs = this->context().nodes_evaluation_log() && is_single_value_;
+
+  /* Only compute previews if they are needed and the node group is active. */
+  const bool node_needs_preview = is_node_preview_needed(node);
+  const bool needs_node_previews = flag_is_set(this->context().needed_side_effect_output_types(),
+                                               SideEffectOutputTypes::NodePreviews);
+  const bNodeSocket *preview_output = nullptr;
+  if (node_needs_preview && needs_node_previews && !is_single_value_) {
+    preview_output = find_preview_output_socket(node);
+  }
+
+  int available_outputs_index = 0;
+  for (const bNodeSocket *output : node.output_sockets()) {
+    if (!is_socket_available(output)) {
+      continue;
+    }
+
+    mf::Variable *output_variable = variables[available_outputs_index];
+    output_to_variable_map_.add_new(output, output_variable);
+
+    /* If the output is referenced by the schedule outside of the pixel compile unit, then an
+     * output result needs to be populated for it. */
+    const bool is_operation_output = compute_output_reference_count(
+                                         *output,
+                                         node_tree_evaluator_.schedule(),
+                                         &node_tree_evaluator_.pixel_compile_unit()) != 0;
+
+    /* If the output is used as the node preview, then an output result needs to be populated for
+     * it, and we additionally keep track of that output to later compute the previews from. */
+    const bool is_preview_output = output == preview_output;
+    if (is_preview_output) {
+      preview_outputs_.add(output);
+    }
+
+    if (should_log_outputs) {
+      logged_outputs_.add(output);
+    }
+
+    if (is_operation_output || is_preview_output || should_log_outputs) {
+      this->populate_operation_result(*output, output_variable);
+    }
+
+    available_outputs_index++;
+  }
+}
+
+void MultiFunctionProcedureOperation::populate_operation_result(const bNodeSocket &output_socket,
+                                                                mf::Variable *variable)
+{
+  const uint output_id = output_sockets_to_output_identifiers_map_.size();
+  const std::string output_identifier = "output" + std::to_string(output_id);
+
+  const ResultType result_type = get_node_socket_result_type(&output_socket);
+  populate_result(output_identifier, result_type);
+
+  /* Map the output socket to the identifier of the newly populated result. */
+  output_sockets_to_output_identifiers_map_.add_new(&output_socket, output_identifier);
+
+  /* Implicitly convert the variable type to the expected result type if needed. */
+  const mf::DataType expected_type = mf::DataType::ForSingle(Result::cpp_type(result_type));
+  mf::Variable *converted_variable = this->convert_variable(variable, expected_type);
+
+  procedure_builder_.add_output_parameter(*converted_variable);
+  output_variables_.add_new(converted_variable);
+  parameter_identifiers_.append(output_identifier);
+}
+
+mf::Variable *MultiFunctionProcedureOperation::convert_variable(mf::Variable *variable,
+                                                                const mf::DataType expected_type)
+{
+  /* Conversion not needed. */
+  const mf::DataType variable_type = variable->data_type();
+  if (variable_type == expected_type) {
+    return variable;
+  }
+
+  const bke::DataTypeConversions &conversion_table = bke::get_implicit_type_conversions();
+  const mf::MultiFunction *function = conversion_table.get_conversion_multi_function(
+      variable_type, expected_type);
+
+  /* Conversion is not possible, return a default variable instead. */
+  if (!function) {
+    return this->get_default_value_variable(expected_type);
+  }
+
+  mf::Variable *converted_variable = procedure_builder_.add_call<1>(*function, {variable})[0];
+  implicit_variables_.append(converted_variable);
+  return converted_variable;
+}
+
+mf::Variable *MultiFunctionProcedureOperation::get_default_value_variable(const mf::DataType type)
+{
+  const mf::MultiFunction &constant_function =
+      procedure_.construct_function<mf::CustomMF_GenericConstant>(
+          type.single_type(), type.single_type().default_value(), false);
+  mf::Variable *constant_variable = procedure_builder_.add_call<1>(constant_function)[0];
+  implicit_variables_.append(constant_variable);
+  return constant_variable;
+}
+
+}  // namespace blender::compositor

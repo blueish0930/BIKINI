@@ -1,0 +1,8 @@
+---
+description: Required asset and demo validation for every official Blender daily merge in BIKINI
+alwaysApply: true
+---
+
+# Official daily merge gate
+
+Before starting any official Blender daily merge, read `E:/Blender_Source/AGENTS.md`, especially the section “每次合并 Blender 官方 daily 前后必须执行”. Follow its pre-merge asset checks and post-merge validation for every `.blend` under `E:/BIKINI Demo Files/`. Do not report the merge complete until the exact Release executable, installed resources, each demo's active nodes, and Blender shutdown have been checked, with failures and untested behavior called out explicitly.

@@ -1,0 +1,117 @@
+/* SPDX-FileCopyrightText: 2023 Blender Authors
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later */
+
+/** \file
+ * \ingroup draw
+ */
+
+#include "draw_defines.hh"
+
+#ifdef GPU_SHADER
+#  pragma once
+#  include "gpu_shader_compat.hh"
+
+#  include "draw_command_shared.hh"
+#  include "draw_shader_shared.hh"
+#endif
+
+#ifdef GLSL_CPP_STUBS
+/* Define stub defines for C++ test compilation. */
+#  define DRAW_VIEW_CREATE_INFO
+#  define DRW_VIEW_CULLING_INFO
+#  define USE_WORLD_CLIP_PLANES
+
+#  define DRW_VIEW_LEN DRW_VIEW_MAX
+#endif
+
+#include "gpu_shader_create_info.hh"
+
+/* -------------------------------------------------------------------- */
+/** \name Resource ID
+ * This is used to fetch per object data in drw_matrices and other object indexed buffers.
+ * \{ */
+
+/**
+ * Used if the resource index needs to be passed to the fragment shader.
+ * IMPORTANT: Vertex shader need to write `drw_ResourceID_iface.resource_id` in main().
+ */
+GPU_SHADER_NAMED_INTERFACE_INFO(draw_resource_id_iface, drw_ResourceID_iface)
+FLAT(uint, resource_id)
+GPU_SHADER_NAMED_INTERFACE_END(drw_ResourceID_iface)
+
+GPU_SHADER_CREATE_INFO(draw_resource_id_varying)
+VERTEX_OUT(draw_resource_id_iface)
+GEOMETRY_OUT(draw_resource_id_iface)
+DEFINE("RESOURCE_ID_VARYING")
+GPU_SHADER_CREATE_END()
+
+GPU_SHADER_CREATE_INFO(draw_resource_id)
+STORAGE_BUF(DRW_RESOURCE_ID_SLOT, read, uint, res_id_buf[])
+GPU_SHADER_CREATE_END()
+
+GPU_SHADER_CREATE_INFO(draw_resource_with_custom_id)
+DEFINE("WITH_CUSTOM_IDS")
+STORAGE_BUF(DRW_RESOURCE_ID_SLOT, read, uint2, res_id_with_custom_id_buf[])
+GPU_SHADER_CREATE_END()
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Draw Object Resources
+ * \{ */
+
+GPU_SHADER_CREATE_INFO(draw_modelmat_common)
+TYPEDEF_SOURCE("draw_shader_shared.hh")
+STORAGE_BUF(DRW_OBJ_MAT_SLOT, read, ObjectMatrices, drw_matrix_buf[])
+DEFINE("DRAW_MODELMAT_CREATE_INFO")
+GPU_SHADER_CREATE_END()
+
+GPU_SHADER_CREATE_INFO(draw_modelmat)
+ADDITIONAL_INFO(draw_modelmat_common)
+ADDITIONAL_INFO(draw_resource_id)
+GPU_SHADER_CREATE_END()
+
+GPU_SHADER_CREATE_INFO(draw_modelmat_with_custom_id)
+ADDITIONAL_INFO(draw_modelmat_common)
+ADDITIONAL_INFO(draw_resource_with_custom_id)
+GPU_SHADER_CREATE_END()
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Draw View
+ * \{ */
+
+GPU_SHADER_CREATE_INFO(draw_view)
+UNIFORM_BUF_FREQ(DRW_VIEW_UBO_SLOT, ViewMatrices, view_buf[64], PASS)
+DEFINE("DRAW_VIEW_CREATE_INFO")
+TYPEDEF_SOURCE("draw_shader_shared.hh")
+GPU_SHADER_CREATE_END()
+
+GPU_SHADER_CREATE_INFO(draw_view_culling)
+UNIFORM_BUF(DRW_VIEW_CULLING_UBO_SLOT, ViewCullingData, drw_view_culling_buf[64])
+DEFINE("DRW_VIEW_CULLING_INFO")
+TYPEDEF_SOURCE("draw_shader_shared.hh")
+GPU_SHADER_CREATE_END()
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Draw View
+ * \{ */
+
+GPU_SHADER_CREATE_INFO(drw_clipped)
+/* TODO(fclem): Move to engine side. */
+UNIFORM_BUF_FREQ(DRW_CLIPPING_UBO_SLOT, float4, drw_clipping_[6], PASS)
+BUILTINS(BuiltinBits::CLIP_DISTANCES)
+DEFINE("USE_WORLD_CLIP_PLANES")
+GPU_SHADER_CREATE_END()
+
+/** \} */
+
+/* Stub needs to be after all definitions to avoid conflict with legacy definitions. */
+#ifdef GLSL_CPP_STUBS
+/* Make it work for both draw_resource_id and draw_resource_with_custom_id. */
+#  define resource_id_buf uint2(0)
+#endif

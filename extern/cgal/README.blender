@@ -1,0 +1,13 @@
+Project: CGAL (Computational Geometry Algorithms Library)
+URL: https://github.com/CGAL/cgal
+License: GPL-3.0-or-later / LGPL / commercial (see LICENSE*)
+Version: 6.2 (library release, header-only)
+
+Upstream: CGAL-6.2-library.zip from GitHub releases (v6.2).
+
+Blender integration notes:
+- Vendored under extern/cgal for Geometry Nodes (WITH_CGAL).
+- Algorithms are called only from intern/cgal_bridge (never from unity-built node TUs).
+- Default kernel: Exact_predicates_inexact_constructions_kernel (EPICK).
+- Full EPECK path requires WITH_MPFR + MPFR libraries (optional).
+- Do not compile examples/tests/demos.

@@ -1,0 +1,543 @@
+/* SPDX-FileCopyrightText: 2026 Blender Authors
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later */
+
+/**
+ * QuadWild Geometry Node backend.
+ *
+ * Spawns the official QuadWild-BiMDF CLI tools (GPL-3) shipped next to blender.exe:
+ *   <program_dir>/quadwild/quadwild[.exe]
+ *   <program_dir>/quadwild/quad_from_patches[.exe]
+ *
+ * Pipeline (from cgg-bern/quadwild-bimdf release notes):
+ *   1) quadwild <mesh.obj> 2 <prep_config.txt>     → remesh + field + tracing
+ *   2) quad_from_patches <mesh_rem_p0.obj> 1 <main_config.txt>
+ *        → *_quadrangulation[_smooth].obj
+ */
+
+#include "BLI_array.hh"
+#include "BLI_fileops.hh"
+#include "BLI_index_range.hh"
+#include "BLI_math_base.hh"
+#include "BLI_offset_indices.hh"
+#include "BLI_path_utils.hh"
+#include "BLI_span.hh"
+#include "BLI_string.hh"
+#include "BLI_string_utils.hh"
+#include "BLI_tempfile.hh"
+#include "BLI_time.hh"
+#include "BLI_vector.hh"
+
+#include "BKE_appdir.hh"
+#include "BKE_mesh.hh"
+
+#include "DNA_mesh_types.h"
+
+#include "MEM_guardedalloc.h"
+
+#include "GEO_mesh_quadwild.hh"
+
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <sstream>
+#include <string>
+#include <vector>
+
+#ifdef _WIN32
+#  include <windows.h>
+#else
+#  include <sys/types.h>
+#  include <sys/wait.h>
+#  include <unistd.h>
+#endif
+
+namespace blender::geometry {
+
+/* -------------------------------------------------------------------- */
+/** \name Package / process helpers
+ * \{ */
+
+static bool path_is_file(const char *path)
+{
+  return BLI_exists(path) && !BLI_is_dir(path);
+}
+
+std::string quadwild_package_dir_find()
+{
+  if (const char *env = BLI_getenv("QUADWILD_DIR")) {
+    if (env[0] != '\0' && BLI_is_dir(env)) {
+      return env;
+    }
+  }
+
+  const char *program_dir = BKE_appdir_program_dir();
+  if (program_dir && program_dir[0]) {
+    char candidate[FILE_MAX];
+    BLI_path_join(candidate, sizeof(candidate), program_dir, "quadwild", nullptr);
+    if (BLI_is_dir(candidate)) {
+      return candidate;
+    }
+  }
+
+  /* Portable layout: some packages nest under versioned datafiles. */
+  if (const std::optional<std::string> datafiles = BKE_appdir_folder_id(BLENDER_DATAFILES,
+                                                                       "quadwild"))
+  {
+    if (BLI_is_dir(datafiles->c_str())) {
+      return *datafiles;
+    }
+  }
+
+  return {};
+}
+
+static std::string tool_path(const StringRefNull package_dir, const char *name)
+{
+  char path[FILE_MAX];
+#ifdef _WIN32
+  char name_win[FILE_MAX];
+  SNPRINTF(name_win, "%s.exe", name);
+  BLI_path_join(path, sizeof(path), package_dir.c_str(), name_win, nullptr);
+#else
+  BLI_path_join(path, sizeof(path), package_dir.c_str(), name, nullptr);
+#endif
+  return path;
+}
+
+#ifdef _WIN32
+static std::wstring utf8_to_wide(const char *utf8)
+{
+  if (!utf8 || !utf8[0]) {
+    return {};
+  }
+  const int n = MultiByteToWideChar(CP_UTF8, 0, utf8, -1, nullptr, 0);
+  if (n <= 0) {
+    return {};
+  }
+  std::wstring out(size_t(n - 1), L'\0');
+  MultiByteToWideChar(CP_UTF8, 0, utf8, -1, out.data(), n);
+  return out;
+}
+#endif
+
+/**
+ * Run \a exe with arguments, waiting until exit.
+ * \return process exit code, or -1 on launch failure.
+ */
+static int run_process(const char *exe,
+                       const std::vector<std::string> &args,
+                       const char *cwd,
+                       std::string *r_log)
+{
+#ifdef _WIN32
+  std::string cmd_utf8;
+  auto append_quoted = [&](const char *s) {
+    if (!cmd_utf8.empty()) {
+      cmd_utf8.push_back(' ');
+    }
+    cmd_utf8.push_back('"');
+    for (const char *p = s; *p; p++) {
+      if (*p == '"') {
+        cmd_utf8.push_back('"');
+        cmd_utf8.push_back('"');
+      }
+      else {
+        cmd_utf8.push_back(*p);
+      }
+    }
+    cmd_utf8.push_back('"');
+  };
+
+  append_quoted(exe);
+  for (const std::string &a : args) {
+    append_quoted(a.c_str());
+  }
+
+  const std::wstring wexe = utf8_to_wide(exe);
+  const std::wstring wcwd = utf8_to_wide(cwd ? cwd : "");
+  std::wstring wcmd = utf8_to_wide(cmd_utf8.c_str());
+  if (wexe.empty() || wcmd.empty()) {
+    if (r_log) {
+      *r_log += "UTF-8 path conversion failed\n";
+    }
+    return -1;
+  }
+
+  STARTUPINFOW si;
+  PROCESS_INFORMATION pi;
+  ZeroMemory(&si, sizeof(si));
+  si.cb = sizeof(si);
+  si.dwFlags = STARTF_USESHOWWINDOW;
+  si.wShowWindow = SW_HIDE;
+  ZeroMemory(&pi, sizeof(pi));
+
+  /* CreateProcessW may modify the command line buffer. */
+  std::vector<wchar_t> cmd_mutable(wcmd.begin(), wcmd.end());
+  cmd_mutable.push_back(L'\0');
+
+  const BOOL ok = CreateProcessW(wexe.c_str(),
+                                 cmd_mutable.data(),
+                                 nullptr,
+                                 nullptr,
+                                 FALSE,
+                                 CREATE_NO_WINDOW,
+                                 nullptr,
+                                 wcwd.empty() ? nullptr : wcwd.c_str(),
+                                 &si,
+                                 &pi);
+  if (!ok) {
+    if (r_log) {
+      *r_log += "CreateProcessW failed for " + std::string(exe) + "\n";
+    }
+    return -1;
+  }
+
+  WaitForSingleObject(pi.hProcess, INFINITE);
+  DWORD code = 1;
+  GetExitCodeProcess(pi.hProcess, &code);
+  CloseHandle(pi.hProcess);
+  CloseHandle(pi.hThread);
+  return int(code);
+#else
+  std::vector<char *> argv;
+  argv.push_back(const_cast<char *>(exe));
+  for (const std::string &a : args) {
+    argv.push_back(const_cast<char *>(a.c_str()));
+  }
+  argv.push_back(nullptr);
+
+  const pid_t pid = fork();
+  if (pid < 0) {
+    if (r_log) {
+      *r_log += "fork failed\n";
+    }
+    return -1;
+  }
+  if (pid == 0) {
+    if (cwd && cwd[0]) {
+      if (chdir(cwd) != 0) {
+        _exit(127);
+      }
+    }
+    execvp(exe, argv.data());
+    _exit(127);
+  }
+  int status = 0;
+  if (waitpid(pid, &status, 0) < 0) {
+    return -1;
+  }
+  if (WIFEXITED(status)) {
+    return WEXITSTATUS(status);
+  }
+  return -1;
+#endif
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Minimal OBJ I/O (triangles in / n-gons out)
+ * \{ */
+
+static bool write_triangle_obj(const char *filepath, const Mesh &mesh)
+{
+  const Span<float3> positions = mesh.vert_positions();
+  const Span<int> corner_verts = mesh.corner_verts();
+  const OffsetIndices faces = mesh.faces();
+
+  FILE *f = BLI_fopen(filepath, "wb");
+  if (!f) {
+    return false;
+  }
+
+  fprintf(f, "# Blender Geometry Nodes → QuadWild\n");
+  for (const int v : positions.index_range()) {
+    const float3 &p = positions[v];
+    fprintf(f, "v %.9g %.9g %.9g\n", double(p.x), double(p.y), double(p.z));
+  }
+  for (const int face_i : faces.index_range()) {
+    const IndexRange face = faces[face_i];
+    if (face.size() != 3) {
+      fclose(f);
+      return false;
+    }
+    /* OBJ is 1-based. */
+    fprintf(f,
+            "f %d %d %d\n",
+            corner_verts[face[0]] + 1,
+            corner_verts[face[1]] + 1,
+            corner_verts[face[2]] + 1);
+  }
+  fclose(f);
+  return true;
+}
+
+static Mesh *read_obj_mesh(const char *filepath)
+{
+  blender::fstream in(filepath, std::ios_base::in);
+  if (!in) {
+    return nullptr;
+  }
+
+  Vector<float3> verts;
+  Vector<Vector<int>> faces;
+
+  std::string line;
+  while (std::getline(in, line)) {
+    if (line.empty() || line[0] == '#') {
+      continue;
+    }
+    if (line[0] == 'v' && (line.size() == 1 || line[1] == ' ' || line[1] == '\t')) {
+      float x = 0, y = 0, z = 0;
+      if (sscanf(line.c_str() + 1, "%f %f %f", &x, &y, &z) >= 3) {
+        verts.append(float3(x, y, z));
+      }
+      continue;
+    }
+    if (line[0] == 'f' && (line.size() == 1 || line[1] == ' ' || line[1] == '\t')) {
+      Vector<int> face;
+      const char *p = line.c_str() + 1;
+      while (*p) {
+        while (*p == ' ' || *p == '\t') {
+          p++;
+        }
+        if (*p == '\0') {
+          break;
+        }
+        int idx = 0;
+        /* Accept "v", "v/vt", "v//vn", "v/vt/vn". */
+        if (sscanf(p, "%d", &idx) != 1) {
+          break;
+        }
+        if (idx < 0) {
+          idx = int(verts.size()) + idx + 1;
+        }
+        face.append(idx - 1);
+        while (*p && *p != ' ' && *p != '\t') {
+          p++;
+        }
+      }
+      if (face.size() >= 3) {
+        faces.append(std::move(face));
+      }
+    }
+  }
+
+  if (verts.is_empty() || faces.is_empty()) {
+    return nullptr;
+  }
+
+  int corners_num = 0;
+  for (const Vector<int> &face : faces) {
+    corners_num += face.size();
+  }
+
+  Mesh *mesh = BKE_mesh_new_nomain(verts.size(), 0, faces.size(), corners_num);
+  mesh->vert_positions_for_write().copy_from(verts.as_span());
+
+  MutableSpan<int> face_offsets = mesh->face_offsets_for_write();
+  MutableSpan<int> corner_verts = mesh->corner_verts_for_write();
+  int corner = 0;
+  face_offsets[0] = 0;
+  for (const int fi : faces.index_range()) {
+    for (const int vi : faces[fi]) {
+      const int clamped = math::clamp(vi, 0, int(verts.size()) - 1);
+      corner_verts[corner++] = clamped;
+    }
+    face_offsets[fi + 1] = corner;
+  }
+
+  bke::mesh_calc_edges(*mesh, false, false);
+  return mesh;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Config generation
+ * \{ */
+
+static bool write_prep_config(const char *filepath, const QuadWildOptions &options)
+{
+  float sharp = options.sharp_feature_threshold_deg;
+  switch (options.feature_mode) {
+    case QuadWildFeatureMode::Organic:
+      sharp = -1.0f;
+      break;
+    case QuadWildFeatureMode::Mechanical:
+      if (!(sharp > 0.0f)) {
+        sharp = 35.0f;
+      }
+      break;
+    case QuadWildFeatureMode::Custom:
+      break;
+  }
+
+  FILE *f = BLI_fopen(filepath, "wb");
+  if (!f) {
+    return false;
+  }
+  /* Exact key order required by QuadWild's fscanf parser. */
+  fprintf(f, "do_remesh %d\n", options.do_remesh ? 1 : 0);
+  fprintf(f, "sharp_feature_thr %g\n", double(sharp));
+  fprintf(f, "alpha %g\n", double(options.alpha));
+  fprintf(f, "scaleFact %g\n", double(options.scale_fact));
+  fclose(f);
+  return true;
+}
+
+static std::string main_config_relative(const QuadWildOptions &options)
+{
+  if (!options.main_config.empty()) {
+    /* Allow bare basename or path under main_config. */
+    if (options.main_config.find('/') != std::string::npos ||
+        options.main_config.find('\\') != std::string::npos)
+    {
+      return options.main_config;
+    }
+    return std::string("config/main_config/") + options.main_config;
+  }
+  return "config/main_config/flow_noalign_lemon.txt";
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Public API
+ * \{ */
+
+Mesh *mesh_quadwild(const Mesh &src_mesh,
+                    const QuadWildOptions &options,
+                    QuadWildResultInfo *r_info)
+{
+  auto fail = [&](const std::string &msg) -> Mesh * {
+    if (r_info) {
+      r_info->success = false;
+      r_info->message = msg;
+    }
+    return BKE_mesh_new_nomain(0, 0, 0, 0);
+  };
+
+  if (src_mesh.verts_num < 3 || src_mesh.faces_num < 1) {
+    return fail("Input mesh is empty");
+  }
+
+  const std::string package = quadwild_package_dir_find();
+  if (package.empty()) {
+    return fail(
+        "QuadWild package not found. Place binaries in <blender>/quadwild/ "
+        "(quadwild + quad_from_patches) or set QUADWILD_DIR");
+  }
+  if (r_info) {
+    r_info->package_dir = package;
+  }
+
+  const std::string qw_exe = tool_path(package, "quadwild");
+  const std::string qfp_exe = tool_path(package, "quad_from_patches");
+  if (!path_is_file(qw_exe.c_str()) || !path_is_file(qfp_exe.c_str())) {
+    return fail("QuadWild executables missing in " + package);
+  }
+
+  /* Work directory for intermediate files (QuadWild writes siblings of the input mesh). */
+  char temp_root[FILE_MAX];
+  BLI_temp_directory_path_get(temp_root, sizeof(temp_root));
+  BLI_path_slash_ensure(temp_root, sizeof(temp_root));
+  char work_dir[FILE_MAX];
+  SNPRINTF(work_dir, "%squadwild_%lld", temp_root, BLI_time_now_seconds_i());
+  if (!BLI_dir_create_recursive(work_dir)) {
+    return fail(std::string("Cannot create work directory: ") + work_dir);
+  }
+
+  char mesh_path[FILE_MAX];
+  char prep_path[FILE_MAX];
+  BLI_path_join(mesh_path, sizeof(mesh_path), work_dir, "input.obj", nullptr);
+  BLI_path_join(prep_path, sizeof(prep_path), work_dir, "prep_setup.txt", nullptr);
+
+  if (!write_triangle_obj(mesh_path, src_mesh)) {
+    BLI_delete(work_dir, true, true);
+    return fail("Failed to write temporary OBJ");
+  }
+  if (!write_prep_config(prep_path, options)) {
+    BLI_delete(work_dir, true, true);
+    return fail("Failed to write prep config");
+  }
+
+  std::string log;
+  /* Step 1+2: remesh, field, tracing. */
+  {
+    const std::vector<std::string> args = {mesh_path, "2", prep_path};
+    const int code = run_process(qw_exe.c_str(), args, package.c_str(), &log);
+    if (code != 0) {
+      BLI_delete(work_dir, true, true);
+      return fail("quadwild step failed (exit " + std::to_string(code) + "). " + log);
+    }
+  }
+
+  char rem_p0[FILE_MAX];
+  BLI_path_join(rem_p0, sizeof(rem_p0), work_dir, "input_rem_p0.obj", nullptr);
+  if (!path_is_file(rem_p0)) {
+    /* Some builds may name slightly differently; try common variants. */
+    char alt[FILE_MAX];
+    BLI_path_join(alt, sizeof(alt), work_dir, "input_rem.obj", nullptr);
+    if (path_is_file(alt)) {
+      BLI_strncpy(rem_p0, alt, sizeof(rem_p0));
+    }
+    else {
+      BLI_delete(work_dir, true, true);
+      return fail("Tracing output input_rem_p0.obj not found");
+    }
+  }
+
+  /* Step 3: quantization + pure-quad extraction (Bi-MDF flow solver). */
+  {
+    const std::string main_cfg = main_config_relative(options);
+    const std::vector<std::string> args = {rem_p0, "1", main_cfg};
+    const int code = run_process(qfp_exe.c_str(), args, package.c_str(), &log);
+    if (code != 0) {
+      BLI_delete(work_dir, true, true);
+      return fail("quad_from_patches failed (exit " + std::to_string(code) + "). " + log);
+    }
+  }
+
+  char out_smooth[FILE_MAX];
+  char out_raw[FILE_MAX];
+  BLI_path_join(
+      out_smooth, sizeof(out_smooth), work_dir, "input_rem_p0_quadrangulation_smooth.obj", nullptr);
+  BLI_path_join(out_raw, sizeof(out_raw), work_dir, "input_rem_p0_quadrangulation.obj", nullptr);
+
+  const char *out_path = nullptr;
+  if (options.smooth_output && path_is_file(out_smooth)) {
+    out_path = out_smooth;
+  }
+  else if (path_is_file(out_raw)) {
+    out_path = out_raw;
+  }
+  else if (path_is_file(out_smooth)) {
+    out_path = out_smooth;
+  }
+
+  if (!out_path) {
+    BLI_delete(work_dir, true, true);
+    return fail("Quadrangulation OBJ not produced");
+  }
+
+  Mesh *result = read_obj_mesh(out_path);
+  BLI_delete(work_dir, true, true);
+
+  if (!result) {
+    return fail("Failed to parse quadrangulation OBJ");
+  }
+
+  BKE_mesh_copy_parameters(result, &src_mesh);
+
+  if (r_info) {
+    r_info->success = true;
+    r_info->message.clear();
+  }
+  return result;
+}
+
+/** \} */
+
+}  // namespace blender::geometry

@@ -1,0 +1,14 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 95f2a77..4c0c182 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -172,9 +172,6 @@ if(MSVC)
+          ${CMAKE_CXX_LINKER_WRAPPER_FLAG}/DEBUG \
+          ${CMAKE_CXX_LINKER_WRAPPER_FLAG}/INCREMENTAL:NO")
+ 
+-    # enable CET shadow stack
+-    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${CMAKE_CXX_LINKER_WRAPPER_FLAG}/CETCOMPAT")
+-
+     #Use of sccache with MSVC requires workaround of replacing /Zi with /Z7
+     #https://github.com/mozilla/sccache
+     if(USE_Z7) #sccache

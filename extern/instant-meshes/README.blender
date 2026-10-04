@@ -1,0 +1,9 @@
+Project: Instant Meshes
+URL: https://github.com/wjakob/instant-meshes
+License: BSD-3-Clause (see LICENSE.txt)
+Upstream: wjakob/instant-meshes
+Local modifications:
+  - Blender CMakeLists.txt builds the remeshing core only (no NanoGUI / viewer / CLI).
+  - patches/blender.patch: oneTBB compatibility, VectorXf setA, nprocs, optional field iterations.
+  - Uses Blender's Eigen and TBB; header-only deps under ext/{dset,pcg32,pss}.
+Copyright: Copyright (c) 2015 Wenzel Jakob, Daniele Panozzo, Marco Tarini, Olga Sorkine-Hornung.

@@ -1,0 +1,4 @@
+# BIKINI fork: Git LFS disabled for all formats (plain Git only).
+# Upstream Blender tracks binaries via LFS; we do not on this remote.
+
+scripts/modules/_bpy_internal/assets/remote_library/*_openapi.py linguist-generated=true

@@ -1,0 +1,18 @@
+ply
+format ascii 1.0
+comment Malformed face indices reference vertices and UVs that do not exist.
+element vertex 4
+property float x
+property float y
+property float z
+property float s
+property float t
+element face 2
+property list uchar uint vertex_indices
+end_header
+0 0 0 0.1 0.2
+1 0 0 0.3 0.4
+1 1 0 0.5 0.6
+0 1 0 0.7 0.8
+3 0 1 2
+3 99 100 101

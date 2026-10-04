@@ -1,0 +1,17 @@
+ply
+format ascii 1.0
+element face 1
+property list int int vertex_indices
+element vertex 4
+property float x
+property float y
+property float z
+property float red
+property float green
+property float blue
+end_header
+4 0 1 2 3
+1 0 1 1 0 0
+1 0 -1 0 1 0
+-1 0 -1 0 0 1
+-1 0 1 0.5 0.5 0.5

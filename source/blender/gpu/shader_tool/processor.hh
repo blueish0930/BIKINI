@@ -1,0 +1,493 @@
+/* SPDX-FileCopyrightText: 2024 Blender Authors
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later */
+
+/** \file
+ * \ingroup shader_tool
+ */
+
+#pragma once
+
+#include "intermediate.hh"
+#include "metadata.hh"
+
+#include "bsl/symbol_table.hh"
+
+namespace blender::gpu::shader {
+
+static inline Language language_from_filename(const std::string &filename)
+{
+  if (filename.ends_with(".msl")) {
+    return Language::MSL;
+  }
+  if (filename.ends_with(".glsl")) {
+    return Language::GLSL;
+  }
+  if (filename.ends_with(".bsl.hh")) {
+    return Language::BSL;
+  }
+  if (filename.ends_with("_infos.hh")) {
+    return Language::INFO;
+  }
+  if (filename.ends_with(".hh")) {
+    return Language::CPP;
+  }
+  return Language::UNKNOWN;
+}
+
+/**
+ * Shader source preprocessor that allow to mutate shader sources into cross API source that can be
+ * interpreted by the different GPU backends. Some syntax are mutated or reported as incompatible.
+ */
+class SourceProcessor {
+ public:
+  using ErrorHandler = parser::ErrorHandler;
+  using Parser = parser::IntermediateForm<parser::FullLexer, parser::FullParser>;
+  using Scope = parser::Scope;
+  using Token = parser::Token;
+  using Tokens = std::vector<parser::Token>;
+
+  /* Cannot use `__` because of some compilers complaining about reserved symbols. */
+  static constexpr const char *namespace_separator = "_";
+  /* Add a prefix to all member functions so that they are not clashing with local variables. */
+  static constexpr const char *method_call_prefix = "_";
+  static constexpr const char *linted_struct_suffix = "_host_shared_";
+  static constexpr const char *uniform_struct_suffix = "uniform_";
+
+ private:
+  const std::string source_;
+  const std::string filepath_;
+  const std::string filename;
+  metadata::Source metadata_;
+  /* List of file that can be used in include directives. */
+  const std::vector<std::string> file_list_;
+
+  Language language_;
+
+  parser::ErrorHandler error_handler = {
+      .default_filename = filepath_.substr(filepath_.find_last_of('/') + 1)};
+
+  void report_error(parser::ast::Node node, const std::string &message)
+  {
+    error_handler.report(node.front(), message);
+  }
+
+  void report_error(Token tok, const std::string &message)
+  {
+    error_handler.report(tok, message);
+  }
+
+  void report_error(int row, int column, const std::string &line, const std::string &message)
+  {
+    error_handler.report(row, column, line, message);
+  }
+
+  struct SourceManager {
+   private:
+    std::vector<std::unique_ptr<Parser>> parsers_;
+
+    int include_id_ = 0;
+
+   public:
+    Parser &new_source(ErrorHandler &error_handler)
+    {
+      return *parsers_.emplace_back(std::make_unique<Parser>(error_handler));
+    }
+
+    /* To be called after all own include of a file have been processed. */
+    int include_id_get()
+    {
+      return include_id_++;
+    }
+  };
+
+ public:
+  SourceProcessor(const std::string &source,
+                  const std::string &filepath,
+                  Language language,
+                  const std::vector<std::string> &file_list)
+      : source_(source),
+        filepath_(filepath),
+        filename(filepath_.substr(filepath_.find_last_of('/') + 1)),
+        file_list_(file_list),
+        language_(language)
+  {
+  }
+
+  struct Result {
+    /* Resulting Intermediate Language source. */
+    std::string source;
+    /* Parsed metadata. */
+    metadata::Source metadata;
+
+    std::optional<parser::ErrorHandler::Error> error;
+  };
+
+  /* Convert to intermediate language. Also outputs metadata.
+   * symbols_set is the set of namespace symbols from external files / dependencies. */
+  Result convert(metadata::Source external_sources_symbols = {});
+
+  /* Lightweight parsing. Only Source::dependencies and Source::symbol_table are populated. */
+  metadata::Source parse_include_and_symbols();
+  metadata::Source parse_include_and_symbols(SourceManager &sources,
+                                             bsl::SymbolTable &symbols,
+                                             std::vector<std::string> &visited_files);
+
+  /* Return the input string with comments removed. */
+  std::string remove_comments()
+  {
+    return remove_comments(source_);
+  }
+
+  /* String hash are outputted inside GLSL and needs to fit 32 bits. */
+  static uint32_t hash_string(const std::string &str)
+  {
+    uint64_t hash_64 = metadata::hash(str);
+    uint32_t hash_32 = uint32_t(hash_64 ^ (hash_64 >> 32));
+    return hash_32;
+  }
+
+ private:
+  Result convert_bsl();
+  Result convert_info();
+  Result convert_glsl();
+  Result convert_msl();
+  Result convert_bsl_legacy(metadata::Source external_sources_symbols);
+
+  /* --- Cleanup --- */
+
+  /** Remove single and multi-line comments to avoid this complexity during parsing. */
+  std::string remove_comments(const std::string &str);
+  void remove_comments(Parser &parser);
+  /* Lower preprocessor directives containing `GPU_SHADER`.
+   * Avoid processing code that is not destined to be shader code and could contain unsupported
+   * syntax. */
+  std::string disabled_code_mutation(const std::string &str);
+  void disabled_code_mutation(Parser &parser, bool new_bsl_compiler = false);
+  /* Remove trailing white spaces. */
+  template<typename ParserT> void cleanup_whitespace(ParserT &parser, bool do_leading = false);
+  /* Successive mutations can introduce a lot of unneeded line directives. */
+  void cleanup_line_directives(Parser &parser);
+  /* Successive mutations can introduce a lot of unneeded blank lines. */
+  void cleanup_empty_lines(Parser &parser);
+
+  /* --- Parsing --- */
+
+  /* Parse defines in order to output them with the create infos.
+   * This allow the create infos to use shared defines values. */
+  void parse_defines(Parser &parser);
+  /* Populates metadata::symbol_table by scanning all namespaces.
+   * Does not parse global symbols. */
+  void parse_local_symbols(Parser &parser);
+  /* Legacy create info parsing and removing. */
+  void parse_legacy_create_info(Parser &parser);
+  /* Populates metadata::dependencies by scanning include directives. */
+  void parse_includes(Parser &parser);
+  /* Parse special pragma. */
+  void parse_pragma_runtime_generated(Parser &parser);
+  /** Populate metadata::functions for runtime node-tree compilation. */
+  void parse_library_functions(Parser &parser);
+  void parse_library_functions_ast(Parser &parser);
+  /* Populate metadata::builtins by scanning source for keywords. Can trigger false positive.
+   * This is mostly legacy path as most builtin should be explicitly defined inside the BSL entry
+   * points. */
+  void parse_builtins(const std::string &str, const std::string &filename, bool pure_glsl = false);
+  void parse_builtins(Parser &parser, const std::string &filename);
+  void parse_draw_debug(Parser &parser, const std::string &filename);
+
+  /* Legacy shared variable support. */
+  std::string threadgroup_variables_parse_and_remove(const std::string &str);
+  void threadgroup_variables_parse_and_remove(Parser &parser);
+
+  void scan_external_symbols(SourceManager &sources,
+                             bsl::SymbolTable &symbols,
+                             std::vector<std::string> &visited_files);
+
+  /* --- Linting --- */
+
+  /* Make sure `if`, `else`, `for` statements are followed by braces. */
+  void lint_unbraced_statements(Parser &parser);
+  /* Lint for BSL reserved tokens. */
+  void lint_reserved_tokens(Parser &parser);
+  /* Lint for valid BSL attributes. */
+  void lint_attributes(Parser &parser);
+  void lint_attributes_ast(Parser &parser);
+  /* Assume formatted source with our code style. Cannot be applied to python shaders. */
+  void lint_global_scope_constants(Parser &parser);
+  void lint_global_scope_constants_ast(Parser &parser);
+  /* Search for constructor definition in active code. These are not supported. */
+  void lint_constructors(Parser &parser);
+  /* Forward declaration of types are not supported and makes no sense in a shader program where
+   * there is no pointers. */
+  void lint_forward_declared_structs(Parser &parser);
+
+  /* --- Lowering --- */
+
+  /* Remove `maybe_unused` attribute. */
+  void lower_noop_attributes(Parser &parser);
+  /* Lower parameters that have no name (invalid in GLSL). */
+  void lower_namesless_parameters(Parser &parser);
+  void lower_namesless_parameters_ast(Parser &parser);
+  /**
+   * Given our code-style, we don't need the disambiguation.
+   * Example: `x.template foo<int>()` > `x.foo<int>()`
+   */
+  void lower_template_dependent_names(Parser &parser);
+  /* Lower template definition and instantiation by doing simple copy paste + argument
+   * substitution. */
+  void lower_templates(Parser &parser);
+  void lower_template_calls(Parser &parser);
+  void lower_template_calls_ast(Parser &parser);
+  void lower_template_specialization(Parser &parser);
+  /* Ensures pragma once is present in headers to comply to our include semantic. */
+  void lint_pragma_once(Parser &parser, const std::string &filename);
+  /* Unroll loops by copy pasting content. */
+  void lower_loop_unroll(Parser &parser);
+  /* Convert if statements marked as static to preprocessor #if statements. */
+  void lower_static_branch(Parser &parser);
+  /* Lower namespaces by adding namespace prefix to all the contained structs and functions. */
+  void lower_namespaces(Parser &parser);
+  void lower_bsl_to_il(Parser &parser, bsl::SymbolTable &symbols);
+  /**
+   * Needs to run before namespace mutation so that `using` have more precedence.
+   * Otherwise the following would fail.
+   * \code{.cc}
+   * namespace B {
+   * int test(int a) {}
+   * }
+   *
+   * namespace A {
+   * int test(int a) {}
+   * int func(int a) {
+   *   using B::test;
+   *   return test(a); // Should reference B::test and not A::test
+   * }
+   * \endcode
+   */
+  void lower_using(Parser &parser);
+  /* Example: `A::B` --> `A_B` */
+  void lower_scope_resolution_operators(Parser &parser);
+  /* Remove preprocessor directives unsupported by target shading languages.
+   * Examples `#includes`, `#pragma once`. */
+  void lower_preprocessor(Parser &parser);
+  void lower_preprocessor_ast(Parser &parser);
+  /* Support for BLI swizzle syntax.
+   * Examples `a.xy()` --> `a.xy`. */
+  void lower_swizzle_methods(Parser &parser);
+  void lower_swizzle_methods_ast(Parser &parser);
+  /* Support for binary literals.
+   * Examples `0b1001` --> `0x9`. */
+  void lower_binary_literals(Parser &parser);
+  /* Change printf calls to "recursive" call to implementation functions.
+   * This allows to emulate the variadic arguments of printf. */
+  void lower_printf(Parser &parser);
+  /* Turn assert into a printf. */
+  void lower_assert(Parser &parser, const std::string &filename);
+  void lower_assert_ast(Parser &parser, const std::string &filename);
+  /* Parse SRT and interfaces, remove their attributes and create init function for SRT structs. */
+  void lower_resource_table(Parser &parser);
+  /* Examples `string_t s = "a" "b"` --> `string_t s = "ab"`. */
+  void lower_strings_sequences(Parser &parser);
+  void lower_strings_sequences_ast(Parser &parser);
+  /* Replace string literals by their hash and store the original string in the file metadata. */
+  void lower_strings(Parser &parser);
+  /* `class` -> `struct` */
+  void lower_classes(Parser &parser);
+  /* Create default initializer (empty brace) for all classes. */
+  void lower_default_constructors(Parser &parser);
+  /* Make all members of a class to be referenced using `this->`. */
+  void lower_implicit_member(Parser &parser);
+  /* Move all method definition outside of struct definition blocks. */
+  void lower_method_definitions(Parser &parser);
+  void lower_this_keyword(Parser &parser);
+  /* Add padding member to empty structs. */
+  void lower_empty_struct(Parser &parser);
+  /* Transform `a.fn(b)` into `fn(a, b)`. */
+  void lower_method_calls(Parser &parser, bool with_prefix = true);
+  void lower_constructors(Parser &parser);
+  /* Transform `auto [a, b] = fn()` into `S _tmp = fn(); a = _tmp.A; b = _tmp.B;`. */
+  void lower_structured_bindings(Parser &parser);
+  /* Parse, convert to create infos, and erase declaration. */
+  void lower_pipeline_definition(Parser &parser, const std::string &filename);
+  /* Remove `[vertex|fragment|compute]` function attribute and add appropriate guards. */
+  void lower_stage_function(Parser &parser);
+  /* Add #ifdef directive around functions using SRT arguments.
+   * Need to run after `lower_entry_points_signature`. */
+  void lower_srt_arguments(Parser &parser);
+  /* Add ifdefs guards around scopes using resource accessors. */
+  void lower_resource_access_functions(Parser &parser);
+  /* Lower enums to constants. */
+  void lower_enums(Parser &parser);
+  void lower_enums_ast(Parser &parser);
+  /* Merge attribute scopes. They are equivalent in the C++ standard.
+   * This allow to simplify parsing later on.
+   * `[[a]] [[b]]` > `[[a, b]]` */
+  void lower_attribute_sequences(Parser &parser);
+  void lower_attribute_sequences_ast(Parser &parser);
+  /* Lint host shared structure for padding and alignment.
+   * Remove the [[host_shared]] attribute. */
+  void lower_host_shared_structures(Parser &parser);
+  /* Remove noop keywords that makes subsequent lowering passes more complicated. */
+  void lower_noop_keywords(Parser &parser);
+  void lower_noop_keywords_ast(Parser &parser);
+  /* Example: `int a[] = {1,2,};` --> `int a[] = {1,2 };` */
+  void lower_trailing_comma_in_list(Parser &parser);
+  void lower_trailing_comma_in_list_ast(Parser &parser);
+  /* Allow easier parsing of struct member declaration.
+   * Example: `int a, b;` --> `int a; int b;` */
+  void lower_comma_separated_declarations(Parser &parser);
+  /* Example: `return {1, 2};` --> `T tmp = T{1, 2}; return tmp;`. */
+  void lower_implicit_return_types(Parser &parser);
+  void lower_implicit_return_types_ast(Parser &parser);
+  /* Example: `int a{1};` --> `int a = int{1};`. */
+  void lower_initializer_implicit_types(Parser &parser);
+  void lower_initializer_implicit_types_ast(Parser &parser);
+  /* Example: `T a{.a=1};` --> `T a; a.a=1;`. */
+  void lower_designated_initializers(Parser &parser);
+  /* Support for **full** aggregate initialization.
+   * They are converted to default constructor for GLSL. */
+  void lower_aggregate_initializers(Parser &parser);
+  void lower_aggregate_initializers_ast(Parser &parser);
+  /* Auto detect array length, and lower to GLSL compatible syntax.
+   * TODO(fclem): GLSL 4.3 already supports initializer list. So port the old GLSL syntax to
+   * initializer list instead. */
+  void lower_array_initializations(Parser &parser);
+  /**
+   * Expand functions with default arguments to function overloads.
+   * Expects formatted input and that function bodies are followed by newline.
+   */
+  void lower_function_default_arguments(Parser &parser);
+  /**
+   * Move the instantiated templated function forward declaration up to where their class were
+   * defined. Needed step in order to support proper intra class calls of templated method with
+   * arbitrary declaration order.
+   */
+  void lower_method_forward_declaration(Parser &parser);
+  /* Limited union implementation. Create getters and setters to a raw data struct. */
+  void lower_unions(Parser &parser);
+  /**
+   * For safety reason, union members need to be declared with the union_t template.
+   * This avoid raw member access which we cannot emulate. Instead this forces the use of the `()`
+   * operator for accessing the members of the enum.
+   *
+   * Need to run before lower_unions.
+   */
+  void lower_union_accessor_templates(Parser &parser);
+  void lower_union_accessor_templates_ast(Parser &parser);
+  void lower_union_setters(Parser &parser);
+  /**
+   * Convert bitfieldExtract into bitfieldInsert when assigned to.
+   *
+   * Need to run after lower_union_setters.
+   */
+  void lower_bitfield_setters(Parser &parser);
+  /**
+   * For safety reason, nested resource tables need to be declared with the srt_t template.
+   * This avoid chained member access which isn't well defined with the preprocessing we are doing.
+   *
+   * This linting phase make sure that [[resource_table]] members uses it and that no incorrect
+   * usage is made. We also remove this template because it has no real meaning.
+   *
+   * Need to run before lower_resource_table.
+   */
+  void lower_srt_accessor_templates(Parser &parser);
+  void lower_srt_accessor_templates_ast(Parser &parser);
+  /* Add `srt_access` around all member access of SRT variables.
+   * Need to run before local reference mutations. */
+  void lower_srt_member_access(Parser &parser);
+  /* Parse entry point definitions and mutating all parameter usage to global resources. */
+  void lower_entry_points(Parser &parser);
+  /* Removes entry point arguments to make it compatible with the legacy code.
+   * Has to run after mutation related to function arguments. */
+  void lower_entry_points_signature(Parser &parser);
+  /* To be run after `lower_reference_arguments()`. */
+  void lower_reference_variables(Parser &parser);
+  /* To be run before `argument_decorator_macro_injection()`. */
+  void lower_reference_arguments(Parser &parser);
+  /* Example: `out float var[2]` > `_ref(float, var)[2]` */
+  void lower_argument_qualifiers(Parser &parser);
+  /* Example: `textureGather(t,c,1)` > `textureGather1(t,c)` */
+  void lower_gather_component(Parser &parser);
+  /* Lower test expect clauses to SSBO assignments. */
+  void lower_tests(Parser &parser, const std::string &prefix = "");
+  /* Lower resource pragmas to macros (breaks BSL parsing). */
+  void lower_resource_macro_placeholder_ast(Parser &parser);
+
+  /* --- Legacy passes for GLSL --- */
+
+  /* Example: `out float var[2]` > `out float _out_sta var _out_end[2]` */
+  std::string argument_decorator_macro_injection(const std::string &str);
+  /* Example: `= float[2](0.0, 0.0)` > `= ARRAY_T(float) ARRAY_V(0.0, 0.0)` */
+  std::string array_constructor_macro_injection(const std::string &str);
+  /* Used to make GLSL matrix constructor compatible with MSL in pyGPU shaders.
+   * This syntax is not supported in blender's own shaders. */
+  std::string matrix_constructor_mutation(const std::string &str);
+
+  /* --- Utilities --- */
+
+  /* Parse subscript scope with single integer literal and return the literal value.
+   * Return the fallback value in any case of non-literal value, or failed conversion. */
+  int static_array_size(const Scope &array, int fallback_value);
+
+  /* Process struct declaration and instantiate it in this file. */
+  void process_template_struct(metadata::TemplateDefinition &template_def,
+                               SourceProcessor::Parser &parser);
+  /* Process templated function (or class method) declaration and instantiate it in this file. */
+  void process_template_function(metadata::TemplateDefinition &template_def,
+                                 SourceProcessor::Parser &parser,
+                                 /* If method, the end token of the template inside the struct. */
+                                 const Token method_end);
+
+  void lower_pre_template(Parser &parser);
+
+  void lower_template_instantiation(
+      Parser &parser,
+      /* If method, the end token of the template inside the struct. */
+      const Token method_end,
+      const Token &inst_start,
+      const Scope &inst_args,
+      const metadata::TemplateDefinition template_def,
+      const Token &symbol_name,
+      const std::vector<std::string> &arg_list,
+      const std::string &fn_decl,
+      const bool all_template_args_in_function_signature);
+
+  metadata::TemplateDefinition parse_template_definition(SourceProcessor::Parser &parser,
+                                                         Token template_tok,
+                                                         bool is_method,
+                                                         Scope ns_scope,
+                                                         const std::string &filepath);
+
+  void parse_namespace_symbols(SourceProcessor::Parser &parser,
+                               Scope ns,
+                               metadata::Source &metadata,
+                               const std::string &filepath);
+
+  std::string template_full_specified_name(metadata::TemplateDefinition &template_def);
+
+ public:
+  /* Check for existence of preprocessor pragma in file. */
+  static bool has_pragma(Parser &parser, std::string_view pragma_str);
+
+  /** Remove trailing white-spaces. */
+  static std::string strip_whitespace(const std::string &str);
+
+  /* Example: `<float, 1>` > `TfloatT1` */
+  static std::string template_arguments_mangle(const Scope template_args);
+
+  /* Create placeholder for GLSL declarations generated by the GPU backends (VK/GL). */
+  static std::string get_create_info_placeholder(const std::string &name);
+
+  /* Make a scope only active based on the given condition using `#if` preprocessor directives.
+   * Processor contained return statements by returning 0 if scope is disabled.
+   * fn_type can be invalid token if scope is not a function scope. */
+  static void guarded_scope_mutation(Parser &parser,
+                                     Scope scope,
+                                     const std::string &condition,
+                                     Token fn_type);
+
+  /* Return `#line 1 filename\n`. */
+  static std::string line_directive_prefix(const std::string &filename);
+};
+
+}  // namespace blender::gpu::shader

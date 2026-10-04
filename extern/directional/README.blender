@@ -1,0 +1,9 @@
+Project: Directional
+URL: https://github.com/avaxman/Directional
+License: MPL-2.0 (Mozilla Public License 2.0)
+Description: Directional field (N-RoSy / polyvector / power field) processing on triangle meshes.
+  Used by Geometry Nodes Tangent Field node (power-field design + expansion to raw N directions).
+  Upstream: Amir Vaxman et al., SGP 2021 Software Award.
+Local modifications: Header-only subset under include/directional (viewer / Deprecated omitted).
+  Uses Blender's Eigen (including unsupported/Eigen/Polynomials).
+Copyright: Copyright (C) 2016–2022 Amir Vaxman and contributors.

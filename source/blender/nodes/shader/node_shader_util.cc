@@ -1,0 +1,737 @@
+/* SPDX-FileCopyrightText: 2005 Blender Authors
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later */
+
+/** \file
+ * \ingroup nodes
+ */
+
+#include <cstring>
+#include <optional>
+
+#include "DNA_node_types.h"
+#include "DNA_space_types.h"
+#include "DNA_customdata_types.h"
+
+#include "BLI_math_matrix_types.hh"
+#include "BLI_math_rotation_c.hh"
+#include "BLI_math_vector_c.hh"
+#include "BLI_string.hh"
+
+#include "BKE_context.hh"
+#include "BKE_node_runtime.hh"
+
+#include "IMB_colormanagement.hh"
+
+#include "node_shader_util.hh"
+
+#include "NOD_socket_search_link.hh"
+
+#include "RE_engine.h"
+
+#include "node_exec.hh"
+
+namespace blender {
+
+bool sh_node_poll_default(const bke::bNodeType * /*ntype*/,
+                          const bNodeTree *ntree,
+                          const char **r_disabled_hint)
+{
+  if (ntree == nullptr) {
+    return false;
+  }
+  /* `NTREE_SHADER` is 0, so only treat it as shader when the idname is set, or both are default
+   * (embedded trees before typeinfo is applied). */
+  if (STREQ(ntree->idname, "ShaderNodeTree")) {
+    return true;
+  }
+  if (ntree->idname[0] == '\0' && ntree->type == NTREE_SHADER) {
+    return true;
+  }
+  if (r_disabled_hint) {
+    *r_disabled_hint = RPT_("Not a shader node tree");
+  }
+  return false;
+}
+
+static bool sh_geo_poll_default(const bke::bNodeType * /*ntype*/,
+                                const bNodeTree *ntree,
+                                const char **r_disabled_hint)
+{
+  /* Image Process reuses repeat/closure/bundle zone nodes (color-only items). */
+  if (!STR_ELEM(ntree->idname, "ShaderNodeTree", "GeometryNodeTree", "ImageNodeTree")) {
+    *r_disabled_hint = RPT_("Not a shader, geometry, or image node tree");
+    return false;
+  }
+  return true;
+}
+
+static bool common_poll_default(const bke::bNodeType * /*ntype*/,
+                                const bNodeTree *ntree,
+                                const char **r_disabled_hint)
+{
+  if (!STR_ELEM(ntree->idname,
+                "ShaderNodeTree",
+                "GeometryNodeTree",
+                "CompositorNodeTree",
+                "ImageNodeTree"))
+  {
+    *r_disabled_hint = RPT_("Not a shader, geometry, compositor, or image node tree");
+    return false;
+  }
+  return true;
+}
+
+void sh_node_type_base(bke::bNodeType *ntype,
+                       UString idname,
+                       const std::optional<int16_t> legacy_type)
+{
+  bke::node_type_base(*ntype, idname, legacy_type);
+
+  ntype->poll = sh_node_poll_default;
+  ntype->insert_link = node_insert_link_default;
+  ntype->gather_link_search_ops = nodes::search_link_ops_for_basic_node;
+}
+
+void sh_geo_node_type_base(bke::bNodeType *ntype,
+                           UString idname,
+                           const std::optional<int16_t> legacy_type)
+{
+  bke::node_type_base(*ntype, idname, legacy_type);
+
+  ntype->poll = sh_geo_poll_default;
+  ntype->insert_link = node_insert_link_default;
+  ntype->gather_link_search_ops = nodes::search_link_ops_for_basic_node;
+}
+
+void common_node_type_base(bke::bNodeType *ntype,
+                           UString idname,
+                           const std::optional<int16_t> legacy_type)
+{
+  sh_node_type_base(ntype, idname, legacy_type);
+  ntype->poll = common_poll_default;
+  ntype->gather_link_search_ops = nodes::search_link_ops_for_basic_node;
+}
+
+bool line_style_shader_nodes_poll(const bContext *C)
+{
+  const SpaceNode *snode = CTX_wm_space_node(C);
+  return snode->shaderfrom == SNODE_SHADER_LINESTYLE;
+}
+
+bool world_shader_nodes_poll(const bContext *C)
+{
+  const SpaceNode *snode = CTX_wm_space_node(C);
+  return snode->shaderfrom == SNODE_SHADER_WORLD;
+}
+
+bool object_shader_nodes_poll(const bContext *C)
+{
+  const SpaceNode *snode = CTX_wm_space_node(C);
+  return snode->shaderfrom == SNODE_SHADER_OBJECT;
+}
+
+bool object_cycles_shader_nodes_poll(const bContext *C)
+{
+  if (!object_shader_nodes_poll(C)) {
+    return false;
+  }
+  const RenderEngineType *engine_type = CTX_data_engine_type(C);
+  return STREQ(engine_type->idname, "CYCLES");
+}
+
+bool object_eevee_shader_nodes_poll(const bContext *C)
+{
+  if (!object_shader_nodes_poll(C)) {
+    return false;
+  }
+  const RenderEngineType *engine_type = CTX_data_engine_type(C);
+  return STREQ(engine_type->idname, "BLENDER_EEVEE") ||
+         STREQ(engine_type->idname, "BLENDER_EEVEE");
+}
+
+/* ****** */
+
+static void nodestack_get_vec(float *in, short type_in, bNodeStack *ns)
+{
+  const float *from = ns->vec;
+
+  switch (type_in) {
+    case SOCK_FLOAT:
+    case SOCK_INT: {
+      switch (ns->sockettype) {
+        case SOCK_FLOAT:
+        case SOCK_INT:
+        case SOCK_BOOLEAN:
+          *in = from[0];
+          break;
+        case SOCK_RGBA:
+          *in = IMB_colormanagement_get_luminance(from);
+          break;
+        case SOCK_VECTOR:
+          *in = (from[0] + from[1] + from[2]) / 3.0f;
+          break;
+        case SOCK_ROTATION:
+          *in = (from[0] + from[1] + from[2] + from[3]) / 4.0f;
+          break;
+        case SOCK_SHADER:
+        case SOCK_STRING:
+        case SOCK_MENU:
+        case SOCK_BUNDLE:
+        case SOCK_CLOSURE:
+        case SOCK_COLOR_RAMP:
+        case SOCK_CURVE:
+          break;
+        default:
+          BLI_assert_unreachable();
+          break;
+      }
+      break;
+    }
+    case SOCK_BOOLEAN: {
+      switch (ns->sockettype) {
+        case SOCK_FLOAT:
+        case SOCK_INT:
+        case SOCK_BOOLEAN:
+          *in = from[0];
+          break;
+        case SOCK_RGBA:
+          *in = IMB_colormanagement_get_luminance(from);
+          break;
+        case SOCK_VECTOR:
+          *in = !is_zero_v3(from);
+          break;
+        case SOCK_ROTATION:
+          *in = !is_zero_v4(from);
+          break;
+        case SOCK_SHADER:
+        case SOCK_STRING:
+        case SOCK_MENU:
+        case SOCK_BUNDLE:
+        case SOCK_CLOSURE:
+        case SOCK_COLOR_RAMP:
+        case SOCK_CURVE:
+          break;
+        default:
+          BLI_assert_unreachable();
+          break;
+      }
+      break;
+    }
+    case SOCK_VECTOR: {
+      switch (ns->sockettype) {
+        case SOCK_FLOAT:
+        case SOCK_INT:
+        case SOCK_BOOLEAN:
+          copy_v4_fl(in, from[0]);
+          break;
+        case SOCK_VECTOR:
+        case SOCK_RGBA:
+        case SOCK_ROTATION:
+          copy_v4_v4(in, from);
+          break;
+        case SOCK_SHADER:
+        case SOCK_STRING:
+        case SOCK_MENU:
+        case SOCK_BUNDLE:
+        case SOCK_CLOSURE:
+        case SOCK_COLOR_RAMP:
+        case SOCK_CURVE:
+          break;
+        default:
+          BLI_assert_unreachable();
+          break;
+      }
+      break;
+    }
+    case SOCK_RGBA: {
+      switch (ns->sockettype) {
+        case SOCK_FLOAT:
+        case SOCK_INT:
+        case SOCK_BOOLEAN:
+          copy_v3_fl(in, from[0]);
+          in[3] = 1.0f;
+          break;
+        case SOCK_VECTOR:
+          copy_v3_v3(in, from);
+          in[3] = 1.0f;
+          break;
+        case SOCK_RGBA:
+        case SOCK_ROTATION:
+          copy_v4_v4(in, from);
+          break;
+        case SOCK_SHADER:
+        case SOCK_STRING:
+        case SOCK_MENU:
+        case SOCK_BUNDLE:
+        case SOCK_CLOSURE:
+        case SOCK_COLOR_RAMP:
+        case SOCK_CURVE:
+          break;
+        default:
+          BLI_assert_unreachable();
+          break;
+      }
+      break;
+    }
+    case SOCK_ROTATION: {
+      switch (ns->sockettype) {
+        case SOCK_FLOAT:
+        case SOCK_INT:
+        case SOCK_BOOLEAN: {
+          const float eul[3] = {from[0], from[0], from[0]};
+          eul_to_quat(in, eul);
+          break;
+        }
+        case SOCK_VECTOR:
+          eul_to_quat(in, from);
+          break;
+        case SOCK_RGBA:
+        case SOCK_ROTATION:
+          copy_v4_v4(in, from);
+          break;
+        case SOCK_SHADER:
+        case SOCK_STRING:
+        case SOCK_MENU:
+        case SOCK_BUNDLE:
+        case SOCK_CLOSURE:
+        case SOCK_COLOR_RAMP:
+        case SOCK_CURVE:
+          break;
+        default:
+          BLI_assert_unreachable();
+          break;
+      }
+      break;
+    }
+    case SOCK_SHADER:
+    case SOCK_STRING:
+    case SOCK_MENU:
+    case SOCK_BUNDLE:
+    case SOCK_CLOSURE:
+    case SOCK_COLOR_RAMP:
+    case SOCK_CURVE:
+      break;
+    default:
+      BLI_assert_unreachable();
+      break;
+  }
+}
+
+void node_gpu_stack_from_data(GPUNodeStack *gs, bNodeSocket *socket, bNodeStack *ns)
+{
+  *gs = GPUNodeStack{};
+
+  if (ns == nullptr) {
+    /* node_get_stack() will generate nullptr bNodeStack pointers
+     * for unknown/unsupported types of sockets. */
+    gs->value = std::monostate{};
+    gs->link = nullptr;
+    gs->type = GPU_NONE;
+    gs->hasinput = false;
+    gs->hasoutput = false;
+    gs->sockettype = socket->type;
+  }
+  else {
+    gs->link = static_cast<GPUNodeLink *>(ns->data);
+
+    /* The value is retrieved as float4, then stored using the type of the socket. */
+    float4 vec(0.0f);
+    nodestack_get_vec(vec, socket->type, ns);
+
+    switch (socket->type) {
+      case SOCK_FLOAT:
+        gs->type = GPU_FLOAT;
+        gs->value.emplace<float>(vec.x);
+        break;
+      case SOCK_INT:
+        gs->type = GPU_INT;
+        gs->value.emplace<int>(int(vec.x));
+        break;
+      case SOCK_BOOLEAN:
+        gs->type = GPU_BOOL;
+        gs->value.emplace<bool>(vec.x > 0.0f);
+        break;
+      case SOCK_INT_VECTOR:
+        /* HACK: Support as float vector, matching SOCK_INT. */
+        switch (socket->default_value_typed<bNodeSocketValueIntVector>()->dimensions) {
+          case 2:
+            gs->type = GPU_VEC2;
+            gs->value = float2(vec);
+            break;
+          case 3:
+          default:
+            gs->type = GPU_VEC3;
+            gs->value = float3(vec);
+            break;
+        }
+        break;
+      case SOCK_VECTOR: {
+        const bNodeSocketValueVector *val = socket->default_value_typed<bNodeSocketValueVector>();
+        const int dims = (val && val->dimensions >= 2 && val->dimensions <= 4) ? val->dimensions :
+                                                                                  3;
+        switch (dims) {
+          case 2:
+            gs->type = GPU_VEC2;
+            gs->value = float2(vec);
+            break;
+          case 4:
+            gs->type = GPU_VEC4;
+            gs->value = vec;
+            break;
+          default:
+            gs->type = GPU_VEC3;
+            gs->value = float3(vec);
+            break;
+        }
+        break;
+      }
+      case SOCK_RGBA:
+      case SOCK_ROTATION:
+        gs->type = GPU_VEC4;
+        gs->value = vec;
+        break;
+      case SOCK_MATRIX:
+        gs->type = GPU_MAT4;
+        gs->value = float4x4::identity();
+        break;
+      case SOCK_SHADER:
+        gs->type = GPU_CLOSURE;
+        gs->value = std::monostate{};
+        break;
+      default:
+        gs->type = GPU_NONE;
+        gs->value = std::monostate{};
+        break;
+    }
+
+    gs->hasinput = ns->hasinput && ns->data;
+    /* XXX Commented out the ns->data check here, as it seems it's not always set,
+     *     even though there *is* a valid connection/output... But that might need
+     *     further investigation.
+     */
+    gs->hasoutput = ns->hasoutput /*&& ns->data*/;
+    gs->sockettype = ns->sockettype;
+  }
+}
+
+void node_data_from_gpu_stack(bNodeStack *ns, GPUNodeStack *gs)
+{
+  float4 vec(0.0f);
+  switch (gs->type) {
+    case GPU_FLOAT:
+      if (const float *v = std::get_if<float>(&gs->value)) {
+        vec.x = *v;
+      }
+      break;
+    case GPU_INT:
+      if (const int *v = std::get_if<int>(&gs->value)) {
+        vec.x = float(*v);
+      }
+      else if (const float *v = std::get_if<float>(&gs->value)) {
+        vec.x = *v;
+      }
+      break;
+    case GPU_BOOL:
+      if (const bool *v = std::get_if<bool>(&gs->value)) {
+        vec.x = float(*v);
+      }
+      else if (const float *v = std::get_if<float>(&gs->value)) {
+        vec.x = *v;
+      }
+      break;
+    case GPU_VEC2:
+      vec = float4(std::get<float2>(gs->value), 0.0f, 0.0f);
+      break;
+    case GPU_VEC3:
+      vec = float4(std::get<float3>(gs->value), 0.0f);
+      break;
+    case GPU_VEC4:
+      vec = std::get<float4>(gs->value);
+      break;
+    default:
+      break;
+  }
+  copy_v4_v4(ns->vec, vec);
+  ns->data = gs->link;
+  ns->sockettype = gs->sockettype;
+}
+
+static void gpu_stack_from_data_list(GPUNodeStack *gs,
+                                     ListBaseT<bNodeSocket> *sockets,
+                                     bNodeStack **ns)
+{
+  int i = 0;
+  for (bNodeSocket &socket : *sockets) {
+    node_gpu_stack_from_data(&gs[i], &socket, ns[i]);
+    i++;
+  }
+
+  gs[i].end = true;
+}
+
+static void data_from_gpu_stack_list(ListBaseT<bNodeSocket> *sockets,
+                                     bNodeStack **ns,
+                                     GPUNodeStack *gs)
+{
+  int i = 0;
+  for (bNodeSocket &socket : *sockets) {
+    if (ELEM(socket.type,
+             SOCK_FLOAT,
+             SOCK_INT,
+             SOCK_INT_VECTOR,
+             SOCK_BOOLEAN,
+             SOCK_VECTOR,
+             SOCK_RGBA,
+             SOCK_ROTATION,
+             SOCK_MATRIX,
+             SOCK_SHADER,
+             SOCK_COLOR_RAMP,
+             SOCK_CURVE))
+    {
+      node_data_from_gpu_stack(ns[i], &gs[i]);
+      i++;
+    }
+  }
+}
+
+bool bke::node_supports_active_flag(const bNode &node, int sub_activity)
+{
+  BLI_assert(ELEM(sub_activity, NODE_ACTIVE_TEXTURE, NODE_ACTIVE_PAINT_CANVAS));
+  switch (sub_activity) {
+    case NODE_ACTIVE_TEXTURE:
+      return node.typeinfo->nclass == NODE_CLASS_TEXTURE;
+    case NODE_ACTIVE_PAINT_CANVAS:
+      return ELEM(node.type_legacy, SH_NODE_TEX_IMAGE, SH_NODE_ATTRIBUTE);
+  }
+  return false;
+}
+
+static bNode *node_get_active(bNodeTree *ntree, int sub_activity)
+{
+  BLI_assert(ELEM(sub_activity, NODE_ACTIVE_TEXTURE, NODE_ACTIVE_PAINT_CANVAS));
+  /* this is the node we texture paint and draw in textured draw */
+  bNode *inactivenode = nullptr, *activetexnode = nullptr, *activegroup = nullptr;
+  bool hasgroup = false;
+
+  if (!ntree) {
+    return nullptr;
+  }
+
+  for (bNode *node : ntree->all_nodes()) {
+    if (node->flag & sub_activity) {
+      activetexnode = node;
+      /* if active we can return immediately */
+      if (node->flag & NODE_ACTIVE) {
+        return node;
+      }
+    }
+    else if (!inactivenode && bke::node_supports_active_flag(*node, sub_activity)) {
+      inactivenode = node;
+    }
+    else if (node->type_legacy == NODE_GROUP) {
+      if (node->flag & NODE_ACTIVE) {
+        activegroup = node;
+      }
+      else {
+        hasgroup = true;
+      }
+    }
+  }
+
+  /* first, check active group for textures */
+  if (activegroup) {
+    bNode *tnode = node_get_active(id_cast<bNodeTree *>(activegroup->id), sub_activity);
+    /* active node takes priority, so ignore any other possible nodes here */
+    if (tnode) {
+      return tnode;
+    }
+  }
+
+  if (activetexnode) {
+    return activetexnode;
+  }
+
+  if (hasgroup) {
+    /* node active texture node in this tree, look inside groups */
+    for (bNode *node : ntree->all_nodes()) {
+      if (node->type_legacy == NODE_GROUP) {
+        bNode *tnode = node_get_active(id_cast<bNodeTree *>(node->id), sub_activity);
+        if (tnode && ((tnode->flag & sub_activity) || !inactivenode)) {
+          return tnode;
+        }
+      }
+    }
+  }
+
+  return inactivenode;
+}
+
+namespace bke {
+
+bNode *node_get_active_texture(bNodeTree &ntree)
+{
+  return node_get_active(&ntree, NODE_ACTIVE_TEXTURE);
+}
+
+bNode *node_get_active_paint_canvas(bNodeTree &ntree)
+{
+  return node_get_active(&ntree, NODE_ACTIVE_PAINT_CANVAS);
+}
+}  // namespace bke
+
+void ntreeExecGPUNodes(bNodeTreeExec *exec,
+                       GPUMaterial *mat,
+                       bNode *output_node,
+                       const int *depth_level)
+{
+  bNodeExec *nodeexec;
+  bNode *node;
+  int n;
+  bNodeStack *stack;
+  bNodeStack *nsin[MAX_SOCKET];  /* arbitrary... watch this */
+  bNodeStack *nsout[MAX_SOCKET]; /* arbitrary... watch this */
+  GPUNodeStack gpuin[MAX_SOCKET + 1], gpuout[MAX_SOCKET + 1];
+  bool do_it;
+
+  stack = exec->stack;
+
+  for (n = 0, nodeexec = exec->nodeexec; n < exec->totnodes; n++, nodeexec++) {
+    node = nodeexec->node;
+
+    if (depth_level && node->runtime->tmp_flag != *depth_level) {
+      continue;
+    }
+
+    do_it = false;
+    /* for groups, only execute outputs for edited group */
+    if (node->typeinfo->nclass == NODE_CLASS_OUTPUT) {
+      if ((output_node != nullptr) && (node == output_node)) {
+        do_it = true;
+      }
+    }
+    else {
+      do_it = node->runtime->need_exec;
+      node->runtime->need_exec = 0;
+    }
+
+    if (do_it) {
+      BLI_assert(!depth_level || node->runtime->tmp_flag >= 0);
+      if (node->typeinfo->gpu_fn) {
+        node_get_stack(node, stack, nsin, nsout);
+        gpu_stack_from_data_list(gpuin, &node->inputs, nsin);
+        gpu_stack_from_data_list(gpuout, &node->outputs, nsout);
+        if (node->typeinfo->gpu_fn(mat, node, &nodeexec->data, gpuin, gpuout)) {
+          data_from_gpu_stack_list(&node->outputs, nsout, gpuout);
+        }
+      }
+    }
+  }
+}
+
+void node_shader_gpu_bump_tex_coord(GPUMaterial *mat, bNode * /*node*/, GPUNodeLink **link)
+{
+  GPU_link(mat, "differentiate_texco", *link, link);
+}
+
+void node_shader_gpu_default_tex_coord(GPUMaterial *mat, bNode *node, GPUNodeLink **link)
+{
+  if (*link) {
+    return;
+  }
+  if (GPU_material_get_engine(mat) == GPU_MAT_COMPOSITOR) {
+    /* Image Process / compositor: ShaderOperation already wires implicit UV. Never inject
+     * Generated/ORCO (mesh attribute that does not exist in a 2D image domain). */
+    GPUNodeStack stack{};
+    stack.type = GPU_VEC3;
+    stack.value = GPU_node_stack_default_value(GPU_VEC3);
+    GPU_link(mat, "set_float3", GPU_constant(stack), link);
+    return;
+  }
+  *link = GPU_attribute(mat, CD_ORCO, "");
+  node_shader_gpu_bump_tex_coord(mat, node, link);
+}
+
+void node_shader_gpu_object_tex_coord(GPUMaterial *mat, bNode *node, GPUNodeLink **link)
+{
+  if (*link) {
+    return;
+  }
+  /* Texture Coordinate → Object (no Object datablock):
+   * world-space P transformed into the shading object's local space.
+   * Same as node_tex_coord Object when inv_obmat[3][3]==0.
+   * Prefer this over Generated/ORCO (node_shader_gpu_default_tex_coord). */
+  GPUNodeLink *world_p = nullptr;
+  if (!GPU_link(mat, "node_tex_coord_position", GPU_shading_data(), &world_p)) {
+    return;
+  }
+  if (!GPU_link(mat,
+                "point_transform_world_to_object",
+                world_p,
+                GPU_kernel_globals(),
+                GPU_shading_data(),
+                link))
+  {
+    return;
+  }
+  node_shader_gpu_bump_tex_coord(mat, node, link);
+}
+
+void node_shader_gpu_tex_mapping(GPUMaterial *mat,
+                                 bNode *node,
+                                 GPUNodeStack *in,
+                                 GPUNodeStack * /*out*/)
+{
+  NodeTexBase *base = static_cast<NodeTexBase *>(node->storage);
+  TexMapping *texmap = &base->tex_mapping;
+  float domin = (texmap->flag & TEXMAP_CLIP_MIN) != 0;
+  float domax = (texmap->flag & TEXMAP_CLIP_MAX) != 0;
+
+  if (domin || domax || !(texmap->flag & TEXMAP_UNIT_MATRIX)) {
+    static float max[3] = {FLT_MAX, FLT_MAX, FLT_MAX};
+    static float min[3] = {-FLT_MAX, -FLT_MAX, -FLT_MAX};
+    GPUNodeLink *tmin, *tmax, *tmat0, *tmat1, *tmat2, *tmat3;
+
+    tmin = GPU_uniform((domin) ? texmap->min : min);
+    tmax = GPU_uniform((domax) ? texmap->max : max);
+    tmat0 = GPU_uniform(static_cast<float *>(texmap->mat[0]));
+    tmat1 = GPU_uniform(static_cast<float *>(texmap->mat[1]));
+    tmat2 = GPU_uniform(static_cast<float *>(texmap->mat[2]));
+    tmat3 = GPU_uniform(static_cast<float *>(texmap->mat[3]));
+
+    GPU_link(mat, "mapping_mat4", in[0].link, tmat0, tmat1, tmat2, tmat3, tmin, tmax, &in[0].link);
+
+    if (texmap->type == TEXMAP_TYPE_NORMAL) {
+      GPU_link(mat, "vector_normalize", in[0].link, &in[0].link);
+    }
+  }
+}
+
+void get_XYZ_to_RGB_for_gpu(XYZ_to_RGB *data)
+{
+  float3x3 xyz_to_rgb = IMB_colormanagement_get_xyz_to_scene_linear();
+  data->r[0] = xyz_to_rgb[0][0];
+  data->r[1] = xyz_to_rgb[1][0];
+  data->r[2] = xyz_to_rgb[2][0];
+  data->g[0] = xyz_to_rgb[0][1];
+  data->g[1] = xyz_to_rgb[1][1];
+  data->g[2] = xyz_to_rgb[2][1];
+  data->b[0] = xyz_to_rgb[0][2];
+  data->b[1] = xyz_to_rgb[1][2];
+  data->b[2] = xyz_to_rgb[2][2];
+}
+
+void search_link_ops_for_shader_bsdf_node(nodes::GatherLinkSearchOpParams &params)
+{
+  static Set<UString> skip_socket_identifiers = {"Weight"_ustr};
+  nodes::search_filtered_link_ops_for_basic_node(params, skip_socket_identifiers);
+}
+
+void search_link_ops_for_shader_material_lighting_node(nodes::GatherLinkSearchOpParams &params)
+{
+  static Set<UString> skip_socket_identifiers = {
+      "LightIndex"_ustr, "ShaderZoneIO"_ustr, "Weight"_ustr};
+  nodes::search_filtered_link_ops_for_basic_node(params, skip_socket_identifiers);
+}
+
+}  // namespace blender

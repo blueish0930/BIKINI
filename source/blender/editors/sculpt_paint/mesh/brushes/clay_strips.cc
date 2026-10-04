@@ -1,0 +1,467 @@
+/* SPDX-FileCopyrightText: 2024 Blender Authors
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later */
+
+/** \file
+ * \ingroup edsculpt
+ *
+ * The Clay Strips brush displaces vertices toward the brush plane.
+ * The displacement occurs in the direction of the plane's normal.
+ * Only vertices located below the plane (in brush-local space) are affected.
+ *
+ * The magnitude of the displacement is determined by the product of the following factors:
+ * - A falloff factor based on the XY distance from the center of the plane
+ * - A parabolic falloff factor based on the local Z distance from the plane
+ * - Additional standard modifiers such as masking, brush strength, texture masking, etc.
+ */
+
+#include "editors/sculpt_paint/mesh/brushes/brushes.hh"
+
+#include "DNA_brush_types.h"
+#include "DNA_mesh_types.h"
+#include "DNA_object_types.h"
+#include "DNA_scene_types.h"
+
+#include "BKE_brush.hh"
+#include "BKE_mesh.hh"
+#include "BKE_object_types.hh"
+#include "BKE_paint.hh"
+#include "BKE_paint_bvh.hh"
+#include "BKE_subdiv_ccg.hh"
+
+#include "BLI_enumerable_thread_specific.hh"
+#include "BLI_math_geom_c.hh"
+#include "BLI_math_matrix.hh"
+#include "BLI_math_vector.hh"
+#include "BLI_task.hh"
+
+#include "editors/sculpt_paint/mesh/mesh_brush_common.hh"
+#include "editors/sculpt_paint/mesh/sculpt_automask.hh"
+#include "editors/sculpt_paint/mesh/sculpt_intern.hh"
+
+#include "bmesh.hh"
+
+namespace blender::ed::sculpt_paint::brushes {
+
+inline namespace clay_strips_cc {
+
+struct LocalData {
+  Vector<float3> positions;
+  Vector<float2> xy_positions;
+  Vector<float> z_positions;
+  Vector<float> factors;
+  Vector<float> distances;
+  Vector<float3> translations;
+};
+
+static void apply_z_axis_factors(const Span<float> z_positions, const MutableSpan<float> factors)
+{
+  PRF_scope(ProfileCategory::Editor);
+  BLI_assert(factors.size() == z_positions.size());
+
+  for (const int i : factors.index_range()) {
+    const float local_z = z_positions[i];
+
+    /* Note: if `local_z > 1`, then `1 - local_z < 0` and the product is negative. */
+    factors[i] *= math::max(0.0f, local_z * (1.0f - local_z));
+  }
+}
+
+/**
+ * If plane trim is enabled, vertices with `z` values greater than the
+ * specified `plane_trim` threshold are ignored (i.e., their factors are set to zero).
+ */
+static void apply_plane_trim_factors(const Brush &brush,
+                                     const Span<float> z_positions,
+                                     const MutableSpan<float> factors)
+{
+  PRF_scope(ProfileCategory::Editor);
+  BLI_assert(factors.size() == z_positions.size());
+
+  const bool use_plane_trim = brush.flag & BRUSH_PLANE_TRIM;
+  if (!use_plane_trim) {
+    return;
+  }
+
+  for (const int i : factors.index_range()) {
+    if (z_positions[i] > brush.plane_trim) {
+      factors[i] = 0.0f;
+    }
+  }
+}
+
+static void calc_faces(const Depsgraph &depsgraph,
+                       const Sculpt &sd,
+                       const Brush &brush,
+                       const float4x4 &mat,
+                       const float3 &offset,
+                       const Span<float3> vert_normals,
+                       const MeshAttributeData &attribute_data,
+                       const bke::pbvh::MeshNode &node,
+                       Object &object,
+                       const PositionDeformData &position_data)
+{
+  SculptSession &ss = *object.runtime->sculpt_session;
+  const StrokeCache &cache = *ss.cache;
+
+  const Span<int> verts = node.verts();
+
+  Array<float, bke::pbvh::MESH_LEAF_LIMIT> factors(verts.size());
+  fill_factor_from_hide_and_mask(attribute_data.hide_vert, attribute_data.mask, verts, factors);
+  filter_region_clip_factors(ss, position_data.eval, verts, factors);
+  if (brush.flag & BRUSH_FRONTFACE) {
+    calc_front_face(cache.view_normal_symm, vert_normals, verts, factors);
+  }
+
+  Array<float2, bke::pbvh::MESH_LEAF_LIMIT> xy_positions(verts.size());
+  Array<float, bke::pbvh::MESH_LEAF_LIMIT> z_positions(verts.size());
+
+  calc_local_positions(position_data.eval,
+                       verts,
+                       mat,
+                       cache.location_symm,
+                       cache.view_normal_symm,
+                       eBrushFalloffShape(brush.falloff_shape),
+                       xy_positions,
+                       z_positions);
+  if (eBrushFalloffShape(brush.falloff_shape) == PAINT_FALLOFF_SHAPE_TUBE) {
+    z_positions.as_mutable_span().fill(brush.plane_offset);
+  }
+  apply_z_axis_factors(z_positions, factors);
+  apply_plane_trim_factors(brush, z_positions, factors);
+
+  Array<float, bke::pbvh::MESH_LEAF_LIMIT> distances(verts.size());
+  calc_brush_cube_distances<float2>(brush, xy_positions, distances);
+  filter_distances_with_radius(1.0f, distances, factors);
+  apply_hardness_to_distances(1.0f, cache.hardness, distances);
+  BKE_brush_calc_curve_factors(eBrushCurvePreset(brush.curve_distance_falloff_preset),
+                               brush.curve_distance_falloff,
+                               distances,
+                               1.0f,
+                               factors);
+
+  auto_mask::calc_vert_factors(depsgraph, object, cache.automasking.get(), node, verts, factors);
+
+  calc_brush_texture_factors(PaintMode::Sculpt, ss, brush, position_data.eval, verts, factors);
+
+  Array<float3, bke::pbvh::MESH_LEAF_LIMIT> translations(verts.size());
+  translations_from_offset_and_factors(offset, factors, translations);
+
+  clip_and_lock_translations(sd, ss, position_data.eval, verts, translations);
+  position_data.deform(translations, verts);
+}
+
+static void calc_grids(const Depsgraph &depsgraph,
+                       const Sculpt &sd,
+                       Object &object,
+                       const Brush &brush,
+                       const float4x4 &mat,
+                       const float3 &offset,
+                       const bke::pbvh::GridsNode &node,
+                       LocalData &tls)
+{
+  SculptSession &ss = *object.runtime->sculpt_session;
+  const StrokeCache &cache = *ss.cache;
+  SubdivCCG &subdiv_ccg = *ss.subdiv_ccg;
+
+  const Span<int> grids = node.grids();
+  const MutableSpan positions = gather_grids_positions(subdiv_ccg, grids, tls.positions);
+
+  tls.factors.resize(positions.size());
+  const MutableSpan<float> factors = tls.factors;
+  fill_factor_from_hide_and_mask(subdiv_ccg, grids, factors);
+  filter_region_clip_factors(ss, positions, factors);
+  if (brush.flag & BRUSH_FRONTFACE) {
+    calc_front_face(cache.view_normal_symm, subdiv_ccg, grids, factors);
+  }
+
+  tls.xy_positions.resize(positions.size());
+  tls.z_positions.resize(positions.size());
+  MutableSpan<float2> xy_positions = tls.xy_positions;
+  MutableSpan<float> z_positions = tls.z_positions;
+
+  calc_local_positions(positions,
+                       mat,
+                       cache.location_symm,
+                       cache.view_normal_symm,
+                       eBrushFalloffShape(brush.falloff_shape),
+                       xy_positions,
+                       z_positions);
+  if (eBrushFalloffShape(brush.falloff_shape) == PAINT_FALLOFF_SHAPE_TUBE) {
+    z_positions.fill(brush.plane_offset);
+  }
+  apply_z_axis_factors(z_positions, factors);
+  apply_plane_trim_factors(brush, z_positions, factors);
+
+  tls.distances.resize(positions.size());
+  const MutableSpan<float> distances = tls.distances;
+  calc_brush_cube_distances<float2>(brush, xy_positions, distances);
+  filter_distances_with_radius(1.0f, distances, factors);
+  apply_hardness_to_distances(1.0f, cache.hardness, distances);
+  BKE_brush_calc_curve_factors(eBrushCurvePreset(brush.curve_distance_falloff_preset),
+                               brush.curve_distance_falloff,
+                               distances,
+                               1.0f,
+                               factors);
+
+  auto_mask::calc_grids_factors(depsgraph, object, cache.automasking.get(), node, grids, factors);
+
+  calc_brush_texture_factors(PaintMode::Sculpt, ss, brush, positions, factors);
+
+  tls.translations.resize(positions.size());
+  translations_from_offset_and_factors(offset, factors, tls.translations);
+
+  clip_and_lock_translations(sd, ss, positions, tls.translations);
+  apply_translations(tls.translations, grids, subdiv_ccg);
+}
+
+static void calc_bmesh(const Depsgraph &depsgraph,
+                       const Sculpt &sd,
+                       Object &object,
+                       const Brush &brush,
+                       const float4x4 &mat,
+                       const float3 &offset,
+                       bke::pbvh::BMeshNode &node,
+                       LocalData &tls)
+{
+  SculptSession &ss = *object.runtime->sculpt_session;
+  const StrokeCache &cache = *ss.cache;
+
+  const Set<BMVert *, 0> &verts = BKE_pbvh_bmesh_node_unique_verts(&node);
+  const MutableSpan positions = gather_bmesh_positions(verts, tls.positions);
+
+  tls.factors.resize(verts.size());
+  const MutableSpan<float> factors = tls.factors;
+  fill_factor_from_hide_and_mask(*ss.bm, verts, factors);
+  filter_region_clip_factors(ss, positions, factors);
+  if (brush.flag & BRUSH_FRONTFACE) {
+    calc_front_face(cache.view_normal_symm, verts, factors);
+  }
+
+  tls.xy_positions.resize(positions.size());
+  tls.z_positions.resize(positions.size());
+  MutableSpan<float2> xy_positions = tls.xy_positions;
+  MutableSpan<float> z_positions = tls.z_positions;
+
+  calc_local_positions(positions,
+                       mat,
+                       cache.location_symm,
+                       cache.view_normal_symm,
+                       eBrushFalloffShape(brush.falloff_shape),
+                       xy_positions,
+                       z_positions);
+  if (eBrushFalloffShape(brush.falloff_shape) == PAINT_FALLOFF_SHAPE_TUBE) {
+    z_positions.fill(brush.plane_offset);
+  }
+  apply_z_axis_factors(z_positions, factors);
+  apply_plane_trim_factors(brush, z_positions, factors);
+
+  tls.distances.resize(positions.size());
+  const MutableSpan<float> distances = tls.distances;
+  calc_brush_cube_distances<float2>(brush, xy_positions, distances);
+  filter_distances_with_radius(1.0f, distances, factors);
+  apply_hardness_to_distances(1.0f, cache.hardness, distances);
+  BKE_brush_calc_curve_factors(eBrushCurvePreset(brush.curve_distance_falloff_preset),
+                               brush.curve_distance_falloff,
+                               distances,
+                               1.0f,
+                               factors);
+
+  auto_mask::calc_vert_factors(depsgraph, object, cache.automasking.get(), node, verts, factors);
+
+  calc_brush_texture_factors(PaintMode::Sculpt, ss, brush, positions, factors);
+
+  tls.translations.resize(positions.size());
+  translations_from_offset_and_factors(offset, factors, tls.translations);
+
+  clip_and_lock_translations(sd, ss, positions, tls.translations);
+  apply_translations(tls.translations, verts);
+}
+
+}  // namespace clay_strips_cc
+
+void do_clay_strips_brush(const Depsgraph &depsgraph,
+                          const Sculpt &sd,
+                          Object &object,
+                          const IndexMask &node_mask,
+                          const float3 &plane_normal,
+                          const float3 &plane_center)
+{
+  PRF_scope(ProfileCategory::Editor);
+  SculptSession &ss = *object.runtime->sculpt_session;
+  const Brush &brush = *BKE_paint_brush_for_read(&sd.paint);
+  bke::pbvh::Tree &pbvh = *bke::object::pbvh_get(object);
+  const bool flip = (ss.cache->bstrength < 0.0f);
+
+  /* Note: This return has to happen *after* the call to calc_brush_plane for now, as
+   * the method is not idempotent and sets variables inside the stroke cache. */
+  if (math::is_zero(ss.cache->grab_delta_symm)) {
+    return;
+  }
+
+  const float3 &tip_normal = eBrushFalloffShape(brush.falloff_shape) ==
+                                     PAINT_FALLOFF_SHAPE_SPHERE ?
+                                 plane_normal :
+                                 ss.cache->view_normal_symm;
+  const float4x4 mat = clay_strips::calc_local_matrix(
+      brush, *ss.cache, tip_normal, plane_center, flip);
+
+  const float3 offset = plane_normal * ss.cache->bstrength * ss.cache->radius;
+
+  threading::EnumerableThreadSpecific<LocalData> all_tls;
+  switch (pbvh.type()) {
+    case bke::pbvh::Type::Mesh: {
+      Mesh &mesh = *id_cast<Mesh *>(object.data);
+      MutableSpan<bke::pbvh::MeshNode> nodes = pbvh.nodes<bke::pbvh::MeshNode>();
+      const PositionDeformData position_data(depsgraph, object);
+      const MeshAttributeData attribute_data(mesh);
+      const Span<float3> vert_normals = bke::pbvh::vert_normals_eval(depsgraph, object);
+      node_mask.foreach_index(
+          [&](const int i) {
+            calc_faces(depsgraph,
+                       sd,
+                       brush,
+                       mat,
+                       offset,
+                       vert_normals,
+                       attribute_data,
+                       nodes[i],
+                       object,
+                       position_data);
+            bke::pbvh::update_node_bounds_mesh(position_data.eval, nodes[i]);
+          },
+          exec_mode::grain_size(1));
+      break;
+    }
+    case bke::pbvh::Type::Grids: {
+      SubdivCCG &subdiv_ccg = *object.runtime->sculpt_session->subdiv_ccg;
+      MutableSpan<float3> positions = subdiv_ccg.positions;
+      MutableSpan<bke::pbvh::GridsNode> nodes = pbvh.nodes<bke::pbvh::GridsNode>();
+      node_mask.foreach_index(
+          [&](const int i) {
+            LocalData &tls = all_tls.local();
+            calc_grids(depsgraph, sd, object, brush, mat, offset, nodes[i], tls);
+            bke::pbvh::update_node_bounds_grids(subdiv_ccg.grid_area, positions, nodes[i]);
+          },
+          exec_mode::grain_size(1));
+      break;
+    }
+    case bke::pbvh::Type::BMesh: {
+      MutableSpan<bke::pbvh::BMeshNode> nodes = pbvh.nodes<bke::pbvh::BMeshNode>();
+      node_mask.foreach_index(
+          [&](const int i) {
+            LocalData &tls = all_tls.local();
+            calc_bmesh(depsgraph, sd, object, brush, mat, offset, nodes[i], tls);
+            bke::pbvh::update_node_bounds_bmesh(nodes[i]);
+          },
+          exec_mode::grain_size(1));
+      break;
+    }
+  }
+  pbvh.tag_positions_changed(node_mask);
+  pbvh.flush_bounds_to_parents();
+}
+
+namespace clay_strips {
+
+float4x4 calc_local_matrix(const Brush &brush,
+                           const StrokeCache &cache,
+                           const float3 &tip_normal,
+                           const float3 &plane_center,
+                           const bool flip)
+{
+  /* TODO: the current calculations always behave as if Rake is enabled. Use similar logic to
+   * calc_brush_local_mat in sculpt.cc to fix the issue. */
+
+  float4x4 mat = float4x4::identity();
+  mat.x_axis() = math::cross(tip_normal, cache.grab_delta_symm);
+  mat.y_axis() = math::cross(tip_normal, mat.x_axis());
+  mat.z_axis() = tip_normal;
+
+  /* Flip the z-axis so that the vertices below the plane have positive z-coordinates. When the
+   * brush is inverted, the affected z-coordinates are already positive. */
+  if (!flip) {
+    mat.z_axis() *= -1.0f;
+  }
+
+  mat.location() = plane_center;
+  mat = math::normalize(mat);
+
+  /* Scale brush local space matrix. */
+  const float4x4 scale = math::from_scale<float4x4>(float3(cache.radius));
+  float4x4 tmat = mat * scale;
+  tmat.y_axis() *= brush.tip_scale_x;
+  mat = math::invert(tmat);
+  return mat;
+}
+
+CursorSampleResult calc_node_mask(const Depsgraph &depsgraph,
+                                  Object &object,
+                                  const Brush &brush,
+                                  IndexMaskMemory &memory)
+{
+  const bke::pbvh::Tree &pbvh = *bke::object::pbvh_get(object);
+  const SculptSession &ss = *object.runtime->sculpt_session;
+
+  const eBrushFalloffShape falloff_shape = eBrushFalloffShape(brush.falloff_shape);
+
+  const bool flip = (ss.cache->bstrength < 0.0f);
+  const float displace = ss.cache->radius * brush_plane_offset_get(brush, ss) *
+                         (flip ? -1.0f : 1.0f);
+
+  /* TODO: Test to see if the sqrt2 extra factor can be removed */
+  const float initial_radius_squared = math::square(ss.cache->radius * std::numbers::sqrt2);
+
+  const bool use_original = !ss.cache->accum;
+  const IndexMask initial_node_mask = gather_nodes(pbvh,
+                                                   falloff_shape,
+                                                   use_original,
+                                                   ss.cache->location_symm,
+                                                   initial_radius_squared,
+                                                   ss.cache->view_normal_symm,
+                                                   memory);
+
+  float3 plane_center;
+  float3 plane_normal;
+  calc_brush_plane(depsgraph, brush, object, initial_node_mask, plane_normal, plane_center);
+  plane_normal = tilt_apply_to_normal(plane_normal, *ss.cache, brush.tilt_strength_factor);
+  plane_center += plane_normal * ss.cache->scale * displace;
+
+  if (math::is_zero(ss.cache->grab_delta_symm) || math::is_zero(plane_normal)) {
+    /* The brush local matrix is degenerate: return an empty index mask. */
+    return {IndexMask(), plane_center, plane_normal};
+  }
+
+  switch (falloff_shape) {
+    case PAINT_FALLOFF_SHAPE_SPHERE: {
+      const float4x4 mat = calc_local_matrix(brush, *ss.cache, plane_normal, plane_center, flip);
+      const IndexMask plane_mask = bke::pbvh::search_nodes(
+          pbvh, memory, [&](const bke::pbvh::Node &node) {
+            if (node_fully_masked_or_hidden(node)) {
+              return false;
+            }
+            return node_in_box_positive_z(mat, node.bounds());
+          });
+      return {plane_mask, plane_center, plane_normal};
+    }
+
+    case PAINT_FALLOFF_SHAPE_TUBE: {
+      const float4x4 mat = calc_local_matrix(
+          brush, *ss.cache, ss.cache->view_normal_symm, plane_center, flip);
+      const IndexMask plane_mask = bke::pbvh::search_nodes(
+          pbvh, memory, [&](const bke::pbvh::Node &node) {
+            if (node_fully_masked_or_hidden(node)) {
+              return false;
+            }
+            return node_in_box(mat, node.bounds(), float3(0.0f), float3(1.0f, 1.0f, 1.0f), false);
+          });
+      return {plane_mask, plane_center, plane_normal};
+    }
+  }
+
+  BLI_assert_unreachable();
+  return {};
+}
+}  // namespace clay_strips
+
+}  // namespace blender::ed::sculpt_paint::brushes

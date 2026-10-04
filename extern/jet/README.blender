@@ -1,0 +1,10 @@
+JET (fluid-engine-dev)
+======================
+
+Vendored from https://github.com/doyubkim/fluid-engine-dev (MIT).
+
+Do **not** ``add_subdirectory`` this folder from Blender. The upstream
+CMakeLists.txt builds gtest, python bindings and examples.
+
+Blender compiles ``src/jet/*.cpp`` from ``extern/apic/CMakeLists.txt``
+and calls ``ApicSolver3`` / ``FlipSolver3`` through ``extern/apic``.

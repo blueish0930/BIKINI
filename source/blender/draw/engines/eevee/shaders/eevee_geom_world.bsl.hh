@@ -1,0 +1,42 @@
+/* SPDX-FileCopyrightText: 2022 Blender Authors
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later */
+
+/**
+ * Custom full-screen triangle with placeholders varyings.
+ */
+
+#pragma once
+
+#include "draw_model.bsl.hh"
+#include "draw_view.bsl.hh"
+#include "eevee_reverse_z_lib.bsl.hh"
+#include "eevee_surf_common.bsl.hh"
+#include "eevee_uniform.bsl.hh"
+
+namespace eevee {
+
+[[vertex]] [[clip_control]] void geom_world([[resource_table]] const Uniform & /*uni*/,
+                                            [[resource_table]] const draw::View &views,
+                                            [[resource_table]] const draw::Model & /*models*/,
+                                            [[out]] VertOutCommon &interp,
+                                            [[vertex_id]] const int vert_id,
+                                            [[position]] float4 &out_position)
+{
+  /* (W)Intel drivers require all varying iface to be written to inside the Vertex shader. */
+  interp.resource_id_raw = 0u;
+
+  /* Full-screen triangle. */
+  int v = vert_id % 3;
+  float x = float((v & 1) << 2) - 1.0f;
+  float y = float((v & 2) << 1) - 1.0f;
+  out_position = float4(x, y, 1.0f, 1.0f);
+
+  /* Pass view position to keep accuracy. */
+  interp.P = views.get(0).point_ndc_to_view(out_position.xyz);
+  interp.N = float3(1);
+
+  out_position = reverse_z::transform(out_position);
+}
+
+}  // namespace eevee

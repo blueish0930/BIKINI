@@ -1,0 +1,17 @@
+ply
+format ascii 1.0
+element vertex 4
+comment position with only x and z
+property float x
+property float z
+comment color with only red
+property uchar red
+element face 1
+property list int int vertex_indices
+end_header
+1 1 240
+1 -1 200
+-1 -1 60
+-1 1 20
+4 0 1 2 3
+

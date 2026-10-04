@@ -1,0 +1,7 @@
+# LiquidFun-style 2D particles in Blender
+
+Compact 2D PBF + optional elastic springs for Geometry Nodes **LiquidFun Solver**.
+
+- Spirit of Google LiquidFun (Box2D + particles). Independent of vendored Box2D 3.x.
+- Not a git-subtree of https://github.com/google/liquidfun (old Box2D 2.3 fork).
+- License: MIT (see LICENSE)

@@ -1,0 +1,237 @@
+/* SPDX-FileCopyrightText: 2023 Blender Authors
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later */
+
+#include "BLI_assert.hh"
+#include "BLI_listbase.hh"
+#include "BLI_math_base.hh"
+#include "BLI_string_ref.hh"
+#include "BLI_vector_set.hh"
+
+#include "DNA_node_types.h"
+
+#include "BKE_node.hh"
+#include "BKE_node_runtime.hh"
+
+#include "GPU_debug.hh"
+
+#include "NOD_eval_log.hh"
+
+#include "COM_algorithm_compute_preview.hh"
+#include "COM_bundle_item.hh"
+#include "COM_context.hh"
+#include "COM_input_descriptor.hh"
+#include "COM_node_operation.hh"
+#include "COM_operation.hh"
+#include "COM_result.hh"
+#include "COM_scheduler.hh"
+#include "COM_utilities.hh"
+#include "COM_utilities_node_tree_logging.hh"
+
+namespace blender::compositor {
+
+NodeOperation::NodeOperation(Context &context, const bNode &node) : Operation(context), node_(node)
+{
+  /* Prefer ListBase over topology-cache vectors. Image Process `evaluate()` from Python can
+   * see a dirty/stale `runtime->outputs` filled with allocator sentinels. */
+  for (const bNodeSocket &output : this->node().outputs) {
+    if (!is_socket_available(&output)) {
+      continue;
+    }
+
+    populate_result(output.identifier, get_node_socket_result_type(&output));
+  }
+
+  for (const bNodeSocket &input : this->node().inputs) {
+    if (!is_socket_available(&input)) {
+      continue;
+    }
+
+    const InputDescriptor input_descriptor = input_descriptor_from_input_socket(&input);
+    if (input.is_multi_input()) {
+      /* Pre-declare a fixed range of multi-input slots so reconnecting stamps does not
+       * mismatch declare vs map and crash in get_input. */
+      constexpr int multi_input_slot_max = 32;
+      for (const int i : IndexRange(multi_input_slot_max)) {
+        const std::string identifier = (i == 0) ? std::string(input.identifier) :
+                                                  (std::string(input.identifier) + "__" +
+                                                   std::to_string(i));
+        declare_input_descriptor(identifier, input_descriptor);
+      }
+    }
+    else {
+      declare_input_descriptor(input.identifier, input_descriptor);
+    }
+  }
+}
+
+class ScopedNodeTimer {
+ private:
+  const bNode &node_;
+  const ComputeContext &compute_context_;
+  nodes::eval_log::NodesEvalLog *log_;
+
+  nodes::eval_log::TimePoint start_;
+
+ public:
+  ScopedNodeTimer(const bNode &node,
+                  const ComputeContext &compute_context,
+                  nodes::eval_log::NodesEvalLog *log)
+      : node_(node), compute_context_(compute_context), log_(log)
+  {
+    start_ = nodes::eval_log::Clock::now();
+  }
+
+  ~ScopedNodeTimer()
+  {
+    if (!log_) {
+      return;
+    }
+    const nodes::eval_log::TimePoint end = nodes::eval_log::Clock::now();
+    nodes::eval_log::NodeTreeLogger &tree_logger = log_->get_local_tree_logger(compute_context_);
+    tree_logger.node_execution_times.append(*tree_logger.allocator,
+                                            {node_.identifier, start_, end});
+  }
+};
+
+void NodeOperation::evaluate()
+{
+  const ScopedNodeTimer node_timer{
+      this->node(), this->get_compute_context(), this->context().nodes_evaluation_log()};
+  if (this->context().use_gpu()) {
+    GPU_debug_group_begin(this->node().typeinfo->idname.c_str());
+  }
+  Operation::evaluate();
+  if (this->context().use_gpu()) {
+    GPU_debug_group_end();
+  }
+}
+
+void NodeOperation::compute_results_reference_counts(const Schedule &schedule)
+{
+  for (const bNodeSocket &output : this->node().outputs) {
+    if (!is_socket_available(&output)) {
+      continue;
+    }
+
+    const int reference_count = compute_output_reference_count(output, schedule);
+    this->get_result(output.identifier).set_reference_count(reference_count);
+  }
+}
+
+void NodeOperation::set_compute_context(const ComputeContext &compute_context)
+{
+  compute_context_ = &compute_context;
+}
+
+const ComputeContext &NodeOperation::get_compute_context() const
+{
+  return *compute_context_;
+}
+
+void NodeOperation::add_warning(nodes::NodeWarningType type, std::string message)
+{
+  nodes::eval_log::NodesEvalLog *log = this->context().nodes_evaluation_log();
+  if (!log) {
+    return;
+  }
+  nodes::eval_log::NodeTreeLogger &tree_logger = log->get_local_tree_logger(
+      this->get_compute_context());
+  tree_logger.node_warnings.append(*tree_logger.allocator,
+                                   {this->node().identifier, {type, message}});
+}
+
+void NodeOperation::log_data()
+{
+  nodes::eval_log::NodesEvalLog *log = this->context().nodes_evaluation_log();
+  if (!log) {
+    return;
+  }
+  nodes::eval_log::NodeTreeLogger &tree_logger = log->get_local_tree_logger(*compute_context_);
+
+  /* Log input values. */
+  for (const bNodeSocket *input_socket : this->node().input_sockets()) {
+    if (!is_socket_available(input_socket)) {
+      continue;
+    }
+
+    /* Multi-input / remapped slots: never call get_input on unmapped identifiers. */
+    if (!this->has_input(input_socket->identifier)) {
+      continue;
+    }
+
+    const InputDescriptor &input_descriptor = this->get_input_descriptor(input_socket->identifier);
+    if (!input_socket->is_logically_linked() && !input_descriptor.implicit_input.has_value()) {
+      continue;
+    }
+
+    const Result &input = this->get_input(input_socket->identifier);
+    log_result(this->context(), tree_logger, *input_socket, input);
+  }
+
+  /* Log output values. */
+  for (const bNodeSocket *output_socket : this->node().output_sockets()) {
+    if (!is_socket_available(output_socket)) {
+      continue;
+    }
+
+    const Result &result = this->get_result(output_socket->identifier);
+    log_result(this->context(), tree_logger, *output_socket, result);
+  }
+
+  /* Log node preview if they are needed and the node group is active. */
+  const bool node_needs_preview = is_node_preview_needed(this->node());
+  const bool needs_node_previews = flag_is_set(this->context().needed_side_effect_output_types(),
+                                               SideEffectOutputTypes::NodePreviews);
+  if (node_needs_preview && needs_node_previews) {
+    const Result *result = this->get_preview_result();
+    if (result && !result->is_single_value()) {
+      ImBuf *preview = compositor::compute_preview(this->context(), *result);
+      tree_logger.node_image_previews.append(*tree_logger.allocator, {node_.identifier, preview});
+    }
+  }
+}
+
+const bNode &NodeOperation::node() const
+{
+  return node_;
+}
+
+Result *NodeOperation::get_preview_result()
+{
+  /* Find the first linked output. */
+  for (const bNodeSocket *output : this->node().output_sockets()) {
+    if (!is_socket_available(output)) {
+      continue;
+    }
+
+    Result &output_result = this->get_result(output->identifier);
+    if (output_result.should_compute()) {
+      return &output_result;
+    }
+  }
+
+  /* No linked outputs, but no inputs either, so nothing to preview. */
+  if (this->node().input_sockets().is_empty()) {
+    return nullptr;
+  }
+
+  /* Find the first allocated input. */
+  for (const bNodeSocket *input : this->node().input_sockets()) {
+    if (!is_socket_available(input)) {
+      continue;
+    }
+    if (!this->has_input(input->identifier)) {
+      continue;
+    }
+
+    Result &input_result = this->get_input(input->identifier);
+    if (input_result.is_allocated()) {
+      return &input_result;
+    }
+  }
+
+  return nullptr;
+}
+
+}  // namespace blender::compositor

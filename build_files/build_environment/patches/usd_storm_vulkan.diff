@@ -1,0 +1,26 @@
+diff --git a/pxr/imaging/hdSt/renderDelegate.cpp b/pxr/imaging/hdSt/renderDelegate.cpp
+index 7984f2b8f..0c716bf81 100644
+--- a/pxr/imaging/hdSt/renderDelegate.cpp
++++ b/pxr/imaging/hdSt/renderDelegate.cpp
+@@ -642,17 +642,10 @@ HdStRenderDelegate::IsSupported(
+     const HdRendererCreateArgsSchema &rendererCreateArgs,
+     std::string * const reasonWhyNot)
+ {
+-    if (const char * const result =
+-                _NullOrReasonWhyNotSupported(rendererCreateArgs)) {
+-        TF_DEBUG(HD_RENDERER_PLUGIN).Msg(
+-            "Storm renderer not supported: %s.\n", result);
+-        if (reasonWhyNot) {
+-            *reasonWhyNot = result;
+-        }
+-        return false;
+-    } else {
+-        return true;
+-    }
++    // BLENDER: This doesn't take into account the backend, and fails for Vulkan
++    // because it defaults to OpenGL. Instead assume Blender already succeeded
++    // creating a relevant GPU device before using Storm.
++    return true;
+ }
+ 
+ TfTokenVector

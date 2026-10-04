@@ -1,0 +1,260 @@
+/* SPDX-FileCopyrightText: 2026 Blender Authors
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later */
+
+/**
+ * QuadWild Geometry Node — Reliable Feature-Line Driven Quad-Remeshing
+ * (Pietroni et al., SIGGRAPH 2021) via open-source QuadWild-BiMDF tools.
+ *
+ * Mesh → triangulate → remesh+field+trace → Bi-MDF quantize → pure-quad Mesh
+ */
+
+#include "BLI_math_base.hh"
+#include "BLI_math_constants.hh"
+
+#include "GEO_foreach_geometry.hh"
+#include "GEO_mesh_quadwild.hh"
+#include "GEO_mesh_triangulate.hh"
+
+#include "BKE_lib_id.hh"
+
+#include "DNA_mesh_types.h"
+#include "DNA_node_types.h"
+
+#include "NOD_rna_define.hh"
+
+#include "UI_interface_layout.hh"
+#include "UI_resources.hh"
+
+#include "node_geometry_util.hh"
+
+namespace blender::nodes::node_geo_quadwild_cc {
+
+enum class FeatureMode {
+  Mechanical = 0,
+  Organic = 1,
+  Custom = 2,
+};
+
+static void node_declare(NodeDeclarationBuilder &b)
+{
+  b.use_custom_socket_order();
+  b.allow_any_socket_order();
+
+  b.add_input<decl::Geometry>("Mesh"_ustr)
+      .supported_type(GeometryComponent::Type::Mesh)
+      .is_default_link_socket()
+      .description(
+          "Surface to remesh into feature-aligned pure quads. Non-triangle faces are "
+          "triangulated first");
+  b.add_output<decl::Geometry>("Mesh"_ustr)
+      .propagate_all_geometry()
+      .align_with_previous()
+      .description(
+          "Pure-quad remesh from QuadWild (feature-line driven layout + Bi-MDF quantization)");
+
+  b.add_input<decl::Float>("Scale"_ustr)
+      .default_value(1.0f)
+      .min(0.01f)
+      .max(100.0f)
+      .description(
+          "Output quad size scale (scaleFact). Larger values produce larger quads relative "
+          "to the traced edge length");
+  b.add_input<decl::Float>("Alpha"_ustr)
+      .default_value(0.01f)
+      .min(0.0f)
+      .max(1.0f)
+      .description(
+          "Regularity vs isometry. Near zero → more regular; higher → more singularities "
+          "allowed for better isometry");
+  b.add_input<decl::Float>("Sharp Angle"_ustr)
+      .default_value(DEG2RADF(35.0f))
+      .min(-1.0f)
+      .max(DEG2RADF(180.0f))
+      .subtype(PROP_ANGLE)
+      .description(
+          "Dihedral angle for automatic sharp features (Mechanical / Custom). "
+          "Ignored in Organic mode");
+  b.add_input<decl::Bool>("Remesh Input"_ustr)
+      .default_value(true)
+      .description(
+          "Remesh the input before field computation (more robust; may lose fine detail)");
+  b.add_input<decl::Bool>("Smooth Output"_ustr)
+      .default_value(true)
+      .description("Use the multi-constraint smoothed quadrangulation when available");
+}
+
+static void node_layout(ui::Layout &layout, bContext * /*C*/, PointerRNA *ptr)
+{
+  layout.prop(ptr, "feature_mode", UI_ITEM_NONE, "", ICON_NONE);
+}
+
+static void node_init(bNodeTree * /*tree*/, bNode *node)
+{
+  node->custom1 = int16_t(FeatureMode::Mechanical);
+}
+
+static geometry::QuadWildFeatureMode to_geometry_mode(const FeatureMode mode)
+{
+  switch (mode) {
+    case FeatureMode::Mechanical:
+      return geometry::QuadWildFeatureMode::Mechanical;
+    case FeatureMode::Organic:
+      return geometry::QuadWildFeatureMode::Organic;
+    case FeatureMode::Custom:
+      return geometry::QuadWildFeatureMode::Custom;
+  }
+  return geometry::QuadWildFeatureMode::Mechanical;
+}
+
+static void node_geo_exec(GeoNodeExecParams params)
+{
+  GeometrySet geometry_set = params.extract_input<GeometrySet>("Mesh"_ustr);
+  const float scale = params.extract_input<float>("Scale"_ustr);
+  const float alpha = params.extract_input<float>("Alpha"_ustr);
+  const float sharp_angle = params.extract_input<float>("Sharp Angle"_ustr);
+  const bool do_remesh = params.extract_input<bool>("Remesh Input"_ustr);
+  const bool smooth_output = params.extract_input<bool>("Smooth Output"_ustr);
+  const FeatureMode feature_mode = FeatureMode(params.node().custom1);
+  const AttributeFilter &attribute_filter = params.get_attribute_filter("Mesh"_ustr);
+
+  geometry::QuadWildOptions options;
+  options.feature_mode = to_geometry_mode(feature_mode);
+  options.scale_fact = math::max(scale, 0.01f);
+  options.alpha = math::clamp(alpha, 0.0f, 1.0f);
+  /* Geometry Nodes socket is radians; QuadWild config uses degrees. */
+  if (sharp_angle >= 0.0f) {
+    options.sharp_feature_threshold_deg = sharp_angle * (180.0f / float(M_PI));
+  }
+  else {
+    options.sharp_feature_threshold_deg = -1.0f;
+  }
+  options.do_remesh = do_remesh;
+  options.smooth_output = smooth_output;
+  options.main_config = "flow_noalign_lemon.txt";
+
+  std::atomic<bool> triangulated = false;
+  std::atomic<bool> found_mesh = false;
+  std::atomic<bool> empty_result = false;
+  std::string last_error;
+
+  if (geometry::quadwild_package_dir_find().empty()) {
+    params.error_message_add(
+        NodeWarningType::Error,
+        TIP_("QuadWild package not found. Install binaries in <blender>/quadwild/ "
+             "or set environment variable QUADWILD_DIR"));
+    params.set_output("Mesh"_ustr, std::move(geometry_set));
+    return;
+  }
+
+  geometry::foreach_real_geometry(geometry_set, [&](GeometrySet &geometry) {
+    const Mesh *src_mesh = geometry.get_mesh();
+    if (!src_mesh) {
+      return;
+    }
+    found_mesh.store(true, std::memory_order_relaxed);
+
+    const Mesh *triangle_mesh = src_mesh;
+    Mesh *owned_triangle_mesh = nullptr;
+    if (src_mesh->corners_num != src_mesh->faces_num * 3) {
+      const IndexMask selection(src_mesh->faces_num);
+      if (std::optional<Mesh *> result = geometry::mesh_triangulate(
+              *src_mesh,
+              selection,
+              geometry::TriangulateNGonMode::Beauty,
+              geometry::TriangulateQuadMode::ShortEdge,
+              attribute_filter))
+      {
+        owned_triangle_mesh = *result;
+        triangle_mesh = owned_triangle_mesh;
+        triangulated.store(true, std::memory_order_relaxed);
+      }
+    }
+
+    geometry::QuadWildResultInfo info;
+    Mesh *result = geometry::mesh_quadwild(*triangle_mesh, options, &info);
+    if (owned_triangle_mesh) {
+      BKE_id_free(nullptr, owned_triangle_mesh);
+    }
+    if (!info.success || result->faces_num == 0) {
+      empty_result.store(true, std::memory_order_relaxed);
+      if (!info.message.empty()) {
+        last_error = info.message;
+      }
+    }
+    geometry.replace_mesh(result);
+  });
+
+  if (!found_mesh.load(std::memory_order_relaxed)) {
+    params.error_message_add(NodeWarningType::Warning,
+                             TIP_("Input geometry does not contain a mesh"));
+  }
+  if (triangulated.load(std::memory_order_relaxed)) {
+    params.error_message_add(NodeWarningType::Info,
+                             TIP_("Non-triangle faces were triangulated before QuadWild"));
+  }
+  if (empty_result.load(std::memory_order_relaxed)) {
+    if (!last_error.empty()) {
+      params.error_message_add(NodeWarningType::Error, last_error);
+    }
+    else {
+      params.error_message_add(
+          NodeWarningType::Warning,
+          TIP_("QuadWild produced no faces; try Organic mode, different Scale, or disable "
+               "Remesh Input"));
+    }
+  }
+
+  params.set_output("Mesh"_ustr, std::move(geometry_set));
+}
+
+static void node_rna(StructRNA *srna)
+{
+  static const EnumPropertyItem feature_mode_items[] = {
+      {int(FeatureMode::Mechanical),
+       "MECHANICAL",
+       0,
+       "Mechanical",
+       "Detect sharp creases from dihedral angle (CAD / hard-surface default)"},
+      {int(FeatureMode::Organic),
+       "ORGANIC",
+       0,
+       "Organic",
+       "No sharp features; suitable for smooth organic surfaces"},
+      {int(FeatureMode::Custom),
+       "CUSTOM",
+       0,
+       "Custom",
+       "Use the Sharp Angle socket as the dihedral feature threshold"},
+      {0, nullptr, 0, nullptr, nullptr},
+  };
+  RNA_def_node_enum(srna,
+                    "feature_mode",
+                    "Feature Mode",
+                    "How feature lines are derived from the input surface",
+                    feature_mode_items,
+                    NOD_inline_enum_accessors(custom1),
+                    int(FeatureMode::Mechanical));
+}
+
+static void node_register()
+{
+  static bke::bNodeType ntype;
+  geo_node_type_base(&ntype, "GeometryNodeQuadWild"_ustr, GEO_NODE_QUADWILD);
+  ntype.ui_name = "QuadWild";
+  ntype.ui_description =
+      "Remesh a surface into a feature-aligned pure-quad mesh using Reliable Feature-Line "
+      "Driven Quad-Remeshing (QuadWild / QuadWild-BiMDF). Requires the quadwild package next "
+      "to blender.exe";
+  ntype.enum_name_legacy = "QUADWILD";
+  ntype.nclass = NODE_CLASS_GEOMETRY;
+  ntype.declare = node_declare;
+  ntype.initfunc = node_init;
+  ntype.geometry_node_execute = node_geo_exec;
+  ntype.draw_buttons = node_layout;
+  bke::node_register_type(ntype);
+  node_rna(ntype.rna_ext.srna);
+}
+NOD_REGISTER_NODE(node_register)
+
+}  // namespace blender::nodes::node_geo_quadwild_cc

@@ -1,0 +1,16 @@
+build/
+imgui.ini
+settings.ini
+.vscode/
+.vs/
+.cap
+.DS_Store
+CMakeUserPresets.json
+.cache/
+.idea/
+.claude/
+.tmp/
+.fetchcontent-cache/
+*.b3rec
+Superluminal/
+build-dp/

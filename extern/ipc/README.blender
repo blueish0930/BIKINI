@@ -1,0 +1,8 @@
+# IPC in Blender
+
+Compact Incremental Potential Contact core for Geometry Nodes **IPC Solver**.
+
+- Method: Li / Ferguson / Jiang / Zorin / Panozzo, SIGGRAPH 2020.
+  Implicit Euler + IPC barrier on particle pairs and a ground plane.
+- Not a git-subtree of https://github.com/ipc-sim/ipc-toolkit (Eigen / TBB / CCD).
+- License: MIT (see LICENSE)
