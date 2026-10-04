@@ -1,0 +1,191 @@
+diff --git a/.ccache/dummy.txt b/.ccache/dummy.txt
+deleted file mode 100644
+index e69de29..0000000
+diff --git a/include/slg/materials/roughglass.h b/include/slg/materials/roughglass.h
+index 4611dc8..fab4747 100644
+--- a/include/slg/materials/roughglass.h
++++ b/include/slg/materials/roughglass.h
+@@ -36,7 +36,8 @@ public:
+ 			TexRef refl, TexRef trans,
+ 			TexRef exteriorIorFact, TexRef interiorIorFact,
+ 			TexRef u, TexRef v,
+-			TexRef filmThickness, TexRef filmIor);
++			TexRef filmThickness, TexRef filmIor,
++			TexRef B = nullptr);
+ 
+ 	virtual MaterialType GetType() const { return ROUGHGLASS; }
+ 	virtual BSDFEvent GetEventTypes() const { return GLOSSY | REFLECT | TRANSMIT; };
+@@ -67,6 +68,7 @@ public:
+ 	TexRef GetNv() const { return nv; }
+ 	TexRef GetFilmThickness() const { return filmThickness; }
+ 	TexRef GetFilmIOR() const { return filmIor; }
++	TexRef GetCauchyB() const { return cauchyB; }
+ 
+ private:
+ 	TexRef Kr;
+@@ -77,6 +79,7 @@ private:
+ 	TexRef nv;
+ 	TexRef filmThickness;
+ 	TexRef filmIor;
++	TexRef cauchyB;
+ };
+ 
+ }
+diff --git a/src/slg/materials/roughglass.cpp b/src/slg/materials/roughglass.cpp
+index 0481a42..50c84b4 100644
+--- a/src/slg/materials/roughglass.cpp
++++ b/src/slg/materials/roughglass.cpp
+@@ -21,6 +21,8 @@
+ #include "slg/materials/thinfilmcoating.h"
+ #include "slg/usings.h"
+ 
++#include <cmath>
++
+ using namespace std;
+ using namespace luxrays;
+ using namespace slg;
+@@ -31,15 +33,61 @@ using namespace slg;
+ // LuxRender RoughGlass material porting.
+ //------------------------------------------------------------------------------
+ 
++static Spectrum WaveLength2RGB(const float waveLength) {
++	float r, g, b;
++	if ((waveLength >= 380.f) && (waveLength < 440.f)) {
++		r = -(waveLength - 440.f) / (440.f - 380.f);
++		g = 0.f;
++		b = 1.f;
++	} else if ((waveLength >= 440.f) && (waveLength < 490.f)) {
++		r = 0.f;
++		g = (waveLength - 440.f) / (490.f - 440.f);
++		b = 1.f;
++	} else if ((waveLength >= 490.f) && (waveLength < 510.f)) {
++		r = 0.f;
++		g = 1.f;
++		b = -(waveLength - 510.f) / (510.f - 490.f);
++	} else if ((waveLength >= 510.f) && (waveLength < 580.f)) {
++		r = (waveLength - 510.f) / (580.f - 510.f);
++		g = 1.f;
++		b = 0.f;
++	} else if ((waveLength >= 580.f) && (waveLength < 645.f)) {
++		r = 1.f;
++		g = -(waveLength - 645.f) / (645.f - 580.f);
++		b = 0.f;
++	} else if ((waveLength >= 645.f) && (waveLength < 780.f)) {
++		r = 1.f;
++		g = 0.f;
++		b = 0.f;
++	} else
++		return Spectrum();
++
++	float factor;
++	if ((waveLength >= 380.f) && (waveLength < 420.f))
++		factor = .3f + .7f * (waveLength - 380.f) / (420.f - 380.f);
++	else if ((waveLength >= 420.f) && (waveLength < 700.f))
++		factor = 1.f;
++	else
++		factor = .3f + .7f * (780.f - waveLength) / (780.f - 700.f);
++
++	const Spectrum normFactor(1.f / .5652729f, 1.f / .36875f, 1.f / .265375f);
++	return Spectrum(r, g, b) * factor * normFactor;
++}
++
++static float WaveLength2IOR(const float waveLength, const float IOR, const float B) {
++	return IOR + B / Sqr(waveLength / 1000.f);
++}
++
+ RoughGlassMaterial::RoughGlassMaterial(TextureConstPtr frontTransp, TextureConstPtr backTransp,
+ 		TextureConstPtr emitted, TextureConstPtr bump,
+ 		TextureConstPtr refl, TextureConstPtr trans,
+ 		TextureConstPtr exteriorIorFact, TextureConstPtr interiorIorFact,
+ 		TextureConstPtr u, TextureConstPtr v,
+-		TextureConstPtr filmThickness, TextureConstPtr filmIor) :
++		TextureConstPtr filmThickness, TextureConstPtr filmIor,
++		TextureConstPtr B) :
+ 			Material(frontTransp, backTransp, emitted, bump), Kr(refl), Kt(trans),
+ 			exteriorIor(exteriorIorFact), interiorIor(interiorIorFact), nu(u), nv(v),
+-			filmThickness(filmThickness), filmIor(filmIor) {
++			filmThickness(filmThickness), filmIor(filmIor), cauchyB(B) {
+ 	glossiness = ComputeGlossiness(nu, nv);
+ }
+ 
+@@ -170,7 +218,18 @@ Spectrum RoughGlassMaterial::Sample(const HitPoint &hitPoint,
+ 	const float cosThetaOH = Dot(localFixedDir, wh);
+ 
+ 	const float nc = ExtractExteriorIors(hitPoint, exteriorIor);
+-	const float nt = ExtractInteriorIors(hitPoint, interiorIor);
++	const float ntBase = ExtractInteriorIors(hitPoint, interiorIor);
++	const float cauchyBValue = cauchyB ? cauchyB->GetFloatValue(hitPoint) : 0.f;
++	float nt = ntBase;
++	Spectrum ktSpectral = kt;
++	if (cauchyBValue > 0.f) {
++		/* Extra wavelength sample. u0/u1 already drive the microfacet. */
++		float uWl = u0 * 12.9898f + u1 * 78.233f + passThroughEvent * 45.164f;
++		uWl = uWl - floorf(uWl);
++		const float waveLength = Lerp(uWl, 380.f, 780.f);
++		nt = WaveLength2IOR(waveLength, ntBase, cauchyBValue);
++		ktSpectral = kt * WaveLength2RGB(waveLength);
++	}
+ 	const float ntc = nt / nc;
+ 
+ 	const float coso = fabsf(localFixedDir.z);
+@@ -217,10 +276,10 @@ Spectrum RoughGlassMaterial::Sample(const HitPoint &hitPoint,
+ 
+ 		if (!hitPoint.fromLight) {
+ 			const float F = FresnelTexture::CauchyEvaluate(ntc, cosThetaIH);
+-			result = (factor / coso) * kt * (1.f - F);
++			result = (factor / coso) * ktSpectral * (1.f - F);
+ 		} else {
+ 			const float F = FresnelTexture::CauchyEvaluate(ntc, cosThetaOH);
+-			result = (factor / cosi) * kt * (1.f - F);
++			result = (factor / cosi) * ktSpectral * (1.f - F);
+ 		}
+ 
+ 		*pdfW *= threshold;
+@@ -349,6 +408,8 @@ void RoughGlassMaterial::AddReferencedTextures(std::unordered_set<const Texture
+ 		filmThickness->AddReferencedTextures(referencedTexs);
+ 	if (filmIor)
+ 		filmIor->AddReferencedTextures(referencedTexs);
++	if (cauchyB)
++		cauchyB->AddReferencedTextures(referencedTexs);
+ }
+ 
+ void RoughGlassMaterial::UpdateTextureReferences(TextureConstRef oldTex, TextureRef newTex) {
+@@ -375,6 +436,8 @@ void RoughGlassMaterial::UpdateTextureReferences(TextureConstRef oldTex, Texture
+ 		filmThickness = &newTex;
+ 	if (filmIor == &oldTex)
+ 		filmIor = &newTex;
++	if (cauchyB == &oldTex)
++		cauchyB = &newTex;
+ 
+ 	if (updateGlossiness)
+ 		glossiness = ComputeGlossiness(nu, nv);
+@@ -397,6 +460,8 @@ PropertiesUPtr RoughGlassMaterial::ToProperties(const ImageMapCache &imgMapCache
+ 		props->Set(Property("scene.materials." + name + ".filmthickness")(filmThickness->GetSDLValue()));
+ 	if (filmIor)
+ 		props->Set(Property("scene.materials." + name + ".filmior")(filmIor->GetSDLValue()));
++	if (cauchyB)
++		props->Set(Property("scene.materials." + name + ".cauchyb")(cauchyB->GetSDLValue()));
+ 	props->Set(Material::ToProperties(imgMapCache, useRealFileName));
+ 
+ 	return props;
+diff --git a/src/slg/scene/parsematerials.cpp b/src/slg/scene/parsematerials.cpp
+index d19edb5..88125b6 100644
+--- a/src/slg/scene/parsematerials.cpp
++++ b/src/slg/scene/parsematerials.cpp
+@@ -493,9 +493,15 @@ MaterialUPtr Scene::CreateMaterial(
+ 		if (isDefined("filmior"))
+ 			filmIor = parseTex("filmior", {1.5f});
+ 
++		TextureConstPtr cauchyB = nullptr;
++		if (isDefined("cauchyb"))
++			cauchyB = parseTex("cauchyb", {0.f, 0.f, 0.f});
++		else if (isDefined("cauchyc"))
++			cauchyB = parseTex("cauchyc", {0.f, 0.f, 0.f});
++
+ 		mat = std::make_unique<RoughGlassMaterial>(
+ 			frontTransparencyTex, backTransparencyTex, emissionTex, bumpTex,
+-			kr, kt, exteriorIor, interiorIor, nu, nv, filmThickness, filmIor
++			kr, kt, exteriorIor, interiorIor, nu, nv, filmThickness, filmIor, cauchyB
+ 		);
+ 	} else if (matType == "velvet") {
+ 		auto kd = parseTex("kd", {.5f, .5f, .5f});
