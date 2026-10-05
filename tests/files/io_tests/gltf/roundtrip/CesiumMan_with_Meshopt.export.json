@@ -1,4 +1,0 @@
-{
-    "export_meshopt_compression_enable": true,
-    "export_meshopt_extension": "KHR_meshopt_compression"
-}
