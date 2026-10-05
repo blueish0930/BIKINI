@@ -367,7 +367,7 @@ gpu::Shader *GPU_shader_async_compilation_finalize(AsyncCompilationHandle &handl
 
 void GPU_shader_async_compilation_cancel(AsyncCompilationHandle &handle)
 {
-  GPUBackend::get()->get_compiler()->asyc_compilation_cancel(handle);
+  GPUBackend::get()->get_compiler()->async_compilation_cancel(handle);
 }
 
 bool GPU_shader_compiler_has_pending_work()
@@ -541,7 +541,7 @@ bool GPU_shader_async_specialization_is_ready(AsyncSpecializationHandle &handle)
 
 void GPU_shader_async_specialization_cancel(AsyncSpecializationHandle &handle)
 {
-  GPUBackend::get()->get_compiler()->asyc_compilation_cancel(handle);
+  GPUBackend::get()->get_compiler()->async_compilation_cancel(handle);
 }
 
 /** \} */
@@ -1135,7 +1135,7 @@ AsyncCompilationHandle ShaderCompiler::async_compilation(const shader::ShaderCre
   return handle;
 }
 
-void ShaderCompiler::asyc_compilation_cancel(AsyncCompilationHandle &handle)
+void ShaderCompiler::async_compilation_cancel(AsyncCompilationHandle &handle)
 {
   {
     std::unique_lock lock(mutex_);
