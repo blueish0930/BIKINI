@@ -32,6 +32,7 @@
 #include "ANIM_action_iterators.hh"
 
 #include "BLI_listbase.hh"
+#include "BLI_set.hh"
 #include "BLI_stack.hh"
 
 namespace blender::nodes::socket_usage_inference {
@@ -1136,19 +1137,27 @@ SocketUsageInferencer::SocketUsageInferencer(const bNodeTree &tree,
   impl_.owner_ = this;
 }
 
-static bool interface_input_may_affect_visibility(const bNodeTree &tree, const int input_i);
+static bool interface_input_may_affect_visibility(const bNodeTree &tree,
+                                                  const int input_i,
+                                                  Set<uint64_t> &visited_inputs);
 
-static bool input_may_affect_visibility(const bNodeSocket &socket)
+static bool input_may_affect_visibility(const bNodeSocket &socket,
+                                        Set<uint64_t> &visited_inputs)
 {
   if (socket.type == SOCK_MENU) {
     return true;
   }
-  if (socket.type != SOCK_BOOLEAN || !socket.is_input()) {
+  if (!socket.is_input()) {
     return false;
   }
 
   const bNode &node = socket.owner_node();
-  if (socket.identifier_ustr() == "Enable"_ustr &&
+  if (ELEM(node.type_legacy, GEO_NODE_SWITCH, GEO_NODE_INDEX_SWITCH, GEO_NODE_MENU_SWITCH) &&
+      socket.index() == 0)
+  {
+    return true;
+  }
+  if (socket.type == SOCK_BOOLEAN && socket.identifier_ustr() == "Enable"_ustr &&
       (node.is_type("NodeEnableInput"_ustr) || node.is_type("NodeEnableOutput"_ustr)))
   {
     return true;
@@ -1160,11 +1169,17 @@ static bool input_may_affect_visibility(const bNodeSocket &socket)
       group->ensure_topology_cache();
       group->ensure_interface_cache();
       if (group->interface_inputs().index_range().contains(socket.index())) {
-        return interface_input_may_affect_visibility(*group, socket.index());
+        return interface_input_may_affect_visibility(*group, socket.index(), visited_inputs);
       }
     }
   }
   return false;
+}
+
+static bool input_may_affect_visibility(const bNodeSocket &socket)
+{
+  Set<uint64_t> visited_inputs;
+  return input_may_affect_visibility(socket, visited_inputs);
 }
 
 static const bNodeSocket *interface_input_visibility_socket(const bNodeTree &tree,
@@ -1238,25 +1253,39 @@ static std::optional<bool> enable_input_should_hide_interface(
   return get_linked_enable_value();
 }
 
-static bool interface_input_may_affect_visibility(const bNodeTree &tree, const int input_i)
+static bool interface_input_may_affect_visibility(const bNodeTree &tree,
+                                                  const int input_i,
+                                                  Set<uint64_t> &visited_inputs)
 {
+  const uint64_t key = (uint64_t(tree.id.session_uid) << 32) | uint32_t(input_i);
+  if (!visited_inputs.add(key)) {
+    return false;
+  }
   const bNodeTreeInterfaceSocket &socket = *tree.interface_inputs()[input_i];
   if (socket.socket_type == StringRef("NodeSocketMenu")) {
     return true;
-  }
-  if (socket.socket_type != StringRef("NodeSocketBool")) {
-    return false;
   }
   for (const bNode *group_input_node : tree.group_input_nodes()) {
     for (const bNodeSocket *target_socket :
          group_input_node->output_socket(input_i).logically_linked_sockets())
     {
-      if (input_may_affect_visibility(*target_socket)) {
+      if (input_may_affect_visibility(*target_socket, visited_inputs)) {
         return true;
       }
     }
   }
   return false;
+}
+
+static bool interface_input_may_affect_visibility(const bNodeTree &tree, const int input_i)
+{
+  Set<uint64_t> visited_inputs;
+  return interface_input_may_affect_visibility(tree, input_i, visited_inputs);
+}
+
+static InferenceValue unknown_group_input_value(const int /*input_i*/)
+{
+  return InferenceValue::Unknown();
 }
 
 Array<SocketUsage> infer_all_sockets_usage(const bNodeTree &tree)
@@ -1277,7 +1306,8 @@ Array<SocketUsage> infer_all_sockets_usage(const bNodeTree &tree)
 
   {
     /* Find actual socket usages. */
-    SocketValueInferencer value_inferencer{tree, scope, compute_context_cache};
+    SocketValueInferencer value_inferencer{
+        tree, scope, compute_context_cache, unknown_group_input_value};
     SocketUsageInferencer usage_inferencer{
         tree, scope, value_inferencer, compute_context_cache, ignore_top_level_node_muting};
     usage_inferencer.mark_top_level_node_outputs_as_used();
@@ -1307,14 +1337,14 @@ Array<SocketUsage> infer_all_sockets_usage(const bNodeTree &tree)
     }
   });
   SocketValueInferencer value_inferencer_all_unknown{
-      tree, scope, compute_context_cache, nullptr, all_ignored_inputs};
+      tree, scope, compute_context_cache, unknown_group_input_value, all_ignored_inputs};
   SocketUsageInferencer usage_inferencer_all_unknown{tree,
                                                      scope,
                                                      value_inferencer_all_unknown,
                                                      compute_context_cache,
                                                      ignore_top_level_node_muting};
   SocketValueInferencer value_inferencer_only_controllers{
-      tree, scope, compute_context_cache, nullptr, only_controllers_used};
+      tree, scope, compute_context_cache, unknown_group_input_value, only_controllers_used};
   SocketUsageInferencer usage_inferencer_only_controllers{tree,
                                                           scope,
                                                           value_inferencer_only_controllers,
@@ -1455,7 +1485,8 @@ void infer_group_interface_usage(const bNodeTree &group,
     /* If there are no visibility controls, all inputs are always visible. */
     return;
   }
-  SocketValueInferencer value_inferencer_all_unknown{group, scope, compute_context_cache};
+  SocketValueInferencer value_inferencer_all_unknown{
+      group, scope, compute_context_cache, unknown_group_input_value};
   SocketUsageInferencer usage_inferencer_all_unknown{
       group, scope, value_inferencer_all_unknown, compute_context_cache};
   const auto get_only_controllers_input_value = [&](const int group_input_i) {

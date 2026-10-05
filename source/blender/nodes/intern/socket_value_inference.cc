@@ -350,11 +350,10 @@ class SocketValueInferencerImpl {
       if (group_input_value_fn_) {
         value = group_input_value_fn_(socket->index());
       }
-      /* When editing a node tree directly, fall back to the interface socket default value so
-       * visibility controllers like Enable Input can hide sockets based on static defaults.
-       * However, during hide-detection passes that intentionally ignore inputs, keep the value
-       * unknown so controller-dependent sockets can still be detected as hideable. */
-      if (!value.is_primitive_value()) {
+      /* A caller-provided unknown value is dynamic. In particular, an input of the edited group
+       * may be overridden by any instance of that group, so its interface default must not be
+       * used to hide sockets in nested group nodes. */
+      if (!group_input_value_fn_ && !value.is_primitive_value()) {
         bool use_interface_default = true;
         if (top_level_ignored_inputs_.has_value()) {
           const bool all_ignored = std::all_of(
