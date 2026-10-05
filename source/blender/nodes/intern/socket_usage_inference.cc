@@ -1147,17 +1147,12 @@ static bool input_may_affect_visibility(const bNodeSocket &socket,
   if (socket.type == SOCK_MENU) {
     return true;
   }
-  if (!socket.is_input()) {
+  if (socket.type != SOCK_BOOLEAN || !socket.is_input()) {
     return false;
   }
 
   const bNode &node = socket.owner_node();
-  if (ELEM(node.type_legacy, GEO_NODE_SWITCH, GEO_NODE_INDEX_SWITCH, GEO_NODE_MENU_SWITCH) &&
-      socket.index() == 0)
-  {
-    return true;
-  }
-  if (socket.type == SOCK_BOOLEAN && socket.identifier_ustr() == "Enable"_ustr &&
+  if (socket.identifier_ustr() == "Enable"_ustr &&
       (node.is_type("NodeEnableInput"_ustr) || node.is_type("NodeEnableOutput"_ustr)))
   {
     return true;
@@ -1264,6 +1259,9 @@ static bool interface_input_may_affect_visibility(const bNodeTree &tree,
   const bNodeTreeInterfaceSocket &socket = *tree.interface_inputs()[input_i];
   if (socket.socket_type == StringRef("NodeSocketMenu")) {
     return true;
+  }
+  if (socket.socket_type != StringRef("NodeSocketBool")) {
+    return false;
   }
   for (const bNode *group_input_node : tree.group_input_nodes()) {
     for (const bNodeSocket *target_socket :
