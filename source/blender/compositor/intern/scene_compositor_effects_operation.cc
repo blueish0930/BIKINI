@@ -179,8 +179,7 @@ void SceneCompositorEffectsOperation::execute()
       flag_is_set(needed_outputs_, NodeGroupOutputTypes::ViewerNode) ||
       flag_is_set(this->context().needed_side_effect_output_types(),
                   SideEffectOutputTypes::ViewerNode);
-  const bool has_viewer_output = needs_viewer_output &&
-                                 this->context().get_viewer_compute_context_hash().has_value();
+  const bool has_viewer_output = needs_viewer_output && this->context().viewer_compute_context();
   const bke::DataBlockComputeContext &scene_compute_context =
       this->context().compute_context_cache().for_data_block(nullptr, scene.id);
 
