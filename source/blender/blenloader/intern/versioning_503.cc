@@ -1144,6 +1144,16 @@ void blo_do_versions_503(FileData * /*fd*/, Library * /*lib*/, Main *bmain)
     }
   }
 
+  /* Official 503.26 (sequencer ripple defaults) landed after BIKINI had already reached
+   * subversion 47. Apply it at 48 so existing BIKINI files still receive the migration. */
+  if (!MAIN_VERSION_FILE_ATLEAST(bmain, 503, 48)) {
+    for (Scene &scene : bmain->scenes) {
+      SequencerToolSettings *sequencer_tool_settings = seq::tool_settings_ensure(&scene);
+      sequencer_tool_settings->ripple_flag = SEQ_RIPPLE_ALL_CHANNELS | SEQ_RIPPLE_MARKERS |
+                                             SEQ_RIPPLE_CLEAR_RANGES;
+    }
+  }
+
   /**
    * Always bump subversion in BKE_blender_version.h when adding versioning
    * code here, and wrap it inside a MAIN_VERSION_FILE_ATLEAST check.

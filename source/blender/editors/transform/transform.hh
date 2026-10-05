@@ -361,6 +361,12 @@ enum {
   /** Node editor: enable align+pack while translating (hold U, or latched from U start). */
   TFM_MODAL_NODE_ALIGN_ON = 39,
   TFM_MODAL_NODE_ALIGN_OFF = 40,
+
+  /* Official values are 39-42; shifted because BIKINI already uses 39 and 40 above. */
+  TFM_MODAL_STRIP_OVERLAP_SHUFFLE = 41,
+  TFM_MODAL_STRIP_OVERLAP_RIPPLE = 42,
+  TFM_MODAL_STRIP_OVERLAP_OVERWRITE = 43,
+  TFM_MODAL_STRIP_RIPPLE_INSERT = 44,
 };
 
 /** \} */
@@ -660,7 +666,9 @@ struct MouseInput {
 
 struct TransCustomData {
   void *data;
+  /** Callback to override automatic freeing done by #use_free. Must null #data.  */
   void (*free_cb)(TransInfo *, TransDataContainer *tc, TransCustomData *custom_data);
+  /** Whether to automatically attempt to `MEM_delete_void` #data if not already null. */
   unsigned int use_free : 1;
 };
 
