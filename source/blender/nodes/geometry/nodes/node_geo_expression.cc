@@ -544,6 +544,9 @@ static void draw_expression_string_socket(CustomSocketDrawParams &params)
   data->owner_id = params.socket_ptr.owner_id;
 
   button_func_search_set_results_are_suggestions(but, true);
+  /* Rows are code snippets: Tab / click insert them and editing continues, Enter finishes the
+   * expression with the typed text instead of inserting the highlighted row. */
+  button_func_search_set_suggestions_insert_text(but, true);
   /* Split display name at UI_SEP_CHAR so category hint is not written into the field. */
   /* (use_shortcut_sep is operator-only; exec_fn still rebuilds from insert_texts + snapshot.) */
   button_func_search_set_sep_string(but, UI_MENU_ARROW_SEP);

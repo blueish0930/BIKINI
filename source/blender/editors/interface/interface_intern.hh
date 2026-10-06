@@ -512,6 +512,15 @@ struct ButtonSearch : public Button {
    * the string to match one of the search items when applying.
    */
   bool results_are_suggestions = false;
+
+  /**
+   * Accepting a suggestion (Tab or click) inserts it into the edit field and keeps editing, and
+   * Enter finishes the field with the typed text instead of confirming the highlighted row.
+   * Used by syntax browsers (e.g. the Expression node) where a row is a snippet to insert, not a
+   * value to commit. Regular search menus such as the attribute search leave this off: there
+   * Enter and clicks confirm the highlighted entry.
+   */
+  bool suggestions_insert_text = false;
 };
 
 /**

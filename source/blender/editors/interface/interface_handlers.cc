@@ -5045,14 +5045,19 @@ static int do_but_textedit(
           ButtonSearch *search_but = (but->type == ButtonType::SearchMenu) ?
                                          static_cast<ButtonSearch *>(but) :
                                          nullptr;
-          if (search_but && search_but->results_are_suggestions && data->searchbox) {
-            /* Click: complete the row under the cursor, stay in text-edit (like Tab). */
+          if (search_but && search_but->suggestions_insert_text && data->searchbox) {
+            /* Syntax browsers: click completes the row under the cursor, stay in text-edit
+             * (like Tab). */
             searchbox_set_active_from_mouse(data->searchbox, event->xy);
             if (textedit_apply_search_suggestion(C, but, data)) {
               changed = true;
             }
           }
           else {
+            /* Confirm the row under the cursor: exiting applies it (see #searchbox_apply). */
+            if (search_but && data->searchbox) {
+              searchbox_set_active_from_mouse(data->searchbox, event->xy);
+            }
             button_activate_state(C, but, BUTTON_STATE_EXIT);
           }
           retval = WM_UI_HANDLER_BREAK;
@@ -5227,9 +5232,10 @@ static int do_but_textedit(
         }
         else if (but->type == ButtonType::SearchMenu && data->searchbox) {
           ButtonSearch *search_but = static_cast<ButtonSearch *>(but);
-          if (search_but->results_are_suggestions) {
-            /* Enter does not complete suggestions — only Tab / mouse click do.
-             * Clear highlight so EXIT keeps free-typed text and does not run search exec. */
+          if (search_but->suggestions_insert_text) {
+            /* Syntax browsers (e.g. the Expression node): Enter does not complete suggestions —
+             * only Tab / mouse click do. Clear highlight so EXIT keeps free-typed text and does
+             * not run search exec. */
             searchbox_clear_active(data->searchbox);
             search_but->item_active = nullptr;
           }

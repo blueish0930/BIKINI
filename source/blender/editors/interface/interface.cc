@@ -6474,6 +6474,14 @@ void button_func_search_set_results_are_suggestions(Button *but, const bool valu
   but_search->results_are_suggestions = value;
 }
 
+void button_func_search_set_suggestions_insert_text(Button *but, const bool value)
+{
+  ButtonSearch *but_search = static_cast<ButtonSearch *>(but);
+  BLI_assert(but->type == ButtonType::SearchMenu);
+
+  but_search->suggestions_insert_text = value;
+}
+
 /* Callbacks for operator search button. */
 static void operator_enum_search_update_fn(
     const bContext *C, void *but, const char *str, SearchItems *items, const bool /*is_first*/)

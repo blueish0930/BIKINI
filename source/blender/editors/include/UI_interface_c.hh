@@ -1969,6 +1969,12 @@ void button_func_search_set_listen(Button *but, ButtonSearchListenFn listen_fn);
  */
 void button_func_search_set_sep_string(Button *but, const char *search_sep_string);
 void button_func_search_set_results_are_suggestions(Button *but, bool value);
+/**
+ * Search rows insert their text into the edit field and editing continues (Tab, click), and Enter
+ * ends editing with the typed text instead of confirming the highlighted row. Meant for syntax
+ * browsers; other search menus confirm the highlighted entry with Enter and clicks.
+ */
+void button_func_search_set_suggestions_insert_text(Button *but, bool value);
 
 #define UI_SEARCHBOX_BOUNDS (6.0f * UI_SCALE_FAC)
 #define UI_SEARCHBOX_TRIA_H (12.0f * UI_SCALE_FAC)
