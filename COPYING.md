@@ -1,37 +1,54 @@
-# 引用库协议说明
+# Third-Party License Notes
 
-BIKINI 的程序整体沿用 Blender 的 GNU General Public License v3.0 or later。版权归 Blender Foundation 及其贡献者；BIKINI 在此基础上的修改同样按该许可证提供。
+BIKINI as a whole follows Blender's GNU General Public License v3.0 or later. Copyright belongs
+to the Blender Foundation and its contributors; the modifications BIKINI adds on top are offered
+under the same license.
 
-- 许可证全文：[release/license/spdx/GPL-3.0-or-later.txt](release/license/spdx/GPL-3.0-or-later.txt)
-- 根目录的简短说明：[COPYING](COPYING)
-- 项目文档：<https://blueish0930.github.io/BIKINI/>
+- Full license text: [release/license/spdx/GPL-3.0-or-later.txt](release/license/spdx/GPL-3.0-or-later.txt)
+- Short note in the repository root: [COPYING](COPYING)
+- Project documentation: <https://blueish0930.github.io/BIKINI/>
 
-随程序一起编译或链接的第三方库保留它们自己的许可证。分发二进制时，需要同时满足 GPL，以及下面这些库各自的条件。
+Third-party libraries that are compiled or linked into the program keep their own licenses. When
+distributing a binary, both the GPL and the conditions of the libraries listed below have to be
+satisfied.
 
-上游 Blender 已经生成的库清单和许可证正文在 [release/license/license.md](release/license/license.md)。那份文件按许可证分组，每组先列出库名、版本和版权行，再附上许可证原文。SPDX 文本在 [release/license/spdx/](release/license/spdx/)。那份清单对应 Blender 原有依赖，还没有列入 BIKINI 另外引用的 CGAL、LuxCore、Spectra、OptiX 和 DLSS。这几项写在下面。
+Upstream Blender already generates a library catalog with the license texts in
+[release/license/license.md](release/license/license.md). That file groups the libraries by
+license; each group lists the library name, version and copyright line first and appends the
+license text. The SPDX texts live in [release/license/spdx/](release/license/spdx/). That catalog
+covers Blender's original dependencies and does not yet include the additional CGAL, LuxCore,
+Spectra, OptiX and DLSS references of BIKINI; those are described below.
 
-## 已经在本仓库里的第三方源码
+## Third-party sources inside this repository
 
-`extern/` 里除 `luxcore` 子模块以外的目录，都随 Git 历史分发。每个目录带有自己的许可证文件。和几何节点直接相关、且不在 `license.md` 清单里的是：
+Everything under `extern/` except the `luxcore` submodule is distributed with the Git history.
+Each directory carries its own license files. The entry that is directly related to geometry
+nodes and is not part of the `license.md` catalog is:
 
-| 库 | 位置 | 许可证 |
+| Library | Location | License |
 | --- | --- | --- |
-| CGAL 6.2 | `extern/cgal` | 各文件为 GPL-3.0-or-later 或 LGPL-3.0-or-later，少量文件为 Boost Software License。说明见 [extern/cgal/LICENSE](extern/cgal/LICENSE) 和 [extern/cgal/README.blender](extern/cgal/README.blender) |
+| CGAL 6.2 | `extern/cgal` | Most files are GPL-3.0-or-later or LGPL-3.0-or-later, a few are under the Boost Software License. See [extern/cgal/LICENSE](extern/cgal/LICENSE) and [extern/cgal/README.blender](extern/cgal/README.blender) |
 
-其余入库库（Audaspace、Bullet、Eigen、Jolt、OpenSubdiv、gtest 等）以各目录中的 `COPYING`、`LICENSE` 或 `README` 为准，并已汇总进 `release/license/license.md`。
+For the remaining bundled libraries (Audaspace, Bullet, Eigen, Jolt, OpenSubdiv, gtest and
+others) the `COPYING`, `LICENSE` or `README` file in each directory is authoritative; they are
+already summarized in `release/license/license.md`.
 
-## 需要自己拉取的库
+## Libraries you have to fetch yourself
 
-这些库不在本仓库的普通文件里。拉取方式和编译步骤见 [README.md](README.md)。
+These libraries are not part of the ordinary files of this repository. How to fetch them and how
+to build are described in [BUILDING.txt](BUILDING.txt).
 
-| 库 | 放到哪里 | 许可证 | 许可证文本在哪 |
+| Library | Where it goes | License | Where the license text lives |
 | --- | --- | --- | --- |
-| Blender 平台预编译库 | `lib/windows_x64` 等 | 每个库各自的开源许可证，与 `release/license/license.md` 中的条目对应 | 预编译库仓库里的 `deps.md`，以及 `license.md` |
-| LuxCore / SLG / LuxRays | `extern/luxcore` | Apache-2.0 | 检出后的 `extern/luxcore/COPYING.txt` |
-| Spectra | `lib/<platform>/spectra` | Mozilla Public License 2.0 | 检出后的 `LICENSE`；SPDX 文本见 [release/license/spdx/MPL-2.0.txt](release/license/spdx/MPL-2.0.txt) |
-| NVIDIA OptiX 头文件 | `lib/<platform>/optix` | NVIDIA Software Developer Kits, Samples and Tools License | 用户下载的 SDK 内 `LICENSE.txt` |
-| NVIDIA DLSS / NGX SDK | `lib/<platform>/dlss` | NVIDIA RTX SDKs License | 用户下载的 SDK 内 `LICENSE.txt` |
+| Blender platform precompiled libraries | `lib/windows_x64` and the equivalents | The individual open-source licenses of the bundled libraries, matching the entries in `release/license/license.md` | `deps.md` in the precompiled library repository, plus `license.md` |
+| LuxCore / SLG / LuxRays | `extern/luxcore` | Apache-2.0 | `extern/luxcore/COPYING.txt` after checkout |
+| Spectra | `lib/<platform>/spectra` | Mozilla Public License 2.0 | `LICENSE` after checkout; SPDX text in [release/license/spdx/MPL-2.0.txt](release/license/spdx/MPL-2.0.txt) |
+| NVIDIA OptiX headers | `lib/<platform>/optix` | NVIDIA Software Developer Kits, Samples and Tools License | `LICENSE.txt` inside the SDK the user downloads |
+| NVIDIA DLSS / NGX SDK | `lib/<platform>/dlss` | NVIDIA RTX SDKs License | `LICENSE.txt` inside the SDK the user downloads |
 
-`patches/luxcore-bikini.patch` 是打在 LuxCore 上的本地修改，不改变 LuxCore 的 Apache-2.0。
+`patches/luxcore-bikini.patch` is a local modification applied on top of LuxCore and does not
+change LuxCore's Apache-2.0 licensing.
 
-OptiX 和 DLSS 是 NVIDIA 的专有 SDK，本仓库不收录这两份代码，也不转载其许可证全文。用户从 NVIDIA 或对应公开仓库取得 SDK 时，以随包的 `LICENSE.txt` 为准。
+OptiX and DLSS are proprietary NVIDIA SDKs. This repository neither includes their code nor
+redistributes their license texts; when a user obtains an SDK from NVIDIA or from the
+corresponding public repository, the `LICENSE.txt` shipped with it is authoritative.
