@@ -2,7 +2,11 @@ Blender uses the GNU General Public License, which describes the rights
 to distribute or change the code. 
 
 Please read this file for the full license.
-doc/license/GPL-license.txt
+release/license/spdx/GPL-3.0-or-later.txt
+
+Third-party libraries keep their own licenses. See COPYING.md for
+where each referenced library's license text lives, and
+release/license/license.md for the generated upstream catalog.
 
 Apart from the GNU GPL, Blender is not available under other licenses.
 
