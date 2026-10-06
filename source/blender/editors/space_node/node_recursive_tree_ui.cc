@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <string>
 #include <utility>
 
@@ -73,8 +74,6 @@
 #include "node_intern.hh"
 
 namespace blender::ed::space_node {
-
-static constexpr int recursive_call_row_limit = 256;
 
 struct RecursionTreeActive {
   uint32_t uid = 0;
@@ -164,8 +163,6 @@ static void collect_direct_calls(nodes::eval_log::NodesEvalLog &log,
                                  const ComputeContextHash hash,
                                  const Span<ChainStep> chain,
                                  Set<ComputeContextHash> &visiting,
-                                 int &budget,
-                                 bool &truncated,
                                  Vector<PendingCall> &r_calls)
 {
   if (!visiting.add(hash)) {
@@ -205,10 +202,6 @@ static void collect_direct_calls(nodes::eval_log::NodesEvalLog &log,
   });
 
   for (const ChildCall &child_call : children) {
-    if (budget <= 0) {
-      truncated = true;
-      return;
-    }
     const ComputeContextHash child_hash = child_call.hash;
     const bNode *caller = child_call.caller;
     Vector<ChainStep> child_chain(chain);
@@ -222,7 +215,6 @@ static void collect_direct_calls(nodes::eval_log::NodesEvalLog &log,
       }
     }
     if (is_self_group_call(root_tree, caller)) {
-      budget--;
       PendingCall call;
       call.hash = child_hash;
       call.name = node_call_name(*caller);
@@ -243,8 +235,6 @@ static void collect_direct_calls(nodes::eval_log::NodesEvalLog &log,
                            child_hash,
                            child_chain,
                            visiting,
-                           budget,
-                           truncated,
                            r_calls);
     }
   }
@@ -497,13 +487,11 @@ static int append_calls(Vector<GraphPoint> &points,
                         bNodeTree &tree,
                         const ComputeContextHash hash,
                         const int depth,
-                        Set<ComputeContextHash> &visiting,
-                        int &budget,
-                        bool &truncated)
+                        Set<ComputeContextHash> &visiting)
 {
   Vector<PendingCall> calls;
   const Vector<ChainStep> chain = points[parent].chain;
-  collect_direct_calls(log, tree, tree, hash, chain, visiting, budget, truncated, calls);
+  collect_direct_calls(log, tree, tree, hash, chain, visiting, calls);
   for (PendingCall &call : calls) {
     const int child = points.size();
     points.append({});
@@ -523,9 +511,7 @@ static int append_calls(Vector<GraphPoint> &points,
                  tree,
                  points[child].hash,
                  depth + 1,
-                 visiting,
-                 budget,
-                 truncated);
+                 visiting);
   }
   return child_count;
 }
@@ -585,22 +571,16 @@ static rctf position_points(Vector<GraphPoint> &points)
   return bounds;
 }
 
-/** Fits the whole tree into the region, never zooming in past 1:1. */
-static void frame_tree(ARegion &region, const rctf &bounds)
+/** Initially show depths zero through seven, with the root centered horizontally. */
+static void frame_tree(ARegion &region)
 {
   View2D &v2d = region.v2d;
-  const float margin = tree_margin * UI_SCALE_FAC;
-  const float tree_w = BLI_rctf_size_x(&bounds) + margin * 2.0f;
-  const float tree_h = BLI_rctf_size_y(&bounds) + margin * 2.0f;
   const float win_w = std::max(float(region.winx), 1.0f);
   const float win_h = std::max(float(region.winy), 1.0f);
-  /* View units per region pixel. */
-  const float scale = std::max(1.0f, std::max(tree_w / win_w, tree_h / win_h));
-  const float half_w = win_w * scale * 0.5f;
-  const float half_h = win_h * scale * 0.5f;
-  const float cx = BLI_rctf_cent_x(&bounds);
-  const float cy = BLI_rctf_cent_y(&bounds);
-  BLI_rctf_init(&v2d.cur, cx - half_w, cx + half_w, cy - half_h, cy + half_h);
+  const float view_h = 8.0f * tree_gap_y * UI_SCALE_FAC;
+  const float view_w = view_h * win_w / win_h;
+  const float top = 0.65f * tree_gap_y * UI_SCALE_FAC;
+  BLI_rctf_init(&v2d.cur, -view_w * 0.5f, view_w * 0.5f, top - view_h, top);
   ui::view2d_curRect_validate(&v2d);
 }
 
@@ -677,6 +657,12 @@ static void draw_links(const Span<GraphPoint> points)
 
 void node_recursive_tree_draw(const bContext &C, ARegion &region)
 {
+  /* The regular node editor limits zoom and view size. A complete recursion tree can be much
+   * wider, so let this window keep zooming out as far as the View2D coordinates allow. */
+  region.v2d.keepzoom &= ~V2D_LIMITZOOM;
+  region.v2d.max[0] = std::numeric_limits<float>::max();
+  region.v2d.max[1] = std::numeric_limits<float>::max();
+
   const SpaceNode *graph = CTX_wm_space_node(&C);
   /* Node editor regions are composited from the viewport overlay framebuffer. Drawing to the
    * window framebuffer leaves a completely black secondary window. */
@@ -716,7 +702,6 @@ void node_recursive_tree_draw(const bContext &C, ARegion &region)
   nodes::eval_log::NodesEvalLog *log = nodes::eval_log::NodesEvalLog::from_space_node(*source);
 
   Vector<GraphPoint> points;
-  bool truncated = false;
   if (root != nullptr) {
     points.append({});
     GraphPoint &root_point = points.last();
@@ -725,11 +710,15 @@ void node_recursive_tree_draw(const bContext &C, ARegion &region)
     root_point.tip = depth_tip(0, "");
     if (log != nullptr) {
       Set<ComputeContextHash> visiting;
-      int budget = recursive_call_row_limit;
-      append_calls(points, 0, *log, tree, root->hash(), 0, visiting, budget, truncated);
+      append_calls(points, 0, *log, tree, root->hash(), 0, visiting);
     }
   }
   const rctf bounds = position_points(points);
+  region.v2d.tot = bounds;
+  BLI_rctf_pad(&region.v2d.tot, tree_margin * UI_SCALE_FAC, tree_margin * UI_SCALE_FAC);
+  region.v2d.scroll |= V2D_SCROLL_BOTTOM;
+  region.v2d.scroll &= ~(V2D_SCROLL_HORIZONTAL_HIDE | V2D_SCROLL_HORIZONTAL_FULLR);
+  region.v2d.alpha_hor = 255;
 
   /* Frame the tree when it first appears or its shape changes. Otherwise keep the user's zoom
    * and pan. Skip frames without a log so a pending evaluation does not make the view jump. */
@@ -737,7 +726,7 @@ void node_recursive_tree_draw(const bContext &C, ARegion &region)
       graph->runtime->recursion_tree_framed_points != points.size())
   {
     graph->runtime->recursion_tree_framed_points = points.size();
-    frame_tree(region, bounds);
+    frame_tree(region);
     ui::view2d_view_ortho(&region.v2d);
   }
 
@@ -788,9 +777,8 @@ void node_recursive_tree_draw(const bContext &C, ARegion &region)
   if (log == nullptr || root == nullptr) {
     draw_message(C, region, IFACE_("Evaluate the node group to list calls."), 8);
   }
-  else if (truncated) {
-    draw_message(C, region, IFACE_("Call tree truncated."), 8);
-  }
+  ui::view2d_view_restore(&C);
+  ui::view2d_scrollers_draw(&region.v2d, nullptr);
 }
 
 static void recursion_tree_hide_chrome(bContext *C, ScrArea *area)
