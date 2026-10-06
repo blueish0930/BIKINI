@@ -4,19 +4,56 @@ BIKINI - BUILDING FROM SOURCE
 Upstream Blender build handbook:
 https://developer.blender.org/docs/handbook/building_blender/
 
-This file describes how this repository differs from upstream Blender, which third-party
-libraries have to be fetched by hand, and how to reproduce the build configuration that is
-verified on this machine.
+This file describes what the source tree contains, how this repository differs from upstream
+Blender, which third-party libraries have to be fetched by hand, and how to reproduce the build
+configuration that is verified on this machine.
 
 
-1. THIRD-PARTY LIBRARIES YOU HAVE TO FETCH YOURSELF
+1. WHAT THE SOURCE TREE CONTAINS
+--------------------------------
+
+After cloning, these directories are already part of the Git history:
+
+source/                    The Blender application itself: window manager, editors, geometry
+                           nodes, compositor, sequencer, Python API.
+
+intern/                    Engines and bridges compiled with Blender, including Cycles, OpenVDB
+                           and Mantaflow, plus BIKINI's LuxCore integration (intern/luxcore) and
+                           the CGAL bridges (intern/cgal_bridge, intern/cgal_volume_bridge).
+
+extern/                    Third-party sources committed to this repository, for example
+                           Audaspace, Bullet, CGAL, Eigen, Jolt, OpenSubdiv and gtest. Each
+                           library keeps its own license files.
+
+scripts/                   Startup scripts, bundled add-ons, presets and templates.
+
+release/                   Runtime data. Full third-party license texts live in release/license/.
+
+locale/                    Interface translations.
+
+assets/                    Brush and node assets.
+
+build_files/               CMake configuration and the Windows build script (make.bat).
+
+tests/, tools/             Tests and build helper tools.
+
+patches/luxcore-bikini.patch
+                           Local modification applied on top of LuxCore for_v2.11 (Cauchy B for
+                           Rough Glass).
+
+extern/luxcore and the platform libraries under lib/ are Git submodules. A plain "git clone"
+only records their commit ids and leaves the directories empty, so they have to be initialized
+separately; see section 2.
+
+
+2. THIRD-PARTY LIBRARIES YOU HAVE TO FETCH YOURSELF
 ---------------------------------------------------
 
 The submodules set "update = none" in .gitmodules, so "git clone --recurse-submodules" does not
 check the platform libraries out either. Initialize them individually with the commands in
-section 3.
+section 4.
 
-1.1 Required to compile
+2.1 Required to compile
 .......................
 
 lib/windows_x64            Blender's official Windows x64 precompiled libraries: Python, LLVM,
@@ -34,7 +71,7 @@ Linux, macOS and Windows ARM64 use lib/linux_x64, lib/macos_arm64 and lib/window
 respectively; their URLs are listed in .gitmodules. Only the library of the current platform is
 needed.
 
-1.2 LuxCore engine
+2.2 LuxCore engine
 ..................
 
 WITH_LUXCORE is enabled by default. Once the sources and their dependencies are in place,
@@ -59,7 +96,7 @@ extern/luxcore/out/dependencies/full_deploy/host/boost/1.88.0/Release/x86_64/inc
 
 extern/boost is a different Boost that Blender ships with and cannot replace that copy.
 
-1.3 Needed only when the matching feature is enabled
+2.3 Needed only when the matching feature is enabled
 ....................................................
 
 lib/windows_x64/optix      Cycles OptiX, and it has to contain include/optix.h. On non-Apple
@@ -80,7 +117,7 @@ These three directories (spectra, optix, dlss) are not part of Blender's officia
 lib-windows_x64 commit.
 
 
-2. REQUIRED TOOLS
+3. REQUIRED TOOLS
 -----------------
 
 Install these and put them on PATH:
@@ -92,7 +129,7 @@ Install these and put them on PATH:
   the Python from lib/windows_x64)
 
 
-3. BUILD STEPS (WINDOWS)
+4. BUILD STEPS (WINDOWS)
 ------------------------
 
 The verified configuration is Visual Studio 2022 (vc17), x64, the "full" configuration and
@@ -127,7 +164,7 @@ When make.bat finds lib/windows_x64 still empty, it also offers to download it. 
 are large, so the first "lfs pull" takes a while.
 
 
-4. OTHER BUILD ENTRY POINTS
+5. OTHER BUILD ENTRY POINTS
 ---------------------------
 
 make.bat 2022          Default configuration. LuxCore stays enabled, DLSS is off, OptiX is on.
@@ -138,7 +175,7 @@ make.bat nobuild 2022  Only generate the Visual Studio projects.
 make.bat help          All switches, including lite, ninja, debug, 2019 and 2026.
 
 
-5. LINUX AND MACOS
+6. LINUX AND MACOS
 ------------------
 
 Initialize the matching lib/<platform> submodule and extern/luxcore (the patch and "make deps"
