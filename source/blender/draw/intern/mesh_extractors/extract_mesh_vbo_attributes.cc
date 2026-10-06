@@ -259,15 +259,10 @@ gpu::VertBufPtr extract_attribute_subdiv(const MeshRenderData &mr,
   return vbo;
 }
 
-gpu::VertBufPtr extract_attr_viewer(const MeshRenderData &mr)
+gpu::VertBufPtr extract_attr_viewer(const MeshRenderData &mr, MeshBufferCache &cache)
 {
   static const GPUVertFormat format = GPU_vertformat_from_attribute(
       "attribute_value", gpu::VertAttrType::SFLOAT_32_32_32_32);
-
-  gpu::VertBufPtr vbo = gpu::VertBufPtr(GPU_vertbuf_create_with_format(format));
-  GPU_vertbuf_data_alloc(*vbo, mr.corners_num);
-  MutableSpan vbo_data = vbo->data<ColorGeometry4f>();
-
   const bke::AttributeAccessor attributes = mr.mesh->attributes();
   /* Prefer Geometry Nodes Debug `.debug_color` over official Viewer `.viewer`.
    * Debug writes a dedicated composite layer for viewport color; when both exist
@@ -277,13 +272,14 @@ gpu::VertBufPtr extract_attr_viewer(const MeshRenderData &mr)
   if (attributes.contains(".debug_color")) {
     attr_name = ".debug_color";
   }
-  else if (attributes.contains(".viewer")) {
-    attr_name = ".viewer";
+  const bke::GAttributeReader attr = attributes.lookup(
+      attr_name, std::nullopt, bke::AttrType::ColorFloat);
+  if (!attr) {
+    gpu::VertBufPtr vbo = vbo_create(format, mr.corners_num);
+    vbo->data<ColorGeometry4f>().fill(ColorGeometry4f(1.0f, 0.0f, 1.0f, 1.0f));
+    return vbo;
   }
-  const bke::AttributeReader attribute = attributes.lookup_or_default<ColorGeometry4f>(
-      attr_name, bke::AttrDomain::Corner, {1.0f, 0.0f, 1.0f, 1.0f});
-  attribute.varray.materialize(vbo_data);
-  return vbo;
+  return extract_attribute_data(mr, cache, attr, format);
 }
 
 /** \} */
