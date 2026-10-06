@@ -133,7 +133,7 @@ bke::AttrType to_attr_type(const Type type)
   }
 }
 
-Value value_from_varray(const GVArray &varray, const int index, Vector<std::string> *interned)
+Value value_from_varray(const GVArray &varray, const int index, Vector<std::string> * /*interned*/)
 {
   if (!varray || index < 0 || index >= varray.size()) {
     return Value::from_float(0.0f);
@@ -169,19 +169,11 @@ Value value_from_varray(const GVArray &varray, const int index, Vector<std::stri
     return Value::from_vec4(float4(c.r, c.g, c.b, c.a), Type::Color);
   }
   if (type.is<std::string>()) {
-    if (interned) {
-      interned->append(varray.typed<std::string>()[index]);
-      return Value::from_str_i(100000 + int(interned->size()) - 1);
-    }
-    return Value::from_str_i(-1);
+    return intern_thread_string(varray.typed<std::string>()[index]);
   }
   if (type.is<MStringProperty>()) {
     const MStringProperty &p = varray.typed<MStringProperty>()[index];
-    if (interned) {
-      interned->append(std::string(p.s, uint8_t(p.s_len)));
-      return Value::from_str_i(100000 + int(interned->size()) - 1);
-    }
-    return Value::from_str_i(-1);
+    return intern_thread_string(StringRef(p.s, uint8_t(p.s_len)));
   }
   if (type.is<bke::WrangleArrayValue>()) {
     return packed_to_value(varray.typed<bke::WrangleArrayValue>()[index]);
@@ -208,7 +200,6 @@ struct ElemUser {
   const bke::GeometrySet *self = nullptr; /* geometry currently being wrangled (geo 0) */
   Vector<std::string> parm_names;
   Vector<GVArray> parm_arrays;
-  Vector<std::string> interned_strings;
   Span<AttrInfo> attr_infos;
   Span<AttrRT> sample_attrs; /* working arrays `point(0, …)` reads (Jacobi snapshot) */
   Vector<ElementSampleCache> element_samples;
@@ -601,7 +592,7 @@ Value load_elem_fn(void *user,
               break;
           }
         }
-        return value_from_varray(sample.values, index, &u->interned_strings);
+        return value_from_varray(sample.values, index, nullptr);
       }
     }
     return std::nullopt;
@@ -733,7 +724,7 @@ Value load_elem_fn(void *user,
              bke::AttrDomain::Face,
              bke::AttrDomain::Corner))
     {
-      Value v = sample_mesh(*mesh, ad, lookup, index, &u->interned_strings);
+      Value v = sample_mesh(*mesh, ad, lookup, index, nullptr);
       if (v.type != Type::Void) {
         return v;
       }
@@ -748,7 +739,7 @@ Value load_elem_fn(void *user,
         }
       }
       Value v = read_named_attr(
-          pc->attributes(), lookup, bke::AttrDomain::Point, index, &u->interned_strings);
+          pc->attributes(), lookup, bke::AttrDomain::Point, index, nullptr);
       if (v.type != Type::Void) {
         return v;
       }
@@ -774,7 +765,7 @@ Value load_elem_fn(void *user,
           }
         }
       }
-      Value v = read_named_attr(cg.attributes(), lookup, ad, index, &u->interned_strings);
+      Value v = read_named_attr(cg.attributes(), lookup, ad, index, nullptr);
       if (v.type != Type::Void) {
         return v;
       }
@@ -790,7 +781,7 @@ Value load_elem_fn(void *user,
         }
       }
       Value v = read_named_attr(
-          inst->attributes(), lookup, bke::AttrDomain::Instance, index, &u->interned_strings);
+          inst->attributes(), lookup, bke::AttrDomain::Instance, index, nullptr);
       if (v.type != Type::Void) {
         return v;
       }
@@ -836,7 +827,7 @@ Value load_sample_fn(void *user,
         user, sample.geo, sample.domain, sample.name, index, Type::Float, error);
   }
   if (sample.values) {
-    return value_from_sample_cache(sample, index, &u->interned_strings);
+    return value_from_sample_cache(sample, index, nullptr);
   }
   return load_elem_fn(user, sample.geo, sample.domain, sample.name, index, Type::Float, error);
 }
@@ -850,11 +841,7 @@ Value load_parm_fn(void *user, const StringRef name, const int index, std::strin
   for (const int i : u->parm_names.index_range()) {
     if (u->parm_names[i] == name) {
       const GVArray &va = u->parm_arrays[i];
-      if (va && va.type().is<std::string>() && index >= 0 && index < va.size()) {
-        u->interned_strings.append(va.typed<std::string>()[index]);
-        return Value::from_str_i(100000 + int(u->interned_strings.size()) - 1);
-      }
-      return value_from_varray(va, index, &u->interned_strings);
+      return value_from_varray(va, index, nullptr);
     }
   }
   std::string dummy;
@@ -6531,7 +6518,8 @@ ExecOutput run_on_accessor(const Program &program,
   fill_counts(owner, env);
   env.attrs = state.rt.as_mutable_span();
   env.const_s = program.const_s.as_span();
-  env.runtime_s = &elem_user.interned_strings;
+  /* Geometry callbacks intern strings in the VM's per-thread temporary storage. */
+  env.runtime_s = nullptr;
   env.elem_user = &elem_user;
   env.load_elem = load_elem_fn;
   env.load_sample = load_sample_fn;

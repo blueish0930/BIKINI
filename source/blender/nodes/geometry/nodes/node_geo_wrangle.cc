@@ -48,6 +48,7 @@
 #include "RNA_prototypes.hh"
 
 #include "FN_field.hh"
+#include "FN_field_evaluation.hh"
 
 #include "NOD_geo_wrangle.hh"
 #include "NOD_socket_items_blend.hh"
@@ -610,7 +611,9 @@ static void node_declare(NodeDeclarationBuilder &b)
       .description("Only run the script on selected elements");
 
   auto &constant_panel = b.add_panel("Constant"_ustr)
-                             .description("Single values from chi/chf/chv/... created by Compile");
+                             .description(
+                                 "Single values from chf/chi/... and code text from cht, created "
+                                 "by Compile");
   for (const int i : IndexRange(storage.input_items.items_num)) {
     const NodeGeometryWrangleInputItem &item = storage.input_items.items[i];
     if (wrangle_item_kind(item) != GEO_NODE_WRANGLE_ITEM_CONSTANT) {
@@ -629,6 +632,12 @@ static void node_declare(NodeDeclarationBuilder &b)
 struct ChannelParmRef {
   std::string name;
   eNodeSocketDatatype type = SOCK_FLOAT;
+  bool is_code = false;
+};
+
+struct TextParmValue {
+  std::string name;
+  std::string code;
 };
 
 static bool wrangle_is_ident_char(const char c)
@@ -659,7 +668,7 @@ static std::optional<eNodeSocketDatatype> wrangle_channel_fn_type(const StringRe
   if (ident == "chq") {
     return SOCK_ROTATION;
   }
-  if (ident == "chs") {
+  if (ident == "chs" || ident == "cht") {
     return SOCK_STRING;
   }
   return std::nullopt;
@@ -744,20 +753,235 @@ static Vector<ChannelParmRef> wrangle_scan_channel_parms(const StringRef src)
       }
       i = j + 1;
       bool seen = false;
-      for (const ChannelParmRef &prev : out) {
+      for (ChannelParmRef &prev : out) {
         if (prev.name == inner) {
+          prev.is_code |= ident == "cht";
           seen = true;
           break;
         }
       }
       if (!seen) {
-        out.append({std::move(inner), *type});
+        out.append({std::move(inner), *type, ident == "cht"});
       }
       continue;
     }
     i++;
   }
   return out;
+}
+
+static const std::string *wrangle_find_text_parm(const Span<TextParmValue> values,
+                                                 const StringRef name)
+{
+  for (const TextParmValue &value : values) {
+    if (value.name == name) {
+      return &value.code;
+    }
+  }
+  return nullptr;
+}
+
+static void wrangle_append_string_literal(std::string &code, const StringRef value)
+{
+  code.push_back('"');
+  for (const char c : value) {
+    switch (c) {
+      case '\\':
+        code += "\\\\";
+        break;
+      case '"':
+        code += "\\\"";
+        break;
+      case '\n':
+        code += "\\n";
+        break;
+      case '\t':
+        code += "\\t";
+        break;
+      case '\r':
+        break;
+      default:
+        code.push_back(c);
+        break;
+    }
+  }
+  code.push_back('"');
+}
+
+/**
+ * Expand `cht("name")` and fold constant `chs("name")` before VEX parsing. Calls inside comments
+ * and string literals stay literal. Missing cht values use a zero expression padded to equal width
+ * for editor diagnostics before Compile.
+ */
+static bool wrangle_expand_text_code(const StringRef src,
+                                     const Span<TextParmValue> values,
+                                     const bool expand_cht,
+                                     const bool allow_missing,
+                                     std::string &r_code,
+                                     std::string &r_error)
+{
+  r_code.clear();
+  r_error.clear();
+  r_code.reserve(src.size());
+  const int n = int(src.size());
+  int i = 0;
+  while (i < n) {
+    const int token_start = i;
+    if (src[i] == '/' && i + 1 < n && src[i + 1] == '/') {
+      i += 2;
+      while (i < n && src[i] != '\n') {
+        i++;
+      }
+      r_code.append(src.data() + token_start, size_t(i - token_start));
+      continue;
+    }
+    if (src[i] == '/' && i + 1 < n && src[i + 1] == '*') {
+      i += 2;
+      while (i + 1 < n && !(src[i] == '*' && src[i + 1] == '/')) {
+        i++;
+      }
+      i = std::min(i + 2, n);
+      r_code.append(src.data() + token_start, size_t(i - token_start));
+      continue;
+    }
+    if (src[i] == '"' || src[i] == '\'') {
+      const char quote = src[i++];
+      while (i < n && src[i] != quote) {
+        i += (src[i] == '\\' && i + 1 < n) ? 2 : 1;
+      }
+      if (i < n) {
+        i++;
+      }
+      r_code.append(src.data() + token_start, size_t(i - token_start));
+      continue;
+    }
+    if (!(wrangle_is_ident_char(src[i]) &&
+          (i == 0 || !wrangle_is_ident_char(src[i - 1]))))
+    {
+      r_code.push_back(src[i++]);
+      continue;
+    }
+
+    while (i < n && wrangle_is_ident_char(src[i])) {
+      i++;
+    }
+    const StringRef ident = src.substr(token_start, i - token_start);
+    const bool is_cht = ident == "cht";
+    const bool is_chs = ident == "chs";
+    if ((!is_cht && !is_chs) || (is_cht && !expand_cht)) {
+      r_code.append(src.data() + token_start, size_t(i - token_start));
+      continue;
+    }
+    int j = i;
+    while (j < n && ELEM(src[j], ' ', '\t', '\r', '\n')) {
+      j++;
+    }
+    if (j >= n || src[j] != '(') {
+      r_code.append(src.data() + token_start, size_t(i - token_start));
+      continue;
+    }
+    j++;
+    while (j < n && ELEM(src[j], ' ', '\t', '\r', '\n')) {
+      j++;
+    }
+    if (j >= n || !ELEM(src[j], '"', '\'')) {
+      r_error = std::string(ident) +
+                " expects a quoted parameter name, for example " + std::string(ident) +
+                "(\"name\")";
+      return false;
+    }
+    const char quote = src[j++];
+    std::string name;
+    while (j < n && src[j] != quote) {
+      if (src[j] == '\\' && j + 1 < n) {
+        name.push_back(src[j + 1]);
+        j += 2;
+      }
+      else {
+        name.push_back(src[j++]);
+      }
+    }
+    if (j >= n) {
+      r_error = "Unterminated parameter name in " + std::string(ident);
+      return false;
+    }
+    j++;
+    while (j < n && ELEM(src[j], ' ', '\t', '\r', '\n')) {
+      j++;
+    }
+    if (j >= n || src[j] != ')') {
+      r_error = std::string(ident) + " expects exactly one quoted parameter name";
+      return false;
+    }
+    j++;
+    if (name.empty()) {
+      r_error = std::string(ident) + " parameter name cannot be empty";
+      return false;
+    }
+    if (const std::string *value = wrangle_find_text_parm(values, name)) {
+      if (is_chs) {
+        wrangle_append_string_literal(r_code, *value);
+      }
+      else {
+        r_code.append(*value);
+      }
+    }
+    else if (is_chs) {
+      r_code.append(src.data() + token_start, size_t(j - token_start));
+    }
+    else if (allow_missing) {
+      r_code.push_back('0');
+      r_code.append(size_t(std::max(j - token_start - 1, 0)), ' ');
+    }
+    else {
+      r_error = "Missing cht parameter '" + name + "'; click Compile to create its input";
+      return false;
+    }
+    i = j;
+  }
+  return true;
+}
+
+static vex::CompileOutput wrangle_compile_editor_preview(const StringRef code)
+{
+  std::string expanded;
+  std::string error;
+  if (!wrangle_expand_text_code(code, {}, true, true, expanded, error)) {
+    vex::CompileOutput output;
+    output.error = error;
+    output.diags.append({0, std::max(1, int(code.size())), true, error});
+    return output;
+  }
+  return vex::compile(expanded);
+}
+
+/**
+ * Return text that is already knowable while the Compile operator is running. This lets a second
+ * Compile discover channel calls inside code supplied to `cht()` by an unlinked input or a direct
+ * String node. More complex string fields are still expanded only during geometry evaluation.
+ */
+static std::optional<std::string> wrangle_compile_text_input(const bNode &node,
+                                                             const StringRef name)
+{
+  for (const bNodeSocket *socket : node.input_sockets()) {
+    if (socket->in_out != SOCK_IN || socket->type != SOCK_STRING || socket->name != name) {
+      continue;
+    }
+    if (socket->link) {
+      const bNode *from_node = socket->link->fromnode;
+      if (!from_node || from_node->type_legacy != FN_NODE_INPUT_STRING || !from_node->storage) {
+        return std::nullopt;
+      }
+      const NodeInputString &storage = *static_cast<const NodeInputString *>(from_node->storage);
+      return std::string(storage.string ? storage.string : "");
+    }
+    if (!socket->default_value) {
+      return std::nullopt;
+    }
+    const auto &value = *socket->default_value_typed<bNodeSocketValueString>();
+    return std::string(value.value);
+  }
+  return std::nullopt;
 }
 
 static void wrangle_commit_run_code(NodeGeometryWrangle &storage)
@@ -779,7 +1003,35 @@ static wmOperatorStatus wrangle_compile_exec(bContext *C, wmOperator *op)
   NodeGeometryWrangle &storage = node_storage(node);
   wrangle_commit_run_code(storage);
   const char *code = storage.code ? storage.code : "";
-  const Vector<ChannelParmRef> wanted = wrangle_scan_channel_parms(code);
+  Vector<ChannelParmRef> wanted = wrangle_scan_channel_parms(code);
+  Vector<TextParmValue> compile_text_values;
+  for (const ChannelParmRef &parm : wanted) {
+    if (!parm.is_code) {
+      continue;
+    }
+    if (std::optional<std::string> value = wrangle_compile_text_input(node, parm.name)) {
+      compile_text_values.append({parm.name, std::move(*value)});
+    }
+  }
+  std::string expanded_for_scan;
+  std::string expansion_error;
+  if (wrangle_expand_text_code(
+          code, compile_text_values, true, true, expanded_for_scan, expansion_error))
+  {
+    for (ChannelParmRef &parm : wrangle_scan_channel_parms(expanded_for_scan)) {
+      bool seen = false;
+      for (ChannelParmRef &existing : wanted) {
+        if (existing.name == parm.name) {
+          existing.is_code |= parm.is_code;
+          seen = true;
+          break;
+        }
+      }
+      if (!seen) {
+        wanted.append(std::move(parm));
+      }
+    }
+  }
 
   socket_items::SocketItemsRef ref = WrangleInputItemsAccessor::get_items_from_node(node);
   if (*ref.items_num > 0) {
@@ -913,7 +1165,7 @@ static void node_layout(ui::Layout &layout, bContext * /*C*/, PointerRNA *ptr)
   }
   const char *code = storage.code ? storage.code : "";
   if (code[0] != '\0') {
-    const vex::CompileOutput compiled = vex::compile(code);
+    const vex::CompileOutput compiled = wrangle_compile_editor_preview(code);
     if (!compiled.program && !compiled.error.empty()) {
       wrangle_draw_compile_error(layout, compiled.error);
     }
@@ -1024,8 +1276,12 @@ static void node_geo_exec(GeoNodeExecParams params)
   const Field<bool> selection = params.extract_input<Field<bool>>("Selection"_ustr);
 
   const NodeGeometryWrangle &storage = node_storage(params.node());
+  const char *code = storage.code_run ? storage.code_run : "";
+  const Vector<ChannelParmRef> channel_parms = wrangle_scan_channel_parms(code);
 
   Vector<vex::ChField> parms;
+  Vector<TextParmValue> text_values;
+  std::string text_error;
   Vector<GeometrySet> extra_owned;
   for (const int i : IndexRange(storage.input_items.items_num)) {
     const NodeGeometryWrangleInputItem &item = storage.input_items.items[i];
@@ -1045,17 +1301,55 @@ static void node_geo_exec(GeoNodeExecParams params)
       continue;
     }
     GField field = params.extract_input<GField>(UString(identifier));
+    bool is_code = false;
+    for (const ChannelParmRef &channel : channel_parms) {
+      if (channel.name == item.name) {
+        is_code = channel.is_code;
+        break;
+      }
+    }
+    if (field.cpp_type().is<std::string>() && !field.depends_on_input()) {
+      text_values.append(
+          {item.name, fn::evaluate_constant_field(field.typed<std::string>())});
+    }
+    else if (is_code) {
+      if (!field.cpp_type().is<std::string>()) {
+        text_error = "cht parameter '" + std::string(item.name) + "' must be a string";
+      }
+      else {
+        text_error = "cht parameter '" + std::string(item.name) +
+                     "' must be a single constant string";
+      }
+    }
     parms.append(vex::ChField(item.name, std::move(field)));
   }
 
-  const char *code = storage.code_run ? storage.code_run : "";
   if (code[0] == '\0') {
     params.set_output("Geometry"_ustr, std::move(geometry_set));
     return;
   }
 
+  std::string expanded_text;
+  if (text_error.empty() &&
+      !wrangle_expand_text_code(code, text_values, true, false, expanded_text, text_error))
+  {
+    text_error = "Code parameter expansion failed: " + text_error;
+  }
+  std::string expanded_code;
+  if (text_error.empty() &&
+      !wrangle_expand_text_code(
+          expanded_text, text_values, false, false, expanded_code, text_error))
+  {
+    text_error = "chs folding failed: " + text_error;
+  }
+  if (!text_error.empty()) {
+    params.error_message_add(NodeWarningType::Error, text_error);
+    params.set_output("Geometry"_ustr, std::move(geometry_set));
+    return;
+  }
+
   const auto profile_before_compile = std::chrono::steady_clock::now();
-  vex::CompileOutput compiled = vex::compile(code);
+  vex::CompileOutput compiled = vex::compile(expanded_code);
   const auto profile_compiled = std::chrono::steady_clock::now();
   if (!compiled.program) {
     if (profile) {
@@ -1174,7 +1468,7 @@ static void wrangle_code_diag_fn(const char *str,
   if (!str || max_num <= 0) {
     return;
   }
-  const vex::CompileOutput compiled = vex::compile(str);
+  const vex::CompileOutput compiled = wrangle_compile_editor_preview(str);
   const int n = std::min(max_num, int(compiled.diags.size()));
   for (int i = 0; i < n; i++) {
     out[i].offset = compiled.diags[i].offset;
@@ -1411,7 +1705,7 @@ static ui::Block *wrangle_edit_popup(bContext *C, ARegion *region, void *arg_v)
     layout.label(arg->status, ICON_INFO);
   }
   const char *code = storage.code ? storage.code : "";
-  const vex::CompileOutput compiled = vex::compile(code);
+  const vex::CompileOutput compiled = wrangle_compile_editor_preview(code);
   if (!compiled.program && !compiled.error.empty()) {
     wrangle_draw_compile_error(layout, compiled.error);
   }
@@ -1524,7 +1818,7 @@ static void node_register()
       ot->description =
           "Commit the editor draft and evaluate (also happens on Ctrl+Enter or clicking outside "
           "the code editor). Creates Constant panel inputs from "
-          "chf/chi/chv/chb/chc/chm/chq/chs and removes unused channel sockets";
+          "chf/chi/chv/chb/chc/chm/chq/chs/cht and removes unused channel sockets";
       ot->exec = wrangle_compile_exec;
       ot->poll = socket_items::ops::editable_node_active_poll<WrangleInputItemsAccessor>;
       ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;

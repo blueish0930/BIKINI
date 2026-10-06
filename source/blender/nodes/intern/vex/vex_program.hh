@@ -932,6 +932,8 @@ bool vm_run_array(const Program &program,
                   std::string &r_error);
 
 StringRef value_string(const Value &v, const VMEnv &env);
+/** Store a transient string in the current VM thread, safe for parallel geometry evaluation. */
+Value intern_thread_string(StringRef value);
 
 std::string type_name(Type type);
 Type prefix_type(char prefix);

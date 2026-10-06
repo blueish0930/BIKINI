@@ -92,6 +92,12 @@ static VMThreadLocalStorage &vm_thread_local_storage()
 #define tls_str_used (vm_thread_local_storage().str_used)
 #define tls_rays_used (vm_thread_local_storage().rays_used)
 
+Value intern_thread_string(const StringRef value)
+{
+  tls_str_tmp.append(std::string(value));
+  return Value::from_str_i(-2 - (int(tls_str_tmp.size()) - 1));
+}
+
 void tls_arrays_begin()
 {
   tls_mats_used = 0;

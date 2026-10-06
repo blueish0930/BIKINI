@@ -71,6 +71,7 @@ StringRef function_param_types(const StringRef name)
       {"chm", "str"},
       {"chq", "str"},
       {"chs", "str"},
+      {"cht", "str"},
       {"valuetostring", "num,int,int"},
       {"value_to_string", "num,int,int"},
       {"format", "str"},
@@ -470,6 +471,7 @@ void gather_completions(Vector<std::string> &r_owned_names,
   add("chm", "Channel", C::Matrix, K::Function, "chm", "chm(\"name\")", true);
   add("chq", "Channel", C::Rotation, K::Function, "chq", "chq(\"name\")", true);
   add("chs", "Channel", C::Variable, K::Function, "chs", "chs(\"name\")", true);
+  add("cht", "Channel", C::Variable, K::Function, "cht", "cht(\"code\")", true);
   add("valuetostring",
       "String",
       C::Variable,
