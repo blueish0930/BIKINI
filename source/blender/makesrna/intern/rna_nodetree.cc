@@ -14291,6 +14291,7 @@ static void rna_def_nodes(BlenderRNA *brna)
   define("GeometryNode", "GeometryNodeCgalExactGeodesic");
   define("GeometryNode", "GeometryNodeCgalRefineIsolevel");
   define("GeometryNode", "GeometryNodeCgalRepairDegeneracies");
+  define("GeometryNode", "GeometryNodeConstructCurves");
   define("GeometryNode", "GeometryNodeConvexHull");
   define("GeometryNode", "GeometryNodeCornersOfEdge");
   define("GeometryNode", "GeometryNodeCornersOfFace");
