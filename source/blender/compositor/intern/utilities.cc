@@ -124,9 +124,7 @@ ResultType socket_data_type_to_result_type(const eNodeSocketDatatype data_type,
        * Process GeometrySet cache; not a GPU image type. */
       return ResultType::String;
     case SOCK_CLOSURE:
-      /* Closure appears on zone nodes allowed in Image Process; treat as unused single-value
-       * float so evaluation does not hit the unreachable default. */
-      return ResultType::Float;
+      return ResultType::Closure;
     case SOCK_COLOR_RAMP:
     case SOCK_CURVE:
       /* Edited on the socket, not a compositor image. Keep the group evaluating. */
