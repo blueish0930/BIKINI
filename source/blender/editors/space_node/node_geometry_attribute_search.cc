@@ -177,6 +177,36 @@ static eCustomDataType data_type_in_attribute_input_node(const eCustomDataType t
   }
 }
 
+/**
+ * Data type to use in the store named attribute node for an attribute of the given type. A few
+ * custom data types have no matching entry in the node, so use the closest one that exists.
+ */
+static eCustomDataType data_type_in_store_named_attribute_node(const eCustomDataType type)
+{
+  switch (type) {
+    case CD_PROP_FLOAT:
+    case CD_PROP_FLOAT2:
+    case CD_PROP_FLOAT3:
+    case CD_PROP_COLOR:
+    case CD_PROP_BOOL:
+    case CD_PROP_INT32:
+    case CD_PROP_BYTE_COLOR:
+    case CD_PROP_QUATERNION:
+    case CD_PROP_FLOAT4X4:
+    case CD_PROP_STRING:
+      return type;
+    case CD_PROP_INT8:
+      return CD_PROP_INT32;
+    case CD_PROP_INT16_2D:
+    case CD_PROP_INT32_2D:
+      return CD_PROP_FLOAT2;
+    case CD_PROP_FLOAT4:
+      return CD_PROP_FLOAT3;
+    default:
+      return CD_PROP_FLOAT;
+  }
+}
+
 static void attribute_search_exec_fn(bContext *C, void *data_v, void *item_v)
 {
   if (ED_screen_animation_playing(CTX_wm_manager(C))) {
@@ -212,6 +242,27 @@ static void attribute_search_exec_fn(bContext *C, void *data_v, void *item_v)
     if (new_type != storage.data_type) {
       storage.data_type = new_type;
       /* Make the output socket with the new type on the attribute input node active. */
+      nodes::update_node_declaration_and_sockets(*node_tree, *node);
+      BKE_ntree_update_tag_node_property(node_tree, node);
+      BKE_main_ensure_invariants(*CTX_data_main(C), node_tree->id);
+    }
+  }
+
+  /* Picking an existing attribute for the store node adopts its domain and data type too, so the
+   * stored value matches the attribute that is already there. A newly typed name (no data type
+   * and domain in the search item) leaves the current settings alone. */
+  if (node->type_legacy == GEO_NODE_STORE_NAMED_ATTRIBUTE && item->data_type.has_value() &&
+      item->domain.has_value())
+  {
+    NodeGeometryStoreNamedAttribute &storage = *static_cast<NodeGeometryStoreNamedAttribute *>(
+        node->storage);
+    const eCustomDataType new_type = data_type_in_store_named_attribute_node(
+        bke::attr_type_to_custom_data_type(*item->data_type).value_or(CD_PROP_FLOAT));
+    const int8_t new_domain = int8_t(*item->domain);
+    if (new_type != storage.data_type || new_domain != storage.domain) {
+      storage.data_type = new_type;
+      storage.domain = new_domain;
+      /* The type of the "Value" socket follows the data type. */
       nodes::update_node_declaration_and_sockets(*node_tree, *node);
       BKE_ntree_update_tag_node_property(node_tree, node);
       BKE_main_ensure_invariants(*CTX_data_main(C), node_tree->id);
