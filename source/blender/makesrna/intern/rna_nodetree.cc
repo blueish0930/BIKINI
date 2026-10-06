@@ -14356,6 +14356,7 @@ static void rna_def_nodes(BlenderRNA *brna)
   define("GeometryNode", "GeometryNodeGetAttributeNames");
   define("GeometryNode", "GeometryNodeGetGeometryBundle");
   define("GeometryNode", "GeometryNodeGetGeometryComponent");
+  define("GeometryNode", "GeometryNodeGetGridNames");
   define("GeometryNode", "GeometryNodeGetNamedGrid");
   define("GeometryNode", "GeometryNodeGizmoDial");
   define("GeometryNode", "GeometryNodeGizmoLinear");
