@@ -1224,16 +1224,33 @@ static void draw_node_socket_name_editable(ui::Layout *layout,
   layout->label(text, ICON_NONE);
 }
 
+/**
+ * Draw the socket name into its own column of \a row.
+ *
+ * The name is styled like a label: #draw_node_socket_name_editable() sets
+ * #ui::EmbossType::None and expands the layout it draws into. Widgets added to that same layout
+ * afterwards (a value field, a search button, ...) inherit both, so they lose their backdrop - an
+ * empty string value then draws nothing at all and the row looks like it has no value widget.
+ * Giving the name a sibling column keeps those settings local to it.
+ */
+static void draw_node_socket_name_column(ui::Layout *row, bNodeSocket *sock, const StringRef text)
+{
+  ui::Layout *name_col = &row->column(true);
+  draw_node_socket_name_editable(name_col, sock, text);
+}
+
+/**
+ * Draw a socket row that has no value widget: the name is all the row has, so it is always drawn.
+ *
+ * Optional Label only drops the name where a value widget takes its place (see the
+ * `if (optional_label)` branches in #std_node_socket_draw). On a row without a value - an output,
+ * a linked socket, a socket with #SOCK_HIDE_VALUE, geometry/matrix/... sockets - skipping the name
+ * would leave an unlabeled socket, e.g. every socket of a Group Input node.
+ */
 static void draw_node_socket_without_value(ui::Layout *layout,
                                            bNodeSocket *sock,
-                                           const StringRef text,
-                                           const bool optional_label)
+                                           const StringRef text)
 {
-  /* Optional Label skips the name on group sockets too. Those sockets still
-   * have an editable interface name, but it must not be drawn in the node. */
-  if (optional_label) {
-    return;
-  }
   draw_node_socket_name_editable(layout, sock, text);
 }
 
@@ -1365,13 +1382,13 @@ static void std_node_socket_draw(
   if (((sock->in_out == SOCK_OUT) && !ramp_or_curve_preview) || (sock->flag & SOCK_HIDE_VALUE) ||
       sock->is_logically_linked())
   {
-    draw_node_socket_without_value(layout, sock, label, optional_label);
+    draw_node_socket_without_value(layout, sock, label);
     return;
   }
   if (tree->type == NTREE_GEOMETRY &&
       ELEM(sock->display_shape, SOCK_DISPLAY_SHAPE_LIST, SOCK_DISPLAY_SHAPE_VOLUME_GRID))
   {
-    draw_node_socket_without_value(layout, sock, label, optional_label);
+    draw_node_socket_without_value(layout, sock, label);
     return;
   }
 
@@ -1444,9 +1461,9 @@ static void std_node_socket_draw(
     case SOCK_SHADER:
     case SOCK_BUNDLE:
     case SOCK_CLOSURE:
-      /* No default-value widget. Optional Label hides the name; otherwise the
-       * name stays a text field so group sockets can be renamed in the node. */
-      draw_node_socket_without_value(layout, sock, label, optional_label);
+      /* No default-value widget, so the name is kept even with Optional Label. It stays a text
+       * field so group sockets can be renamed in the node. */
+      draw_node_socket_without_value(layout, sock, label);
       break;
     case SOCK_RGBA: {
       if (optional_label) {
@@ -1474,7 +1491,7 @@ static void std_node_socket_draw(
         }
         else {
           ui::Layout *row = &layout->split(ui::Layout::PROPERTY_SPLIT_FACTOR, false);
-          draw_node_socket_name_editable(row, sock, label);
+          draw_node_socket_name_column(row, sock, label);
           node_geometry_add_attribute_search_button(*C, *node, *ptr, *row);
         }
       }
@@ -1484,7 +1501,7 @@ static void std_node_socket_draw(
         }
         else {
           ui::Layout *row = &layout->split(ui::Layout::PROPERTY_SPLIT_FACTOR, false);
-          draw_node_socket_name_editable(row, sock, label);
+          draw_node_socket_name_column(row, sock, label);
           node_geometry_add_layer_search_button(*C, *node, *ptr, *row);
         }
       }
@@ -1494,7 +1511,7 @@ static void std_node_socket_draw(
         }
         else {
           ui::Layout *row = &layout->split(ui::Layout::PROPERTY_SPLIT_FACTOR, false);
-          draw_node_socket_name_editable(row, sock, label);
+          draw_node_socket_name_column(row, sock, label);
           node_geometry_add_volume_grid_search_button(*C, *node, *ptr, *row);
         }
       }
@@ -1504,7 +1521,7 @@ static void std_node_socket_draw(
         }
         else {
           ui::Layout *row = &layout->split(ui::Layout::PROPERTY_SPLIT_FACTOR, false);
-          draw_node_socket_name_editable(row, sock, label);
+          draw_node_socket_name_column(row, sock, label);
           node_bundle_type_add_string_search_button(*C, *node, *ptr, *row);
         }
       }
@@ -1521,7 +1538,7 @@ static void std_node_socket_draw(
         }
         else {
           ui::Layout *row = &layout->split(ui::Layout::PROPERTY_SPLIT_FACTOR, false);
-          draw_node_socket_name_editable(row, sock, label);
+          draw_node_socket_name_column(row, sock, label);
           row->prop(ptr, "default_value", DEFAULT_FLAGS, "", ICON_NONE);
         }
       }
@@ -1711,7 +1728,7 @@ static void std_node_socket_draw(
                                                                         0;
       }
       if (poin == nullptr) {
-        draw_node_socket_without_value(layout, sock, label, optional_label);
+        draw_node_socket_without_value(layout, sock, label);
         break;
       }
       /* The name button sets emboss to None. A ColorBand/Curve button on that same
@@ -1732,7 +1749,7 @@ static void std_node_socket_draw(
       break;
     }
     default:
-      draw_node_socket_without_value(layout, sock, label_or_empty, optional_label);
+      draw_node_socket_without_value(layout, sock, label);
       break;
   }
 
