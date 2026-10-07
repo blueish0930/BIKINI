@@ -49,6 +49,12 @@ template<> void hash_unique_default(const bke::WrangleArrayValue &value, UniqueH
 
 void BKE_cpp_types_init()
 {
+  static bool initialized = false;
+  if (initialized) {
+    return;
+  }
+  initialized = true;
+
   register_cpp_types();
 
   BLI_CPP_TYPE_REGISTER(bke::GeometrySet,
@@ -74,7 +80,6 @@ void BKE_cpp_types_init()
                         CPPTypeFlags::Hashable | CPPTypeFlags::EqualityComparable);
   BLI_CPP_TYPE_REGISTER(nodes::BundlePtr, CPPTypeFlags::EqualityComparable);
   BLI_CPP_TYPE_REGISTER(nodes::ClosurePtr, CPPTypeFlags::EqualityComparable);
-  BLI_CPP_TYPE_REGISTER(nodes::GListPtr, CPPTypeFlags::EqualityComparable);
 
   BLI_CPP_TYPE_REGISTER(bke::GeometryNodesReferenceSet, CPPTypeFlags::None);
   BLI_CPP_TYPE_REGISTER(bke::SocketValueVariant, CPPTypeFlags::None);
