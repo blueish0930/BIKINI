@@ -25,6 +25,7 @@
 #include "DNA_scene_types.h"
 
 #include "BKE_callbacks.hh"
+#include "BKE_compute_context_cache.hh"
 #include "BKE_compute_contexts.hh"
 #include "BKE_context.hh"
 #include "BKE_global.hh"
@@ -91,27 +92,27 @@ class ImageNodesContext : public Context {
   Scene &scene_;
   bNodeTree &node_tree_;
   int2 resolution_;
-  std::optional<ComputeContextHash> active_compute_context_hash_;
+  const ComputeContext *active_compute_context_ = nullptr;
   bool gpu_supported_ = true;
   Vector<std::unique_ptr<Result>> owned_inputs_;
   nodes::eval_log::NodesEvalLog *eval_log_ = nullptr;
 
  public:
   ImageNodesContext(StaticCacheManager &cache_manager,
+                    bke::ComputeContextCache &compute_context_cache,
                     Main &bmain,
                     Scene &scene,
                     bNodeTree &node_tree,
                     const int2 resolution,
                     nodes::eval_log::NodesEvalLog *eval_log)
-      : Context(cache_manager),
+      : Context(cache_manager, compute_context_cache),
         bmain_(bmain),
         scene_(scene),
         node_tree_(node_tree),
         resolution_(math::max(resolution, int2(1))),
         eval_log_(eval_log)
   {
-    const bke::DataBlockComputeContext base_context(nullptr, scene.id);
-    active_compute_context_hash_ = base_context.hash();
+    active_compute_context_ = &compute_context_cache.for_data_block(nullptr, scene.id);
   }
 
   nodes::eval_log::NodesEvalLog *nodes_evaluation_log() const override
@@ -157,9 +158,9 @@ class ImageNodesContext : public Context {
            SideEffectOutputTypes::NodePreviews;
   }
 
-  const std::optional<ComputeContextHash> &get_viewer_compute_context_hash() const override
+  const ComputeContext *viewer_compute_context() const override
   {
-    return active_compute_context_hash_;
+    return active_compute_context_;
   }
 
   ResultPrecision get_precision() const override
@@ -462,7 +463,9 @@ bool ntreeImageNodesEvaluate(
     nodes::image_points::set_active_stamp_attr_gpu_cache(&stamp_attr_gpu_cache);
 
     StaticCacheManager cache_manager;
-    ImageNodesContext context(cache_manager, bmain, scene, ntree, resolution, eval_log);
+    bke::ComputeContextCache compute_context_cache;
+    ImageNodesContext context(
+        cache_manager, compute_context_cache, bmain, scene, ntree, resolution, eval_log);
 
     DRW_gpu_context_enable();
     const bool gpu_enabled = DRW_gpu_context_is_enabled();
