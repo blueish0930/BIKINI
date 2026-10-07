@@ -175770,9 +175770,6 @@ msgctxt "*"
 msgid "DLSS"
 msgstr "DLSS"
 
-msgid "Use NVIDIA DLSS Ray Reconstruction"
-msgstr "使用 NVIDIA DLSS 光线重建"
-
 msgctxt "*"
 msgid "Use NVIDIA DLSS Ray Reconstruction"
 msgstr "使用 NVIDIA DLSS 光线重建"
@@ -175788,18 +175785,6 @@ msgstr " (180°)"
 
 msgid " (90°)"
 msgstr " (90°)"
-
-msgid " (Flipped X)"
-msgstr " (翻转 X)"
-
-msgid " (Flipped Y)"
-msgstr " (翻转 Y)"
-
-msgid " (Flipped) (Rolled)"
-msgstr " (翻转) (滚转)"
-
-msgid " (Rolled)"
-msgstr " (滚转)"
 
 msgid "%s"
 msgstr "%s"
@@ -175891,9 +175876,6 @@ msgstr "黑、红、绿、蓝、白。通道调试"
 msgid "Blend two heightfields (mix, add, max, min, screen, overlay, hypot)"
 msgstr "混合两个高度场（混合、相加、最大、最小、滤色、叠加、斜边）"
 
-msgid "Block Margins"
-msgstr "块边距"
-
 msgid "Bottom margin as a multiple of the default line height"
 msgstr "底边距，为默认行高的倍数"
 
@@ -175930,9 +175912,6 @@ msgstr "子级物体"
 msgid "Cividis"
 msgstr "Cividis"
 
-msgid "Clamp Handles"
-msgstr "钳制控制柄"
-
 msgid "Classic jet rainbow. Common in older papers; weak perceptual uniformity"
 msgstr "经典 Jet 彩虹。旧论文常用；感知均匀性较差"
 
@@ -175941,21 +175920,6 @@ msgstr "点击表头循环索引排序：升序、降序、原始顺序"
 
 msgid "Click header to cycle sort: ascending, descending, original order"
 msgstr "点击表头循环排序：升序、降序、原始顺序"
-
-msgid "Code Block"
-msgstr "代码块"
-
-msgid "Code Block X"
-msgstr "代码块 X"
-
-msgid "Code Block Y"
-msgstr "代码块 Y"
-
-msgid "Code Span X"
-msgstr "行内代码 X"
-
-msgid "Code Span Y"
-msgstr "行内代码 Y"
 
 msgid "Collider thickness is large compared with the FLIP grid cell size"
 msgstr "碰撞体厚度相对 FLIP 网格单元偏大"
@@ -176005,9 +175969,6 @@ msgstr "安全继续"
 msgid "Coolwarm"
 msgstr "Coolwarm"
 
-msgid "Copy Style to Clipboard"
-msgstr "复制样式到剪贴板"
-
 msgid "Copy md_style namespace source to the clipboard"
 msgstr "把 md_style 命名空间源码复制到剪贴板"
 
@@ -176043,9 +176004,6 @@ msgstr "根据匹配的上一帧几何推导逐顶点运动"
 
 msgid "Derived mask (slope, curvature, flow, …)"
 msgstr "派生遮罩（坡度、曲率、流动等）"
-
-msgid "Details"
-msgstr "详情"
 
 msgid "Disable Output Cache"
 msgstr "禁用输出缓存"
@@ -176200,9 +176158,6 @@ msgstr "组输出：点 · 旋转 · 尺寸(2D) · ID"
 msgid "HR Pad"
 msgstr "水平线边距"
 
-msgid "Headers"
-msgstr "标题"
-
 msgid "Height map. White is high (towards the camera); Invert treats it as depth"
 msgstr "高度图。白色为高（朝向摄像机）；反转则当作深度"
 
@@ -176211,9 +176166,6 @@ msgstr "贴图中几何表面的高度。低于 Midlevel 的值向内凹；高�
 
 msgid "Heightfield (grayscale). Connect to Erosion or Viewer"
 msgstr "高度场（灰度）。接到侵蚀或预览"
-
-msgid "Horizontal Rule"
-msgstr "水平线"
 
 msgid "Horizontal indent per list level in pixels at 1x scale"
 msgstr "每一级列表的水平缩进（1 倍缩放下的像素）"
@@ -176355,9 +176307,6 @@ msgstr "在物体之前关联"
 
 msgid "Link between objects"
 msgstr "在物体之间关联"
-
-msgid "List Spacing"
-msgstr "列表间距"
 
 msgid "Local lights: Distance from evaluation position to light position.\nSun lights: 1.0"
 msgstr "局部光：求值位置到灯光位置的距离。\n太阳光：1.0"
@@ -176829,9 +176778,6 @@ msgstr "此节点应连接到组输出节点，中间可以经过切换节点。
 
 msgid "This value can only be displayed with the text overlay in the 3D view"
 msgstr "此值只能用 3D 视图的文字叠加显示"
-
-msgid "Tight"
-msgstr "紧凑"
 
 msgid "Time-step / feature scale"
 msgstr "时间步 / 特征尺度"
