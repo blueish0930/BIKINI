@@ -190,7 +190,7 @@ const EnumPropertyItem rna_enum_space_type_items[] = {
     {SPACE_PROJECT,
      "PROJECT",
      ICON_PROJECT,
-     "Project Setup",
+     "Project Settings",
      "Manage the current Blender project"},
     {SPACE_DATABLOCK_GRAPH,
      "DATABLOCK_GRAPH",
