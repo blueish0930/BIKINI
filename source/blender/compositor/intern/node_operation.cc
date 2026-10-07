@@ -15,6 +15,7 @@
 
 #include "GPU_debug.hh"
 
+#include "NOD_compositor_gizmos.hh"
 #include "NOD_eval_log.hh"
 
 #include "COM_algorithm_compute_preview.hh"
@@ -148,6 +149,10 @@ void NodeOperation::log_data()
     return;
   }
   nodes::eval_log::NodeTreeLogger &tree_logger = log->get_local_tree_logger(*compute_context_);
+
+  if (nodes::gizmos::node_has_gizmo(this->node())) {
+    tree_logger.evaluated_gizmo_nodes.append(*tree_logger.allocator, {node_.identifier});
+  }
 
   /* Log input values. */
   for (const bNodeSocket *input_socket : this->node().input_sockets()) {
