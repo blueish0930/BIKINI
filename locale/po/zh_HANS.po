@@ -51883,10 +51883,6 @@ msgstr ""
 "最终结果的计算方式为：(漫射光 * 漫射颜色) + (光泽光 * 光泽颜色)"
 
 
-msgid "Light Evaluation"
-msgstr "光照评估"
-
-
 msgid "Defines parametrization of the light evaluation"
 msgstr "定义光照评估的参数化设置"
 
@@ -51897,22 +51893,6 @@ msgstr "光线衰减"
 
 msgid "Manipulate how light intensity decreases over distance. Typically used for non-physically-based effects; in reality light always falls off quadratically"
 msgstr "控制光强度如何随距离而降低。通常用于非物理效应；在现实中，光总是以二次型衰减"
-
-
-msgid "Light Info"
-msgstr "光照信息"
-
-
-msgid "Exposes physical properties of the light being evaluated and computes basic information relative to the evaluation position"
-msgstr "展示待解算光线的物理特性，并计算与解算位置相关的基本信息"
-
-
-msgid "Light Iter Internal Input"
-msgstr "光照迭代内部输入"
-
-
-msgid "Light Iter Internal Output"
-msgstr "光照迭代内部输出"
 
 
 msgid "Light Path"
@@ -52624,10 +52604,6 @@ msgid ""
 msgstr ""
 "将渲染效果 (如光和阴影) 转换为颜色。通常用于非照片级真实感渲染，以对 BSDF 的输出应用其他效果。\n"
 "注意：仅支持 EEVEE"
-
-
-msgid "Shadow Raycast"
-msgstr "阴影光线投射"
 
 
 msgid "Squeeze Value (Legacy)"
@@ -139741,34 +139717,6 @@ msgid "Name in use. The other data-block was renamed to '%s'"
 msgstr "名称已被使用。另一个数据块已重命名为 '%s'"
 
 
-msgid "It"
-msgstr "斜"
-
-
-msgid "Size factor relative to body text"
-msgstr "相对于正文的尺寸系数"
-
-
-msgid "Font weight"
-msgstr "字体粗细"
-
-
-msgid "Use italic style"
-msgstr "使用斜体样式"
-
-
-msgid "Top margin as a multiple of the default line height"
-msgstr "顶部边距作为默认行高的倍数"
-
-
-msgid "Bottom margin as a multiple of the default line height"
-msgstr "底部边距作为默认行高的倍数"
-
-
-msgid "Quote"
-msgstr "引述"
-
-
 msgid "Code Block"
 msgstr "代码块"
 
@@ -139781,76 +139729,24 @@ msgid "Tight"
 msgstr "紧凑"
 
 
-msgid "Spacing between items in loose lists"
-msgstr "松散列表中项目之间的间距"
-
-
-msgid "Spacing between items in tight lists"
-msgstr "紧凑列表中项目之间的间距"
-
-
-msgid "Margin above the first item in a nested list"
-msgstr "嵌套列表中第一个项目上方的边距"
-
-
-msgid "Quote Bar"
-msgstr "引述栏"
-
-
-msgid "Vertical padding around quote text for the quote bar"
-msgstr "引述栏周围引述文本的垂直填充"
-
-
-msgid "HR Pad"
-msgstr "水平线填充"
-
-
-msgid "Additional vertical padding around the horizontal rule line"
-msgstr "水平线周围的额外垂直填充"
-
-
 msgid "Indent"
 msgstr "缩进"
-
-
-msgid "Horizontal indent per list level in pixels at 1x scale"
-msgstr "1x 比例下每个列表级别的水平像素缩进"
-
-
-msgid "Padding between ordered list markers and item text in pixels at 1x scale"
-msgstr "1x 比例下有序列表标记与项目文本之间的像素间距"
 
 
 msgid "Code Block X"
 msgstr "代码块 X"
 
 
-msgid "Horizontal padding around fenced code blocks in pixels at 1x scale"
-msgstr "1x 比例下带边框代码块周围的水平像素内边距"
-
-
 msgid "Code Block Y"
 msgstr "代码块 Y"
-
-
-msgid "Vertical padding around fenced code blocks in pixels at 1x scale"
-msgstr "1x 比例下带边框代码块周围的垂直像素内边距"
 
 
 msgid "Code Span X"
 msgstr "行内代码 X"
 
 
-msgid "Horizontal padding around inline code spans in pixels at 1x scale"
-msgstr "1x 比例下内联代码段周围的水平像素填充"
-
-
 msgid "Code Span Y"
 msgstr "行内代码 Y"
-
-
-msgid "Vertical padding around inline code spans in pixels at 1x scale"
-msgstr "1x 比例下内联代码段周围的垂直像素填充"
 
 
 msgid "Headers"
@@ -139871,10 +139767,6 @@ msgstr "详情"
 
 msgid "Copy Style to Clipboard"
 msgstr "复制样式到剪贴板"
-
-
-msgid "Copy md_style namespace source to the clipboard"
-msgstr "将 md_style 命名空间的源码复制到剪贴板"
 
 
 msgid "Picking a bone failed"
@@ -146968,10 +146860,6 @@ msgstr "关联内部集合"
 
 msgid "Move parent object inside collection"
 msgstr "将父物体移动到集合内"
-
-
-msgid "Move inside collection (Ctrl to link, Shift to parent, Ctrl + Shift to move only parent)"
-msgstr "移动到集合内 (Ctrl 为关联, Shift 为父级, Ctrl + Shift 仅移动父级)"
 
 
 msgid "Move inside collection (Ctrl to link)"
@@ -159504,22 +159392,6 @@ msgid "Transmission Light"
 msgstr "透射光线"
 
 
-msgid "Evaluation position. Surface position by default"
-msgstr "评估位置。默认为表面位置"
-
-
-msgid "Evaluation normal. Surface normal by default"
-msgstr "评估法向。默认为表面法向"
-
-
-msgid "Evaluation roughness. Used for reflection factor"
-msgstr "默认粗糙度。用于反射系数"
-
-
-msgid "Shading reflection factor, scaled by PI"
-msgstr "着色反射系数，按 π 缩放"
-
-
 msgid ""
 "All local lights: Mask to smooth the light cutoff.\n"
 "Spot lights: Cutoff mask and spot attenuation.\n"
@@ -159556,14 +159428,6 @@ msgid ""
 msgstr ""
 "光源附近光的平滑强度。\n"
 "这样可以避免刺眼的高光，并减少全局照明噪点。0.0为没有平滑；越高的值越平滑"
-
-
-msgid "Radiant intensity divided by PI"
-msgstr "辐射通量除以 π"
-
-
-msgid "Light position"
-msgstr "光照位置"
 
 
 msgid "Is Camera Ray"
