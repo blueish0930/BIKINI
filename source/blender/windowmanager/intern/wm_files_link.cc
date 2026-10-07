@@ -381,10 +381,6 @@ static wmOperatorStatus wm_link_append_exec(bContext *C, wmOperator *op)
 
   BKE_blendfile_link_append_context_finalize(lapp_context);
 
-  /* Black-box locked node groups: decrypt appended/linked groups with the embedded key
-   * so they evaluate without a password. Viewing/editing stays password-gated. */
-  bke::node_tree_lock_auto_decrypt_all(*bmain);
-
   BKE_blendfile_link_append_context_free(lapp_context);
 
   /* Important we unset, otherwise these object won't

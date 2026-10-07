@@ -41,7 +41,43 @@ enum class Type : uint8_t {
   StringArray,
   MatArray,
   RayArray,
+  /**
+   * `vector2 xs[]` / `u[]@name`. Only the compiler and the attribute storage know this type: at
+   * run time the items are kept as 3D vectors (a #VecArray value) and become 2D again when one is
+   * read or when the array is stored.
+   */
+  Vec2Array,
+  /** `vector4 xs[]`, `color xs[]`, `rotation xs[]`: three flavors of one array of 4D vectors. */
+  Vec4Array,
+  ColorArray,
+  RotArray,
+  /**
+   * `matrix2 xs[]` / `matrix3 xs[]`. Like #Vec2Array these only exist for the compiler and the
+   * attribute storage, at run time the items are 4x4 matrices in a #MatArray value.
+   */
+  Mat2Array,
+  Mat3Array,
 };
+
+/** Arrays whose items are 4D vectors. */
+inline bool type_is_vec4_array(const Type type)
+{
+  return type == Type::Vec4Array || type == Type::ColorArray || type == Type::RotArray;
+}
+
+/** The array type a value has at run time, which holds the items of \a type. */
+inline Type array_runtime_type(const Type type)
+{
+  switch (type) {
+    case Type::Vec2Array:
+      return Type::VecArray;
+    case Type::Mat2Array:
+    case Type::Mat3Array:
+      return Type::MatArray;
+    default:
+      return type;
+  }
+}
 
 struct RayHit {
   int hit = 0;
@@ -157,8 +193,9 @@ inline bool type_is_matrix(const Type type)
 inline bool type_is_wrangle_packed(const Type type)
 {
   return type == Type::IntArray || type == Type::FloatArray || type == Type::VecArray ||
-         type == Type::StringArray || type == Type::MatArray || type == Type::RayArray ||
-         type == Type::Matrix2 || type == Type::Matrix3;
+         type == Type::Vec2Array || type == Type::StringArray || type == Type::MatArray ||
+         type == Type::RayArray || type == Type::Matrix2 || type == Type::Matrix3 ||
+         type_is_vec4_array(type) || type == Type::Mat2Array || type == Type::Mat3Array;
 }
 
 inline int type_linear_dim(const Type type)
@@ -512,6 +549,64 @@ enum class Builtin : uint16_t {
   Ddx,
   Ddy,
   Fwidth,
+  /** A channel used directly as an `array()` argument: the whole list input. */
+  ChiArr,
+  ChfArr,
+  ChbArr,
+  ChvArr,
+  ChcArr,
+  ChmArr,
+  ChqArr,
+  ChsArr,
+  ChrArr,
+  ChuArr,
+  /** `rand` where a vector is expected: an independent value per component. */
+  RandVec,
+  HsvToRgb,
+  RgbToHsv,
+  /** Rotation utilities. Quaternions are stored as (x, y, z, w). */
+  QRotate,
+  Slerp,
+  Dihedral,
+  EulerToQuat,
+  QuatToEuler,
+  QConvert,
+  RotateFn,
+  LookAt,
+  QDistance,
+  /** `chramp("name", pos)`: color ramp widget on the node. #ChrampF is the float overload. */
+  Chramp,
+  ChrampF,
+  /** `chcurve("name", value)`: float, vector or color curve widget, picked from the type of
+   * `value` when the script is compiled. */
+  ChcurveF,
+  ChcurveV,
+  ChcurveC,
+  /** Reductions of a whole array: `min(arr)`, `max(arr)`, `sum(arr)` and `unique(arr)`. */
+  ArrayMin,
+  ArrayMax,
+  ArraySum,
+  ArrayUnique,
+  /** `find(arr, value)`: indices of all matching items. */
+  ArrayFind,
+  /** `slice(arr, start, end, step)`: part of an array, negative indices count from the end. */
+  ArraySlice,
+  /** Set operations on two arrays, the result has no duplicates. */
+  ArrayUnion,
+  ArraySubtract,
+  ArrayIntersect,
+  /** Empty array of 4D vectors, or with arguments the items of other vector arrays. */
+  ArrayVec4,
+  ArrayColor,
+  ArrayRot,
+};
+
+/** Widget behind a `chramp()` / `chcurve()` parameter. */
+enum class RampKind : int8_t {
+  ColorRamp = 0,
+  FloatCurve = 1,
+  VectorCurve = 2,
+  ColorCurve = 3,
 };
 
 struct Value {
@@ -824,6 +919,12 @@ struct Program {
     int bytes = 0;
   };
   Vector<GpuCh> gpu_ch;
+  struct RampParm {
+    std::string name;
+    RampKind kind = RampKind::ColorRamp;
+  };
+  /** Ramp and curve parameters read through `chramp()` / `chcurve()`. */
+  Vector<RampParm> ramp_parms;
 };
 
 struct AttrRT {
@@ -866,6 +967,9 @@ using LoadSampleFn = Value (*)(void *user,
 
 using LoadParmFn = Value (*)(void *user, StringRef name, int index, std::string &r_error);
 
+/** Evaluate the ramp or curve parameter  name at  input. */
+using EvalRampFn = Value (*)(void *user, StringRef name, RampKind kind, const Value &input);
+
 struct VMEnv;
 
 using TopoFn = Value (*)(void *user,
@@ -895,6 +999,8 @@ struct VMEnv {
   Span<int> face_offsets;
   void *parm_user = nullptr;
   LoadParmFn load_parm = nullptr;
+  /** Uses #parm_user. Without it ramps are a linear gray ramp and curves the identity. */
+  EvalRampFn eval_ramp = nullptr;
   void *topo_user = nullptr;
   TopoFn topo_fn = nullptr;
   float3 hit_pos = float3(0.0f);
@@ -914,6 +1020,8 @@ struct VMEnv {
 };
 
 Value value_from_quat(const math::Quaternion &q);
+/** Result of a ramp or curve parameter that has no widget yet: a gray ramp or the input. */
+Value ramp_identity(RampKind kind, const Value &input);
 math::Quaternion value_as_quat(const Value &v);
 
 /** Returns false on error. If the script `return`s, #r_return is set. */
@@ -950,6 +1058,7 @@ Vector<int> int_array_values(const Value &v);
 Vector<int> *iarr_mut(const Value &v);
 Value value_from_float_array(Vector<float> values);
 Value value_from_vec_array(Vector<float3> values);
+Value value_from_vec4_array(Vector<float4> values, Type type = Type::Vec4Array);
 Value value_from_string_array(Vector<std::string> values);
 Value value_from_mat_array(Vector<float4x4> values);
 Value value_from_ray(const RayHit &hit);

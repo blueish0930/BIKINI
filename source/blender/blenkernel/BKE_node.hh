@@ -593,56 +593,6 @@ void node_tree_type_add(bNodeTreeType &nt);
 void node_tree_type_free_link(const bNodeTreeType &nt);
 bool node_tree_is_registered(const bNodeTree &ntree);
 
-/** True when the node group has a lock password set. */
-bool node_tree_is_locked(const bNodeTree &ntree);
-/** True when internals are encrypted and not decrypted in this session. */
-bool node_tree_contents_sealed(const bNodeTree &ntree);
-/** True when \a password matches the stored lock (also true when unlocked). */
-bool node_tree_password_matches(const bNodeTree &ntree, StringRef password);
-/** True when both trees are locked with the same derived key (nested groups share salt). */
-bool node_tree_lock_shares_key(const bNodeTree &a, const bNodeTree &b);
-
-/**
- * Encrypt the node graph with \a password. Nested node groups are encrypted with the
- * same password. Nodes stay in memory while the editor still has the group open; they
- * are stripped from .blend files and sealed on exit.
- */
-bool node_tree_lock_apply(Main &bmain,
-                          bNodeTree &ntree,
-                          StringRef password,
-                          ReportList *reports);
-/** Decrypt internals into \a ntree. */
-bool node_tree_lock_unlock_contents(Main &bmain,
-                                    bNodeTree &ntree,
-                                    StringRef password,
-                                    ReportList *reports);
-/** Re-encrypt (if needed), wipe in-memory nodes, and drop the session key. */
-void node_tree_lock_seal(Main &bmain, bNodeTree &ntree);
-void node_tree_lock_session_acquire(bNodeTree &ntree);
-void node_tree_lock_session_release(Main &bmain, bNodeTree &ntree);
-/** Remove the lock after contents are already decrypted. */
-void node_tree_clear_lock(bNodeTree &ntree);
-
-/**
- * Black-box: seal every locked group (encrypt with the embedded key and strip in-file
- * nodes) so a written .blend contains no plaintext graph. Call right before the write
- * step of a real file save; pair with #node_tree_lock_restore_after_write.
- */
-void node_tree_lock_seal_all_for_write(Main &bmain);
-/** Restore in-memory nodes stripped by #node_tree_lock_seal_all_for_write. */
-void node_tree_lock_restore_after_write(Main &bmain);
-/**
- * Black-box: transparently decrypt all sealed locked groups with the embedded key so
- * they evaluate without a password. Call after file load and after link/append.
- * Viewing/editing internals stays gated by the user password.
- */
-void node_tree_lock_auto_decrypt_all(Main &bmain);
-/**
- * True when a locked group must hide its internals from UI and Python because the
- * password was not verified in this session.
- */
-bool node_tree_lock_blocks_view(const bNodeTree &ntree);
-
 Span<bNodeTreeType *> node_tree_types_get();
 
 bool node_tree_type_supports_socket_type_static(const int ntree_type,

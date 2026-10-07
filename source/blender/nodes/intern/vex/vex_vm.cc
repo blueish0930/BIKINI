@@ -16,15 +16,20 @@
 #include "BLI_enumerable_thread_specific.hh"
 #include "BLI_execution_mode.hh"
 #include "BLI_index_mask.hh"
+#include "BLI_math_axis_angle.hh"
+#include "BLI_math_color_c.hh"
 #include "BLI_math_constants.hh"
+#include "BLI_math_euler.hh"
 #include "BLI_math_matrix.hh"
 #include "BLI_math_matrix_c.hh"
 #include "BLI_math_solvers.hh"
 #include "BLI_math_quaternion.hh"
 #include "BLI_math_rotation.hh"
+#include "BLI_math_rotation_c.hh"
 #include "BLI_math_vector.hh"
 #include "BLI_math_vector_types.hh"
 #include "BLI_noise.hh"
+#include "BLI_set.hh"
 #include "BLI_span.hh"
 #include "DNA_node_types.h"
 #include "DNA_meshdata_types.h"
@@ -43,6 +48,7 @@ struct VMThreadLocalStorage {
   Vector<Vector<int>> iarr;
   Vector<Vector<float>> farr;
   Vector<Vector<float3>> varr;
+  Vector<Vector<float4>> v4arr;
   Vector<Vector<std::string>> sarr;
   Vector<Vector<float4x4>> marr;
   Vector<Vector<RayHit>> rarr;
@@ -53,6 +59,7 @@ struct VMThreadLocalStorage {
   int iarr_used = 0;
   int farr_used = 0;
   int varr_used = 0;
+  int v4arr_used = 0;
   int sarr_used = 0;
   int marr_used = 0;
   int rarr_used = 0;
@@ -76,6 +83,7 @@ static VMThreadLocalStorage &vm_thread_local_storage()
 #define tls_iarr (vm_thread_local_storage().iarr)
 #define tls_farr (vm_thread_local_storage().farr)
 #define tls_varr (vm_thread_local_storage().varr)
+#define tls_v4arr (vm_thread_local_storage().v4arr)
 #define tls_sarr (vm_thread_local_storage().sarr)
 #define tls_marr (vm_thread_local_storage().marr)
 #define tls_rarr (vm_thread_local_storage().rarr)
@@ -86,6 +94,7 @@ static VMThreadLocalStorage &vm_thread_local_storage()
 #define tls_iarr_used (vm_thread_local_storage().iarr_used)
 #define tls_farr_used (vm_thread_local_storage().farr_used)
 #define tls_varr_used (vm_thread_local_storage().varr_used)
+#define tls_v4arr_used (vm_thread_local_storage().v4arr_used)
 #define tls_sarr_used (vm_thread_local_storage().sarr_used)
 #define tls_marr_used (vm_thread_local_storage().marr_used)
 #define tls_rarr_used (vm_thread_local_storage().rarr_used)
@@ -105,6 +114,7 @@ void tls_arrays_begin()
   tls_iarr_used = 0;
   tls_farr_used = 0;
   tls_varr_used = 0;
+  tls_v4arr_used = 0;
   tls_sarr_used = 0;
   tls_marr_used = 0;
   tls_rarr_used = 0;
@@ -121,6 +131,9 @@ void tls_arrays_begin()
   }
   if (tls_varr.capacity() < 256) {
     tls_varr.reserve(256);
+  }
+  if (tls_v4arr.capacity() < 64) {
+    tls_v4arr.reserve(64);
   }
 }
 
@@ -378,6 +391,13 @@ Value value_from_vec_array(Vector<float3> values)
   r.i = store_tls_array(tls_varr, tls_varr_used, std::move(values));
   return r;
 }
+Value value_from_vec4_array(Vector<float4> values, const Type type)
+{
+  Value r;
+  r.type = type_is_vec4_array(type) ? type : Type::Vec4Array;
+  r.i = store_tls_array(tls_v4arr, tls_v4arr_used, std::move(values));
+  return r;
+}
 Value value_from_string_array(Vector<std::string> values)
 {
   Value r;
@@ -453,6 +473,13 @@ Vector<float3> *varr_mut(const Value &v)
   }
   return &tls_varr[v.i];
 }
+Vector<float4> *v4arr_mut(const Value &v)
+{
+  if (!type_is_vec4_array(v.type) || v.i < 0 || v.i >= int(tls_v4arr.size())) {
+    return nullptr;
+  }
+  return &tls_v4arr[v.i];
+}
 Vector<std::string> *sarr_mut(const Value &v)
 {
   if (v.type != Type::StringArray || v.i < 0 || v.i >= int(tls_sarr.size())) {
@@ -489,6 +516,9 @@ int array_len(const Value &v)
     return int(a->size());
   }
   if (const Vector<float3> *a = varr_mut(v)) {
+    return int(a->size());
+  }
+  if (const Vector<float4> *a = v4arr_mut(v)) {
     return int(a->size());
   }
   if (const Vector<std::string> *a = sarr_mut(v)) {
@@ -543,8 +573,11 @@ int array_write_index(Vector<T> &items, const int raw_i, const T &fill)
 
 Value empty_array(const Type type)
 {
-  if (type == Type::VecArray) {
+  if (ELEM(type, Type::VecArray, Type::Vec2Array)) {
     return value_from_vec_array({});
+  }
+  if (type_is_vec4_array(type)) {
+    return value_from_vec4_array({}, type);
   }
   if (type == Type::FloatArray) {
     return value_from_float_array({});
@@ -552,13 +585,38 @@ Value empty_array(const Type type)
   if (type == Type::StringArray) {
     return value_from_string_array({});
   }
-  if (type == Type::MatArray) {
+  if (ELEM(type, Type::MatArray, Type::Mat2Array, Type::Mat3Array)) {
     return value_from_mat_array({});
   }
   if (type == Type::RayArray) {
     return value_from_ray_array({});
   }
   return value_from_int_array({});
+}
+
+namespace {
+const float4x4 &value_as_matrix(const Value &v);
+float3x3 value_as_matrix3(const Value &v);
+}  // namespace
+
+/** A matrix of any size as the 4x4 item of a matrix array, identity outside of its own part. */
+static float4x4 matrix_item_from_value(const Value &v)
+{
+  if (v.type == Type::Matrix) {
+    return value_as_matrix(v);
+  }
+  if (ELEM(v.type, Type::Matrix2, Type::Matrix3)) {
+    return float4x4(value_as_matrix3(v));
+  }
+  return float4x4::identity();
+}
+
+/** Item type of the three flavors of 4D vector arrays. */
+static Type vec4_array_item_type(const Type array_type)
+{
+  return array_type == Type::ColorArray ? Type::Color :
+         array_type == Type::RotArray   ? Type::Rotation :
+                                          Type::Vector4;
 }
 
 Value get_index_value(const Value &arr, const int raw_i)
@@ -580,6 +638,10 @@ Value get_index_value(const Value &arr, const int raw_i)
   if (Vector<float3> *a = varr_mut(arr)) {
     const int i = wrap_index(raw_i, int(a->size()), false);
     return Value::from_vec(i >= 0 ? (*a)[i] : float3(0.0f));
+  }
+  if (Vector<float4> *a = v4arr_mut(arr)) {
+    const int i = wrap_index(raw_i, int(a->size()), false);
+    return Value::from_vec4(i >= 0 ? (*a)[i] : float4(0.0f), vec4_array_item_type(arr.type));
   }
   if (Vector<std::string> *a = sarr_mut(arr)) {
     const int i = wrap_index(raw_i, int(a->size()), false);
@@ -658,6 +720,13 @@ Value set_index_value(Value arr, const int raw_i, const Value &elem, const VMEnv
     }
     return arr;
   }
+  if (Vector<float4> *a = v4arr_mut(arr)) {
+    const int i = array_write_index(*a, raw_i, float4(0.0f));
+    if (i >= 0) {
+      (*a)[i] = elem.as_vec4();
+    }
+    return arr;
+  }
   if (Vector<std::string> *a = sarr_mut(arr)) {
     const int i = array_write_index(*a, raw_i, std::string());
     if (i >= 0) {
@@ -668,12 +737,7 @@ Value set_index_value(Value arr, const int raw_i, const Value &elem, const VMEnv
   if (Vector<float4x4> *a = marr_mut(arr)) {
     const int i = array_write_index(*a, raw_i, float4x4::identity());
     if (i >= 0) {
-      if (elem.type == Type::Matrix && elem.i >= 0 && elem.i < int(tls_mats.size())) {
-        (*a)[i] = tls_mats[elem.i];
-      }
-      else {
-        (*a)[i] = float4x4::identity();
-      }
+      (*a)[i] = matrix_item_from_value(elem);
     }
     return arr;
   }
@@ -812,6 +876,22 @@ Value packed_to_value(const bke::WrangleArrayValue &p)
     }
     return value_from_vec_array(std::move(vals));
   }
+  if (p.kind == bke::WrangleArrayKind::Float4) {
+    Vector<float4> vals;
+    vals.reserve(p.count);
+    for (int i = 0; i < p.count; i++) {
+      vals.append(float4(p.d.f[i * 4], p.d.f[i * 4 + 1], p.d.f[i * 4 + 2], p.d.f[i * 4 + 3]));
+    }
+    return value_from_vec4_array(std::move(vals));
+  }
+  if (p.kind == bke::WrangleArrayKind::Float2) {
+    Vector<float3> vals;
+    vals.reserve(p.count);
+    for (int i = 0; i < p.count; i++) {
+      vals.append(float3(p.d.f[i * 2], p.d.f[i * 2 + 1], 0.0f));
+    }
+    return value_from_vec_array(std::move(vals));
+  }
   if (p.kind == bke::WrangleArrayKind::Float) {
     Vector<float> vals;
     vals.reserve(p.count);
@@ -857,6 +937,78 @@ Value packed_to_value(const bke::WrangleArrayValue &p)
   return value_from_int_array(std::move(vals));
 }
 
+/**
+ * Read a packed list as the declared attribute type. A new attribute is zero-initialized, which
+ * is an empty int list whatever the declaration says, and `append(f[]@a, x)` would then truncate
+ * `x` to an integer.
+ */
+static Value packed_to_typed_value(const bke::WrangleArrayValue &p, const Type type)
+{
+  if (p.count == 0 && type_is_array(type)) {
+    return empty_array(type);
+  }
+  const Type runtime_type = array_runtime_type(type);
+  if (runtime_type == Type::MatArray &&
+      ELEM(p.kind, bke::WrangleArrayKind::Matrix2, bke::WrangleArrayKind::Matrix3))
+  {
+    /* `2[]@name` / `3[]@name`: every stored item, not only the first one. */
+    Vector<float4x4> vals;
+    vals.reserve(p.count);
+    for (int i = 0; i < p.count; i++) {
+      vals.append(p.small_matrix_at(i));
+    }
+    return value_from_mat_array(std::move(vals));
+  }
+  if (type_is_vec4_array(runtime_type)) {
+    /* The array is read as the declared flavor, whatever kind of vectors were stored. */
+    Vector<float4> vals;
+    vals.reserve(p.count);
+    if (p.kind == bke::WrangleArrayKind::Float4) {
+      for (int i = 0; i < p.count; i++) {
+        vals.append(float4(p.d.f[i * 4], p.d.f[i * 4 + 1], p.d.f[i * 4 + 2], p.d.f[i * 4 + 3]));
+      }
+      return value_from_vec4_array(std::move(vals), runtime_type);
+    }
+    if (p.kind == bke::WrangleArrayKind::Float3) {
+      for (int i = 0; i < p.count; i++) {
+        vals.append(float4(p.d.f[i * 3], p.d.f[i * 3 + 1], p.d.f[i * 3 + 2], 0.0f));
+      }
+      return value_from_vec4_array(std::move(vals), runtime_type);
+    }
+    if (p.kind == bke::WrangleArrayKind::Float2) {
+      for (int i = 0; i < p.count; i++) {
+        vals.append(float4(p.d.f[i * 2], p.d.f[i * 2 + 1], 0.0f, 0.0f));
+      }
+      return value_from_vec4_array(std::move(vals), runtime_type);
+    }
+  }
+  if (runtime_type == Type::VecArray && p.kind == bke::WrangleArrayKind::Float4) {
+    Vector<float3> vals;
+    vals.reserve(p.count);
+    for (int i = 0; i < p.count; i++) {
+      vals.append(float3(p.d.f[i * 4], p.d.f[i * 4 + 1], p.d.f[i * 4 + 2]));
+    }
+    return value_from_vec_array(std::move(vals));
+  }
+  if (type == Type::FloatArray && p.kind == bke::WrangleArrayKind::Int) {
+    Vector<float> vals;
+    vals.reserve(p.count);
+    for (int i = 0; i < p.count; i++) {
+      vals.append(float(p.d.i[i]));
+    }
+    return value_from_float_array(std::move(vals));
+  }
+  if (type == Type::IntArray && p.kind == bke::WrangleArrayKind::Float) {
+    Vector<int> vals;
+    vals.reserve(p.count);
+    for (int i = 0; i < p.count; i++) {
+      vals.append(int(p.d.f[i]));
+    }
+    return value_from_int_array(std::move(vals));
+  }
+  return packed_to_value(p);
+}
+
 void value_to_packed(const Value &v,
                      bke::WrangleArrayValue &p,
                      const Type dest,
@@ -864,20 +1016,67 @@ void value_to_packed(const Value &v,
 {
   int range_start = 0;
   int range_size = 0;
-  if (int_array_range(v, range_start, range_size)) {
-    p.set_ints(int_array_values(v));
-    return;
-  }
-  if (Vector<int> *a = iarr_mut(v)) {
-    p.set_ints(*a);
+  if (int_array_range(v, range_start, range_size) || iarr_mut(v)) {
+    const Vector<int> ints = int_array_values(v);
+    if (dest == Type::FloatArray) {
+      /* `f[]@a = array(1, 2)` must still store floats. */
+      Vector<float> floats;
+      floats.reserve(ints.size());
+      for (const int value : ints) {
+        floats.append(float(value));
+      }
+      p.set_floats(floats);
+      return;
+    }
+    p.set_ints(ints);
     return;
   }
   if (Vector<float> *a = farr_mut(v)) {
+    if (dest == Type::IntArray) {
+      Vector<int> ints;
+      ints.reserve(a->size());
+      for (const float value : *a) {
+        ints.append(int(value));
+      }
+      p.set_ints(ints);
+      return;
+    }
     p.set_floats(*a);
     return;
   }
   if (Vector<float3> *a = varr_mut(v)) {
+    if (dest == Type::Vec2Array) {
+      p.set_float2s(*a);
+      return;
+    }
+    if (type_is_vec4_array(dest)) {
+      Vector<float4> items;
+      items.reserve(a->size());
+      for (const float3 &item : *a) {
+        items.append(float4(item.x, item.y, item.z, 0.0f));
+      }
+      p.set_float4s(items);
+      return;
+    }
     p.set_float3s(*a);
+    return;
+  }
+  if (Vector<float4> *a = v4arr_mut(v)) {
+    if (ELEM(dest, Type::VecArray, Type::Vec2Array)) {
+      Vector<float3> items;
+      items.reserve(a->size());
+      for (const float4 &item : *a) {
+        items.append(float3(item.x, item.y, item.z));
+      }
+      if (dest == Type::Vec2Array) {
+        p.set_float2s(items);
+      }
+      else {
+        p.set_float3s(items);
+      }
+      return;
+    }
+    p.set_float4s(*a);
     return;
   }
   if (Vector<std::string> *a = sarr_mut(v)) {
@@ -885,7 +1084,15 @@ void value_to_packed(const Value &v,
     return;
   }
   if (Vector<float4x4> *a = marr_mut(v)) {
-    p.set_matrices(*a);
+    if (dest == Type::Mat2Array) {
+      p.set_matrix2s(*a);
+    }
+    else if (dest == Type::Mat3Array) {
+      p.set_matrix3s(*a);
+    }
+    else {
+      p.set_matrices(*a);
+    }
     return;
   }
   if (Vector<RayHit> *a = rayarr_mut(v)) {
@@ -946,8 +1153,17 @@ void value_to_packed(const Value &v,
   /* `{1, 2, 3}` is a vector literal; `i[]@ids = {1, 2, 3}` must still store a list. */
   if (type_is_vec_like(v.type)) {
     const float3 xyz = v.as_vec();
+    if (type_is_vec4_array(dest)) {
+      const float4 xyzw = v.as_vec4();
+      p.set_float4s(Span(&xyzw, 1));
+      return;
+    }
     if (dest == Type::VecArray) {
       p.set_float3s(Span(&xyz, 1));
+      return;
+    }
+    if (dest == Type::Vec2Array) {
+      p.set_float2s(Span(&xyz, 1));
       return;
     }
     if (dest == Type::FloatArray) {
@@ -1002,6 +1218,26 @@ StringRef value_string(const Value &v, const VMEnv &env)
 Value value_from_quat(const math::Quaternion &q)
 {
   return Value::from_vec4(float4(q.x, q.y, q.z, q.w), Type::Rotation);
+}
+
+Value ramp_identity(const RampKind kind, const Value &input)
+{
+  switch (kind) {
+    case RampKind::ColorRamp: {
+      const float t = std::clamp(input.as_float(), 0.0f, 1.0f);
+      return Value::from_vec4(float4(t, t, t, 1.0f), Type::Color);
+    }
+    case RampKind::FloatCurve:
+      return Value::from_float(input.as_float());
+    case RampKind::VectorCurve:
+      return Value::from_vec(input.as_vec());
+    case RampKind::ColorCurve: {
+      const float3 rgb = input.as_vec();
+      const float alpha = ELEM(input.type, Type::Color, Type::Vector4) ? input.v.w : 1.0f;
+      return Value::from_vec4(float4(rgb.x, rgb.y, rgb.z, alpha), Type::Color);
+    }
+  }
+  return input;
 }
 
 math::Quaternion value_as_quat(const Value &v)
@@ -1088,10 +1324,17 @@ Value load_attr_value(const AttrRT &a, const int index, VMEnv &env)
       case Type::FloatArray:
         return value_from_float_array({});
       case Type::VecArray:
+      case Type::Vec2Array:
         return value_from_vec_array({});
+      case Type::Vec4Array:
+      case Type::ColorArray:
+      case Type::RotArray:
+        return value_from_vec4_array({}, a.type);
       case Type::StringArray:
         return value_from_string_array({});
       case Type::MatArray:
+      case Type::Mat2Array:
+      case Type::Mat3Array:
         return value_from_mat_array({});
       case Type::RayArray:
         return value_from_ray_array({});
@@ -1169,6 +1412,12 @@ Value load_attr_value(const AttrRT &a, const int index, VMEnv &env)
     case Type::IntArray:
     case Type::FloatArray:
     case Type::VecArray:
+    case Type::Vec2Array:
+    case Type::Vec4Array:
+    case Type::ColorArray:
+    case Type::RotArray:
+    case Type::Mat2Array:
+    case Type::Mat3Array:
     case Type::StringArray:
     case Type::MatArray:
     case Type::RayArray:
@@ -1179,7 +1428,7 @@ Value load_attr_value(const AttrRT &a, const int index, VMEnv &env)
         if (a.type == Type::Matrix3) {
           return Value::from_matrix3(a.warr[index].as_matrix3());
         }
-        return packed_to_value(a.warr[index]);
+        return packed_to_typed_value(a.warr[index], a.type);
       }
       if (a.rarr) {
         if (a.type == Type::Matrix2) {
@@ -1188,7 +1437,7 @@ Value load_attr_value(const AttrRT &a, const int index, VMEnv &env)
         if (a.type == Type::Matrix3) {
           return Value::from_matrix3(a.rarr[index].as_matrix3());
         }
-        return packed_to_value(a.rarr[index]);
+        return packed_to_typed_value(a.rarr[index], a.type);
       }
       if (a.type == Type::Matrix2) {
         return Value::from_matrix2(float2x2::identity());
@@ -1196,14 +1445,8 @@ Value load_attr_value(const AttrRT &a, const int index, VMEnv &env)
       if (a.type == Type::Matrix3) {
         return Value::from_matrix3(float3x3::identity());
       }
-      if (a.type == Type::IntArray) {
-        return value_from_int_array({});
-      }
-      if (a.type == Type::StringArray) {
-        return value_from_string_array({});
-      }
-      if (a.type == Type::VecArray) {
-        return value_from_vec_array({});
+      if (type_is_array(a.type)) {
+        return empty_array(a.type);
       }
       if (a.type == Type::MatArray) {
         return value_from_mat_array({});
@@ -1283,6 +1526,12 @@ void store_attr_value(AttrRT &a, const int index, const Value &v, VMEnv &env)
     case Type::IntArray:
     case Type::FloatArray:
     case Type::VecArray:
+    case Type::Vec2Array:
+    case Type::Vec4Array:
+    case Type::ColorArray:
+    case Type::RotArray:
+    case Type::Mat2Array:
+    case Type::Mat3Array:
     case Type::StringArray:
     case Type::MatArray:
     case Type::RayArray:
@@ -1798,6 +2047,12 @@ void attr_store_mask(AttrRT &a, const Value &v, const IndexMask &mask, VMEnv &en
     case Type::IntArray:
     case Type::FloatArray:
     case Type::VecArray:
+    case Type::Vec2Array:
+    case Type::Vec4Array:
+    case Type::ColorArray:
+    case Type::RotArray:
+    case Type::Mat2Array:
+    case Type::Mat3Array:
     case Type::StringArray:
     case Type::MatArray:
     case Type::RayArray: {
@@ -1898,8 +2153,33 @@ std::string valuetostring_float(const double value, int before, int after)
   return out;
 }
 
+/** `{{a, b}, {c, d}}`: the columns of a matrix. */
+static std::string matrix_default_string(const float *values, const int dim)
+{
+  std::string s = "{";
+  for (int col = 0; col < dim; col++) {
+    s += col ? ", {" : "{";
+    for (int row = 0; row < dim; row++) {
+      char buf[48];
+      snprintf(buf, sizeof(buf), row ? ", %g" : "%g", double(values[col * dim + row]));
+      s += buf;
+    }
+    s += "}";
+  }
+  return s + "}";
+}
+
 std::string value_default_string(const Value &v, VMEnv &env)
 {
+  if (type_is_array(v.type)) {
+    std::string s = "[";
+    const int n = array_len(v);
+    for (int i = 0; i < n; i++) {
+      s += i ? ", " : "";
+      s += value_default_string(get_index_value(v, i), env);
+    }
+    return s + "]";
+  }
   switch (v.type) {
     case Type::String:
       return std::string(value_string(v, env));
@@ -1916,13 +2196,35 @@ std::string value_default_string(const Value &v, VMEnv &env)
       snprintf(buf, sizeof(buf), "{%g, %g}", double(v.v.x), double(v.v.y));
       return buf;
     }
-    case Type::Vector:
-    case Type::Vector4:
-    case Type::Color:
-    case Type::Rotation: {
+    case Type::Vector: {
       char buf[128];
       snprintf(buf, sizeof(buf), "{%g, %g, %g}", double(v.v.x), double(v.v.y), double(v.v.z));
       return buf;
+    }
+    case Type::Vector4:
+    case Type::Color:
+    case Type::Rotation: {
+      char buf[160];
+      snprintf(buf,
+               sizeof(buf),
+               "{%g, %g, %g, %g}",
+               double(v.v.x),
+               double(v.v.y),
+               double(v.v.z),
+               double(v.v.w));
+      return buf;
+    }
+    case Type::Matrix2: {
+      const float2x2 m = v.as_matrix2();
+      return matrix_default_string(&m[0][0], 2);
+    }
+    case Type::Matrix3: {
+      const float3x3 m = value_as_matrix3(v);
+      return matrix_default_string(&m[0][0], 3);
+    }
+    case Type::Matrix: {
+      const float4x4 m = value_as_matrix(v);
+      return matrix_default_string(&m[0][0], 4);
     }
     default: {
       char buf[64];
@@ -2420,7 +2722,7 @@ static Value mul_mat_vec(const Value &m, const Value &v, const bool row_vec, std
   const int vd = type_linear_dim(v.type);
   if (md == 0 || vd == 0 || md != vd) {
     if (err) {
-      *err = "矩阵×向量维度不一致";
+      *err = "Matrix and vector sizes do not match";
     }
     return Value::from_float(0.0f);
   }
@@ -2475,7 +2777,7 @@ Value numeric_mul(const Value &a, const Value &b, std::string *err = nullptr)
   }
   if (type_is_matrix(a.type) && type_is_matrix(b.type)) {
     if (err) {
-      *err = "矩阵乘法维度不一致：两边阶数必须相同";
+      *err = "Matrix sizes do not match: both sides need the same size";
     }
     return Value::from_float(0.0f);
   }
@@ -2779,6 +3081,154 @@ static Value map_ternary(const Value &a, const Value &b, const Value &c, const F
   return Value::from_float(fn(a.as_float(), b.as_float(), c.as_float()));
 }
 
+/**
+ * Indices selected by `slice(arr, start, end, step)` on an array of \a size items. Like Python
+ * slices: the end is exclusive, negative indices count from the end, out of range indices are
+ * clamped and a negative step walks backwards.
+ */
+static Vector<int> slice_indices(
+    const int size, const int start_arg, const int end_arg, const bool has_end, const int step)
+{
+  Vector<int> indices;
+  if (size <= 0 || step == 0) {
+    return indices;
+  }
+  if (step > 0) {
+    const int start = start_arg < 0 ? std::max(start_arg + size, 0) : std::min(start_arg, size);
+    const int end = !has_end ? size :
+                    end_arg < 0 ? std::max(end_arg + size, 0) :
+                                  std::min(end_arg, size);
+    for (int64_t i = start; i < end; i += step) {
+      indices.append(int(i));
+    }
+  }
+  else {
+    const int start = start_arg < 0 ? std::max(start_arg + size, -1) :
+                                      std::min(start_arg, size - 1);
+    const int end = !has_end ? -1 :
+                    end_arg < 0 ? std::max(end_arg + size, -1) :
+                                  std::min(end_arg, size - 1);
+    for (int64_t i = start; i > end; i += step) {
+      indices.append(int(i));
+    }
+  }
+  return indices;
+}
+
+template<typename T> static Vector<T> items_at(const Span<T> items, const Span<int> indices)
+{
+  Vector<T> result;
+  result.reserve(indices.size());
+  for (const int i : indices) {
+    result.append(items[i]);
+  }
+  return result;
+}
+
+/** Key that makes -0 and +0 the same value in a set. */
+static float set_key(const float value)
+{
+  return value + 0.0f;
+}
+static float3 set_key(const float3 &value)
+{
+  return value + float3(0.0f);
+}
+template<typename T> static const T &set_key(const T &value)
+{
+  return value;
+}
+
+/**
+ * `union(a, b)`, `subtract(a, b)` and `intersect(a, b)`. The result has every value once, in the
+ * order of their first occurrence in \a a (followed by \a b for the union).
+ */
+template<typename T>
+static Vector<T> array_set_operation(const Builtin op, const Span<T> a, const Span<T> b)
+{
+  Set<T> in_b;
+  for (const T &item : b) {
+    in_b.add(set_key(item));
+  }
+  Set<T> seen;
+  Vector<T> result;
+  auto add = [&](const T &item) {
+    if (seen.add(set_key(item))) {
+      result.append(item);
+    }
+  };
+  for (const T &item : a) {
+    if (op == Builtin::ArrayUnion || in_b.contains(set_key(item)) == (op == Builtin::ArrayIntersect))
+    {
+      add(item);
+    }
+  }
+  if (op == Builtin::ArrayUnion) {
+    for (const T &item : b) {
+      add(item);
+    }
+  }
+  return result;
+}
+
+/** Items of an int or float array as floats. */
+static Vector<float> float_array_values(const Value &v)
+{
+  if (const Vector<float> *items = farr_mut(v)) {
+    return *items;
+  }
+  Vector<float> result;
+  if (v.type == Type::IntArray) {
+    for (const int item : int_array_values(v)) {
+      result.append(float(item));
+    }
+  }
+  return result;
+}
+
+/** Rotation of a quaternion, an Euler XYZ vector or the rotation part of a matrix. */
+static math::Quaternion rotation_arg_as_quat(const Value &v)
+{
+  if (type_is_matrix(v.type)) {
+    return math::to_quaternion(math::normalize(value_as_matrix3(v)));
+  }
+  return math::normalize(value_as_quat(v));
+}
+
+static math::Quaternion axis_angle_quat(const float3 &axis, const float angle)
+{
+  if (math::is_zero(axis)) {
+    return math::Quaternion::identity();
+  }
+  return math::to_quaternion(math::AxisAngle(math::normalize(axis), math::AngleRadian(angle)));
+}
+
+/** Houdini rotation orders: 0 = XYZ, 1 = XZY, 2 = YXZ, 3 = YZX, 4 = ZXY, 5 = ZYX, or the name. */
+static math::EulerOrder parse_euler_order(const Value &v, const VMEnv &env)
+{
+  if (v.type == Type::String) {
+    const StringRef s = value_string(v, env);
+    if (str_ieq(s, "xzy")) {
+      return math::EulerOrder::XZY;
+    }
+    if (str_ieq(s, "yxz")) {
+      return math::EulerOrder::YXZ;
+    }
+    if (str_ieq(s, "yzx")) {
+      return math::EulerOrder::YZX;
+    }
+    if (str_ieq(s, "zxy")) {
+      return math::EulerOrder::ZXY;
+    }
+    if (str_ieq(s, "zyx")) {
+      return math::EulerOrder::ZYX;
+    }
+    return math::EulerOrder::XYZ;
+  }
+  const int order = v.as_int();
+  return (order >= 0 && order <= 5) ? math::EulerOrder(order + 1) : math::EulerOrder::XYZ;
+}
+
 Value call_builtin(const Builtin id,
                    const Span<Value> args,
                    VMEnv &env,
@@ -3070,7 +3520,8 @@ Value call_builtin(const Builtin id,
       return Value::from_vec4(float4(v.v.x, v.v.y, v.v.z, a), Type::Color);
     }
     case Builtin::Hash:
-    case Builtin::Rand: {
+    case Builtin::Rand:
+    case Builtin::RandVec: {
       auto seed_u32 = [&](const Value &v) -> uint32_t {
         if (v.type == Type::String) {
           const StringRef s = blender::nodes::vex::value_string(v, env);
@@ -3101,6 +3552,12 @@ Value call_builtin(const Builtin id,
       }
       if (id == Builtin::Hash) {
         return Value::from_int(int(h));
+      }
+      if (id == Builtin::RandVec) {
+        /* The first component is the scalar `rand` of the same seed. */
+        return Value::from_vec(float3(noise::hash_to_float(h),
+                                      noise::hash_to_float(h, 1u),
+                                      noise::hash_to_float(h, 2u)));
       }
       return Value::from_float(noise::hash_to_float(h));
     }
@@ -3495,10 +3952,137 @@ Value call_builtin(const Builtin id,
             float4(arg(0).as_float(), arg(1).as_float(), arg(2).as_float(), arg(3).as_float()),
             Type::Rotation);
       }
+      if (args.size() == 2) {
+        /* Houdini `quaternion(angle, axis)`. The swapped order is accepted too. */
+        const bool axis_first = type_is_vec_like(arg(0).type) && !type_is_vec_like(arg(1).type);
+        return value_from_quat(axis_angle_quat(arg(axis_first ? 0 : 1).as_vec(),
+                                               arg(axis_first ? 1 : 0).as_float()));
+      }
+      if (type_is_matrix(arg(0).type)) {
+        return value_from_quat(rotation_arg_as_quat(arg(0)));
+      }
       return value_from_quat(value_as_quat(arg(0)));
     }
     case Builtin::RotateRotation:
       return value_from_quat(value_as_quat(arg(0)) * value_as_quat(arg(1)));
+    case Builtin::HsvToRgb:
+    case Builtin::RgbToHsv: {
+      const bool packed = args.size() < 3;
+      float3 in = packed ? arg(0).as_vec() :
+                           float3(arg(0).as_float(), arg(1).as_float(), arg(2).as_float());
+      float3 out;
+      if (id == Builtin::HsvToRgb) {
+        /* Hue is cyclic. */
+        in.x -= floorf(in.x);
+        hsv_to_rgb_v(in, out);
+      }
+      else {
+        rgb_to_hsv_v(in, out);
+      }
+      if (packed && arg(0).type == Type::Color) {
+        return Value::from_vec4(float4(out.x, out.y, out.z, arg(0).v.w), Type::Color);
+      }
+      return Value::from_vec(out);
+    }
+    case Builtin::QRotate: {
+      /* `qrotate(q, v)`, the swapped order is accepted too. */
+      const bool swapped = arg(0).type != Type::Rotation && arg(1).type == Type::Rotation;
+      const math::Quaternion q = rotation_arg_as_quat(arg(swapped ? 1 : 0));
+      return Value::from_vec(math::transform_point(q, arg(swapped ? 0 : 1).as_vec()));
+    }
+    case Builtin::Slerp:
+      return value_from_quat(math::interpolate(
+          rotation_arg_as_quat(arg(0)), rotation_arg_as_quat(arg(1)), arg(2).as_float()));
+    case Builtin::Dihedral: {
+      const float3 a = math::normalize(arg(0).as_vec());
+      const float3 b = math::normalize(arg(1).as_vec());
+      float q[4];
+      rotation_between_vecs_to_quat(q, a, b);
+      return value_from_quat(math::Quaternion(q[0], q[1], q[2], q[3]));
+    }
+    case Builtin::EulerToQuat:
+      return value_from_quat(
+          math::to_quaternion(math::Euler3(arg(0).as_vec(), parse_euler_order(arg(1), env))));
+    case Builtin::QuatToEuler: {
+      const math::Euler3 eul = math::to_euler(rotation_arg_as_quat(arg(0)),
+                                              parse_euler_order(arg(1), env));
+      return Value::from_vec(float3(float(eul.x()), float(eul.y()), float(eul.z())));
+    }
+    case Builtin::QConvert:
+      return Value::from_matrix3(math::from_rotation<float3x3>(rotation_arg_as_quat(arg(0))));
+    case Builtin::QDistance: {
+      const math::Quaternion a = rotation_arg_as_quat(arg(0));
+      const math::Quaternion b = rotation_arg_as_quat(arg(1));
+      const float d = fabsf(a.w * b.w + a.x * b.x + a.y * b.y + a.z * b.z);
+      return Value::from_float(2.0f * acosf(std::min(d, 1.0f)));
+    }
+    case Builtin::RotateFn: {
+      if (args.size() < 3) {
+        return value_from_quat(rotation_arg_as_quat(arg(0)) * rotation_arg_as_quat(arg(1)));
+      }
+      /* `rotate(x, angle, axis)`: the rotation is applied after \a x. */
+      const math::Quaternion q = axis_angle_quat(arg(2).as_vec(), arg(1).as_float());
+      if (arg(0).type == Type::Rotation) {
+        return value_from_quat(q * value_as_quat(arg(0)));
+      }
+      if (arg(0).type == Type::Matrix) {
+        return Value::from_matrix(math::from_rotation<float4x4>(q) * value_as_matrix(arg(0)));
+      }
+      if (type_is_matrix(arg(0).type)) {
+        return Value::from_matrix3(math::from_rotation<float3x3>(q) * value_as_matrix3(arg(0)));
+      }
+      return Value::from_vec(math::transform_point(q, arg(0).as_vec()));
+    }
+    case Builtin::LookAt: {
+      /* Like a camera: -Z looks from `from` to `to` and Y is as close to `up` as possible. */
+      const float3 forward = math::normalize(arg(1).as_vec() - arg(0).as_vec());
+      if (math::is_zero(forward)) {
+        return Value::from_matrix3(float3x3::identity());
+      }
+      float3 up = args.size() > 2 ? arg(2).as_vec() : float3(0.0f, 0.0f, 1.0f);
+      const float3 z = -forward;
+      float3 x = math::cross(up, z);
+      if (math::length_squared(x) < 1e-12f) {
+        up = (fabsf(z.z) < 0.9f) ? float3(0.0f, 0.0f, 1.0f) : float3(0.0f, 1.0f, 0.0f);
+        x = math::cross(up, z);
+      }
+      x = math::normalize(x);
+      return Value::from_matrix3(float3x3(x, math::cross(z, x), z));
+    }
+    case Builtin::Chramp:
+    case Builtin::ChrampF:
+    case Builtin::ChcurveF:
+    case Builtin::ChcurveV:
+    case Builtin::ChcurveC: {
+      RampKind kind = RampKind::ColorRamp;
+      if (id == Builtin::ChcurveF) {
+        kind = RampKind::FloatCurve;
+      }
+      else if (id == Builtin::ChcurveV) {
+        kind = RampKind::VectorCurve;
+      }
+      else if (id == Builtin::ChcurveC) {
+        kind = RampKind::ColorCurve;
+      }
+      const Value &input = arg(1);
+      Value out = env.eval_ramp ? env.eval_ramp(env.parm_user,
+                                                blender::nodes::vex::value_string(arg(0), env),
+                                                kind,
+                                                input) :
+                                  ramp_identity(kind, input);
+      if (id == Builtin::ChrampF) {
+        const float3 rgb = out.as_vec();
+        const bool gray = rgb.x == rgb.y && rgb.y == rgb.z;
+        return Value::from_float(gray ? rgb.x : (rgb.x + rgb.y + rgb.z) / 3.0f);
+      }
+      if (kind != RampKind::ColorRamp && args.size() > 2) {
+        /* Optional factor, like the Factor input of the curve nodes. */
+        const float fac = arg(2).as_float();
+        const Value base = ramp_identity(kind, input);
+        out.v = base.v * (1.0f - fac) + out.v * fac;
+      }
+      return out;
+    }
     case Builtin::Chf:
     case Builtin::Chi:
     case Builtin::Chv:
@@ -3506,11 +4090,30 @@ Value call_builtin(const Builtin id,
     case Builtin::Chc:
     case Builtin::Chm:
     case Builtin::Chq:
+    case Builtin::Chr:
+    case Builtin::Chu:
     case Builtin::Chs: {
       const StringRef name = blender::nodes::vex::value_string(arg(0), env);
       Value loaded = Value::from_float(0.0f);
       if (env.load_parm) {
         loaded = env.load_parm(env.parm_user, name, env.index, error);
+      }
+      /* A list channel read outside of `array()` gives its first item. */
+      if (const Vector<int> *items = iarr_mut(loaded)) {
+        loaded = Value::from_int(items->is_empty() ? 0 : items->first());
+      }
+      else if (const Vector<float> *items = farr_mut(loaded)) {
+        loaded = Value::from_float(items->is_empty() ? 0.0f : items->first());
+      }
+      else if (const Vector<float3> *items = varr_mut(loaded)) {
+        loaded = Value::from_vec(items->is_empty() ? float3(0.0f) : items->first());
+      }
+      else if (const Vector<std::string> *items = sarr_mut(loaded)) {
+        loaded = intern_thread_string(items->is_empty() ? StringRef() : StringRef(items->first()));
+      }
+      else if (const Vector<float4x4> *items = marr_mut(loaded)) {
+        const float4x4 first = items->is_empty() ? float4x4::identity() : items->first();
+        loaded = Value::from_matrix(first);
       }
       switch (id) {
         case Builtin::Chi:
@@ -3531,7 +4134,11 @@ Value call_builtin(const Builtin id,
             return loaded;
           }
           return Value::from_matrix(float4x4::identity());
+        case Builtin::Chu:
+          return Value::from_vec2(loaded.as_vec2());
         case Builtin::Chq:
+          return Value::from_vec4(loaded.as_vec4(), Type::Vector4);
+        case Builtin::Chr:
           if (loaded.type == Type::Rotation) {
             return loaded;
           }
@@ -3546,12 +4153,175 @@ Value call_builtin(const Builtin id,
           return Value::from_float(loaded.as_float());
       }
     }
+    case Builtin::ChiArr:
+    case Builtin::ChfArr:
+    case Builtin::ChbArr:
+    case Builtin::ChvArr:
+    case Builtin::ChcArr:
+    case Builtin::ChmArr:
+    case Builtin::ChqArr:
+    case Builtin::ChrArr:
+    case Builtin::ChuArr:
+    case Builtin::ChsArr: {
+      const StringRef name = blender::nodes::vex::value_string(arg(0), env);
+      Value loaded = Value::from_float(0.0f);
+      if (env.load_parm) {
+        loaded = env.load_parm(env.parm_user, name, env.index, error);
+      }
+      Type want = Type::IntArray;
+      switch (id) {
+        case Builtin::ChfArr:
+          want = Type::FloatArray;
+          break;
+        case Builtin::ChuArr:
+        case Builtin::ChvArr:
+        case Builtin::ChqArr:
+        case Builtin::ChcArr:
+          want = Type::VecArray;
+          break;
+        case Builtin::ChmArr:
+        case Builtin::ChrArr:
+          want = Type::MatArray;
+          break;
+        case Builtin::ChsArr:
+          want = Type::StringArray;
+          break;
+        default:
+          break;
+      }
+      const bool as_bool = id == Builtin::ChbArr;
+      if (loaded.type == want && !as_bool) {
+        return loaded;
+      }
+      /* Without a list input the channel is a single value, which makes a one item array. A list
+       * of an unrelated type gives an empty array. */
+      const bool is_single = !type_is_array(loaded.type);
+      switch (want) {
+        case Type::FloatArray: {
+          Vector<float> values;
+          if (const Vector<int> *items = iarr_mut(loaded)) {
+            values.reserve(items->size());
+            for (const int item : *items) {
+              values.append(float(item));
+            }
+          }
+          else if (is_single) {
+            values.append(loaded.as_float());
+          }
+          return value_from_float_array(std::move(values));
+        }
+        case Type::VecArray: {
+          Vector<float3> values;
+          if (is_single) {
+            values.append(loaded.as_vec());
+          }
+          return value_from_vec_array(std::move(values));
+        }
+        case Type::StringArray: {
+          Vector<std::string> values;
+          if (is_single) {
+            values.append(loaded.type == Type::String ? std::string(value_string(loaded, env)) :
+                                                        std::string());
+          }
+          return value_from_string_array(std::move(values));
+        }
+        case Type::MatArray: {
+          Vector<float4x4> values;
+          if (is_single) {
+            if (loaded.type == Type::Matrix && loaded.i >= 0 && loaded.i < int(tls_mats.size())) {
+              values.append(tls_mats[loaded.i]);
+            }
+            else if (loaded.type == Type::Rotation) {
+              values.append(math::from_rotation<float4x4>(value_as_quat(loaded)));
+            }
+            else {
+              values.append(float4x4::identity());
+            }
+          }
+          return value_from_mat_array(std::move(values));
+        }
+        default:
+          break;
+      }
+      Vector<int> values;
+      if (const Vector<int> *items = iarr_mut(loaded)) {
+        values.reserve(items->size());
+        for (const int item : *items) {
+          values.append(item != 0 ? 1 : 0);
+        }
+      }
+      else if (const Vector<float> *items = farr_mut(loaded)) {
+        values.reserve(items->size());
+        for (const float item : *items) {
+          values.append(as_bool ? int(item != 0.0f) : int(item));
+        }
+      }
+      else if (is_single) {
+        values.append(as_bool ? int(loaded.as_bool()) : loaded.as_int());
+      }
+      return value_from_int_array(std::move(values));
+    }
     case Builtin::ArrayInt:
       return value_from_int_array({});
-    case Builtin::ArrayFloat:
-      return value_from_float_array({});
-    case Builtin::ArrayVec:
-      return value_from_vec_array({});
+    case Builtin::ArrayFloat: {
+      /* With arguments this is the int array to float array conversion. */
+      Vector<float> vals;
+      for (const Value &v : args) {
+        if (const Vector<float> *src = farr_mut(v)) {
+          vals.extend(*src);
+        }
+        else if (v.type == Type::IntArray) {
+          for (const int item : int_array_values(v)) {
+            vals.append(float(item));
+          }
+        }
+        else {
+          vals.append(v.as_float());
+        }
+      }
+      return value_from_float_array(std::move(vals));
+    }
+    case Builtin::ArrayVec: {
+      /* Without arguments an empty array, otherwise the items of the arguments: this converts
+       * an array of 4D vectors. */
+      Vector<float3> vals;
+      for (const Value &v : args) {
+        if (const Vector<float3> *src = varr_mut(v)) {
+          vals.extend(*src);
+        }
+        else if (const Vector<float4> *src = v4arr_mut(v)) {
+          for (const float4 &item : *src) {
+            vals.append(float3(item.x, item.y, item.z));
+          }
+        }
+        else {
+          vals.append(v.as_vec());
+        }
+      }
+      return value_from_vec_array(std::move(vals));
+    }
+    case Builtin::ArrayVec4:
+    case Builtin::ArrayColor:
+    case Builtin::ArrayRot: {
+      Vector<float4> vals;
+      for (const Value &v : args) {
+        if (const Vector<float4> *src = v4arr_mut(v)) {
+          vals.extend(*src);
+        }
+        else if (const Vector<float3> *src = varr_mut(v)) {
+          for (const float3 &item : *src) {
+            vals.append(float4(item.x, item.y, item.z, 0.0f));
+          }
+        }
+        else {
+          vals.append(v.as_vec4());
+        }
+      }
+      return value_from_vec4_array(std::move(vals),
+                                   id == Builtin::ArrayColor ? Type::ColorArray :
+                                   id == Builtin::ArrayRot   ? Type::RotArray :
+                                                               Type::Vec4Array);
+    }
     case Builtin::ArrayStr:
       return value_from_string_array({});
     case Builtin::ArrayMat:
@@ -3568,13 +4338,23 @@ Value call_builtin(const Builtin id,
       Type at = Type::IntArray;
       if (!args.is_empty()) {
         at = type_is_array(arg(0).type) ? arg(0).type : array_type_of(arg(0).type);
+        /* 2D vectors are kept as 3D vectors and small matrices as 4x4 matrices. */
+        at = array_runtime_type(at);
         for (const Value &v : args) {
           if (v.type == Type::String || v.type == Type::StringArray) {
             at = Type::StringArray;
             break;
           }
-          if (v.type == Type::Matrix || v.type == Type::MatArray) {
+          if (type_is_matrix(v.type) || v.type == Type::MatArray) {
             at = Type::MatArray;
+            break;
+          }
+          if (ELEM(v.type, Type::Vector4, Type::Color, Type::Rotation) || type_is_vec4_array(v.type))
+          {
+            /* The first argument decides between vector4, color and rotation. */
+            if (!type_is_vec4_array(at)) {
+              at = type_is_vec4_array(v.type) ? v.type : array_type_of(v.type);
+            }
             break;
           }
           if (v.type == Type::Ray || v.type == Type::RayArray) {
@@ -3590,27 +4370,47 @@ Value call_builtin(const Builtin id,
           }
         }
       }
+      /* Array arguments are concatenated, so `array(chi("list"), 5)` appends to the list. */
       if (at == Type::StringArray) {
         Vector<std::string> vals;
         for (const Value &v : args) {
-          vals.append(std::string(value_string(v, env)));
+          if (const Vector<std::string> *src = sarr_mut(v)) {
+            vals.extend(*src);
+          }
+          else {
+            vals.append(std::string(value_string(v, env)));
+          }
         }
         return value_from_string_array(std::move(vals));
       }
       if (at == Type::MatArray) {
         Vector<float4x4> vals;
         for (const Value &v : args) {
-          if (v.type == Type::Matrix && v.i >= 0 && v.i < int(tls_mats.size())) {
-            vals.append(tls_mats[v.i]);
-          }
-          else if (Vector<float4x4> *src = marr_mut(v)) {
+          if (Vector<float4x4> *src = marr_mut(v)) {
             vals.extend(*src);
           }
           else {
-            vals.append(float4x4::identity());
+            vals.append(matrix_item_from_value(v));
           }
         }
         return value_from_mat_array(std::move(vals));
+      }
+      if (type_is_vec4_array(at)) {
+        Vector<float4> vals;
+        for (const Value &v : args) {
+          if (const Vector<float4> *src = v4arr_mut(v)) {
+            vals.extend(*src);
+          }
+          else if (const Vector<float3> *src = varr_mut(v)) {
+            for (const float3 &item : *src) {
+              vals.append(float4(item.x, item.y, item.z, 0.0f));
+            }
+          }
+          else {
+            vals.append(v.as_vec4());
+          }
+        }
+        return value_from_vec4_array(std::move(vals), at);
       }
       if (at == Type::RayArray) {
         Vector<RayHit> vals;
@@ -3627,20 +4427,40 @@ Value call_builtin(const Builtin id,
       if (at == Type::VecArray) {
         Vector<float3> vals;
         for (const Value &v : args) {
-          vals.append(v.as_vec());
+          if (const Vector<float3> *src = varr_mut(v)) {
+            vals.extend(*src);
+          }
+          else {
+            vals.append(v.as_vec());
+          }
         }
         return value_from_vec_array(std::move(vals));
       }
       if (at == Type::FloatArray) {
         Vector<float> vals;
         for (const Value &v : args) {
-          vals.append(v.as_float());
+          if (const Vector<float> *src = farr_mut(v)) {
+            vals.extend(*src);
+          }
+          else if (v.type == Type::IntArray) {
+            for (const int item : int_array_values(v)) {
+              vals.append(float(item));
+            }
+          }
+          else {
+            vals.append(v.as_float());
+          }
         }
         return value_from_float_array(std::move(vals));
       }
       Vector<int> vals;
       for (const Value &v : args) {
-        vals.append(v.as_int());
+        if (v.type == Type::IntArray) {
+          vals.extend(int_array_values(v));
+        }
+        else {
+          vals.append(v.as_int());
+        }
       }
       return value_from_int_array(std::move(vals));
     }
@@ -3649,28 +4469,100 @@ Value call_builtin(const Builtin id,
       if (!type_is_array(arr.type)) {
         arr = empty_array(array_type_of(arr.type));
       }
+      /* Every further argument is one item, or an array whose items are all added. Arrays are
+       * copied before they are added, so that `append(xs, xs)` works. */
+      const int args_num = std::max(int(args.size()), 2);
       if (Vector<int> *a = materialize_int_array(arr)) {
-        a->append(arg(1).as_int());
+        for (int i = 1; i < args_num; i++) {
+          const Value &item = arg(i);
+          if (item.type == Type::IntArray) {
+            a->extend(int_array_values(item));
+          }
+          else if (item.type == Type::FloatArray) {
+            for (const float x : float_array_values(item)) {
+              a->append(int(x));
+            }
+          }
+          else {
+            a->append(item.as_int());
+          }
+        }
       }
       else if (Vector<float> *a = farr_mut(arr)) {
-        a->append(arg(1).as_float());
+        for (int i = 1; i < args_num; i++) {
+          const Value &item = arg(i);
+          if (ELEM(item.type, Type::IntArray, Type::FloatArray)) {
+            a->extend(float_array_values(item));
+          }
+          else {
+            a->append(item.as_float());
+          }
+        }
       }
       else if (Vector<float3> *a = varr_mut(arr)) {
-        a->append(arg(1).as_vec());
+        for (int i = 1; i < args_num; i++) {
+          const Value &item = arg(i);
+          if (const Vector<float3> *items = varr_mut(item)) {
+            a->extend(Vector<float3>(*items));
+          }
+          else if (const Vector<float4> *items = v4arr_mut(item)) {
+            for (const float4 &p : *items) {
+              a->append(float3(p.x, p.y, p.z));
+            }
+          }
+          else {
+            a->append(item.as_vec());
+          }
+        }
+      }
+      else if (Vector<float4> *a = v4arr_mut(arr)) {
+        for (int i = 1; i < args_num; i++) {
+          const Value &item = arg(i);
+          if (const Vector<float4> *items = v4arr_mut(item)) {
+            a->extend(Vector<float4>(*items));
+          }
+          else if (const Vector<float3> *items = varr_mut(item)) {
+            for (const float3 &p : *items) {
+              a->append(float4(p.x, p.y, p.z, 0.0f));
+            }
+          }
+          else {
+            a->append(item.as_vec4());
+          }
+        }
       }
       else if (Vector<std::string> *a = sarr_mut(arr)) {
-        a->append(std::string(value_string(arg(1), env)));
+        for (int i = 1; i < args_num; i++) {
+          const Value &item = arg(i);
+          if (const Vector<std::string> *items = sarr_mut(item)) {
+            a->extend(Vector<std::string>(*items));
+          }
+          else {
+            a->append(std::string(value_string(item, env)));
+          }
+        }
       }
       else if (Vector<float4x4> *a = marr_mut(arr)) {
-        if (arg(1).type == Type::Matrix && arg(1).i >= 0 && arg(1).i < int(tls_mats.size())) {
-          a->append(tls_mats[arg(1).i]);
-        }
-        else {
-          a->append(float4x4::identity());
+        for (int i = 1; i < args_num; i++) {
+          const Value &item = arg(i);
+          if (const Vector<float4x4> *items = marr_mut(item)) {
+            a->extend(Vector<float4x4>(*items));
+          }
+          else {
+            a->append(matrix_item_from_value(item));
+          }
         }
       }
       else if (Vector<RayHit> *a = rayarr_mut(arr)) {
-        a->append(ray_hit_from_value(arg(1)));
+        for (int i = 1; i < args_num; i++) {
+          const Value &item = arg(i);
+          if (const Vector<RayHit> *items = rayarr_mut(item)) {
+            a->extend(Vector<RayHit>(*items));
+          }
+          else {
+            a->append(ray_hit_from_value(item));
+          }
+        }
       }
       return arr;
     }
@@ -3688,15 +4580,15 @@ Value call_builtin(const Builtin id,
       else if (Vector<float3> *a = varr_mut(arr)) {
         a->insert(wrap_index(arg(1).as_int(), int(a->size()), true), arg(2).as_vec());
       }
+      else if (Vector<float4> *a = v4arr_mut(arr)) {
+        a->insert(wrap_index(arg(1).as_int(), int(a->size()), true), arg(2).as_vec4());
+      }
       else if (Vector<std::string> *a = sarr_mut(arr)) {
         a->insert(wrap_index(arg(1).as_int(), int(a->size()), true),
                   std::string(value_string(arg(2), env)));
       }
       else if (Vector<float4x4> *a = marr_mut(arr)) {
-        float4x4 m = float4x4::identity();
-        if (arg(2).type == Type::Matrix && arg(2).i >= 0 && arg(2).i < int(tls_mats.size())) {
-          m = tls_mats[arg(2).i];
-        }
+        const float4x4 m = matrix_item_from_value(arg(2));
         a->insert(wrap_index(arg(1).as_int(), int(a->size()), true), m);
       }
       else if (Vector<RayHit> *a = rayarr_mut(arr)) {
@@ -3719,6 +4611,12 @@ Value call_builtin(const Builtin id,
         }
       }
       else if (Vector<float3> *a = varr_mut(arr)) {
+        const int i = wrap_index(arg(1).as_int(), int(a->size()), false);
+        if (i >= 0) {
+          a->remove(i);
+        }
+      }
+      else if (Vector<float4> *a = v4arr_mut(arr)) {
         const int i = wrap_index(arg(1).as_int(), int(a->size()), false);
         if (i >= 0) {
           a->remove(i);
@@ -3763,6 +4661,245 @@ Value call_builtin(const Builtin id,
             a->remove(i);
           }
         }
+      }
+      else if (Vector<float4> *a = v4arr_mut(arr)) {
+        const float4 x = arg(1).as_vec4();
+        for (int i = int(a->size()) - 1; i >= 0; i--) {
+          if ((*a)[i] == x) {
+            a->remove(i);
+          }
+        }
+      }
+      return arr;
+    }
+    case Builtin::ArrayMin:
+    case Builtin::ArrayMax: {
+      /* An empty array gives zero. Vectors are compared per component, like `min(a, b)`. */
+      const bool is_min = id == Builtin::ArrayMin;
+      const Value &arr = arg(0);
+      if (arr.type == Type::IntArray) {
+        const Vector<int> values = int_array_values(arr);
+        if (values.is_empty()) {
+          return Value::from_int(0);
+        }
+        return Value::from_int(is_min ? *std::min_element(values.begin(), values.end()) :
+                                        *std::max_element(values.begin(), values.end()));
+      }
+      if (const Vector<float> *a = farr_mut(arr)) {
+        if (a->is_empty()) {
+          return Value::from_float(0.0f);
+        }
+        return Value::from_float(is_min ? *std::min_element(a->begin(), a->end()) :
+                                          *std::max_element(a->begin(), a->end()));
+      }
+      if (const Vector<float3> *a = varr_mut(arr)) {
+        if (a->is_empty()) {
+          return Value::from_vec(float3(0.0f));
+        }
+        float3 result = a->first();
+        for (const float3 &item : *a) {
+          result = is_min ? math::min(result, item) : math::max(result, item);
+        }
+        return Value::from_vec(result);
+      }
+      if (const Vector<std::string> *a = sarr_mut(arr)) {
+        if (a->is_empty()) {
+          return intern_runtime_string(env, "");
+        }
+        return intern_runtime_string(env,
+                                     is_min ? *std::min_element(a->begin(), a->end()) :
+                                              *std::max_element(a->begin(), a->end()));
+      }
+      return Value::from_float(0.0f);
+    }
+    case Builtin::ArraySum: {
+      const Value &arr = arg(0);
+      if (arr.type == Type::IntArray) {
+        int64_t total = 0;
+        for (const int item : int_array_values(arr)) {
+          total += item;
+        }
+        return Value::from_int(int(total));
+      }
+      if (const Vector<float> *a = farr_mut(arr)) {
+        double total = 0.0;
+        for (const float item : *a) {
+          total += double(item);
+        }
+        return Value::from_float(float(total));
+      }
+      if (const Vector<float3> *a = varr_mut(arr)) {
+        float3 total(0.0f);
+        for (const float3 &item : *a) {
+          total += item;
+        }
+        return Value::from_vec(total);
+      }
+      return Value::from_float(0.0f);
+    }
+    case Builtin::ArrayUnique: {
+      /* A new array with the first occurrence of every value, in the original order. */
+      const Value &arr = arg(0);
+      if (arr.type == Type::IntArray) {
+        Set<int> seen;
+        Vector<int> result;
+        for (const int item : int_array_values(arr)) {
+          if (seen.add(item)) {
+            result.append(item);
+          }
+        }
+        return value_from_int_array(std::move(result));
+      }
+      if (const Vector<float> *a = farr_mut(arr)) {
+        Set<float> seen;
+        Vector<float> result;
+        for (const float item : *a) {
+          /* Adding zero makes -0 and +0 the same key. */
+          if (seen.add(item + 0.0f)) {
+            result.append(item);
+          }
+        }
+        return value_from_float_array(std::move(result));
+      }
+      if (const Vector<float3> *a = varr_mut(arr)) {
+        Set<float3> seen;
+        Vector<float3> result;
+        for (const float3 &item : *a) {
+          if (seen.add(item + float3(0.0f))) {
+            result.append(item);
+          }
+        }
+        return value_from_vec_array(std::move(result));
+      }
+      if (const Vector<std::string> *a = sarr_mut(arr)) {
+        Set<std::string> seen;
+        Vector<std::string> result;
+        for (const std::string &item : *a) {
+          if (seen.add(item)) {
+            result.append(item);
+          }
+        }
+        return value_from_string_array(std::move(result));
+      }
+      return arr;
+    }
+    case Builtin::ArrayUnion:
+    case Builtin::ArraySubtract:
+    case Builtin::ArrayIntersect: {
+      const Value &a = arg(0);
+      const Value &b = arg(1);
+      if (a.type == Type::IntArray && b.type == Type::IntArray) {
+        const Vector<int> items_a = int_array_values(a);
+        const Vector<int> items_b = int_array_values(b);
+        return value_from_int_array(array_set_operation<int>(id, items_a, items_b));
+      }
+      if (ELEM(a.type, Type::IntArray, Type::FloatArray) &&
+          ELEM(b.type, Type::IntArray, Type::FloatArray))
+      {
+        /* Mixing an int array with a float array works on floats. */
+        const Vector<float> items_a = float_array_values(a);
+        const Vector<float> items_b = float_array_values(b);
+        return value_from_float_array(array_set_operation<float>(id, items_a, items_b));
+      }
+      const Vector<float3> *vectors_a = varr_mut(a);
+      const Vector<float3> *vectors_b = varr_mut(b);
+      if (vectors_a && vectors_b) {
+        return value_from_vec_array(array_set_operation<float3>(id, *vectors_a, *vectors_b));
+      }
+      const Vector<std::string> *strings_a = sarr_mut(a);
+      const Vector<std::string> *strings_b = sarr_mut(b);
+      if (strings_a && strings_b) {
+        return value_from_string_array(
+            array_set_operation<std::string>(id, *strings_a, *strings_b));
+      }
+      return a;
+    }
+    case Builtin::ArrayFind: {
+      /* Indices of every item that equals the value, in order. */
+      const Value &arr = arg(0);
+      const Value &value = arg(1);
+      Vector<int> result;
+      if (arr.type == Type::IntArray) {
+        const Vector<int> values = int_array_values(arr);
+        if (value.type == Type::Float) {
+          const float x = value.as_float();
+          for (const int i : values.index_range()) {
+            if (float(values[i]) == x) {
+              result.append(i);
+            }
+          }
+        }
+        else {
+          const int x = value.as_int();
+          for (const int i : values.index_range()) {
+            if (values[i] == x) {
+              result.append(i);
+            }
+          }
+        }
+      }
+      else if (const Vector<float> *a = farr_mut(arr)) {
+        const float x = value.as_float();
+        for (const int i : a->index_range()) {
+          if ((*a)[i] == x) {
+            result.append(i);
+          }
+        }
+      }
+      else if (const Vector<float3> *a = varr_mut(arr)) {
+        const float3 x = value.as_vec();
+        for (const int i : a->index_range()) {
+          if ((*a)[i] == x) {
+            result.append(i);
+          }
+        }
+      }
+      else if (const Vector<float4> *a = v4arr_mut(arr)) {
+        const float4 x = value.as_vec4();
+        for (const int i : a->index_range()) {
+          if ((*a)[i] == x) {
+            result.append(i);
+          }
+        }
+      }
+      else if (const Vector<std::string> *a = sarr_mut(arr)) {
+        const StringRef x = value_string(value, env);
+        for (const int i : a->index_range()) {
+          if (StringRef((*a)[i]) == x) {
+            result.append(i);
+          }
+        }
+      }
+      return value_from_int_array(std::move(result));
+    }
+    case Builtin::ArraySlice: {
+      const Value &arr = arg(0);
+      const Vector<int> indices = slice_indices(array_len(arr),
+                                                arg(1).as_int(),
+                                                arg(2).as_int(),
+                                                args.size() > 2,
+                                                args.size() > 3 ? arg(3).as_int() : 1);
+      if (arr.type == Type::IntArray) {
+        const Vector<int> values = int_array_values(arr);
+        return value_from_int_array(items_at<int>(values, indices));
+      }
+      if (const Vector<float> *a = farr_mut(arr)) {
+        return value_from_float_array(items_at<float>(*a, indices));
+      }
+      if (const Vector<float3> *a = varr_mut(arr)) {
+        return value_from_vec_array(items_at<float3>(*a, indices));
+      }
+      if (const Vector<float4> *a = v4arr_mut(arr)) {
+        return value_from_vec4_array(items_at<float4>(*a, indices), arr.type);
+      }
+      if (const Vector<std::string> *a = sarr_mut(arr)) {
+        return value_from_string_array(items_at<std::string>(*a, indices));
+      }
+      if (const Vector<float4x4> *a = marr_mut(arr)) {
+        return value_from_mat_array(items_at<float4x4>(*a, indices));
+      }
+      if (const Vector<RayHit> *a = rayarr_mut(arr)) {
+        return value_from_ray_array(items_at<RayHit>(*a, indices));
       }
       return arr;
     }
@@ -4549,7 +5686,7 @@ static bool vm_interp(const Program &program,
         break;
       case Op::CallUser: {
         if (in.imm < 0 || in.imm >= int(program.user_fns.size())) {
-          r_error = "无效的函数调用";
+          r_error = "Invalid function call";
           return false;
         }
         const UserFn &fn = program.user_fns[in.imm];
@@ -4563,6 +5700,11 @@ static bool vm_interp(const Program &program,
         /* `return f(...)` — reuse this frame (linear recursion stays O(n)). */
         const bool tail = (pc + 1 < code_n && code[pc + 1].op == Op::Return);
         if (tail && fn_n <= loc_n) {
+          /* The frame is reused, so the depth check below never triggers: use the loop budget. */
+          if (++jumps > max_jumps) {
+            r_error = "Function recursion is too deep";
+            return false;
+          }
           for (int i = 0; i < narg; i++) {
             loc[i] = arg_buf[i];
           }
@@ -4570,7 +5712,7 @@ static bool vm_interp(const Program &program,
           continue;
         }
         if (int(frames.size()) >= max_depth) {
-          r_error = "函数递归太深";
+          r_error = "Function recursion is too deep";
           return false;
         }
         const int new_base = local_top;
@@ -4827,6 +5969,9 @@ void optimize_program(Program &program)
                   Builtin::ArrayInt,
                   Builtin::ArrayFloat,
                   Builtin::ArrayVec,
+                  Builtin::ArrayVec4,
+                  Builtin::ArrayColor,
+                  Builtin::ArrayRot,
                   Builtin::ArrayStr,
                   Builtin::ArrayMat,
                   Builtin::ArrayRay))
@@ -5550,6 +6695,9 @@ bool builtin_is_uniform_value(const Builtin id)
     case Builtin::ArrayInt:
     case Builtin::ArrayFloat:
     case Builtin::ArrayVec:
+    case Builtin::ArrayVec4:
+    case Builtin::ArrayColor:
+    case Builtin::ArrayRot:
     case Builtin::ArrayStr:
     case Builtin::ArrayMat:
     case Builtin::ArrayRay:
@@ -6658,7 +7806,7 @@ static bool vm_run_tiles_scalar(const Program &program,
                 case Op::CallUser: {
                   if (in.imm < 0 || in.imm >= int(program.user_fns.size())) {
                     lane_ok = false;
-                    err = "无效的函数调用";
+                    err = "Invalid function call";
                     break;
                   }
                   const UserFn &fn = program.user_fns[in.imm];
@@ -7688,7 +8836,7 @@ bool vm_run_array(const Program &program,
         r_error = "array exec does not support fused sample gathers";
         return false;
       case Op::CallUser:
-        r_error = "array exec 不支持用户函数";
+        r_error = "array exec does not support user functions";
         return false;
       case Op::Pow: {
         const Value b = pop();

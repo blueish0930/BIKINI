@@ -11,6 +11,9 @@
 
 #include "BLI_array.hh"
 #include "BLI_function_ref.hh"
+#include "BLI_listbase.hh"
+#include "BLI_math_matrix.hh"
+#include "BLI_math_quaternion_types.hh"
 #include "BLI_set.hh"
 #include "BLI_string.hh"
 
@@ -22,6 +25,9 @@
 #include <optional>
 #include <string>
 
+#include <fmt/format.h>
+
+#include "BKE_colortools.hh"
 #include "BKE_context.hh"
 #include "BKE_geometry_fields.hh"
 #include "BKE_report.hh"
@@ -30,7 +36,11 @@
 
 #include "BLO_read_write.hh"
 
+#include "BLT_translation.hh"
+#include "BLT_translation_any_thread.hh"
+
 #include "DNA_array_utils.hh"
+#include "DNA_color_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_node_types.h"
 
@@ -51,6 +61,7 @@
 #include "FN_field_evaluation.hh"
 
 #include "NOD_geo_wrangle.hh"
+#include "NOD_geometry_nodes_list.hh"
 #include "NOD_socket_items_blend.hh"
 #include "NOD_socket_items_ops.hh"
 #include "NOD_socket_items_ui.hh"
@@ -377,6 +388,41 @@ static int wrangle_call_help(const StringRef fn, char (*out)[192], const int max
     row("clamp(x, lo, hi)");
     return n;
   }
+  if (fn == "min" || fn == "max") {
+    row(fn == "min" ? "min(a, b)  smaller value, per component for vectors" :
+                      "max(a, b)  larger value, per component for vectors");
+    row(fn == "min" ? "min(arr)  smallest item of an int, float, vector or string array" :
+                      "max(arr)  largest item of an int, float, vector or string array");
+    return n;
+  }
+  if (fn == "sum") {
+    row("sum(arr)  total of an int, float or vector array");
+    return n;
+  }
+  if (fn == "union" || fn == "subtract" || fn == "intersect") {
+    row(fn == "union"    ? "union(a, b)  -> every value that is in a or in b" :
+        fn == "subtract" ? "subtract(a, b)  -> the values of a that are not in b" :
+                           "intersect(a, b)  -> the values that are in both a and b");
+    row("  new array without duplicates, in the order of a; a and b are not changed");
+    row("  a and b: two int, float, vector or string arrays");
+    return n;
+  }
+  if (fn == "find") {
+    row("find(arr, value)  -> int[] with the index of every match");
+    row("  empty when the value is not in the array: len(find(arr, x)) == 0");
+    return n;
+  }
+  if (fn == "slice") {
+    row("slice(arr, start, end, step)  -> new array, end is not included");
+    row("  negative indices count from the end: slice(arr, -3) is the last three");
+    row("  end and step are optional, a negative step walks backwards");
+    return n;
+  }
+  if (fn == "unique") {
+    row("unique(arr)  -> new array without duplicates, first occurrences in order");
+    row("  arr itself is not changed: arr = unique(arr);");
+    return n;
+  }
   if (fn == "mix" || fn == "lerp") {
     row("mix(a, b, t)  t in 0..1");
     return n;
@@ -389,6 +435,52 @@ static int wrangle_call_help(const StringRef fn, char (*out)[192], const int max
   if (fn == "smooth") {
     row("smooth(value)  hermite 0..1 (clamped)");
     row("smooth(min, max, value)  smoothstep");
+    return n;
+  }
+  if (fn == "chramp") {
+    row("chramp(\"name\", position)  color ramp input, position 0..1");
+    row("  color c = chramp(...)   float f = chramp(...)");
+    row("  Compile creates the Color Ramp input in the Constant panel");
+    return n;
+  }
+  if (fn == "chcurve") {
+    row("chcurve(\"name\", value, factor)  curve input, factor is optional");
+    row("  float value: float curve    vector value: vector curve");
+    row("  color value: color curve    returns the type of value");
+    return n;
+  }
+  if (fn == "hsvtorgb" || fn == "rgbtohsv") {
+    row("hsvtorgb(h, s, v) / hsvtorgb(hsv)   rgbtohsv(r, g, b) / rgbtohsv(rgb)");
+    row("  all components 0..1, hue wraps around");
+    return n;
+  }
+  if (fn == "rotate") {
+    row("rotate(a, b)  multiply two rotations");
+    row("rotate(x, angle, axis)  x: vector, matrix, matrix3 or rotation");
+    row("  angle in radians, returns the rotated x");
+    return n;
+  }
+  if (fn == "quaternion" || fn == "rotation" || fn == "quat") {
+    row("quaternion(x, y, z, w)");
+    row("quaternion(angle, axis)  angle in radians");
+    row("quaternion(matrix)  quaternion(euler_xyz)");
+    return n;
+  }
+  if (fn == "eulertoquaternion" || fn == "quaterniontoeuler") {
+    row("eulertoquaternion(radians, order)   quaterniontoeuler(q, order)");
+    row("  order: 0 xyz, 1 xzy, 2 yxz, 3 yzx, 4 zxy, 5 zyx  or \"xyz\"");
+    return n;
+  }
+  if (fn == "lookat") {
+    row("lookat(from, to, up)  -> matrix3");
+    row("  -Z points from `from` to `to`, Y towards up (default +Z)");
+    return n;
+  }
+  if (fn == "array") {
+    row("array(a, b, ...)  values and arrays are joined into one array");
+    row("array(chi(\"name\"))  a channel here becomes a List input");
+    row("  chi/chb: int[]  chf: float[]  chs: string[]");
+    row("  chu/chv/chq/chc: vector[]  chm/chr: matrix[]");
     return n;
   }
   /* Fallback: signature from the completion table so `fn(` is never just a name list. */
@@ -521,6 +613,24 @@ static void wrangle_suggest_fn(const char *str,
   Vector<expression::CompletionItem> all_items;
   Vector<const expression::CompletionItem *> matches;
   collect_matches(match_token, is_member, show_all, owned, all_items, matches);
+  /* Tab inserts the first row: an exact match first, then the shortest names, which are the
+   * closest to what is typed, then alphabetically. Ctrl-Space on nothing keeps the table order,
+   * which is grouped by topic. */
+  if (!match_token.is_empty()) {
+    auto key = [](const expression::CompletionItem *item) {
+      return item->insert_text.is_empty() ? item->name : item->insert_text;
+    };
+    std::stable_sort(matches.begin(),
+                     matches.end(),
+                     [&](const expression::CompletionItem *a, const expression::CompletionItem *b) {
+                       const StringRef key_a = key(a);
+                       const StringRef key_b = key(b);
+                       if (key_a.size() != key_b.size()) {
+                         return key_a.size() < key_b.size();
+                       }
+                       return key_a < key_b;
+                     });
+  }
   int n = 0;
   for (const expression::CompletionItem *item : matches) {
     if (n >= max_num) {
@@ -533,14 +643,14 @@ static void wrangle_suggest_fn(const char *str,
                                 (item->insert_text.is_empty() ? item->name : item->insert_text) :
                                 item->usage;
     const StringRef ins = item->insert_text.is_empty() ? item->name : item->insert_text;
+    /* `text \x1f parameter types \x1f category`, the list draws the three apart. */
     std::string packed = std::string(shown);
+    packed.push_back('\x1f');
     if (item->kind == expression::CompletionKind::Function) {
-      const StringRef types = vex::function_param_types(item->name);
-      if (!types.is_empty()) {
-        packed.push_back('\x1f');
-        packed += types;
-      }
+      packed += vex::function_param_types(item->name);
     }
+    packed.push_back('\x1f');
+    packed += item->category_label;
     bool dup = false;
     for (int i = 0; i < n; i++) {
       if (StringRef(packed) == StringRef(out[i])) {
@@ -569,6 +679,45 @@ static void draw_geo_extend_socket(CustomSocketDrawParams &params)
   RNA_boolean_set(&op_ptr, "show_dialog", false);
   RNA_boolean_set(&op_ptr, "init_from_active", false);
   RNA_enum_set(&op_ptr, "socket_type", SOCK_GEOMETRY);
+}
+
+struct ChannelParmRef {
+  std::string name;
+  eNodeSocketDatatype type = SOCK_FLOAT;
+  bool is_code = false;
+  /** Passed directly to `array()`, which reads a whole list. */
+  bool is_list = false;
+  /** Vector size: `chu` is 2D, `chv` is 3D and `chq` is 4D, like the `u@`/`v@`/`q@` attributes. */
+  int dimensions = 3;
+};
+
+static vex::CompileOutput wrangle_compile_editor_preview(StringRef code);
+
+static Vector<ChannelParmRef> wrangle_scan_channel_parms(StringRef src);
+
+/**
+ * How the compiled code uses the channel behind \a item. The list shape and the vector size follow
+ * the code instead of being stored on the item, so a socket can never disagree with what the
+ * script reads.
+ */
+static const ChannelParmRef *wrangle_item_channel(const NodeGeometryWrangleInputItem &item,
+                                                  const Span<ChannelParmRef> channel_parms)
+{
+  if (!item.name) {
+    return nullptr;
+  }
+  for (const ChannelParmRef &parm : channel_parms) {
+    if (parm.name == item.name) {
+      return &parm;
+    }
+  }
+  return nullptr;
+}
+
+/** A channel used as `array(chi("name"))` reads a whole list. Code inputs are never lists. */
+static bool wrangle_channel_is_list(const ChannelParmRef *parm)
+{
+  return parm && parm->is_list && !parm->is_code;
 }
 
 static void node_declare(NodeDeclarationBuilder &b)
@@ -612,8 +761,52 @@ static void node_declare(NodeDeclarationBuilder &b)
 
   auto &constant_panel = b.add_panel("Constant"_ustr)
                              .description(
-                                 "Single values from chf/chi/... and code text from cht, created "
-                                 "by Compile");
+                                 "Single values from chf/chi/..., lists from channels inside "
+                                 "array(), ramps and curves from chramp/chcurve and code text "
+                                 "from cht, created by Compile");
+  const Vector<ChannelParmRef> channel_parms = wrangle_scan_channel_parms(
+      storage.code_run ? storage.code_run : "");
+  /* Whether a `chcurve()` is a float, vector or color curve follows the type of the value that
+   * the script passes to it, which only the compiler knows. */
+  Vector<vex::Program::RampParm> ramp_parms;
+  bool ramp_parms_known = false;
+  for (const ChannelParmRef &parm : channel_parms) {
+    if (parm.type == SOCK_CURVE) {
+      const vex::CompileOutput compiled = wrangle_compile_editor_preview(
+          storage.code_run ? storage.code_run : "");
+      if (compiled.program) {
+        ramp_parms = compiled.program->ramp_parms;
+        ramp_parms_known = true;
+      }
+      break;
+    }
+  }
+  auto curve_subtype_for_item = [&](const NodeGeometryWrangleInputItem &item,
+                                    const StringRef identifier) {
+    if (ramp_parms_known) {
+      for (const vex::Program::RampParm &parm : ramp_parms) {
+        if (item.name && parm.name == item.name) {
+          switch (parm.kind) {
+            case vex::RampKind::VectorCurve:
+              return NODE_SOCKET_CURVE_VECTOR;
+            case vex::RampKind::ColorCurve:
+              return NODE_SOCKET_CURVE_COLOR;
+            default:
+              return NODE_SOCKET_CURVE_FLOAT;
+          }
+        }
+      }
+    }
+    /* The code does not compile right now: keep the curve that is already there. */
+    for (const bNodeSocket &socket : node->inputs) {
+      if (socket.type == SOCK_CURVE && identifier == StringRef(socket.identifier)) {
+        if (const auto *value = socket.default_value_typed<bNodeSocketValueCurve>()) {
+          return value->curve_subtype;
+        }
+      }
+    }
+    return NODE_SOCKET_CURVE_FLOAT;
+  };
   for (const int i : IndexRange(storage.input_items.items_num)) {
     const NodeGeometryWrangleInputItem &item = storage.input_items.items[i];
     if (wrangle_item_kind(item) != GEO_NODE_WRANGLE_ITEM_CONSTANT) {
@@ -622,18 +815,29 @@ static void node_declare(NodeDeclarationBuilder &b)
     const eNodeSocketDatatype socket_type = eNodeSocketDatatype(item.socket_type);
     const UString identifier{WrangleInputItemsAccessor::socket_identifier_for_item(item)};
     const UString name{item.name ? item.name : ""};
-    constant_panel.add_input(socket_type, name, identifier)
-        .socket_name_ptr(&tree->id, *WrangleInputItemsAccessor::item_srna, &item, "name")
-        .structure_type(StructureType::Single);
+    const ChannelParmRef *parm = wrangle_item_channel(item, channel_parms);
+    BaseSocketDeclarationBuilder *input = nullptr;
+    if (socket_type == SOCK_VECTOR) {
+      input = &constant_panel.add_input<decl::Vector>(name, identifier)
+                   .dimensions(parm ? parm->dimensions : 3);
+    }
+    else if (socket_type == SOCK_CURVE) {
+      input = &constant_panel.add_input<decl::Curve>(name, identifier)
+                   .subtype(curve_subtype_for_item(item, identifier.ref()));
+    }
+    else {
+      input = &constant_panel.add_input(socket_type, name, identifier);
+    }
+    input->socket_name_ptr(&tree->id, *WrangleInputItemsAccessor::item_srna, &item, "name");
+    if (wrangle_channel_is_list(parm)) {
+      input->structure_type(StructureType::List).hide_value();
+    }
+    else {
+      input->structure_type(StructureType::Single);
+    }
   }
 
 }
-
-struct ChannelParmRef {
-  std::string name;
-  eNodeSocketDatatype type = SOCK_FLOAT;
-  bool is_code = false;
-};
 
 struct TextParmValue {
   std::string name;
@@ -653,7 +857,8 @@ static std::optional<eNodeSocketDatatype> wrangle_channel_fn_type(const StringRe
   if (ident == "chi") {
     return SOCK_INT;
   }
-  if (ident == "chv") {
+  /* Like the attribute prefixes: `u@` is a 2D vector, `q@` a 4D vector and `r@` a rotation. */
+  if (ELEM(ident, "chu", "chv", "chq")) {
     return SOCK_VECTOR;
   }
   if (ident == "chb") {
@@ -665,11 +870,17 @@ static std::optional<eNodeSocketDatatype> wrangle_channel_fn_type(const StringRe
   if (ident == "chm") {
     return SOCK_MATRIX;
   }
-  if (ident == "chq") {
+  if (ident == "chr") {
     return SOCK_ROTATION;
   }
   if (ident == "chs" || ident == "cht") {
     return SOCK_STRING;
+  }
+  if (ident == "chramp") {
+    return SOCK_COLOR_RAMP;
+  }
+  if (ident == "chcurve") {
+    return SOCK_CURVE;
   }
   return std::nullopt;
 }
@@ -678,6 +889,16 @@ static Vector<ChannelParmRef> wrangle_scan_channel_parms(const StringRef src)
 {
   Vector<ChannelParmRef> out;
   const int n = int(src.size());
+  /* For every open parenthesis, whether it starts the arguments of an `array(` call. */
+  Vector<bool> array_parens;
+  StringRef last_ident;
+  int last_ident_end = -1;
+  auto skip_space = [&](int k) {
+    while (k < n && ELEM(src[k], ' ', '\t', '\n', '\r')) {
+      k++;
+    }
+    return k;
+  };
   int i = 0;
   while (i < n) {
     if (src[i] == '/' && i + 1 < n && src[i + 1] == '/') {
@@ -717,6 +938,8 @@ static Vector<ChannelParmRef> wrangle_scan_channel_parms(const StringRef src)
         i++;
       }
       const StringRef ident = src.substr(ident_start, i - ident_start);
+      last_ident = ident;
+      last_ident_end = i;
       const std::optional<eNodeSocketDatatype> type = wrangle_channel_fn_type(ident);
       if (!type) {
         continue;
@@ -751,23 +974,176 @@ static Vector<ChannelParmRef> wrangle_scan_channel_parms(const StringRef src)
       if (j >= n || inner.empty()) {
         continue;
       }
+      bool is_list = false;
+      if (ident != "cht" && !array_parens.is_empty() && array_parens.last()) {
+        /* Only a whole argument counts: `array(chi("a"), 2)` but not `array(chi("a") + 1)`. */
+        int before = ident_start - 1;
+        while (before >= 0 && ELEM(src[before], ' ', '\t', '\n', '\r')) {
+          before--;
+        }
+        int after = skip_space(j + 1);
+        if (before >= 0 && ELEM(src[before], '(', ',') && after < n && src[after] == ')') {
+          after = skip_space(after + 1);
+          is_list = after < n && ELEM(src[after], ',', ')');
+        }
+      }
+      /* The channel call's own parenthesis was consumed here; its `)` is popped by the loop. */
+      array_parens.append(false);
       i = j + 1;
       bool seen = false;
       for (ChannelParmRef &prev : out) {
         if (prev.name == inner) {
           prev.is_code |= ident == "cht";
+          prev.is_list |= is_list;
           seen = true;
           break;
         }
       }
       if (!seen) {
-        out.append({std::move(inner), *type, ident == "cht"});
+        const int dimensions = (ident == "chu") ? 2 : (ident == "chq") ? 4 : 3;
+        out.append({std::move(inner), *type, ident == "cht", is_list, dimensions});
       }
       continue;
+    }
+    if (src[i] == '(') {
+      array_parens.append(last_ident == "array" && skip_space(last_ident_end) == i);
+    }
+    else if (src[i] == ')' && !array_parens.is_empty()) {
+      array_parens.pop_last();
     }
     i++;
   }
   return out;
+}
+
+/**
+ * Copy a native list into the array that `array(chi("name"))` returns. VEX has no color or
+ * rotation arrays, so colors become RGB vectors and rotations become matrices.
+ */
+static void wrangle_read_list(const GListPtr &values,
+                              const eNodeSocketDatatype socket_type,
+                              vex::ChList &r_list)
+{
+  using Kind = vex::ChList::Kind;
+  const CPPType *type = nullptr;
+  switch (socket_type) {
+    case SOCK_INT:
+      type = &CPPType::get<int>();
+      r_list.kind = Kind::Int;
+      break;
+    case SOCK_BOOLEAN:
+      type = &CPPType::get<bool>();
+      r_list.kind = Kind::Int;
+      break;
+    case SOCK_FLOAT:
+      type = &CPPType::get<float>();
+      r_list.kind = Kind::Float;
+      break;
+    case SOCK_VECTOR:
+      /* 2D and 4D vectors are read below, a vector array holds their first three components. */
+      type = &CPPType::get<float3>();
+      r_list.kind = Kind::Vector;
+      break;
+    case SOCK_RGBA:
+      type = &CPPType::get<ColorGeometry4f>();
+      r_list.kind = Kind::Vector;
+      break;
+    case SOCK_MATRIX:
+      type = &CPPType::get<float4x4>();
+      r_list.kind = Kind::Matrix;
+      break;
+    case SOCK_ROTATION:
+      type = &CPPType::get<math::Quaternion>();
+      r_list.kind = Kind::Matrix;
+      break;
+    case SOCK_STRING:
+      type = &CPPType::get<std::string>();
+      r_list.kind = Kind::String;
+      break;
+    default:
+      return;
+  }
+  if (!values) {
+    return;
+  }
+  GVArray varray = values->varray();
+  if (socket_type == SOCK_VECTOR && varray.type().is<float2>()) {
+    const VArray<float2> src = varray.typed<float2>();
+    r_list.vectors.reserve(src.size());
+    for (const int64_t i : src.index_range()) {
+      const float2 value = src[i];
+      r_list.vectors.append(float3(value.x, value.y, 0.0f));
+    }
+    return;
+  }
+  if (socket_type == SOCK_VECTOR && varray.type().is<float4>()) {
+    const VArray<float4> src = varray.typed<float4>();
+    r_list.vectors.reserve(src.size());
+    for (const int64_t i : src.index_range()) {
+      r_list.vectors.append(float3(src[i]));
+    }
+    return;
+  }
+  if (varray.type() != *type) {
+    varray = bke::get_implicit_type_conversions().try_convert(std::move(varray), *type);
+    if (!varray) {
+      return;
+    }
+  }
+  const int64_t size = varray.size();
+  switch (socket_type) {
+    case SOCK_INT:
+      r_list.ints.resize(size);
+      varray.typed<int>().materialize(r_list.ints);
+      break;
+    case SOCK_BOOLEAN: {
+      const VArray<bool> src = varray.typed<bool>();
+      r_list.ints.reserve(size);
+      for (const int64_t i : IndexRange(size)) {
+        r_list.ints.append(src[i] ? 1 : 0);
+      }
+      break;
+    }
+    case SOCK_FLOAT:
+      r_list.floats.resize(size);
+      varray.typed<float>().materialize(r_list.floats);
+      break;
+    case SOCK_VECTOR:
+      r_list.vectors.resize(size);
+      varray.typed<float3>().materialize(r_list.vectors);
+      break;
+    case SOCK_RGBA: {
+      const VArray<ColorGeometry4f> src = varray.typed<ColorGeometry4f>();
+      r_list.vectors.reserve(size);
+      for (const int64_t i : IndexRange(size)) {
+        const ColorGeometry4f color = src[i];
+        r_list.vectors.append(float3(color.r, color.g, color.b));
+      }
+      break;
+    }
+    case SOCK_MATRIX:
+      r_list.matrices.resize(size);
+      varray.typed<float4x4>().materialize(r_list.matrices);
+      break;
+    case SOCK_ROTATION: {
+      const VArray<math::Quaternion> src = varray.typed<math::Quaternion>();
+      r_list.matrices.reserve(size);
+      for (const int64_t i : IndexRange(size)) {
+        r_list.matrices.append(math::from_rotation<float4x4>(src[i]));
+      }
+      break;
+    }
+    case SOCK_STRING: {
+      const VArray<std::string> src = varray.typed<std::string>();
+      r_list.strings.reserve(size);
+      for (const int64_t i : IndexRange(size)) {
+        r_list.strings.append(src[i]);
+      }
+      break;
+    }
+    default:
+      break;
+  }
 }
 
 static const std::string *wrangle_find_text_parm(const Span<TextParmValue> values,
@@ -885,9 +1261,10 @@ static bool wrangle_expand_text_code(const StringRef src,
       j++;
     }
     if (j >= n || !ELEM(src[j], '"', '\'')) {
-      r_error = std::string(ident) +
-                " expects a quoted parameter name, for example " + std::string(ident) +
-                "(\"name\")";
+      r_error = fmt::format(
+          fmt::runtime(BLT_translate_do_tooltip_any_thread("{} expects a quoted parameter name, for example {}(\"name\")")),
+          std::string(ident),
+          std::string(ident));
       return false;
     }
     const char quote = src[j++];
@@ -902,7 +1279,8 @@ static bool wrangle_expand_text_code(const StringRef src,
       }
     }
     if (j >= n) {
-      r_error = "Unterminated parameter name in " + std::string(ident);
+      r_error = fmt::format(fmt::runtime(BLT_translate_do_tooltip_any_thread("Unterminated parameter name in {}")),
+                            std::string(ident));
       return false;
     }
     j++;
@@ -910,12 +1288,14 @@ static bool wrangle_expand_text_code(const StringRef src,
       j++;
     }
     if (j >= n || src[j] != ')') {
-      r_error = std::string(ident) + " expects exactly one quoted parameter name";
+      r_error = fmt::format(fmt::runtime(BLT_translate_do_tooltip_any_thread("{} expects exactly one quoted parameter name")),
+                            std::string(ident));
       return false;
     }
     j++;
     if (name.empty()) {
-      r_error = std::string(ident) + " parameter name cannot be empty";
+      r_error = fmt::format(fmt::runtime(BLT_translate_do_tooltip_any_thread("{} parameter name cannot be empty")),
+                            std::string(ident));
       return false;
     }
     if (const std::string *value = wrangle_find_text_parm(values, name)) {
@@ -934,7 +1314,9 @@ static bool wrangle_expand_text_code(const StringRef src,
       r_code.append(size_t(std::max(j - token_start - 1, 0)), ' ');
     }
     else {
-      r_error = "Missing cht parameter '" + name + "'; click Compile to create its input";
+      r_error = fmt::format(
+          fmt::runtime(BLT_translate_do_tooltip_any_thread("Missing cht parameter '{}'; click Compile to create its input")),
+          name);
       return false;
     }
     i = j;
@@ -1146,6 +1528,8 @@ static void node_layout(ui::Layout &layout, bContext * /*C*/, PointerRNA *ptr)
   RNA_int_set(&edit_ptr, "node_identifier", node.identifier);
   PointerRNA op_ptr = compile_row.op("NODE_OT_wrangle_compile", IFACE_("Compile"), ICON_FILE_REFRESH);
   RNA_int_set(&op_ptr, "node_identifier", node.identifier);
+  PointerRNA docs_ptr = compile_row.op("WM_OT_url_open", IFACE_("Docs"), ICON_HELP);
+  RNA_string_set(&docs_ptr, "url", vex::docs_url);
 
   ui::Block *block = layout.block();
   const int64_t buttons_before = block ? block->buttons_ptrs.size() : 0;
@@ -1280,6 +1664,19 @@ static void node_geo_exec(GeoNodeExecParams params)
   const Vector<ChannelParmRef> channel_parms = wrangle_scan_channel_parms(code);
 
   Vector<vex::ChField> parms;
+  Vector<vex::ChList> lists;
+  Vector<vex::ChRamp> ramps;
+  /* Evaluating a curve needs its tables, building them on the shared socket value would race
+   * with other evaluations of this node. */
+  struct OwnedCurves {
+    Vector<CurveMapping *> curves;
+    ~OwnedCurves()
+    {
+      for (CurveMapping *curve : curves) {
+        BKE_curvemapping_free(curve);
+      }
+    }
+  } owned_curves;
   Vector<TextParmValue> text_values;
   std::string text_error;
   Vector<GeometrySet> extra_owned;
@@ -1300,6 +1697,34 @@ static void node_geo_exec(GeoNodeExecParams params)
     if (kind != GEO_NODE_WRANGLE_ITEM_CONSTANT) {
       continue;
     }
+    if (wrangle_channel_is_list(wrangle_item_channel(item, channel_parms))) {
+      vex::ChList list;
+      list.name = item.name;
+      wrangle_read_list(params.extract_input<GListPtr>(UString(identifier)),
+                        eNodeSocketDatatype(item.socket_type),
+                        list);
+      lists.append(std::move(list));
+      continue;
+    }
+    if (ELEM(item.socket_type, SOCK_COLOR_RAMP, SOCK_CURVE)) {
+      const SocketValueVariant value = params.extract_input<SocketValueVariant>(
+          UString(identifier));
+      vex::ChRamp ramp;
+      ramp.name = item.name;
+      if (const ColorBand *const *band = value.get_if<ColorBand *>()) {
+        ramp.color_ramp = *band;
+      }
+      else if (const CurveMapping *const *curve = value.get_if<CurveMapping *>()) {
+        if (*curve) {
+          CurveMapping *copy = BKE_curvemapping_copy(*curve);
+          BKE_curvemapping_init(copy);
+          owned_curves.curves.append(copy);
+          ramp.curve = copy;
+        }
+      }
+      ramps.append(std::move(ramp));
+      continue;
+    }
     GField field = params.extract_input<GField>(UString(identifier));
     bool is_code = false;
     for (const ChannelParmRef &channel : channel_parms) {
@@ -1308,17 +1733,31 @@ static void node_geo_exec(GeoNodeExecParams params)
         break;
       }
     }
+    /* Geometry nodes pass every vector socket as a float3, which drops the fourth component of a
+     * `chq` socket. An unlinked socket still stores all four, so read it from there. */
+    if (item.socket_type == SOCK_VECTOR) {
+      const ChannelParmRef *channel = wrangle_item_channel(item, channel_parms);
+      const bNodeSocket *socket = params.node().input_by_identifier(UString(identifier));
+      if (channel && channel->dimensions == 4 && socket && !socket->is_directly_linked() &&
+          socket->default_value)
+      {
+        const auto &value = *socket->default_value_typed<bNodeSocketValueVector>();
+        const float4 default_4d(value.value[0], value.value[1], value.value[2], value.value[3]);
+        field = GField::from_constant(CPPType::get<float4>(), &default_4d);
+      }
+    }
     if (field.cpp_type().is<std::string>() && !field.depends_on_input()) {
       text_values.append(
           {item.name, fn::evaluate_constant_field(field.typed<std::string>())});
     }
     else if (is_code) {
       if (!field.cpp_type().is<std::string>()) {
-        text_error = "cht parameter '" + std::string(item.name) + "' must be a string";
+        text_error = fmt::format(fmt::runtime(BLT_translate_do_tooltip_any_thread("cht parameter '{}' must be a string")),
+                                 item.name);
       }
       else {
-        text_error = "cht parameter '" + std::string(item.name) +
-                     "' must be a single constant string";
+        text_error = fmt::format(
+            fmt::runtime(BLT_translate_do_tooltip_any_thread("cht parameter '{}' must be a single constant string")), item.name);
       }
     }
     parms.append(vex::ChField(item.name, std::move(field)));
@@ -1333,14 +1772,15 @@ static void node_geo_exec(GeoNodeExecParams params)
   if (text_error.empty() &&
       !wrangle_expand_text_code(code, text_values, true, false, expanded_text, text_error))
   {
-    text_error = "Code parameter expansion failed: " + text_error;
+    text_error = fmt::format(fmt::runtime(BLT_translate_do_tooltip_any_thread("Code parameter expansion failed: {}")),
+                             text_error);
   }
   std::string expanded_code;
   if (text_error.empty() &&
       !wrangle_expand_text_code(
           expanded_text, text_values, false, false, expanded_code, text_error))
   {
-    text_error = "chs folding failed: " + text_error;
+    text_error = fmt::format(fmt::runtime(BLT_translate_do_tooltip_any_thread("chs folding failed: {}")), text_error);
   }
   if (!text_error.empty()) {
     params.error_message_add(NodeWarningType::Error, text_error);
@@ -1367,7 +1807,8 @@ static void node_geo_exec(GeoNodeExecParams params)
       }
     }
     params.error_message_add(NodeWarningType::Error,
-                             compiled.error.empty() ? "Wrangle compile failed" : compiled.error);
+                             compiled.error.empty() ? BLT_translate_do_tooltip_any_thread("Wrangle compile failed") :
+                                                      compiled.error);
     params.set_output("Geometry"_ustr, std::move(geometry_set));
     return;
   }
@@ -1396,7 +1837,9 @@ static void node_geo_exec(GeoNodeExecParams params)
                                         extra_ptrs,
                                         storage_domain(storage),
                                         selection,
-                                        parms);
+                                        parms,
+                                        lists,
+                                        ramps);
   if (profile) {
     const auto profile_end = std::chrono::steady_clock::now();
     const double setup_ms =
@@ -1434,7 +1877,8 @@ static void node_geo_exec(GeoNodeExecParams params)
   }
   if (!result.ok) {
     params.error_message_add(NodeWarningType::Error,
-                             result.error.empty() ? "Wrangle evaluation failed" : result.error);
+                             result.error.empty() ? BLT_translate_do_tooltip_any_thread("Wrangle evaluation failed") :
+                                                    result.error);
   }
   else if (!result.warning.empty()) {
     params.error_message_add(NodeWarningType::Info, result.warning);
@@ -1586,6 +2030,8 @@ static ui::Block *wrangle_edit_popup(bContext *C, ARegion *region, void *arg_v)
   PointerRNA compile_hdr = header.op(
       "NODE_OT_wrangle_compile", IFACE_("Compile"), ICON_FILE_REFRESH);
   RNA_int_set(&compile_hdr, "node_identifier", arg->node->identifier);
+  PointerRNA docs_hdr = header.op("WM_OT_url_open", IFACE_("Docs"), ICON_HELP);
+  RNA_string_set(&docs_hdr, "url", vex::docs_url);
   header.separator_spacer();
   header.button("",
                 arg->pinned ? ICON_PINNED : ICON_UNPINNED,
@@ -1818,7 +2264,8 @@ static void node_register()
       ot->description =
           "Commit the editor draft and evaluate (also happens on Ctrl+Enter or clicking outside "
           "the code editor). Creates Constant panel inputs from "
-          "chf/chi/chv/chb/chc/chm/chq/chs/cht and removes unused channel sockets";
+          "chf/chi/chu/chv/chq/chb/chc/chm/chr/chs/cht/chramp/chcurve and removes unused "
+          "channel sockets";
       ot->exec = wrangle_compile_exec;
       ot->poll = socket_items::ops::editable_node_active_poll<WrangleInputItemsAccessor>;
       ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;

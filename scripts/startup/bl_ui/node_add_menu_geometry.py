@@ -504,6 +504,7 @@ class NODE_MT_gn_mesh_read_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "GeometryNodeClusterByConnected")
         self.node_operator(layout, "GeometryNodeInputMeshEdgeAngle")
         self.node_operator(layout, "GeometryNodeInputMeshEdgeNeighbors")
+        self.node_operator(layout, "GeometryNodeInputMeshEdgeRings")
         self.node_operator(layout, "GeometryNodeInputMeshEdgeVertices")
         self.node_operator(layout, "GeometryNodeEdgesToFaceGroups")
         self.node_operator(layout, "GeometryNodeInputMeshFaceArea")
@@ -554,6 +555,7 @@ class NODE_MT_gn_mesh_operations_base(node_add_menu.NodeMenu):
     def draw(self, context):
         del context
         layout = self.layout
+        self.node_operator(layout, "GeometryNodeDissolveEdges")
         self.node_operator(layout, "GeometryNodeDualMesh")
         self.node_operator(layout, "GeometryNodeEdgePathsToCurves")
         self.node_operator(layout, "GeometryNodeEdgePathsToSelection")

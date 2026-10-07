@@ -25,6 +25,7 @@
 
 #include "DNA_curves_types.h"
 #include "DNA_material_types.h"
+#include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 
 #include "BKE_attribute.hh"
@@ -37,6 +38,7 @@
 #include "BKE_curves_utils.hh"
 #include "BKE_customdata.hh"
 #include "BKE_deform.hh"
+#include "BKE_wrangle_array.hh"
 
 #include "attribute_storage_access.hh"
 
@@ -1907,6 +1909,10 @@ GVArray CurvesGeometry::adapt_domain(const GVArray &varray,
     BUFFER_FOR_CPP_TYPE_VALUE(varray.type(), value);
     varray.get_internal_single(value);
     return GVArray::from_single(varray.type(), this->attributes().domain_size(to), value);
+  }
+  if (varray.type().is_any<WrangleArrayValue, MStringProperty>()) {
+    /* Lists and strings can't be mixed, they are only available on their own domain. */
+    return {};
   }
 
   if (from == AttrDomain::Point && to == AttrDomain::Curve) {

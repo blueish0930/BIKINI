@@ -331,10 +331,26 @@ def fetch_shader_json(shader_id: str, api_key: str = "") -> dict:
     raise RuntimeError(" | ".join(errors) + " — " + hint)
 
 
-def _buffer_letter(name: str) -> str:
-    cleaned = (name or "").replace("Buffer", "").strip()
-    if cleaned[:1] in "ABCD":
-        return cleaned[:1]
+# Output ids of Buffer A–D: numeric in the API dump, hashed on the site.
+_BUFFER_OUTPUT_IDS = {
+    "257": "A", "258": "B", "259": "C", "260": "D",
+    "4dXGR8": "A", "XsXGR8": "B", "4sXGR8": "C", "XdfGR8": "D",
+}
+
+
+def _buffer_letter(rp: dict) -> str:
+    """Buffer A–D letter of a render pass.
+
+    Older shaders name their passes "Buf A" rather than "Buffer A", and a few have no
+    usable name at all, so the output id is the fallback.
+    """
+    m = re.search(r"\b([A-D])\s*$", (rp.get("name") or "").strip())
+    if m:
+        return m.group(1)
+    for out in rp.get("outputs") or []:
+        letter = _BUFFER_OUTPUT_IDS.get(str(out.get("id")))
+        if letter:
+            return letter
     return ""
 
 
@@ -343,7 +359,7 @@ def _buffer_id_map(shader: dict, cubemap_slots: dict | None = None) -> dict:
     for rp in shader.get("renderpass") or []:
         if rp.get("type") != "buffer":
             continue
-        letter = _buffer_letter(rp.get("name") or "")
+        letter = _buffer_letter(rp)
         if not letter:
             continue
         for out in rp.get("outputs") or []:
@@ -401,7 +417,9 @@ def encode_inputs(inputs: list, shader: dict, extra_idmap: dict | None = None) -
             # Generated Cubemap A stored as Buffer A/B/C/D, not the dummy sky.
             parts.append(f"{ch}=buffer:{idmap[inp.get('id')]}")
         elif ctype == "texture":
-            parts.append(f"{ch}=texture:{inp.get('src') or ''}")
+            # Only the kind is read back. The site path is ~80 characters per input, which
+            # overflows the node's 1024-character map on shaders with many inputs.
+            parts.append(f"{ch}=texture:")
         elif ctype == "keyboard":
             parts.append(f"{ch}=keyboard:")
         elif ctype == "cubemap":
@@ -495,8 +513,8 @@ def apply_shader_to_node(node, shader: dict) -> None:
             present.append("Image")
             pending.append(rp)
         elif ptype == "buffer":
-            letter = _buffer_letter(name)
-            if letter in "ABCD":
+            letter = _buffer_letter(rp)
+            if letter:
                 codes[letter] = code
                 present.append(f"Buffer {letter}")
                 pending.append(rp)
@@ -523,8 +541,8 @@ def apply_shader_to_node(node, shader: dict) -> None:
                 pass_maps.append("IMAGE:" + encoded)
             letters["image"] = encode_channel_letters(rp.get("inputs") or [], shader, cube_slots)
         elif ptype == "buffer":
-            letter = _buffer_letter(rp.get("name") or "")
-            if letter in "ABCD":
+            letter = _buffer_letter(rp)
+            if letter:
                 encoded = encode_inputs(rp.get("inputs") or [], shader, cube_slots)
                 if encoded:
                     pass_maps.append(letter + ":" + encoded)
@@ -540,6 +558,11 @@ def apply_shader_to_node(node, shader: dict) -> None:
                 if encoded:
                     pass_maps.append(slot + ":" + encoded)
                 letters[slot] = encode_channel_letters(rp.get("inputs") or [], shader, cube_slots)
+
+    # Which buffer slots hold a Cubemap pass. The code cannot tell: a Cubemap tab may keep
+    # a `mainImage` next to `mainCubemap`, and a Buffer tab may have a helper of that name.
+    # Always written, so the node knows the pass types came from the site.
+    pass_maps.append("CUBE:" + "".join(sorted(set(cube_slots.values()))))
 
     node.code_common = codes["common"]
     node.code_buffer_a = codes["A"]

@@ -39,6 +39,8 @@
 
 #include "BLF_api.hh"
 
+#include "BLT_translation.hh"
+
 #include "ED_node.hh"
 
 #include "UI_interface_icons.hh"
@@ -2203,14 +2205,6 @@ static void widget_draw_text_ime_underline(const uiFontStyle *fstyle,
 }
 #endif /* WITH_INPUT_IME */
 
-static bool code_ident_start(const char c)
-{
-  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' || c == '@';
-}
-static bool code_ident_char(const char c)
-{
-  return code_ident_start(c) || (c >= '0' && c <= '9');
-}
 static bool code_is_keyword(const char *s, const int n)
 {
   static const char *kw[] = {
@@ -2233,64 +2227,202 @@ static bool code_is_keyword(const char *s, const int n)
   return false;
 }
 
-static bool code_is_type(const char *s, const int n)
+/**
+ * Colors of the code editor. Data types use the socket colors of the node editor, brightened for
+ * the dark background: `v@P` reads as a vector and `f@mask` as a float at a glance, and a type
+ * keyword has the color of the attributes of that type. Float is the exception: the gray of its
+ * socket is too close to plain text and punctuation, so it is lime instead.
+ */
+enum class CodeColor : uint8_t {
+  Text = 0,
+  Punctuation,
+  Comment,
+  Number,
+  String,
+  Keyword,
+  Function,
+  Variable,
+  Attribute,
+  Float,
+  Int,
+  Bool,
+  Vector,
+  Color,
+  Rotation,
+  Matrix,
+};
+
+static const uchar *code_color(const CodeColor color)
 {
-  static const char *kw[] = {
-      "bool",
-      "float",
-      "int",
-      "matrix2",
-      "matrix3",
-      "matrix",
-      "quaternion",
-      "quat",
-      "rotation",
-      "string",
-      "color",
-      "vector2",
-      "vector4",
-      "vector",
-      "void",
+  static const uchar colors[][3] = {
+      {212, 212, 212}, /* Text. */
+      {160, 160, 160}, /* Punctuation. */
+      {106, 153, 85},  /* Comment. */
+      {181, 206, 168}, /* Number. */
+      {206, 145, 120}, /* String literals and the string type. */
+      {197, 134, 192}, /* Keyword. */
+      {220, 220, 170}, /* Function. */
+      {156, 220, 254}, /* Variable. */
+      {78, 201, 176},  /* Attribute without a type prefix. */
+      {195, 232, 100}, /* Float. */
+      {110, 200, 125}, /* Int. */
+      {245, 150, 175}, /* Bool. */
+      {110, 160, 255}, /* Vector. */
+      {240, 190, 60},  /* Color. */
+      {165, 125, 255}, /* Rotation. */
+      {235, 105, 140}, /* Matrix. */
   };
-  for (const char *k : kw) {
-    if (int(strlen(k)) == n && memcmp(k, s, n) == 0) {
+  return colors[int(color)];
+}
+
+/** The color of a type name such as `float` or `vector2`. False when it is not a type. */
+static bool code_type_color(const char *s, const int n, CodeColor &r_color)
+{
+  static const struct {
+    const char *name;
+    CodeColor color;
+  } types[] = {
+      {"float", CodeColor::Float},
+      {"int", CodeColor::Int},
+      {"bool", CodeColor::Bool},
+      {"boolean", CodeColor::Bool},
+      {"vector", CodeColor::Vector},
+      {"vector2", CodeColor::Vector},
+      {"vector4", CodeColor::Vector},
+      {"vec2", CodeColor::Vector},
+      {"vec3", CodeColor::Vector},
+      {"vec4", CodeColor::Vector},
+      {"color", CodeColor::Color},
+      {"string", CodeColor::String},
+      {"rotation", CodeColor::Rotation},
+      {"quaternion", CodeColor::Rotation},
+      {"quat", CodeColor::Rotation},
+      {"matrix", CodeColor::Matrix},
+      {"matrix2", CodeColor::Matrix},
+      {"matrix3", CodeColor::Matrix},
+      {"matrix4", CodeColor::Matrix},
+      {"mat2", CodeColor::Matrix},
+      {"mat3", CodeColor::Matrix},
+      {"mat4", CodeColor::Matrix},
+      {"ray", CodeColor::Attribute},
+      {"void", CodeColor::Keyword},
+  };
+  for (const auto &type : types) {
+    if (int(strlen(type.name)) == n && memcmp(type.name, s, n) == 0) {
+      r_color = type.color;
       return true;
     }
   }
   return false;
 }
 
+/** The color of an attribute from its type prefix, the `v` of `v@P`. */
+static CodeColor code_prefix_color(const char prefix)
+{
+  switch (prefix) {
+    case 'f':
+      return CodeColor::Float;
+    case 'i':
+      return CodeColor::Int;
+    case 'b':
+      return CodeColor::Bool;
+    case 'u':
+    case 'v':
+    case 'q':
+      return CodeColor::Vector;
+    case 'c':
+      return CodeColor::Color;
+    case 's':
+      return CodeColor::String;
+    case 'r':
+      return CodeColor::Rotation;
+    case 'm':
+    case '2':
+    case '3':
+    case '4':
+      return CodeColor::Matrix;
+    default:
+      return CodeColor::Attribute;
+  }
+}
+
+static bool code_name_char(const char c)
+{
+  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
+}
+
+/** Whether a block comment is still open at the end of \a line. */
+static bool code_line_ends_in_comment(const StringRef line, bool in_block_comment)
+{
+  const char *s = line.data();
+  const int n = int(line.size());
+  int i = 0;
+  while (i < n) {
+    if (in_block_comment) {
+      if (s[i] == '*' && i + 1 < n && s[i + 1] == '/') {
+        in_block_comment = false;
+        i += 2;
+        continue;
+      }
+      i++;
+      continue;
+    }
+    if (s[i] == '/' && i + 1 < n && s[i + 1] == '/') {
+      return false;
+    }
+    if (s[i] == '/' && i + 1 < n && s[i + 1] == '*') {
+      in_block_comment = true;
+      i += 2;
+      continue;
+    }
+    if (s[i] == '"' || s[i] == '\'') {
+      const char quote = s[i++];
+      while (i < n && s[i] != quote) {
+        i += (s[i] == '\\' && i + 1 < n) ? 2 : 1;
+      }
+    }
+    i++;
+  }
+  return in_block_comment;
+}
+
 static void widget_draw_code_line(const int fontid,
                                   const float x0,
                                   const float y,
-                                  const StringRef line)
+                                  const StringRef line,
+                                  bool &in_block_comment)
 {
-  const uchar col_default[3] = {212, 212, 212};
-  const uchar col_comment[3] = {106, 153, 85};
-  const uchar col_string[3] = {206, 145, 120};
-  const uchar col_number[3] = {181, 206, 168};
-  const uchar col_keyword[3] = {197, 134, 192};
-  const uchar col_type[3] = {78, 201, 176};
-  const uchar col_func[3] = {220, 220, 170};
-  const uchar col_var[3] = {156, 220, 254};
-  const uchar col_attr[3] = {86, 156, 214};
-  const uchar col_punct[3] = {150, 150, 150};
-
   const char *s = line.data();
   const int n = int(line.size());
   const int cell = std::max(1, int(std::lround(double(BLF_fixed_width(fontid)))));
   int i = 0;
   int grid_col = 0;
   while (i < n) {
-    const uchar *col = col_default;
+    CodeColor color = CodeColor::Text;
     int len = 1;
     const char c = s[i];
-    if (c == '/' && i + 1 < n && s[i + 1] == '/') {
-      col = col_comment;
+    if (in_block_comment) {
+      /* Inside a block comment that started on an earlier line. */
+      color = CodeColor::Comment;
+      int j = i;
+      while (j + 1 < n && !(s[j] == '*' && s[j + 1] == '/')) {
+        j++;
+      }
+      if (j + 1 < n) {
+        j += 2;
+        in_block_comment = false;
+      }
+      else {
+        j = n;
+      }
+      len = j - i;
+    }
+    else if (c == '/' && i + 1 < n && s[i + 1] == '/') {
+      color = CodeColor::Comment;
       len = n - i;
     }
     else if (c == '/' && i + 1 < n && s[i + 1] == '*') {
-      col = col_comment;
+      color = CodeColor::Comment;
       int j = i + 2;
       while (j + 1 < n && !(s[j] == '*' && s[j + 1] == '/')) {
         j++;
@@ -2298,10 +2430,14 @@ static void widget_draw_code_line(const int fontid,
       if (j + 1 < n) {
         j += 2;
       }
+      else {
+        j = n;
+        in_block_comment = true;
+      }
       len = j - i;
     }
     else if (c == '"' || c == '\'') {
-      col = col_string;
+      color = CodeColor::String;
       int j = i + 1;
       while (j < n && s[j] != c) {
         if (s[j] == '\\' && j + 1 < n) {
@@ -2316,47 +2452,95 @@ static void widget_draw_code_line(const int fontid,
       }
       len = j - i;
     }
-    else if (c >= '0' && c <= '9') {
-      col = col_number;
-      int j = i + 1;
-      while (j < n && ((s[j] >= '0' && s[j] <= '9') || s[j] == '.' || s[j] == 'f')) {
+    else if (ELEM(c, '2', '3', '4') && i + 1 < n && s[i + 1] == '@') {
+      /* `2@m` / `3@m` / `4@m` matrix attributes. */
+      color = CodeColor::Matrix;
+      int j = i + 2;
+      while (j < n && code_name_char(s[j])) {
         j++;
       }
       len = j - i;
     }
-    else if (code_ident_start(c)) {
+    else if ((c >= '0' && c <= '9') || (c == '.' && i + 1 < n && s[i + 1] >= '0' && s[i + 1] <= '9'))
+    {
+      color = CodeColor::Number;
       int j = i + 1;
-      while (j < n && code_ident_char(s[j])) {
+      while (j < n) {
+        const char d = s[j];
+        if ((d >= '0' && d <= '9') || d == '.' || d == 'x' || (d >= 'a' && d <= 'f') ||
+            (d >= 'A' && d <= 'F'))
+        {
+          /* Exponents: `1e-5`. */
+          if ((d == 'e' || d == 'E') && j + 1 < n && (s[j + 1] == '-' || s[j + 1] == '+')) {
+            j++;
+          }
+          j++;
+        }
+        else {
+          break;
+        }
+      }
+      len = j - i;
+    }
+    else if (c == '@') {
+      /* Attribute without a type prefix. */
+      color = CodeColor::Attribute;
+      int j = i + 1;
+      while (j < n && code_name_char(s[j])) {
         j++;
       }
       len = j - i;
-      if (code_is_keyword(s + i, len)) {
-        col = col_keyword;
+    }
+    else if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_') {
+      int j = i + 1;
+      while (j < n && code_name_char(s[j])) {
+        j++;
       }
-      else if (code_is_type(s + i, len)) {
-        col = col_type;
+      const int name_len = j - i;
+      /* `f@name` and `f[]@name`: the whole attribute takes the color of its type. */
+      int attr_at = -1;
+      if (j < n && s[j] == '@') {
+        attr_at = j;
       }
-      else if (s[i] == '@' || (len >= 2 && s[i + 1] == '@') || (len == 1 && s[i] == 'P') ||
-               (len == 5 && memcmp(s + i, "ptnum", 5) == 0) ||
-               (len == 5 && memcmp(s + i, "index", 5) == 0))
+      else if (j + 2 < n && s[j] == '[' && s[j + 1] == ']' && s[j + 2] == '@') {
+        attr_at = j + 2;
+      }
+      if (attr_at >= 0) {
+        color = (name_len == 1) ? code_prefix_color(c) : CodeColor::Attribute;
+        j = attr_at + 1;
+        while (j < n && code_name_char(s[j])) {
+          j++;
+        }
+      }
+      else if (code_is_keyword(s + i, name_len)) {
+        const bool is_bool = (name_len == 4 && memcmp(s + i, "true", 4) == 0) ||
+                             (name_len == 5 && memcmp(s + i, "false", 5) == 0);
+        color = is_bool ? CodeColor::Number : CodeColor::Keyword;
+      }
+      else if (code_type_color(s + i, name_len, color)) {
+        /* Pass. */
+      }
+      else if ((name_len == 1 && c == 'P') || (name_len == 5 && memcmp(s + i, "ptnum", 5) == 0) ||
+               (name_len == 5 && memcmp(s + i, "index", 5) == 0))
       {
-        col = col_attr;
+        color = CodeColor::Attribute;
       }
       else {
         int k = j;
         while (k < n && (s[k] == ' ' || s[k] == '\t')) {
           k++;
         }
-        col = (k < n && s[k] == '(') ? col_func : col_var;
+        color = (k < n && s[k] == '(') ? CodeColor::Function : CodeColor::Variable;
       }
+      len = j - i;
     }
     else if (c == ' ' || c == '\t') {
-      col = col_default;
+      color = CodeColor::Text;
     }
     else {
-      col = col_punct;
+      color = CodeColor::Punctuation;
     }
-    BLF_color3ubv(fontid, col);
+    BLF_color3ubv(fontid, code_color(color));
     BLF_position(fontid, x0 + float(grid_col * cell), y, 0.0f);
     BLF_draw_mono(fontid, s + i, size_t(len), cell, 2);
     for (int k = i; k < i + len;) {
@@ -2586,6 +2770,17 @@ static void draw_code_squiggle(const float x0,
     immVertex2f(pos, x, yy);
   }
   immEnd();
+  immUnbindProgram();
+}
+
+static void draw_code_box(
+    const float x0, const float y0, const float x1, const float y1, const float col[4])
+{
+  const uint pos = GPU_vertformat_attr_add(
+      immVertexFormat(), "pos", gpu::VertAttrType::SFLOAT_32_32);
+  immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
+  immUniformColor4fv(col);
+  immRectf(pos, x0, y0, x1, y1);
   immUnbindProgram();
 }
 
@@ -2953,6 +3148,27 @@ static void widget_draw_textbox(const uiFontStyle *fstyle,
     BLF_enable(blf_mono_font, BLF_CLIPPING);
     BLF_clipping(blf_mono_font, rect.xmin, rect.ymin, rect.xmax, int(ymax));
   }
+  /* Errors and warnings are needed twice: for the line numbers and for the underlines. */
+  const char *code_src = nullptr;
+  int code_src_n = 0;
+  uiCodeDiag code_diags[48];
+  int code_diags_num = 0;
+  int code_diag_lines[48];
+  if (is_code) {
+    code_src = but->editstr ? but->editstr :
+               (textbox->wrap_cache ? textbox->wrap_cache->text.c_str() : nullptr);
+    code_src_n = code_src ? int(strlen(code_src)) : 0;
+    if (code_src_n > 0 && but->code_diag_func) {
+      but->code_diag_func(code_src, but->code_diag_arg, code_diags, &code_diags_num, 48);
+      for (int di = 0; di < code_diags_num; di++) {
+        int diag_col = 0;
+        code_offset_to_line_col(code_src,
+                                std::clamp(code_diags[di].offset, 0, code_src_n),
+                                code_diag_lines[di],
+                                diag_col);
+      }
+    }
+  }
   float y_run = ymax;
   if (is_code) {
     for (int li = 0; li < visible.size(); li++) {
@@ -2962,7 +3178,21 @@ static void widget_draw_textbox(const uiFontStyle *fstyle,
       const float baseline = em_bottom - float(code_m.descender);
       char num[16];
       SNPRINTF(num, "%d", scroll + li + 1);
-      const uchar gutter_col[3] = {92, 92, 98};
+      /* The number of a line with a problem takes the color of its underline, so the line is
+       * easy to find even when only a single character is marked. */
+      const uchar gutter_plain[3] = {92, 92, 98};
+      const uchar gutter_warning[3] = {235, 184, 46};
+      const uchar gutter_error[3] = {240, 96, 84};
+      const uchar *gutter_col = gutter_plain;
+      for (int di = 0; di < code_diags_num; di++) {
+        if (code_diag_lines[di] == scroll + li) {
+          if (code_diags[di].is_error) {
+            gutter_col = gutter_error;
+            break;
+          }
+          gutter_col = gutter_warning;
+        }
+      }
       BLF_color3ubv(blf_mono_font, gutter_col);
       const int num_w = int(BLF_width(blf_mono_font, num, strlen(num)));
       const int num_pad = std::max(1, int(std::lround(0.2f * code_m.em)));
@@ -2981,6 +3211,13 @@ static void widget_draw_textbox(const uiFontStyle *fstyle,
                  int(ymax));
   }
   y_run = ymax;
+  /* A block comment can start above the first visible line. */
+  bool in_block_comment = false;
+  if (is_code) {
+    for (int li = 0; li < scroll && li < draw_lines.size(); li++) {
+      in_block_comment = code_line_ends_in_comment(draw_lines[li], in_block_comment);
+    }
+  }
   for (int li = 0; li < visible.size(); li++) {
     const StringRef line = visible[li];
     if (rect.xmin > button_rect->xmax - scrollbar_pad - vscroll_w) {
@@ -2993,8 +3230,11 @@ static void widget_draw_textbox(const uiFontStyle *fstyle,
       const float line_top = float(rect.ymax);
       const float em_bottom = code_em_bottom(line_top);
       const float baseline = em_bottom - float(code_m.descender);
-      widget_draw_code_line(
-          blf_mono_font, float(rect.xmin + code_gutter - scroll_x), baseline, line);
+      widget_draw_code_line(blf_mono_font,
+                            float(rect.xmin + code_gutter - scroll_x),
+                            baseline,
+                            line,
+                            in_block_comment);
     }
     else {
       fontstyle_draw_ex(
@@ -3003,9 +3243,8 @@ static void widget_draw_textbox(const uiFontStyle *fstyle,
   }
   if (is_code) {
     BLF_batch_draw_flush();
-    const char *src = but->editstr ? but->editstr :
-                      (textbox->wrap_cache ? textbox->wrap_cache->text.c_str() : nullptr);
-    const int src_n = src ? int(strlen(src)) : 0;
+    const char *src = code_src;
+    const int src_n = code_src_n;
     const int cell = std::max(1, textbox->last_code_cell_w);
     auto line_x = [&](const int line_i, const int col) -> int {
       if (line_i < 0 || line_i >= lines.size()) {
@@ -3032,9 +3271,11 @@ static void widget_draw_textbox(const uiFontStyle *fstyle,
       }
       const int b = (a >= 0) ? code_match_bracket(src, src_n, a) : -1;
       if (a >= 0) {
-        const float match_col[4] = {0.92f, 0.72f, 0.18f, 0.95f};
-        const float unmatch_col[4] = {0.92f, 0.32f, 0.28f, 0.95f};
-        auto squiggle_at = [&](const int off, const float rgba[4]) {
+        /* The bracket next to the caret and its partner get a box. Wavy underlines are only
+         * used for errors and warnings, a pair of brackets is neither. */
+        const float match_col[4] = {1.0f, 1.0f, 1.0f, 0.16f};
+        const float unmatch_col[4] = {0.92f, 0.32f, 0.28f, 0.45f};
+        auto box_at = [&](const int off, const float rgba[4]) {
           int ln = 0, glyph_col = 0;
           code_offset_to_line_col(src, off, ln, glyph_col);
           if (!(scroll <= ln && ln < scroll + visible_lines)) {
@@ -3043,21 +3284,20 @@ static void widget_draw_textbox(const uiFontStyle *fstyle,
           const float x0 = float(rect.xmin + code_gutter + line_x(ln, glyph_col) - scroll_x);
           const float x1 = float(
               rect.xmin + code_gutter + line_x(ln, glyph_col + 1) - scroll_x);
-          const float y = line_y_bottom(ln) - 1.5f * U.pixelsize;
-          draw_code_squiggle(x0, std::max(x1, x0 + float(cell)), y, rgba);
+          const float y0 = line_y_bottom(ln) - 1.0f * U.pixelsize;
+          draw_code_box(x0, y0, std::max(x1, x0 + float(cell)), y0 + code_m.em, rgba);
         };
         if (b >= 0) {
-          squiggle_at(a, match_col);
-          squiggle_at(b, match_col);
+          box_at(a, match_col);
+          box_at(b, match_col);
         }
         else {
-          squiggle_at(a, unmatch_col);
+          box_at(a, unmatch_col);
         }
       }
-      if (but->code_diag_func) {
-        uiCodeDiag diags[48];
-        int nd = 0;
-        but->code_diag_func(src, but->code_diag_arg, diags, &nd, 48);
+      if (code_diags_num > 0) {
+        const uiCodeDiag *diags = code_diags;
+        const int nd = code_diags_num;
         const float err_col[4] = {0.92f, 0.32f, 0.28f, 0.95f};
         const float warn_col[4] = {0.92f, 0.72f, 0.18f, 0.95f};
         for (int di = 0; di < nd; di++) {
@@ -3170,6 +3410,128 @@ static void widget_draw_textbox(const uiFontStyle *fstyle,
   }
 }
 
+/**
+ * One row of the list below the caret, packed by the node as
+ * `text \x1f parameter types \x1f category`. Completions always have a category (it may be
+ * empty). The usage help shown inside the parentheses of a call has none, there the first row is
+ * the signature and the following rows explain it.
+ */
+struct CodeSuggestRow {
+  StringRef text;
+  StringRef types;
+  StringRef category;
+  bool is_completion = false;
+};
+
+static CodeSuggestRow code_suggest_row(const char *raw)
+{
+  CodeSuggestRow row;
+  const StringRef all = raw;
+  const int64_t first = all.find('\x1f');
+  if (first == StringRef::not_found) {
+    row.text = all;
+    return row;
+  }
+  row.text = all.substr(0, first);
+  const StringRef rest = all.drop_prefix(first + 1);
+  const int64_t second = rest.find('\x1f');
+  if (second == StringRef::not_found) {
+    row.types = rest;
+    return row;
+  }
+  row.types = rest.substr(0, second);
+  row.category = rest.drop_prefix(second + 1);
+  row.is_completion = true;
+  return row;
+}
+
+/** Categories reuse the type colors of the code, so a row hints at what it gives back. */
+static CodeColor code_category_color(const StringRef category)
+{
+  if (category == "Float") {
+    return CodeColor::Float;
+  }
+  if (category == "Vector") {
+    return CodeColor::Vector;
+  }
+  if (category == "Matrix") {
+    return CodeColor::Matrix;
+  }
+  if (category == "Rotation") {
+    return CodeColor::Rotation;
+  }
+  if (category == "Color") {
+    return CodeColor::Color;
+  }
+  if (category == "String") {
+    return CodeColor::String;
+  }
+  if (category == "Keyword") {
+    return CodeColor::Keyword;
+  }
+  if (category == "Array") {
+    return CodeColor::Int;
+  }
+  if (category == "Channel") {
+    return CodeColor::Variable;
+  }
+  return CodeColor::Attribute;
+}
+
+/** Small parameter type labels above the parameters of a signature. */
+static void code_suggest_draw_type_labels(const StringRef sig,
+                                          const StringRef types_csv,
+                                          const float x0,
+                                          const float y,
+                                          const float font_px)
+{
+  const int64_t open = sig.find('(');
+  if (open == StringRef::not_found || types_csv.is_empty()) {
+    return;
+  }
+  Vector<StringRef, 12> types;
+  StringRef rest = types_csv;
+  while (!rest.is_empty() && types.size() < 12) {
+    const int64_t comma = rest.find(',');
+    types.append(comma == StringRef::not_found ? rest : rest.substr(0, comma));
+    if (comma == StringRef::not_found) {
+      break;
+    }
+    rest = rest.drop_prefix(comma + 1);
+  }
+  /* Where every parameter starts, measured at the size of the signature. */
+  BLF_size(blf_mono_font, font_px);
+  Vector<float, 12> starts;
+  int64_t i = open + 1;
+  while (starts.size() < types.size() && i < sig.size() && sig[i] != ')') {
+    while (i < sig.size() && ELEM(sig[i], ' ', '\t')) {
+      i++;
+    }
+    starts.append(BLF_width(blf_mono_font, sig.data(), size_t(i)));
+    while (i < sig.size() && !ELEM(sig[i], ',', ')')) {
+      i++;
+    }
+    if (i < sig.size() && sig[i] == ',') {
+      i++;
+    }
+  }
+  const float small_px = std::max(font_px * 0.72f, 8.0f);
+  BLF_size(blf_mono_font, small_px);
+  const uchar label_col[3] = {130, 170, 190};
+  BLF_color3ubv(blf_mono_font, label_col);
+  float next_free_x = x0;
+  for (const int64_t k : starts.index_range()) {
+    /* Each label sits above its parameter. Short parameter names (`atan2(y, x)`) would make
+     * the labels run into each other, so they never start before the previous one ends. */
+    const float x = std::max(x0 + starts[k], next_free_x);
+    BLF_position(blf_mono_font, x, y, 0.0f);
+    BLF_draw(blf_mono_font, types[k].data(), size_t(types[k].size()));
+    next_free_x = x + BLF_width(blf_mono_font, types[k].data(), size_t(types[k].size())) +
+                  0.6f * small_px;
+  }
+  BLF_size(blf_mono_font, font_px);
+}
+
 static void textbox_draw_one_code_suggest(const ARegion *region,
                                           const Block &block,
                                           ButtonTextBox *textbox)
@@ -3189,6 +3551,7 @@ static void textbox_draw_one_code_suggest(const ARegion *region,
   rect.ymin += int(textbox_hscroll_height() / aspect);
 
   const float font_px = std::max(textbox->last_code_font_px, 1.0f);
+  const float small_px = std::max(font_px * 0.8f, 8.0f);
   BLF_size(blf_mono_font, font_px);
   const float line_h = textbox->last_code_line_h > 0.5f ? textbox->last_code_line_h : 16.0f;
   const int gutter = textbox->last_code_gutter;
@@ -3199,22 +3562,83 @@ static void textbox_draw_one_code_suggest(const ARegion *region,
     return;
   }
   const int line_cursor = textbox_wrapped_line_index_from_char_offset(lines, textbox->pos);
+  /* The list hangs from the caret. Once the caret line is scrolled out of view there is nothing
+   * to attach it to, and it would float over the node header or the sockets instead. */
+  if (line_cursor < scroll || line_cursor >= scroll + textbox->drawn_rows()) {
+    return;
+  }
   const char *str = lines[0].begin();
-  const int caret_col = std::max(0, textbox->pos - int(lines[line_cursor].begin() - str));
+  const int caret_col = std::clamp(textbox->pos - int(lines[line_cursor].begin() - str),
+                                   0,
+                                   int(lines[line_cursor].size()));
   const int caret_px = textbox_code_x_from_offset(
       blf_mono_font, lines[line_cursor], caret_col, textbox->last_code_cell_w);
 
-  const int n = textbox->code_suggest_num;
+  /* What is typed so far, to show which part of every completion matches it. */
+  int typed_len = 0;
+  while (typed_len < caret_col) {
+    const char c = lines[line_cursor][caret_col - typed_len - 1];
+    if (!(code_name_char(c) || c == '@')) {
+      break;
+    }
+    typed_len++;
+  }
+
+  const int rows_num = textbox->code_suggest_num;
+  CodeSuggestRow rows[ButtonTextBox::CODE_SUGGEST_MAX];
+  for (int si = 0; si < rows_num; si++) {
+    rows[si] = code_suggest_row(textbox->code_suggest[si]);
+  }
+  const bool is_completion = rows_num > 0 && rows[0].is_completion;
+  /* A long list would cover the node: the best matches come first, the rest is counted. */
+  const int max_rows = 8;
+  const int shown_num = is_completion ? std::min(rows_num, max_rows) : rows_num;
+  const float pad_x = 0.6f * font_px;
+  const float row_h = is_completion ? line_h * 1.2f : line_h;
+  const float gap = 2.0f * font_px;
+
   float heights[ButtonTextBox::CODE_SUGGEST_MAX];
   float total_h = 0.0f;
-  for (int si = 0; si < n; si++) {
-    const bool typed = strchr(textbox->code_suggest[si], '\x1f') != nullptr;
-    heights[si] = typed ? line_h * 1.65f : line_h;
+  float widest = 0.0f;
+  for (int si = 0; si < shown_num; si++) {
+    const CodeSuggestRow &row = rows[si];
+    float width = BLF_width(blf_mono_font, row.text.data(), size_t(row.text.size()));
+    if (is_completion) {
+      heights[si] = row_h;
+      if (!row.category.is_empty()) {
+        BLF_size(blf_mono_font, small_px);
+        width += gap + BLF_width(blf_mono_font, row.category.data(), size_t(row.category.size()));
+        BLF_size(blf_mono_font, font_px);
+      }
+    }
+    else {
+      /* Signature rows of the usage help carry the parameter types above them. */
+      heights[si] = row.types.is_empty() ? line_h : line_h * 1.65f;
+      width += row.types.is_empty() ? 0.0f : 2.0f * font_px;
+    }
     total_h += heights[si];
+    widest = std::max(widest, width);
   }
+  /* The footer says how to accept and how many more there are. */
+  char footer[64] = "";
+  if (is_completion) {
+    if (rows_num > shown_num) {
+      SNPRINTF(footer, "%s    +%d", IFACE_("Tab: complete"), rows_num - shown_num);
+    }
+    else {
+      SNPRINTF(footer, "%s", IFACE_("Tab: complete"));
+    }
+    BLF_size(blf_mono_font, small_px);
+    widest = std::max(widest, BLF_width(blf_mono_font, footer, strlen(footer)));
+    BLF_size(blf_mono_font, font_px);
+    total_h += line_h;
+  }
+
+  const float bar_w = is_completion ? std::max(2.0f, 0.22f * font_px) : 0.0f;
   float box_x = float(rect.xmin + gutter + caret_px - scroll_x);
-  const float box_w = std::min(480.0f * UI_SCALE_FAC,
-                               std::max(float(BLI_rcti_size_x(&button_rect)), 1.0f));
+  /* As wide as the longest row, so a few short names do not cover the whole node. */
+  const float box_w = std::min(520.0f * UI_SCALE_FAC,
+                               std::max(widest + bar_w + 2.0f * pad_x, 8.0f * font_px));
   const float box_h = total_h;
   const float line_bottom = float(rect.ymax) - line_h * float(line_cursor - scroll + 1);
   /* Default: hang the list from the caret line downward. Flip above only if it
@@ -3222,95 +3646,110 @@ static void textbox_draw_one_code_suggest(const ARegion *region,
   float box_top = line_bottom;
   float box_bottom = box_top - box_h;
   const int region_h = BLI_rcti_size_y(&region->winrct);
+  const int region_w = BLI_rcti_size_x(&region->winrct);
   if (box_bottom < 0.0f && line_bottom + line_h + box_h <= float(region_h)) {
     box_bottom = line_bottom + line_h;
     box_top = box_bottom + box_h;
   }
-  GPU_blend(GPU_BLEND_NONE);
-  {
+  /* Keep the list inside the region when the caret is close to the right edge. */
+  if (box_x + box_w > float(region_w)) {
+    box_x = std::max(0.0f, float(region_w) - box_w);
+  }
+
+  auto fill = [&](const float x0, const float y0, const float x1, const float y1, const uchar col[3]) {
     const uint pos = GPU_vertformat_attr_add(
         immVertexFormat(), "pos", gpu::VertAttrType::SFLOAT_32_32);
     immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
-    immUniformColor4ub(37, 37, 38, 255);
-    immRectf(pos, box_x, box_bottom, box_x + box_w, box_top);
+    immUniformColor4ub(col[0], col[1], col[2], 255);
+    immRectf(pos, x0, y0, x1, y1);
     immUnbindProgram();
-  }
+  };
+  GPU_blend(GPU_BLEND_NONE);
+  /* Outline, so the list reads as a panel above the node and not as part of it. */
+  const uchar outline_col[3] = {84, 84, 88};
+  const uchar back_col[3] = {32, 32, 34};
+  const uchar first_col[3] = {44, 62, 86};
+  const uchar footer_back_col[3] = {26, 26, 28};
+  fill(box_x - 1.0f, box_bottom - 1.0f, box_x + box_w + 1.0f, box_top + 1.0f, outline_col);
+  fill(box_x, box_bottom, box_x + box_w, box_top, back_col);
+
+  const uchar bright_col[3] = {255, 255, 255};
+  const uchar dim_col[3] = {140, 140, 146};
+  const uchar help_col[3] = {185, 185, 190};
+  const float text_x = box_x + bar_w + pad_x;
   float top = box_top;
-  for (int si = 0; si < n; si++) {
+  for (int si = 0; si < shown_num; si++) {
+    const CodeSuggestRow &row = rows[si];
     const float h = heights[si];
-    if (si == textbox->code_suggest_sel) {
-      const uint p2 = GPU_vertformat_attr_add(
-          immVertexFormat(), "pos", gpu::VertAttrType::SFLOAT_32_32);
-      immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
-      immUniformColor4ub(0, 120, 215, 255);
-      immRectf(p2, box_x, top - h, box_x + box_w, top);
-      immUnbindProgram();
-    }
-    const char *raw = textbox->code_suggest[si];
-    const char *bar = strchr(raw, '\x1f');
-    const char *sig = raw;
-    size_t sig_len = strlen(raw);
-    const char *types_csv = nullptr;
-    if (bar != nullptr) {
-      sig_len = size_t(bar - raw);
-      types_csv = bar + 1;
-    }
-    const float x0 = box_x + 6.0f;
-    if (types_csv && types_csv[0] && sig_len > 0) {
-      char types[12][16];
-      int nt = 0;
-      const char *tp = types_csv;
-      while (*tp && nt < 12) {
-        int k = 0;
-        while (*tp && *tp != ',' && k < 15) {
-          types[nt][k++] = *tp++;
-        }
-        types[nt][k] = '\0';
-        nt++;
-        while (*tp && *tp != ',') {
-          tp++;
-        }
-        if (*tp == ',') {
-          tp++;
-        }
+    const float baseline = top - h + 0.5f * (h - line_h) + 0.28f * line_h;
+    if (is_completion) {
+      /* Tab inserts the first row. */
+      if (si == 0) {
+        fill(box_x, top - h, box_x + box_w, top, first_col);
       }
-      const char *open = static_cast<const char *>(memchr(sig, '(', sig_len));
-      if (open != nullptr && nt > 0) {
-        BLF_size(blf_mono_font, font_px);
-        float prefixes[12];
-        int ti = 0;
-        size_t i = size_t(open - sig) + 1;
-        while (ti < nt && i < sig_len && sig[i] != ')') {
-          while (i < sig_len && (sig[i] == ' ' || sig[i] == '\t')) {
-            i++;
-          }
-          prefixes[ti] = BLF_width(blf_mono_font, sig, i);
-          while (i < sig_len && sig[i] != ',' && sig[i] != ')') {
-            i++;
-          }
-          if (sig[i] == ',') {
-            i++;
-          }
-          ti++;
-        }
-        const int n_draw = ti;
-        const float small_px = std::max(font_px * 0.72f, 8.0f);
+      fill(box_x, top - h, box_x + bar_w, top, code_color(code_category_color(row.category)));
+
+      /* The name up to the parenthesis, with the typed part brighter, then the rest dimmer. */
+      int64_t name_len = row.text.find('(');
+      if (name_len == StringRef::not_found) {
+        const int64_t dash = row.text.find(" \xe2\x80\x94 ");
+        name_len = (dash == StringRef::not_found) ? row.text.size() : dash;
+      }
+      const int64_t match_len = std::min<int64_t>(typed_len, name_len);
+      const bool matches = match_len > 0 &&
+                           BLI_strncasecmp(row.text.data(),
+                                           lines[line_cursor].data() + caret_col - typed_len,
+                                           size_t(match_len)) == 0;
+      const int64_t bright_len = matches ? match_len : 0;
+      float x = text_x;
+      BLF_size(blf_mono_font, font_px);
+      if (bright_len > 0) {
+        BLF_color3ubv(blf_mono_font, bright_col);
+        BLF_position(blf_mono_font, x, baseline, 0.0f);
+        BLF_draw(blf_mono_font, row.text.data(), size_t(bright_len));
+        x += BLF_width(blf_mono_font, row.text.data(), size_t(bright_len));
+      }
+      if (name_len > bright_len) {
+        BLF_color3ubv(blf_mono_font, code_color(CodeColor::Function));
+        BLF_position(blf_mono_font, x, baseline, 0.0f);
+        BLF_draw(blf_mono_font, row.text.data() + bright_len, size_t(name_len - bright_len));
+        x += BLF_width(blf_mono_font, row.text.data() + bright_len, size_t(name_len - bright_len));
+      }
+      if (row.text.size() > name_len) {
+        BLF_color3ubv(blf_mono_font, help_col);
+        BLF_position(blf_mono_font, x, baseline, 0.0f);
+        BLF_draw(blf_mono_font, row.text.data() + name_len, size_t(row.text.size() - name_len));
+      }
+      if (!row.category.is_empty()) {
         BLF_size(blf_mono_font, small_px);
-        const uchar dim[3] = {150, 195, 215};
-        BLF_color3ubv(blf_mono_font, dim);
-        const float y_type = top - 0.58f * line_h;
-        for (int k = 0; k < n_draw; k++) {
-          BLF_position(blf_mono_font, x0 + prefixes[k], y_type, 0.0f);
-          BLF_draw(blf_mono_font, types[k], strlen(types[k]));
-        }
+        const float category_w = BLF_width(
+            blf_mono_font, row.category.data(), size_t(row.category.size()));
+        BLF_color3ubv(blf_mono_font, dim_col);
+        BLF_position(blf_mono_font, box_x + box_w - pad_x - category_w, baseline, 0.0f);
+        BLF_draw(blf_mono_font, row.category.data(), size_t(row.category.size()));
+        BLF_size(blf_mono_font, font_px);
       }
     }
-    BLF_size(blf_mono_font, font_px);
-    const uchar tcol[3] = {220, 220, 170};
-    BLF_color3ubv(blf_mono_font, tcol);
-    BLF_position(blf_mono_font, x0, top - h + 3.0f, 0.0f);
-    BLF_draw(blf_mono_font, sig, sig_len);
+    else {
+      if (!row.types.is_empty()) {
+        code_suggest_draw_type_labels(
+            row.text, row.types, text_x, top - 0.58f * line_h, font_px);
+      }
+      /* The signature stands out, the explanation below it is quieter. */
+      BLF_size(blf_mono_font, font_px);
+      BLF_color3ubv(blf_mono_font, si == 0 ? code_color(CodeColor::Function) : help_col);
+      BLF_position(blf_mono_font, text_x, top - h + 0.28f * line_h, 0.0f);
+      BLF_draw(blf_mono_font, row.text.data(), size_t(row.text.size()));
+    }
     top -= h;
+  }
+  if (is_completion) {
+    fill(box_x, box_bottom, box_x + box_w, box_bottom + line_h, footer_back_col);
+    BLF_size(blf_mono_font, small_px);
+    BLF_color3ubv(blf_mono_font, dim_col);
+    BLF_position(blf_mono_font, text_x, box_bottom + 0.3f * line_h, 0.0f);
+    BLF_draw(blf_mono_font, footer, strlen(footer));
+    BLF_size(blf_mono_font, font_px);
   }
 }
 

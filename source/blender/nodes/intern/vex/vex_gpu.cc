@@ -125,6 +125,18 @@ float wr_rand0(int index, inout int seq)
   return wr_hash_to_float(h);
 }
 
+vec3 wr_hash_to_vec3(uint h)
+{
+  return vec3(float(wr_hash(h)), float(wr_hash2(h, 1u)), float(wr_hash2(h, 2u))) / 4294967295.0;
+}
+
+vec3 wr_rand0_vec(int index, inout int seq)
+{
+  uint h = uint(index) ^ (uint(seq) * 747796405u);
+  seq += 1;
+  return wr_hash_to_vec3(h);
+}
+
 WrangleArr wr_arr_new(int kind)
 {
   WrangleArr a;
@@ -478,6 +490,12 @@ void pack_attr(const AttrRT &a, const int index, void *dst, const Type type)
     case Type::IntArray:
     case Type::FloatArray:
     case Type::VecArray:
+    case Type::Vec2Array:
+    case Type::Vec4Array:
+    case Type::ColorArray:
+    case Type::RotArray:
+    case Type::Mat2Array:
+    case Type::Mat3Array:
     case Type::StringArray:
     case Type::MatArray:
     case Type::RayArray: {
@@ -578,6 +596,12 @@ void unpack_attr(AttrRT &a, const int index, const void *src, const Type type)
     case Type::IntArray:
     case Type::FloatArray:
     case Type::VecArray:
+    case Type::Vec2Array:
+    case Type::Vec4Array:
+    case Type::ColorArray:
+    case Type::RotArray:
+    case Type::Mat2Array:
+    case Type::Mat3Array:
     case Type::StringArray:
     case Type::MatArray:
     case Type::RayArray: {

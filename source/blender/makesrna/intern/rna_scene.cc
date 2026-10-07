@@ -3839,7 +3839,6 @@ static void rna_def_tool_settings(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "uv_mirror_threshold", PROP_FLOAT, PROP_NONE);
   RNA_def_property_float_sdna(prop, nullptr, "uv_mirror_threshold");
-  RNA_def_property_float_default(prop, 0.001f);
   RNA_def_property_ui_text(
       prop,
       "UV Mirror Pair Distance",

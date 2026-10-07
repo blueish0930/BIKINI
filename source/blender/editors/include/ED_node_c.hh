@@ -51,18 +51,6 @@ void ED_node_tree_path_get(SpaceNode *snode, char *value);
 void ED_node_tree_start(ARegion *region, SpaceNode *snode, bNodeTree *ntree, ID *id, ID *from);
 void ED_node_tree_push(ARegion *region, SpaceNode *snode, bNodeTree *ntree, bNode *gnode);
 void ED_node_tree_pop(ARegion *region, SpaceNode *snode);
-/**
- * True when the current edit tree is password-locked and has not been unlocked in this editor.
- * Node contents should not be drawn or edited until the password is entered.
- */
-bool ED_node_edit_tree_is_lock_blocked(const SpaceNode *snode);
-/** Invoke the password dialog if the current edit tree is locked and not yet unlocked. */
-void ED_node_tree_password_prompt_if_needed(bContext *C);
-/**
- * After opening a .blend, ask for the lock password so sealed node groups can
- * evaluate. Does not grant editor access; viewing internals still requires a password.
- */
-void ED_node_lock_prompt_after_file_load(bContext *C);
 int ED_node_tree_depth(SpaceNode *snode);
 bNodeTree *ED_node_tree_get(SpaceNode *snode, int level);
 

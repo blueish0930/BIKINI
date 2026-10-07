@@ -34,6 +34,7 @@ set(SRC
   intern/mesh_boolean_manifold.cc
   intern/mesh_clip_plane.cc
   intern/mesh_copy_selection.cc
+  intern/mesh_dissolve.cc
   intern/mesh_laplacian.cc
   intern/mesh_instant_meshes.cc
   intern/mesh_triangle_remesh.cc
@@ -95,6 +96,7 @@ set(SRC
   GEO_mesh_boolean.hh
   GEO_mesh_clip_plane.hh
   GEO_mesh_copy_selection.hh
+  GEO_mesh_dissolve.hh
   GEO_mesh_laplacian.hh
   GEO_mesh_instant_meshes.hh
   GEO_mesh_triangle_remesh.hh

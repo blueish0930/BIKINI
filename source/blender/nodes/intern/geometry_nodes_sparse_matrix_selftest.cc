@@ -28,6 +28,7 @@ using blender::nodes::sparse_matrix::sparse_matrix_add;
 using blender::nodes::sparse_matrix::sparse_matrix_apply;
 using blender::nodes::sparse_matrix::sparse_matrix_multiply;
 using blender::nodes::sparse_matrix::sparse_matrix_scale;
+using blender::nodes::sparse_matrix::sparse_matrix_transpose;
 using blender::nodes::sparse_matrix::sparse_matrix_subtract;
 
 int g_failures = 0;
@@ -120,6 +121,17 @@ void test_scale()
   check(sparse_matrix_scale(a_w, a_r, a_c, 0.0f).empty(), "scale by zero");
 }
 
+void test_transpose()
+{
+  const std::vector<float> a_w = {2.0f, 1.0f, 3.0f};
+  const std::vector<int> a_r = {0, 0, 1};
+  const std::vector<int> a_c = {2, 0, 1};
+  const COOMatrix out = sparse_matrix_transpose(a_w, a_r, a_c);
+  check(out.size() == 3, "transpose size");
+  check(out.row[2] == 2 && out.col[2] == 0, "transpose (0,2) -> (2,0)");
+  check_float_eq(out.weight[2], 2.0f, "transpose value");
+}
+
 void test_apply()
 {
   const std::vector<float> a_w = {2.0f};
@@ -144,6 +156,7 @@ int sparse_matrix_selftest_run()
   test_mul();
   test_empty();
   test_scale();
+  test_transpose();
   test_apply();
   if (g_failures == 0) {
     std::printf("ALL PASSED\n");

@@ -47,6 +47,7 @@ enum class Operation {
   Subtract = 1,
   Multiply = 2,
   Scale = 3,
+  Transpose = 4,
 };
 
 inline bool is_stored_zero(const float value)
@@ -91,6 +92,9 @@ COOMatrix sparse_matrix_scale(const float *a_w,
                               const int *a_c,
                               int64_t a_size,
                               float scale);
+
+/** Swap rows and columns. Like the other operations the result is sorted by (row, col). */
+COOMatrix sparse_matrix_transpose(const float *a_w, const int *a_r, const int *a_c, int64_t a_size);
 
 COOMatrix sparse_matrix_apply(Operation op,
                               const float *a_w,
@@ -159,6 +163,13 @@ inline COOMatrix sparse_matrix_scale(const std::vector<float> &a_w,
                                      const float scale)
 {
   return sparse_matrix_scale(a_w.data(), a_r.data(), a_c.data(), int64_t(a_w.size()), scale);
+}
+
+inline COOMatrix sparse_matrix_transpose(const std::vector<float> &a_w,
+                                         const std::vector<int> &a_r,
+                                         const std::vector<int> &a_c)
+{
+  return sparse_matrix_transpose(a_w.data(), a_r.data(), a_c.data(), int64_t(a_w.size()));
 }
 
 }  // namespace blender::nodes::sparse_matrix

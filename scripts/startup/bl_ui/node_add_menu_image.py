@@ -142,7 +142,7 @@ class NODE_MT_image_node_filter_blur_base(node_add_menu.NodeMenu):
     def draw(self, context):
         layout = self.layout
         self.node_operator(layout, "CompositorNodeBilateralblur")
-        # Expand Blur Type menu options in search (Flat/Tent/Gaussian/�?.
+        # Expand Blur Type menu options in search (Flat/Tent/Gaussian/...).
         self.node_operator_with_searchable_enum_socket(
             context, layout, "CompositorNodeBlur", "Type", [
                 "Flat", "Tent", "Quadratic", "Cubic", "Gaussian", "Fast Gaussian", "Catrom", "Mitch",

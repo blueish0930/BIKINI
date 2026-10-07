@@ -95,18 +95,18 @@ TEST(nodes_vex, diagnostics_keep_the_primary_source_location)
   ASSERT_FALSE(bool(compiled.program));
   ASSERT_FALSE(compiled.diags.is_empty());
   EXPECT_EQ(compiled.diags[0].offset, int(source.find("no_such_fn")));
-  EXPECT_NE(compiled.error.find("L2:"), std::string::npos);
+  EXPECT_NE(compiled.error.find("Line 2:"), std::string::npos);
 }
 
 TEST(nodes_vex, lexer_diagnostics_preserve_the_actual_error_kind)
 {
   const CompileOutput string_error = compile("string s = \"unfinished;");
   ASSERT_FALSE(string_error.diags.is_empty());
-  EXPECT_EQ(string_error.diags[0].message, "字符串少了结束引号");
+  EXPECT_EQ(string_error.diags[0].message, "The string has no closing quote");
 
   const CompileOutput comment_error = compile("float a = 1; /* unfinished");
   ASSERT_FALSE(comment_error.diags.is_empty());
-  EXPECT_EQ(comment_error.diags[0].message, "块注释少了结束符 */");
+  EXPECT_EQ(comment_error.diags[0].message, "The block comment has no closing */");
 }
 
 TEST(nodes_vex, while_loop)
@@ -916,6 +916,94 @@ TEST(nodes_vex, rotation_mul_is_rotate_rotation)
   EXPECT_EQ(b.return_int, 1);
 }
 
+TEST(nodes_vex, rotation_utilities)
+{
+  const PureEvalOutput a = eval_source(
+      "rotation q = quaternion(radians(90), set(0, 0, 1)); "
+      "return qrotate(q, set(1, 0, 0));");
+  ASSERT_TRUE(a.ok) << a.error;
+  EXPECT_NEAR(a.return_vec.x, 0.0f, 1e-5f);
+  EXPECT_NEAR(a.return_vec.y, 1.0f, 1e-5f);
+  const PureEvalOutput b = eval_source(
+      "return quaterniontoeuler(eulertoquaternion(set(0.1, 0.2, 0.3), \"zyx\"), \"zyx\");");
+  ASSERT_TRUE(b.ok) << b.error;
+  EXPECT_NEAR(b.return_vec.x, 0.1f, 1e-5f);
+  EXPECT_NEAR(b.return_vec.y, 0.2f, 1e-5f);
+  EXPECT_NEAR(b.return_vec.z, 0.3f, 1e-5f);
+  const PureEvalOutput c = eval_source("return rotate(set(1, 0, 0), radians(90), set(0, 0, 1));");
+  ASSERT_TRUE(c.ok) << c.error;
+  EXPECT_NEAR(c.return_vec.y, 1.0f, 1e-5f);
+  const PureEvalOutput d = eval_source(
+      "rotation q = slerp(quaternion(0, 0, 0, 1), dihedral(set(1, 0, 0), set(0, 1, 0)), 0.5); "
+      "return qrotate(q, set(1, 0, 0));");
+  ASSERT_TRUE(d.ok) << d.error;
+  EXPECT_NEAR(d.return_vec.x, 0.70710678f, 1e-5f);
+  EXPECT_NEAR(d.return_vec.y, 0.70710678f, 1e-5f);
+  const PureEvalOutput e = eval_source(
+      "matrix3 m = lookat(set(0, 0, 0), set(1, 0, 0), set(0, 0, 1)); "
+      "return m * set(0, 0, -1);");
+  ASSERT_TRUE(e.ok) << e.error;
+  EXPECT_NEAR(e.return_vec.x, 1.0f, 1e-5f);
+}
+
+TEST(nodes_vex, hsv_rgb_conversion)
+{
+  const PureEvalOutput a = eval_source("return hsvtorgb(0.5, 1.0, 1.0);");
+  ASSERT_TRUE(a.ok) << a.error;
+  EXPECT_NEAR(a.return_vec.x, 0.0f, 1e-5f);
+  EXPECT_NEAR(a.return_vec.y, 1.0f, 1e-5f);
+  EXPECT_NEAR(a.return_vec.z, 1.0f, 1e-5f);
+  const PureEvalOutput b = eval_source("return rgbtohsv(hsvtorgb(set(0.25, 0.5, 0.8)));");
+  ASSERT_TRUE(b.ok) << b.error;
+  EXPECT_NEAR(b.return_vec.x, 0.25f, 1e-5f);
+  EXPECT_NEAR(b.return_vec.y, 0.5f, 1e-5f);
+  EXPECT_NEAR(b.return_vec.z, 0.8f, 1e-5f);
+  /* The hue is cyclic. */
+  const PureEvalOutput c = eval_source("return hsvtorgb(1.5, 1.0, 1.0);");
+  ASSERT_TRUE(c.ok) << c.error;
+  EXPECT_NEAR(c.return_vec.x, 0.0f, 1e-5f);
+  EXPECT_NEAR(c.return_vec.z, 1.0f, 1e-5f);
+}
+
+TEST(nodes_vex, shader_material_hsvtorgb_gpu)
+{
+  const CompileOutput compiled = compile_shader_material(
+      "Output = hsvtorgb(v@Position.x, 1.0, 1.0);\n");
+  ASSERT_TRUE(bool(compiled.program)) << compiled.error;
+  EXPECT_TRUE(compiled.program->gpu_ok) << compiled.program->gpu_error;
+  EXPECT_NE(compiled.program->gpu_helpers.find("wr_hsv_to_rgb"), std::string::npos);
+}
+
+TEST(nodes_vex, chramp_chcurve_parms)
+{
+  const CompileOutput compiled = compile(
+      "f@a = chramp(\"ramp\", 0.25);\n"
+      "f@b = chcurve(\"falloff\", 0.5);\n"
+      "v@c = chcurve(\"offset\", v@P);\n"
+      "c@d = chcurve(\"grade\", c@Cd);\n");
+  ASSERT_TRUE(bool(compiled.program)) << compiled.error;
+  const Vector<Program::RampParm> &parms = compiled.program->ramp_parms;
+  ASSERT_EQ(parms.size(), 4);
+  EXPECT_EQ(parms[0].kind, RampKind::ColorRamp);
+  EXPECT_EQ(parms[1].kind, RampKind::FloatCurve);
+  EXPECT_EQ(parms[2].kind, RampKind::VectorCurve);
+  EXPECT_EQ(parms[3].kind, RampKind::ColorCurve);
+
+  /* One name cannot be two kinds of curve. */
+  const CompileOutput conflict = compile(
+      "f@a = chcurve(\"c\", 1.0);\n"
+      "v@b = chcurve(\"c\", v@P);\n");
+  EXPECT_FALSE(bool(conflict.program));
+
+  /* Without a widget a ramp is a gray ramp and a curve returns its input. */
+  const PureEvalOutput ramp = eval_source("float f = chramp(\"ramp\", 0.25); return f;");
+  ASSERT_TRUE(ramp.ok) << ramp.error;
+  EXPECT_NEAR(ramp.return_float, 0.25f, 1e-6f);
+  const PureEvalOutput curve = eval_source("return chcurve(\"c\", set(1, 2, 3));");
+  ASSERT_TRUE(curve.ok) << curve.error;
+  EXPECT_NEAR(curve.return_vec.z, 3.0f, 1e-6f);
+}
+
 TEST(nodes_vex, matrix_and_vector_subscript)
 {
   const PureEvalOutput a = eval_source(
@@ -953,6 +1041,145 @@ TEST(nodes_vex, array_len_append_removeindex)
   const PureEvalOutput c = eval_source("int[] xs = array(3, 1, 2); sort(xs); return xs[0];");
   ASSERT_TRUE(c.ok) << c.error;
   EXPECT_EQ(c.return_int, 1);
+}
+
+TEST(nodes_vex, array_min_max_sum_unique)
+{
+  const PureEvalOutput a = eval_source("int[] xs = array(3, 1, 2, 3); return min(xs);");
+  ASSERT_TRUE(a.ok) << a.error;
+  EXPECT_EQ(a.return_int, 1);
+  const PureEvalOutput b = eval_source("float xs[] = array(0.5, 2.5, 1.0); return max(xs);");
+  ASSERT_TRUE(b.ok) << b.error;
+  EXPECT_NEAR(b.return_float, 2.5f, 1e-6f);
+  const PureEvalOutput c = eval_source("int[] xs = array(3, 1, 2, 3); return sum(xs);");
+  ASSERT_TRUE(c.ok) << c.error;
+  EXPECT_EQ(c.return_int, 9);
+  const PureEvalOutput d = eval_source(
+      "vector vs[] = array(set(1, 5, 0), set(2, 3, 4)); return max(vs) + sum(vs);");
+  ASSERT_TRUE(d.ok) << d.error;
+  EXPECT_NEAR(d.return_vec.x, 5.0f, 1e-6f);
+  EXPECT_NEAR(d.return_vec.y, 13.0f, 1e-6f);
+  EXPECT_NEAR(d.return_vec.z, 8.0f, 1e-6f);
+  /* Unique keeps the first occurrences in order and leaves the source array alone. */
+  const PureEvalOutput e = eval_source(
+      "int[] xs = array(3, 1, 3, 2, 1); int[] u = unique(xs); "
+      "return len(u) * 1000 + u[0] * 100 + u[1] * 10 + u[2] + len(xs) * 10000;");
+  ASSERT_TRUE(e.ok) << e.error;
+  EXPECT_EQ(e.return_int, 53312);
+  /* The two argument forms still compare values. */
+  const PureEvalOutput g = eval_source("return min(4, 2) + max(4, 2);");
+  ASSERT_TRUE(g.ok) << g.error;
+  EXPECT_EQ(g.return_int, 6);
+  EXPECT_FALSE(eval_source("return sum(array(\"a\", \"b\"));").ok);
+}
+
+TEST(nodes_vex, array_find_slice)
+{
+  const PureEvalOutput a = eval_source(
+      "int[] xs = array(5, 7, 5, 9); int[] idx = find(xs, 5); "
+      "return len(idx) * 100 + idx[0] * 10 + idx[1];");
+  ASSERT_TRUE(a.ok) << a.error;
+  EXPECT_EQ(a.return_int, 202);
+  const PureEvalOutput b = eval_source("int[] xs = array(5, 7); return len(find(xs, 3));");
+  ASSERT_TRUE(b.ok) << b.error;
+  EXPECT_EQ(b.return_int, 0);
+  /* The end is exclusive and negative indices count from the end. */
+  const PureEvalOutput c = eval_source(
+      "int[] xs = array(10, 11, 12, 13, 14); int[] s = slice(xs, 1, -1); "
+      "return len(s) * 10000 + s[0] * 100 + s[2];");
+  ASSERT_TRUE(c.ok) << c.error;
+  EXPECT_EQ(c.return_int, 31113);
+  const PureEvalOutput d = eval_source(
+      "int[] xs = array(10, 11, 12, 13, 14); int[] s = slice(xs, -2); "
+      "return len(s) * 10000 + s[0] * 100 + s[1];");
+  ASSERT_TRUE(d.ok) << d.error;
+  EXPECT_EQ(d.return_int, 21314);
+  /* A negative step walks backwards, out of range indices are clamped. */
+  const PureEvalOutput e = eval_source(
+      "float xs[] = array(0.0, 1.0, 2.0, 3.0); float s[] = slice(xs, -1, -100, -2); "
+      "return int(len(s) * 100 + s[0] * 10 + s[1]);");
+  ASSERT_TRUE(e.ok) << e.error;
+  EXPECT_EQ(e.return_int, 231);
+  EXPECT_FALSE(eval_source("int[] xs = array(1, 2); return len(find(xs, \"a\"));").ok);
+}
+
+TEST(nodes_vex, array_set_operations)
+{
+  /* Results have no duplicates and keep the order of the first array. */
+  const PureEvalOutput a = eval_source(
+      "int[] a = array(3, 1, 3, 2); int[] b = array(2, 5, 5); int[] u = union(a, b); "
+      "return len(u) * 10000 + u[0] * 1000 + u[1] * 100 + u[2] * 10 + u[3];");
+  ASSERT_TRUE(a.ok) << a.error;
+  EXPECT_EQ(a.return_int, 43125);
+  const PureEvalOutput b = eval_source(
+      "int[] a = array(3, 1, 3, 2); int[] b = array(2, 5); int[] s = subtract(a, b); "
+      "return len(s) * 100 + s[0] * 10 + s[1];");
+  ASSERT_TRUE(b.ok) << b.error;
+  EXPECT_EQ(b.return_int, 231);
+  const PureEvalOutput c = eval_source(
+      "int[] a = array(3, 1, 3, 2); int[] b = array(2, 3, 7); int[] s = intersect(a, b); "
+      "return len(s) * 100 + s[0] * 10 + s[1];");
+  ASSERT_TRUE(c.ok) << c.error;
+  EXPECT_EQ(c.return_int, 232);
+  /* Int and float arrays can be mixed, different kinds cannot. */
+  const PureEvalOutput d = eval_source(
+      "int[] a = array(1, 2); float b[] = array(2.0, 2.5); return len(union(a, b));");
+  ASSERT_TRUE(d.ok) << d.error;
+  EXPECT_EQ(d.return_int, 3);
+  EXPECT_FALSE(
+      eval_source("int[] a = array(1); string b[] = array(\"x\"); return len(union(a, b));").ok);
+}
+
+TEST(nodes_vex, append_many_items_and_arrays)
+{
+  /* Every further argument is one item or a whole array, added in order. */
+  const PureEvalOutput a = eval_source(
+      "int[] xs = array(1); int[] more = array(6, 7); append(xs, 2, 3); append(xs, more); "
+      "append(xs, 8, more, 9); "
+      "return len(xs) * 10000 + xs[2] * 1000 + xs[4] * 100 + xs[5] * 10 + xs[8];");
+  ASSERT_TRUE(a.ok) << a.error;
+  EXPECT_EQ(a.return_int, 93789);
+  /* An array can be appended to itself, and a brace list is a list of items. */
+  const PureEvalOutput b = eval_source(
+      "int[] xs = array(1, 2); append(xs, xs); append(xs, {5, 6}); return len(xs) * 10 + xs[5];");
+  ASSERT_TRUE(b.ok) << b.error;
+  EXPECT_EQ(b.return_int, 66);
+  /* Int and float arrays mix, other kinds do not. */
+  const PureEvalOutput c = eval_source(
+      "float fs[] = array(0.5); int[] xs = array(2, 3); append(fs, 1, xs); "
+      "return len(fs) * 10 + int(fs[3]);");
+  ASSERT_TRUE(c.ok) << c.error;
+  EXPECT_EQ(c.return_int, 43);
+  EXPECT_FALSE(eval_source("int[] xs = array(1); append(xs); return len(xs);").ok);
+  EXPECT_FALSE(eval_source("int[] xs = array(1); append(xs, \"a\"); return len(xs);").ok);
+  EXPECT_FALSE(eval_source(
+                   "int[] xs = array(1); string ss[] = array(\"a\"); append(xs, ss); return 0;")
+                   .ok);
+}
+
+TEST(nodes_vex, array_items_keep_their_type)
+{
+  /* The items of a vector2 array used to come back as 3D vectors, a vector4 array lost its last
+   * component and the items of matrix2 / matrix3 arrays became identity matrices. */
+  const PureEvalOutput v2 = eval_source(
+      "vector2 us[] = array(vec2(1, 2), vec2(3, 4)); append(us, vec2(5, 6)); "
+      "return format(\"{}\", us[2]) == \"{5, 6}\" ? len(us) : -1;");
+  ASSERT_TRUE(v2.ok) << v2.error;
+  EXPECT_EQ(v2.return_int, 3);
+  const PureEvalOutput v4 = eval_source(
+      "vector4 qs[] = array(vec4(1, 2, 3, 4)); append(qs, vec4(5, 6, 7, 8)); "
+      "return int(qs[1].w) * 10 + int(qs[0].w);");
+  ASSERT_TRUE(v4.ok) << v4.error;
+  EXPECT_EQ(v4.return_int, 84);
+  const PureEvalOutput m2 = eval_source(
+      "matrix2 ms[] = array(matrix2(1, 2, 3, 4), matrix2(5, 6, 7, 8)); "
+      "return int(determinant(ms[1]));");
+  ASSERT_TRUE(m2.ok) << m2.error;
+  EXPECT_EQ(m2.return_int, -2);
+  const PureEvalOutput m3 = eval_source(
+      "matrix3 m = ident(); matrix3 ms[]; append(ms, m, m * 2); return int(determinant(ms[1]));");
+  ASSERT_TRUE(m3.ok) << m3.error;
+  EXPECT_EQ(m3.return_int, 8);
 }
 
 TEST(nodes_vex, array_index_assign)
@@ -998,9 +1225,9 @@ TEST(nodes_vex, color_rgba_literal)
   EXPECT_EQ(out.return_int, 2);
 }
 
-TEST(nodes_vex, chs_chq_compile)
+TEST(nodes_vex, chs_chr_compile)
 {
-  const CompileOutput compiled = compile("string s = chs(\"name\"); r@orient = chq(\"rot\");");
+  const CompileOutput compiled = compile("string s = chs(\"name\"); r@orient = chr(\"rot\");");
   ASSERT_TRUE(bool(compiled.program)) << compiled.error;
 }
 
@@ -1078,7 +1305,7 @@ TEST(nodes_vex, compile_error_has_location)
 {
   const CompileOutput compiled = compile("foo(1);");
   EXPECT_FALSE(bool(compiled.program));
-  EXPECT_NE(compiled.error.find("L"), std::string::npos);
+  EXPECT_NE(compiled.error.find("Line 1:"), std::string::npos);
   EXPECT_NE(compiled.error.find("foo"), std::string::npos);
   ASSERT_FALSE(compiled.diags.is_empty());
   EXPECT_TRUE(compiled.diags[0].is_error);
@@ -1088,9 +1315,72 @@ TEST(nodes_vex, compile_error_missing_semicolon_is_specific)
 {
   const CompileOutput compiled = compile("v@P += {0, 0, 1}");
   EXPECT_FALSE(bool(compiled.program));
-  EXPECT_NE(compiled.error.find("v@P"), std::string::npos);
-  EXPECT_TRUE(compiled.error.find(";") != std::string::npos ||
-              compiled.error.find("分号") != std::string::npos);
+  EXPECT_NE(compiled.error.find("Missing ;"), std::string::npos);
+}
+
+TEST(nodes_vex, missing_separators_are_reported_where_they_belong)
+{
+  /* The error is on the line that misses the `;`, not at the start of the next statement. */
+  const std::string source = "float a = 1.0\nfloat b = 2.0;\n";
+  const CompileOutput semicolon = compile(source);
+  ASSERT_FALSE(semicolon.diags.is_empty());
+  EXPECT_EQ(semicolon.diags[0].offset, int(source.find("1.0")));
+  EXPECT_NE(semicolon.error.find("Line 1:"), std::string::npos);
+
+  const CompileOutput paren = compile("f@x = sin(1.0;\n");
+  ASSERT_FALSE(paren.diags.is_empty());
+  EXPECT_EQ(paren.diags[0].message, "Missing ) (after 1.0)");
+
+  const std::string block = "if (i@index > 2) {\n  f@x = 1;\n";
+  const CompileOutput brace = compile(block);
+  ASSERT_FALSE(brace.diags.is_empty());
+  EXPECT_EQ(brace.diags[0].offset, int(block.find("{")));
+
+  const CompileOutput extra = compile("f@x = 1;\n}\n");
+  ASSERT_FALSE(extra.diags.is_empty());
+  EXPECT_EQ(extra.diags[0].message, "Unexpected }");
+}
+
+TEST(nodes_vex, mistakes_that_used_to_pass_silently)
+{
+  EXPECT_FALSE(bool(compile("f@x = sin(1.0, 2.0);").program));
+  EXPECT_FALSE(bool(compile("float a = \"text\";").program));
+  EXPECT_FALSE(bool(compile("float xs[] = array(1.0);\nfloat b = slice(xs, 0, 1);").program));
+  EXPECT_FALSE(bool(compile("z@foo = 1;").program));
+  /* A single value attribute cannot hold an array, the whole attribute is underlined. */
+  const std::string array_source = "i@nbr = pointneighbours(0, i@index);";
+  const CompileOutput array_to_scalar = compile(array_source);
+  EXPECT_FALSE(bool(array_to_scalar.program));
+  ASSERT_FALSE(array_to_scalar.diags.is_empty());
+  EXPECT_EQ(array_to_scalar.diags[0].offset, 0);
+  EXPECT_EQ(array_to_scalar.diags[0].length, 5);
+  EXPECT_FALSE(bool(compile("nbr = pointneighbours(0, i@index);").program));
+
+  /* A name one typo away from a variable is still an attribute, but gets a warning. */
+  const CompileOutput typo = compile("float total = 0;\ntotl = 5;\nf@x = total;");
+  ASSERT_TRUE(bool(typo.program)) << typo.error;
+  EXPECT_NE(typo.warning.find("total"), std::string::npos);
+
+  /* Unknown functions name the closest one. */
+  const CompileOutput unknown = compile("f@x = sinn(1.0);");
+  ASSERT_FALSE(unknown.diags.is_empty());
+  EXPECT_EQ(unknown.diags[0].message, "Unknown function sinn, did you mean sin?");
+}
+
+TEST(nodes_vex, valid_code_is_not_reported)
+{
+  /* Matrix attributes start with a number token. */
+  EXPECT_TRUE(bool(compile("2@m = matrix2(1.5);\n4@x = ident();").program));
+  /* A string seed, a lone index and a string array are all valid. */
+  EXPECT_TRUE(bool(compile("f@r = rand(\"jitter\", i@id);").program));
+  EXPECT_TRUE(bool(compile("vector p = point(3);").program));
+  EXPECT_TRUE(bool(compile("string names[] = array(\"a\");\nappend(names, \"b\");").program));
+  /* Array attributes are declared with `[]`. */
+  EXPECT_TRUE(bool(compile("i[]@nbr = pointneighbours(0, i@index);").program));
+  /* A bare attribute next to a similarly named variable is not a typo. */
+  const CompileOutput bare = compile("float scale = 2;\nf@x = pscale * scale;");
+  ASSERT_TRUE(bool(bare.program)) << bare.error;
+  EXPECT_TRUE(bare.warning.empty()) << bare.warning;
 }
 
 TEST(nodes_vex, texture_and_geo_builtins_compile)
@@ -1130,7 +1420,7 @@ TEST(nodes_vex, delete_geometry_domain_string_or_int)
   ASSERT_TRUE(bool(d.program)) << d.error;
   const CompileOutput bad = compile("delete_geometry(v@P, i@index, 0);\n");
   EXPECT_FALSE(bool(bad.program));
-  EXPECT_NE(bad.error.find("Type mismatch"), std::string::npos);
+  EXPECT_NE(bad.error.find("delete_geometry"), std::string::npos);
 }
 
 TEST(nodes_vex, geo_nonzero_is_forced_to_zero_with_warning)
@@ -1570,10 +1860,10 @@ TEST(nodes_vex, matrix_mul_dim_mismatch_is_error)
 {
   const CompileOutput a = compile("matrix2 a = 1; matrix3 b = 1; matrix2 c = a * b;");
   EXPECT_FALSE(bool(a.program));
-  EXPECT_NE(a.error.find("维度"), std::string::npos);
+  EXPECT_NE(a.error.find("sizes do not match"), std::string::npos);
   const CompileOutput b = compile("matrix m = ident(); vector p = m * v@P;");
   EXPECT_FALSE(bool(b.program));
-  EXPECT_NE(b.error.find("维度"), std::string::npos);
+  EXPECT_NE(b.error.find("sizes do not match"), std::string::npos);
 }
 
 TEST(nodes_vex, vec_times_mat_warns_not_error)

@@ -18,6 +18,7 @@ set(SRC
   BLT_date_string.hh
   BLT_lang.hh
   BLT_translation.hh
+  BLT_translation_any_thread.hh
 )
 
 if(WITH_INTERNATIONAL)

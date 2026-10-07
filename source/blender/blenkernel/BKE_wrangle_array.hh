@@ -36,6 +36,10 @@ enum class WrangleArrayKind : uint8_t {
   Matrix3 = 6,
   /** Packed ray hits: 8 floats each (face, pos.xyz, n.xyz, dist). */
   Ray = 7,
+  /** 2D vectors, the items of `u[]@name` and `vector2 xs[]`. */
+  Float2 = 8,
+  /** 4D vectors, the items of `q[]@name`, `c[]@name` and `r[]@name`. */
+  Float4 = 9,
 };
 
 struct WrangleArrayValue {
@@ -102,6 +106,35 @@ struct WrangleArrayValue {
     }
   }
 
+  /** The Wrangle keeps the items of a 2D vector array as 3D vectors, Z is dropped here. */
+  void set_float2s(const Span<float3> src)
+  {
+    clear(WrangleArrayKind::Float2);
+    const int max_n = max_values / 2;
+    total = uint16_t(std::min<int64_t>(src.size(), 65535));
+    count = uint16_t(std::min<int64_t>(src.size(), max_n));
+    truncated = src.size() > max_n;
+    for (int i = 0; i < count; i++) {
+      d.f[i * 2 + 0] = src[i].x;
+      d.f[i * 2 + 1] = src[i].y;
+    }
+  }
+
+  void set_float4s(const Span<float4> src)
+  {
+    clear(WrangleArrayKind::Float4);
+    const int max_n = max_values / 4;
+    total = uint16_t(std::min<int64_t>(src.size(), 65535));
+    count = uint16_t(std::min<int64_t>(src.size(), max_n));
+    truncated = src.size() > max_n;
+    for (int i = 0; i < count; i++) {
+      d.f[i * 4 + 0] = src[i].x;
+      d.f[i * 4 + 1] = src[i].y;
+      d.f[i * 4 + 2] = src[i].z;
+      d.f[i * 4 + 3] = src[i].w;
+    }
+  }
+
   static constexpr int matrix_floats = 16;
   static constexpr int ray_floats = 8;
 
@@ -158,6 +191,60 @@ struct WrangleArrayValue {
       return float3x3::identity();
     }
     return float3x3(d.f);
+  }
+
+  /**
+   * `2[]@name` / `3[]@name`: several small matrices, stored like the single one above. The
+   * Wrangle keeps the items of a matrix array as 4x4 matrices, their upper left part is stored.
+   */
+  void set_matrix2s(const Span<float4x4> src)
+  {
+    clear(WrangleArrayKind::Matrix2);
+    const int max_n = max_values / matrix2_floats;
+    total = uint16_t(std::min<int64_t>(src.size(), 65535));
+    count = uint16_t(std::min<int64_t>(src.size(), max_n));
+    truncated = src.size() > max_n;
+    for (int i = 0; i < count; i++) {
+      for (int col = 0; col < 2; col++) {
+        for (int row = 0; row < 2; row++) {
+          d.f[i * matrix2_floats + col * 2 + row] = src[i][col][row];
+        }
+      }
+    }
+  }
+
+  void set_matrix3s(const Span<float4x4> src)
+  {
+    clear(WrangleArrayKind::Matrix3);
+    const int max_n = max_values / matrix3_floats;
+    total = uint16_t(std::min<int64_t>(src.size(), 65535));
+    count = uint16_t(std::min<int64_t>(src.size(), max_n));
+    truncated = src.size() > max_n;
+    for (int i = 0; i < count; i++) {
+      for (int col = 0; col < 3; col++) {
+        for (int row = 0; row < 3; row++) {
+          d.f[i * matrix3_floats + col * 3 + row] = src[i][col][row];
+        }
+      }
+    }
+  }
+
+  /** Item of a `2[]@` / `3[]@` array as a 4x4 matrix, identity outside of the stored part. */
+  float4x4 small_matrix_at(const int index) const
+  {
+    float4x4 result = float4x4::identity();
+    const int dim = (kind == WrangleArrayKind::Matrix2) ? 2 :
+                    (kind == WrangleArrayKind::Matrix3) ? 3 :
+                                                          0;
+    if (dim == 0 || index < 0 || index >= int(count)) {
+      return result;
+    }
+    for (int col = 0; col < dim; col++) {
+      for (int row = 0; row < dim; row++) {
+        result[col][row] = d.f[index * dim * dim + col * dim + row];
+      }
+    }
+    return result;
   }
 
   void set_rays(const int n, const float *src)
@@ -239,6 +326,29 @@ struct WrangleArrayValue {
         comma(i);
       }
     }
+    else if (kind == WrangleArrayKind::Float2) {
+      for (int i = 0; i < n; i++) {
+        s += '(';
+        s += std::to_string(d.f[i * 2 + 0]);
+        s += ", ";
+        s += std::to_string(d.f[i * 2 + 1]);
+        s += ')';
+        comma(i);
+      }
+    }
+    else if (kind == WrangleArrayKind::Float4) {
+      for (int i = 0; i < n; i++) {
+        s += '(';
+        for (int k = 0; k < 4; k++) {
+          s += std::to_string(d.f[i * 4 + k]);
+          if (k + 1 < 4) {
+            s += ", ";
+          }
+        }
+        s += ')';
+        comma(i);
+      }
+    }
     else if (kind == WrangleArrayKind::String) {
       for (int i = 0; i < n; i++) {
         s += '"';
@@ -267,25 +377,19 @@ struct WrangleArrayValue {
         comma(i);
       }
     }
-    else if (kind == WrangleArrayKind::Matrix2) {
-      s += '[';
-      for (int k = 0; k < matrix2_floats; k++) {
-        s += std::to_string(d.f[k]);
-        if (k + 1 < matrix2_floats) {
-          s += ", ";
+    else if (kind == WrangleArrayKind::Matrix2 || kind == WrangleArrayKind::Matrix3) {
+      const int floats = (kind == WrangleArrayKind::Matrix2) ? matrix2_floats : matrix3_floats;
+      for (int i = 0; i < n; i++) {
+        s += '[';
+        for (int k = 0; k < floats; k++) {
+          s += std::to_string(d.f[i * floats + k]);
+          if (k + 1 < floats) {
+            s += ", ";
+          }
         }
+        s += ']';
+        comma(i);
       }
-      s += ']';
-    }
-    else if (kind == WrangleArrayKind::Matrix3) {
-      s += '[';
-      for (int k = 0; k < matrix3_floats; k++) {
-        s += std::to_string(d.f[k]);
-        if (k + 1 < matrix3_floats) {
-          s += ", ";
-        }
-      }
-      s += ']';
     }
     else if (kind == WrangleArrayKind::Ray) {
       for (int i = 0; i < n; i++) {

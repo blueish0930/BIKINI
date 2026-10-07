@@ -149,59 +149,6 @@ static bNode *node_group_get_active(bContext *C, const UString node_idname)
   return nullptr;
 }
 
-bool node_tree_session_is_unlocked(const SpaceNode &snode, const bNodeTree &ntree)
-{
-  if (!snode.runtime) {
-    return false;
-  }
-  if (snode.runtime->unlocked_tree_session_uids.contains(ntree.id.session_uid)) {
-    return true;
-  }
-  if (!bke::node_tree_is_locked(ntree)) {
-    return false;
-  }
-  /* Nested groups locked with the same key as an already-authenticated ancestor
-   * may be entered without typing the password again. Independent locked groups
-   * (even with the same typed password) use a different salt and must not inherit. */
-  for (const bNodeTreePath &path : snode.treepath) {
-    const bNodeTree *ancestor = path.nodetree;
-    if (!ancestor || ancestor == &ntree) {
-      continue;
-    }
-    if (!snode.runtime->unlocked_tree_session_uids.contains(ancestor->id.session_uid)) {
-      continue;
-    }
-    if (bke::node_tree_lock_shares_key(*ancestor, ntree)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-static void node_group_mark_decrypted_session(SpaceNode &snode, const bNodeTree &ntree)
-{
-  if (snode.runtime) {
-    snode.runtime->unlocked_tree_session_uids.add(ntree.id.session_uid);
-  }
-}
-
-static bNodeTree *node_group_password_op_tree(bContext *C, wmOperator *op)
-{
-  const std::string tree_name = RNA_string_get(op->ptr, "node_tree_name");
-  if (!tree_name.empty()) {
-    Main *bmain = CTX_data_main(C);
-    if (bmain) {
-      if (bNodeTree *ntree = id_cast<bNodeTree *>(
-              BKE_libblock_find_name(bmain, ID_NT, tree_name.c_str())))
-      {
-        return ntree;
-      }
-    }
-  }
-  SpaceNode *snode = CTX_wm_space_node(C);
-  return snode ? snode->edittree : nullptr;
-}
-
 static bool node_group_is_open_recursive_self(const SpaceNode *snode, const bNodeTree *ngroup)
 {
   if (snode == nullptr || snode->edittree == nullptr || ngroup == nullptr) {
@@ -214,11 +161,11 @@ static bool node_group_is_open_recursive_self(const SpaceNode *snode, const bNod
   return edit == ngroup || edit->id.session_uid == ngroup->id.session_uid;
 }
 
-static wmOperatorStatus node_group_enter_or_prompt(bContext *C,
-                                                   ARegion *region,
-                                                   SpaceNode *snode,
-                                                   bNodeTree *ngroup,
-                                                   bNode *gnode)
+static wmOperatorStatus node_group_push_tree(bContext *C,
+                                             ARegion *region,
+                                             SpaceNode *snode,
+                                             bNodeTree *ngroup,
+                                             bNode *gnode)
 {
   if (!ngroup) {
     return OPERATOR_CANCELLED;
@@ -229,389 +176,8 @@ static wmOperatorStatus node_group_enter_or_prompt(bContext *C,
                "Already inside this recursive group. Change depth in the Recursion Tree window");
     return OPERATOR_CANCELLED;
   }
-  if (bke::node_tree_is_locked(*ngroup) && !node_tree_session_is_unlocked(*snode, *ngroup)) {
-    wmOperatorType *ot = WM_operatortype_find("NODE_OT_group_password_enter", false);
-    if (!ot) {
-      return OPERATOR_CANCELLED;
-    }
-    PointerRNA ptr = WM_operator_properties_create_ptr(ot);
-    RNA_string_set(&ptr, "node_tree_name", ngroup->id.name + 2);
-    if (gnode) {
-      RNA_string_set(&ptr, "node_name", gnode->name);
-    }
-    RNA_boolean_set(&ptr, "do_push", true);
-    WM_operator_name_call_ptr(C, ot, wm::OpCallContext::InvokeDefault, &ptr, nullptr);
-    WM_operator_properties_free(&ptr);
-    return OPERATOR_FINISHED;
-  }
-  if (snode->runtime && bke::node_tree_is_locked(*ngroup)) {
-    /* Remember this visit so the editor stays unblocked while inside. Pop removes it. */
-    snode->runtime->unlocked_tree_session_uids.add(ngroup->id.session_uid);
-  }
   ED_node_tree_push(region, snode, ngroup, gnode);
   return OPERATOR_FINISHED;
-}
-
-/** \} */
-
-/* -------------------------------------------------------------------- */
-/** \name Lock / Unlock Node Group
- * \{ */
-
-static wmOperatorStatus node_group_lock_toggle_invoke(bContext *C,
-                                                      wmOperator *op,
-                                                      const wmEvent * /*event*/)
-{
-  SpaceNode *snode = CTX_wm_space_node(C);
-  bNodeTree *group = snode ? snode->edittree : nullptr;
-  if (!group || (group->id.flag & ID_FLAG_EMBEDDED_DATA)) {
-    return OPERATOR_CANCELLED;
-  }
-
-  const bool removing_lock = bke::node_tree_is_locked(*group);
-  RNA_boolean_set(op->ptr, "removing_lock", removing_lock);
-
-  if (removing_lock) {
-    return WM_operator_props_dialog_popup(
-        C,
-        op,
-        320,
-        IFACE_("Unlock Node Group"),
-        IFACE_("Unlock"),
-        false,
-        IFACE_("Enter the password to remove the lock."),
-        true);
-  }
-  return WM_operator_props_dialog_popup(
-      C,
-      op,
-      320,
-      IFACE_("Lock Node Group"),
-      IFACE_("Lock"),
-      false,
-      IFACE_("Set a password. The node graph is stored encrypted in the .blend file and "
-             "appears empty in other Blender versions, but still computes automatically. "
-             "This password is required to view or edit the internals."),
-      true);
-}
-
-static wmOperatorStatus node_group_lock_toggle_exec(bContext *C, wmOperator *op)
-{
-  SpaceNode *snode = CTX_wm_space_node(C);
-  bNodeTree *group = snode ? snode->edittree : nullptr;
-  if (!group || (group->id.flag & ID_FLAG_EMBEDDED_DATA)) {
-    return OPERATOR_CANCELLED;
-  }
-
-  const std::string password = RNA_string_get(op->ptr, "password");
-  const bool removing_lock = RNA_boolean_get(op->ptr, "removing_lock");
-
-  if (removing_lock) {
-    if (!bke::node_tree_lock_unlock_contents(*CTX_data_main(C), *group, password, op->reports)) {
-      return OPERATOR_CANCELLED;
-    }
-    bke::node_tree_clear_lock(*group);
-    if (snode->runtime) {
-      snode->runtime->unlocked_tree_session_uids.remove(group->id.session_uid);
-    }
-  }
-  else {
-    if (password.empty()) {
-      BKE_report(op->reports, RPT_ERROR, "Password cannot be empty");
-      return OPERATOR_CANCELLED;
-    }
-    const std::string confirm = RNA_string_get(op->ptr, "confirm_password");
-    if (password != confirm) {
-      BKE_report(op->reports, RPT_ERROR, "Passwords do not match");
-      return OPERATOR_CANCELLED;
-    }
-    Main *bmain = CTX_data_main(C);
-    if (!bke::node_tree_lock_apply(*bmain, *group, password, op->reports)) {
-      return OPERATOR_CANCELLED;
-    }
-    bke::node_tree_lock_session_acquire(*group);
-    /* Stay inside after locking; re-entry later will require the password. */
-    node_group_mark_decrypted_session(*snode, *group);
-  }
-
-  WM_event_add_notifier(C, NC_NODE | ND_DISPLAY, group);
-  WM_event_add_notifier(C, NC_SPACE | ND_SPACE_NODE, nullptr);
-  return OPERATOR_FINISHED;
-}
-
-static void node_group_lock_toggle_ui(bContext * /*C*/, wmOperator *op)
-{
-  ui::Layout &layout = *op->layout;
-  layout.use_property_split_set(true);
-  layout.use_property_decorate_set(false);
-  layout.prop(op->ptr, "password", UI_ITEM_NONE, std::nullopt, ICON_NONE);
-  if (!RNA_boolean_get(op->ptr, "removing_lock")) {
-    layout.prop(op->ptr, "confirm_password", UI_ITEM_NONE, std::nullopt, ICON_NONE);
-  }
-}
-
-void NODE_OT_group_lock_toggle(wmOperatorType *ot)
-{
-  ot->name = "Lock Node Group";
-  ot->description = "Lock or unlock this node group with a password";
-  ot->idname = "NODE_OT_group_lock_toggle";
-
-  ot->invoke = node_group_lock_toggle_invoke;
-  ot->exec = node_group_lock_toggle_exec;
-  ot->ui = node_group_lock_toggle_ui;
-  ot->poll = node_group_operator_active_poll;
-
-  /* Do not push undo: copying a large node tree into the undo stack is slow,
-   * and storing a lock password in undo is also undesirable. */
-  ot->flag = 0;
-
-  PropertyRNA *prop = RNA_def_string(
-      ot->srna, "password", nullptr, 128, "Password", "Password for this node group");
-  RNA_def_property_subtype(prop, PROP_PASSWORD);
-  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
-  ot->prop = prop;
-
-  prop = RNA_def_string(ot->srna,
-                        "confirm_password",
-                        nullptr,
-                        128,
-                        "Confirm",
-                        "Re-enter the password to confirm");
-  RNA_def_property_subtype(prop, PROP_PASSWORD);
-  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
-
-  prop = RNA_def_boolean(ot->srna, "removing_lock", false, "Removing Lock", "");
-  RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
-}
-
-/** \} */
-
-/* -------------------------------------------------------------------- */
-/** \name Enter Locked Node Group (Password)
- * \{ */
-
-static wmOperatorStatus node_group_password_enter_exec(bContext *C, wmOperator *op)
-{
-  SpaceNode *snode = CTX_wm_space_node(C);
-  ARegion *region = CTX_wm_region(C);
-  bNodeTree *ngroup = node_group_password_op_tree(C, op);
-  if (!snode || !ngroup) {
-    return OPERATOR_CANCELLED;
-  }
-
-  const std::string password = RNA_string_get(op->ptr, "password");
-  Main *bmain = CTX_data_main(C);
-  if (!bke::node_tree_lock_unlock_contents(*bmain, *ngroup, password, op->reports)) {
-    return OPERATOR_CANCELLED;
-  }
-  bke::node_tree_lock_session_acquire(*ngroup);
-
-  node_group_mark_decrypted_session(*snode, *ngroup);
-  if (snode->runtime) {
-    snode->runtime->password_prompt_shown = false;
-  }
-
-  if (RNA_boolean_get(op->ptr, "do_push")) {
-    const std::string node_name = RNA_string_get(op->ptr, "node_name");
-    bNode *gnode = nullptr;
-    if (!node_name.empty() && snode->edittree) {
-      gnode = bke::node_find_node_by_name(*snode->edittree, node_name);
-    }
-    ED_node_tree_push(region, snode, ngroup, gnode);
-  }
-
-  WM_event_add_notifier(C, NC_SCENE | ND_NODES, nullptr);
-  WM_event_add_notifier(C, NC_NODE | ND_DISPLAY, nullptr);
-  WM_event_add_notifier(C, NC_SPACE | ND_SPACE_NODE, nullptr);
-  return OPERATOR_FINISHED;
-}
-
-static wmOperatorStatus node_group_password_enter_invoke(bContext *C,
-                                                         wmOperator *op,
-                                                         const wmEvent * /*event*/)
-{
-  SpaceNode *snode = CTX_wm_space_node(C);
-  bNodeTree *ngroup = node_group_password_op_tree(C, op);
-  if (!ngroup) {
-    return OPERATOR_CANCELLED;
-  }
-  if (!bke::node_tree_is_locked(*ngroup) ||
-      (snode && node_tree_session_is_unlocked(*snode, *ngroup)))
-  {
-    return node_group_password_enter_exec(C, op);
-  }
-  return WM_operator_props_dialog_popup(C,
-                                        op,
-                                        320,
-                                        IFACE_("Node Group Locked"),
-                                        IFACE_("Unlock"),
-                                        false,
-                                        IFACE_("Enter the password to view this node group."),
-                                        true);
-}
-
-static void node_group_password_enter_cancel(bContext *C, wmOperator *op)
-{
-  if (RNA_boolean_get(op->ptr, "do_push")) {
-    /* Never entered the group. */
-    return;
-  }
-  SpaceNode *snode = CTX_wm_space_node(C);
-  ARegion *region = CTX_wm_region(C);
-  if (snode && snode->treepath.first() != snode->treepath.last()) {
-    ED_node_tree_pop(region, snode);
-  }
-}
-
-static void node_group_password_enter_ui(bContext * /*C*/, wmOperator *op)
-{
-  ui::Layout &layout = *op->layout;
-  layout.use_property_split_set(true);
-  layout.use_property_decorate_set(false);
-  layout.prop(op->ptr, "password", UI_ITEM_NONE, std::nullopt, ICON_NONE);
-}
-
-void NODE_OT_group_password_enter(wmOperatorType *ot)
-{
-  ot->name = "Enter Node Group Password";
-  ot->description = "Enter the password to view a locked node group";
-  ot->idname = "NODE_OT_group_password_enter";
-
-  ot->invoke = node_group_password_enter_invoke;
-  ot->exec = node_group_password_enter_exec;
-  ot->cancel = node_group_password_enter_cancel;
-  ot->ui = node_group_password_enter_ui;
-  ot->poll = node_group_operator_active_poll;
-
-  PropertyRNA *prop = RNA_def_string(
-      ot->srna, "password", nullptr, 128, "Password", "Password for this node group");
-  RNA_def_property_subtype(prop, PROP_PASSWORD);
-  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
-  ot->prop = prop;
-
-  prop = RNA_def_string(ot->srna, "node_tree_name", nullptr, MAX_ID_NAME - 2, "Node Tree", "");
-  RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
-
-  prop = RNA_def_string(ot->srna, "node_name", nullptr, 64, "Node Name", "");
-  RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
-
-  prop = RNA_def_boolean(
-      ot->srna, "do_push", false, "Push", "Enter the node group after unlocking");
-  RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
-}
-
-/** \} */
-
-/* -------------------------------------------------------------------- */
-/** \name Unlock Locked Groups For Evaluation (File Load)
- * \{ */
-
-static bool unlock_locked_groups_poll(bContext *C)
-{
-  Main *bmain = CTX_data_main(C);
-  if (!bmain) {
-    return false;
-  }
-  for (bNodeTree &tree : bmain->nodetrees) {
-    if (bke::node_tree_contents_sealed(tree)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-static wmOperatorStatus unlock_locked_groups_exec(bContext *C, wmOperator *op)
-{
-  Main *bmain = CTX_data_main(C);
-  if (!bmain) {
-    return OPERATOR_CANCELLED;
-  }
-  const std::string password = RNA_string_get(op->ptr, "password");
-  if (password.empty()) {
-    BKE_report(op->reports, RPT_ERROR, "Password cannot be empty");
-    return OPERATOR_CANCELLED;
-  }
-
-  int unlocked = 0;
-  int failed = 0;
-  for (bNodeTree &tree : bmain->nodetrees) {
-    if (!bke::node_tree_contents_sealed(tree)) {
-      continue;
-    }
-    if (bke::node_tree_lock_unlock_contents(*bmain, tree, password, nullptr)) {
-      /* Decrypt for modifiers / evaluation only. Do not mark the editor session
-       * unlocked: viewing internals still requires entering the group password. */
-      unlocked++;
-      DEG_id_tag_update(&tree.id, ID_RECALC_NTREE_OUTPUT);
-    }
-    else {
-      failed++;
-    }
-  }
-
-  if (unlocked == 0) {
-    BKE_report(op->reports, RPT_ERROR, "Incorrect password");
-    return OPERATOR_CANCELLED;
-  }
-
-  BKE_ntree_update(*bmain);
-  DEG_relations_tag_update(bmain);
-  WM_event_add_notifier(C, NC_SCENE | ND_NODES, nullptr);
-  WM_event_add_notifier(C, NC_OBJECT | ND_MODIFIER, nullptr);
-  WM_event_add_notifier(C, NC_NODE | ND_DISPLAY, nullptr);
-  if (failed > 0) {
-    BKE_report(op->reports,
-               RPT_WARNING,
-               "Some locked node groups use a different password and were not decrypted");
-  }
-  return OPERATOR_FINISHED;
-}
-
-static wmOperatorStatus unlock_locked_groups_invoke(bContext *C,
-                                                    wmOperator *op,
-                                                    const wmEvent * /*event*/)
-{
-  if (!unlock_locked_groups_poll(C)) {
-    return OPERATOR_CANCELLED;
-  }
-  return WM_operator_props_dialog_popup(
-      C,
-      op,
-      320,
-      IFACE_("Locked Node Groups"),
-      IFACE_("Unlock"),
-      false,
-      IFACE_("Enter the password so locked node groups can compute. "
-             "Viewing the node graph still requires the password."),
-      true);
-}
-
-static void unlock_locked_groups_ui(bContext * /*C*/, wmOperator *op)
-{
-  ui::Layout &layout = *op->layout;
-  layout.use_property_split_set(true);
-  layout.use_property_decorate_set(false);
-  layout.prop(op->ptr, "password", UI_ITEM_NONE, std::nullopt, ICON_NONE);
-}
-
-void NODE_OT_unlock_locked_groups(wmOperatorType *ot)
-{
-  ot->name = "Unlock Locked Node Groups";
-  ot->description =
-      "Decrypt locked node groups so they can evaluate; does not open them in the editor";
-  ot->idname = "NODE_OT_unlock_locked_groups";
-
-  ot->invoke = unlock_locked_groups_invoke;
-  ot->exec = unlock_locked_groups_exec;
-  ot->ui = unlock_locked_groups_ui;
-  ot->poll = unlock_locked_groups_poll;
-  ot->flag = 0;
-
-  PropertyRNA *prop = RNA_def_string(
-      ot->srna, "password", nullptr, 128, "Password", "Password for locked node groups");
-  RNA_def_property_subtype(prop, PROP_PASSWORD);
-  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
-  ot->prop = prop;
 }
 
 /** \} */
@@ -663,7 +229,7 @@ static wmOperatorStatus node_group_edit_exec(bContext *C, wmOperator *op)
     }
 
     if (ngroup) {
-      const wmOperatorStatus status = node_group_enter_or_prompt(C, region, snode, ngroup, gnode);
+      const wmOperatorStatus status = node_group_push_tree(C, region, snode, ngroup, gnode);
       WM_event_add_notifier(C, NC_SCENE | ND_NODES, nullptr);
       WM_event_add_notifier(C, NC_NODE | ND_NODE_GIZMO, nullptr);
       return status;
@@ -735,7 +301,7 @@ static wmOperatorStatus node_group_enter_exit_invoke(bContext *C,
       return OPERATOR_PASS_THROUGH;
     }
     /* Path push only — do not change tree_idname (stay GPU Texture Editor). */
-    return node_group_enter_or_prompt(C, &region, &snode, geo, node);
+    return node_group_push_tree(C, &region, &snode, geo, node);
   }
   /* Compositor → GPU Texture Editor group (Tab / double-click). */
   if (node->is_type("CompositorNodeImageProcess"_ustr)) {
@@ -746,7 +312,7 @@ static wmOperatorStatus node_group_enter_exit_invoke(bContext *C,
     if (!img_group || img_group->type != NTREE_IMAGE || ID_MISSING(img_group)) {
       return OPERATOR_PASS_THROUGH;
     }
-    return node_group_enter_or_prompt(C, &region, &snode, img_group, node);
+    return node_group_push_tree(C, &region, &snode, img_group, node);
   }
   if (!node->is_group()) {
     return OPERATOR_PASS_THROUGH;
@@ -758,7 +324,7 @@ static wmOperatorStatus node_group_enter_exit_invoke(bContext *C,
   if (!group || ID_MISSING(group)) {
     return OPERATOR_PASS_THROUGH;
   }
-  return node_group_enter_or_prompt(C, &region, &snode, group, node);
+  return node_group_push_tree(C, &region, &snode, group, node);
 }
 
 void NODE_OT_group_enter_exit(wmOperatorType *ot)
@@ -860,17 +426,6 @@ static wmOperatorStatus node_group_ungroup_exec(bContext *C, wmOperator *op)
   }
   if (nodes_to_ungroup.is_empty()) {
     return OPERATOR_CANCELLED;
-  }
-
-  for (bNode *node : nodes_to_ungroup) {
-    bNodeTree *ngroup = id_cast<bNodeTree *>(node->id);
-    if (ngroup && bke::node_tree_is_locked(*ngroup)) {
-      BKE_reportf(op->reports,
-                  RPT_ERROR,
-                  "Cannot ungroup locked node group '%s'",
-                  ngroup->id.name + 2);
-      return OPERATOR_CANCELLED;
-    }
   }
 
   node_deselect_all(*snode->edittree);
@@ -1344,10 +899,6 @@ static wmOperatorStatus node_group_insert_exec(bContext *C, wmOperator *op)
   }
 
   bNodeTree *ngroup = reinterpret_cast<bNodeTree *>(gnode->id);
-  if (bke::node_tree_is_locked(*ngroup) && !node_tree_session_is_unlocked(*snode, *ngroup)) {
-    BKE_report(op->reports, RPT_ERROR, "Cannot insert into a locked node group");
-    return OPERATOR_CANCELLED;
-  }
   VectorSet<bNode *> nodes_to_group = get_nodes_to_group(*ntree, gnode);
 
   /* Make sure that there won't be a node group containing itself afterwards. */

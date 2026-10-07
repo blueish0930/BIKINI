@@ -1538,33 +1538,7 @@ static bool rna_NodeTree_check(bNodeTree *ntree, ReportList *reports)
     }
     return false;
   }
-  if (bke::node_tree_lock_blocks_view(*ntree)) {
-    if (reports) {
-      BKE_reportf(reports,
-                  RPT_ERROR,
-                  "Node group '%s' is locked; enter the password to edit it",
-                  ntree->id.name + 2);
-    }
-    return false;
-  }
   return true;
-}
-
-/* Locked groups whose password was not verified this session expose no nodes/links
- * through RNA (black-box). Length and index/name lookups fall back to iterating these
- * begin functions, so gating here covers the whole collection interface. */
-static void rna_NodeTree_nodes_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
-{
-  bNodeTree *ntree = reinterpret_cast<bNodeTree *>(ptr->owner_id);
-  ListBase *lb = bke::node_tree_lock_blocks_view(*ntree) ? nullptr : &ntree->nodes;
-  rna_iterator_listbase_begin(iter, ptr, lb, nullptr);
-}
-
-static void rna_NodeTree_links_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
-{
-  bNodeTree *ntree = reinterpret_cast<bNodeTree *>(ptr->owner_id);
-  ListBase *lb = bke::node_tree_lock_blocks_view(*ntree) ? nullptr : &ntree->links;
-  rna_iterator_listbase_begin(iter, ptr, lb, nullptr);
 }
 
 static void rna_NodeTree_update(Main *bmain, Scene * /*scene*/, PointerRNA *ptr)
@@ -1991,12 +1965,6 @@ static void rna_NodeTree_link_clear(bNodeTree *ntree, Main *bmain, ReportList *r
 static bool rna_NodeTree_contains_tree(bNodeTree *tree, bNodeTree *sub_tree)
 {
   return bke::node_tree_contains_tree(*tree, *sub_tree);
-}
-
-static bool rna_NodeTree_is_locked_get(PointerRNA *ptr)
-{
-  const bNodeTree *ntree = ptr->data_as<bNodeTree>();
-  return bke::node_tree_is_locked(*ntree);
 }
 
 static void rna_NodeTree_bl_idname_get(PointerRNA *ptr, char *value)
@@ -5569,7 +5537,7 @@ static const EnumPropertyItem node_metallic_fresnel_type_items[] = {
      0,
      "F82 Tint",
      "An approximation of the Fresnel conductor curve based on the colors at perpendicular and "
-     "near-grazing (roughly 82��) angles"},
+     "near-grazing (roughly 82°) angles"},
     {0, nullptr, 0, nullptr, nullptr},
 };
 
@@ -6574,7 +6542,7 @@ static void def_image_histogram(BlenderRNA * /*brna*/, StructRNA *srna)
   RNA_def_property_ui_text(
       prop,
       "Black",
-      "Input black point in scene-linear units (left handle; may be outside 0?C1 for HDR)");
+      "Input black point in scene-linear units (left handle; may be outside 0–1 for HDR)");
   RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
 
   prop = RNA_def_property(srna, "levels_white", PROP_FLOAT, PROP_NONE);
@@ -9763,7 +9731,6 @@ static void def_image_fluid_sim_output(BlenderRNA *brna, StructRNA *srna)
   RNA_def_property_ui_text(
       prop,
       "Density Dissipation",
-      "Density Dissipation / ??????\n"
       "How fast the color/dye fades during advection. 0 = never, "
       "1.0 = the WebGL Fluid default. Higher = dye disappears quickly");
   RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_NodeImageFluid_solver_update");
@@ -9775,7 +9742,6 @@ static void def_image_fluid_sim_output(BlenderRNA *brna, StructRNA *srna)
   RNA_def_property_ui_text(
       prop,
       "Velocity Dissipation",
-      "Velocity Dissipation / ??????\n"
       "How fast velocity decays during self-advection. 0 = inviscid, "
       "0.2 = WebGL Fluid default. Higher = more damping");
   RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_NodeImageFluid_solver_update");
@@ -9786,7 +9752,6 @@ static void def_image_fluid_sim_output(BlenderRNA *brna, StructRNA *srna)
   RNA_def_property_ui_text(
       prop,
       "Pressure",
-      "Pressure / ?????????\n"
       "Warm-start decay factor for the pressure field. 0 = cold start, "
       "0.8 = WebGL Fluid default, 1 = fully retain last pressure");
   RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_NodeImageFluid_solver_update");
@@ -9798,7 +9763,6 @@ static void def_image_fluid_sim_output(BlenderRNA *brna, StructRNA *srna)
   RNA_def_property_ui_text(
       prop,
       "Vorticity",
-      "Vorticity / ???????\n"
       "Curl confinement strength. 0 = none, 30 = WebGL Fluid default. "
       "Adds small-scale swirl to the velocity field");
   RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_NodeImageFluid_solver_update");
@@ -9810,7 +9774,6 @@ static void def_image_fluid_sim_output(BlenderRNA *brna, StructRNA *srna)
   RNA_def_property_ui_text(
       prop,
       "Pressure V-Cycles",
-      "Pressure V-Cycles / ??? V ???\n"
       "Multigrid V-cycles per projection (3 default). Few cycles = hundreds of Jacobi iterations");
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_NodeImageFluid_solver_update");
@@ -9822,7 +9785,6 @@ static void def_image_fluid_sim_output(BlenderRNA *brna, StructRNA *srna)
   RNA_def_property_ui_text(
       prop,
       "Pressure Iterations",
-      "Pressure Iterations / ???????\n"
       "Jacobi iterations on the coarsest multigrid level. 20 = default");
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_NodeImageFluid_solver_update");
@@ -9834,7 +9796,6 @@ static void def_image_fluid_sim_output(BlenderRNA *brna, StructRNA *srna)
   RNA_def_property_ui_text(
       prop,
       "Pressure Smoothing",
-      "Pressure Smoothing / ??????\n"
       "Jacobi pre/post smoothing per multigrid level (2 default)");
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_NodeImageFluid_solver_update");
@@ -9844,8 +9805,7 @@ static void def_image_fluid_sim_output(BlenderRNA *brna, StructRNA *srna)
   RNA_def_property_range(prop, 0.01f, 1.0f);
   RNA_def_property_ui_text(
       prop, "Splat Radius",
-      "Splat Radius / ?????\n"
-      "[Hidden ?? vestigial WebGL demo param]");
+      "[Hidden: vestigial WebGL demo param]");
   RNA_def_property_flag(prop, PROP_HIDDEN);
   RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_NodeImageFluid_solver_update");
 
@@ -9856,8 +9816,7 @@ static void def_image_fluid_sim_output(BlenderRNA *brna, StructRNA *srna)
   RNA_def_property_ui_text(
       prop,
       "Velocity Scale",
-      "Velocity Scale / ???????\n"
-      "[Hidden ?? vestigial WebGL demo param]");
+      "[Hidden: vestigial WebGL demo param]");
   RNA_def_property_flag(prop, PROP_HIDDEN);
   RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_NodeImageFluid_solver_update");
 
@@ -10045,7 +10004,7 @@ static void def_geo_simulation_output(BlenderRNA *brna, StructRNA *srna)
   RNA_def_property_ui_text(
       prop,
       "Memory Limit (MB)",
-      "Approximate maximum memory for unbaked simulation frames in megabytes (MB, 1024��1024 "
+      "Approximate maximum memory for unbaked simulation frames in megabytes (MB, 1024×1024 "
       "bytes); older frames are freed first");
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
@@ -12943,29 +12902,12 @@ static void rna_def_nodetree(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Description", "Description of the node tree");
   RNA_def_property_update(prop, NC_NODE | ND_DISPLAY, "rna_NodeTree_update_asset");
 
-  prop = RNA_def_property(srna, "is_locked", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_clear_flag(prop, PROP_EDITABLE | PROP_ANIMATABLE);
-  RNA_def_property_boolean_funcs(prop, "rna_NodeTree_is_locked_get", nullptr);
-  RNA_def_property_ui_text(
-      prop,
-      "Lock",
-      "Node group is encrypted; a password is required to view or extract its internals");
-
   /* AnimData */
   rna_def_animdata_common(srna);
 
   /* Nodes Collection */
   prop = RNA_def_property(srna, "nodes", PROP_COLLECTION, PROP_NONE);
   RNA_def_property_collection_sdna(prop, nullptr, "nodes", nullptr);
-  RNA_def_property_collection_funcs(prop,
-                                    "rna_NodeTree_nodes_begin",
-                                    nullptr,
-                                    nullptr,
-                                    nullptr,
-                                    nullptr,
-                                    nullptr,
-                                    nullptr,
-                                    nullptr);
   RNA_def_property_struct_type(prop, "Node");
   RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_ui_text(prop, "Nodes", "");
@@ -12974,15 +12916,6 @@ static void rna_def_nodetree(BlenderRNA *brna)
   /* NodeLinks Collection */
   prop = RNA_def_property(srna, "links", PROP_COLLECTION, PROP_NONE);
   RNA_def_property_collection_sdna(prop, nullptr, "links", nullptr);
-  RNA_def_property_collection_funcs(prop,
-                                    "rna_NodeTree_links_begin",
-                                    nullptr,
-                                    nullptr,
-                                    nullptr,
-                                    nullptr,
-                                    nullptr,
-                                    nullptr,
-                                    nullptr);
   RNA_def_property_struct_type(prop, "NodeLink");
   RNA_def_property_ui_text(prop, "Links", "");
   rna_def_nodetree_link_api(brna, prop);
@@ -14319,6 +14252,7 @@ static void rna_def_nodes(BlenderRNA *brna)
   define("GeometryNode", "GeometryNodeDebug");
   /* GeometryNodeDelaunay3D deleted (non-CGAL Bowyer–Watson; use GeometryNodeCgalDelaunay3D) */
   define("GeometryNode", "GeometryNodeDeleteGeometry");
+  define("GeometryNode", "GeometryNodeDissolveEdges");
   define("GeometryNode", "GeometryNodeDistributePointsInGrid");
   define("GeometryNode", "GeometryNodeDistributePointsInVolume");
   define("GeometryNode", "GeometryNodeDistributePointsOnFaces", def_geo_distribute_points_on_faces);
@@ -14421,6 +14355,7 @@ static void rna_def_nodes(BlenderRNA *brna)
   define("GeometryNode", "GeometryNodeInputMaterialIndex");
   define("GeometryNode", "GeometryNodeInputMeshEdgeAngle");
   define("GeometryNode", "GeometryNodeInputMeshEdgeNeighbors");
+  define("GeometryNode", "GeometryNodeInputMeshEdgeRings");
   define("GeometryNode", "GeometryNodeInputMeshEdgeVertices");
   define("GeometryNode", "GeometryNodeInputMeshFaceArea");
   define("GeometryNode", "GeometryNodeInputMeshFaceIsPlanar");

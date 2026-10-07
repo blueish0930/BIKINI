@@ -194,21 +194,10 @@ static void tag_guide_geometry_eval(SpaceNode & /*snode*/)
 
 void ED_node_tree_start(ARegion *region, SpaceNode *snode, bNodeTree *ntree, ID *id, ID *from)
 {
-  const bool keep_unlock = ntree && snode->runtime &&
-                           snode->runtime->unlocked_tree_session_uids.contains(ntree->id.session_uid);
-
   for (bNodeTreePath &path : snode->treepath.items_mutable()) {
     MEM_delete(&path);
   }
   snode->treepath.clear_no_delete();
-
-  if (snode->runtime) {
-    snode->runtime->unlocked_tree_session_uids.clear();
-    snode->runtime->password_prompt_shown = false;
-    if (keep_unlock) {
-      snode->runtime->unlocked_tree_session_uids.add(ntree->id.session_uid);
-    }
-  }
 
   if (ntree) {
     bNodeTreePath *path = MEM_new<bNodeTreePath>("node tree path");
@@ -329,24 +318,6 @@ void ED_node_tree_pop(ARegion *region, SpaceNode *snode)
     return;
   }
 
-  bNodeTree *leaving = path->nodetree;
-  if (snode->runtime) {
-    snode->runtime->password_prompt_shown = false;
-    if (leaving) {
-      snode->runtime->unlocked_tree_session_uids.remove(leaving->id.session_uid);
-    }
-  }
-  if (leaving && G_MAIN && bke::node_tree_is_locked(*leaving)) {
-    bke::node_tree_lock_session_release(*G_MAIN, *leaving);
-  }
-  if (snode->runtime && G_MAIN) {
-    for (bNodeTree &tree : G_MAIN->nodetrees) {
-      if (bke::node_tree_contents_sealed(tree)) {
-        snode->runtime->unlocked_tree_session_uids.remove(tree.id.session_uid);
-      }
-    }
-  }
-
   BLI_remlink(&snode->treepath, path);
   MEM_delete(path);
 
@@ -368,65 +339,6 @@ void ED_node_tree_pop(ARegion *region, SpaceNode *snode)
   tag_guide_geometry_eval(*snode);
 
   WM_main_add_notifier(NC_SCENE | ND_NODES, nullptr);
-}
-
-bool ED_node_edit_tree_is_lock_blocked(const SpaceNode *snode)
-{
-  if (!snode || !snode->edittree || !snode->runtime) {
-    return false;
-  }
-  if (!bke::node_tree_is_locked(*snode->edittree)) {
-    return false;
-  }
-  return !ed::space_node::node_tree_session_is_unlocked(*snode, *snode->edittree);
-}
-
-void ED_node_tree_password_prompt_if_needed(bContext *C)
-{
-  SpaceNode *snode = CTX_wm_space_node(C);
-  if (!ED_node_edit_tree_is_lock_blocked(snode)) {
-    return;
-  }
-  if (snode->runtime->password_prompt_shown) {
-    return;
-  }
-  snode->runtime->password_prompt_shown = true;
-
-  wmOperatorType *ot = WM_operatortype_find("NODE_OT_group_password_enter", false);
-  if (!ot) {
-    return;
-  }
-  PointerRNA ptr = WM_operator_properties_create_ptr(ot);
-  RNA_string_set(&ptr, "node_tree_name", snode->edittree->id.name + 2);
-  RNA_boolean_set(&ptr, "do_push", false);
-  WM_operator_name_call_ptr(C, ot, wm::OpCallContext::InvokeDefault, &ptr, nullptr);
-  WM_operator_properties_free(&ptr);
-}
-
-void ED_node_lock_prompt_after_file_load(bContext *C)
-{
-  if (!C || G.background) {
-    return;
-  }
-  Main *bmain = CTX_data_main(C);
-  if (!bmain) {
-    return;
-  }
-  bool any_sealed = false;
-  for (bNodeTree &tree : bmain->nodetrees) {
-    if (bke::node_tree_contents_sealed(tree)) {
-      any_sealed = true;
-      break;
-    }
-  }
-  if (!any_sealed) {
-    return;
-  }
-  wmOperatorType *ot = WM_operatortype_find("NODE_OT_unlock_locked_groups", false);
-  if (!ot) {
-    return;
-  }
-  WM_operator_name_call_ptr(C, ot, wm::OpCallContext::InvokeDefault, nullptr, nullptr);
 }
 
 int ED_node_tree_depth(SpaceNode *snode)
@@ -1802,7 +1714,6 @@ static bool image_tree_needs_evaluation(const bNodeTree &ntree)
 static void node_area_refresh(const bContext *C, ScrArea *area)
 {
   snode_set_context(*C);
-  ED_node_tree_password_prompt_if_needed(const_cast<bContext *>(C));
 
   /* Image Process editor: evaluate so Viewer backdrop updates
    * (same role as the compositor job for CompositorNodeTree). Always run when the tree has

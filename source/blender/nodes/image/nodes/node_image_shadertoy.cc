@@ -132,19 +132,13 @@ static const char *pass_rna_prop(const int pass_view)
 }
 
 /* -------------------------------------------------------------------- */
-/** \name Shader parameter scan (#define / const / #iUniform)
+/** \name GLSL token stream
+ *
+ * User GLSL is only ever edited token-wise: a token is renamed, blanked, or gets text
+ * appended. Whitespace, comments and line breaks are kept as they were pasted, so a
+ * statement that spans several lines stays intact and compiler error lines still match
+ * the ShaderToy source.
  * \{ */
-
-enum class ShaderParamKind { Float, Int, Bool, Vec2, Vec3, Color };
-
-struct ShaderParam {
-  std::string name;
-  ShaderParamKind kind = ShaderParamKind::Float;
-  float values[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-  float min_v = 0.0f;
-  float max_v = 0.0f;
-  bool has_range = false;
-};
 
 static bool is_ident_start(const char c)
 {
@@ -172,20 +166,316 @@ static StringRef rtrim(StringRef s)
   return s;
 }
 
-static bool skip_ident_name(StringRef &s, std::string &name)
+enum class TokKind : uint8_t { Ident, Number, Punct };
+
+struct Tok {
+  TokKind kind = TokKind::Punct;
+  /** Part of a preprocessor directive, including its `#`. */
+  bool pp = false;
+  /** The `#` that starts a directive. */
+  bool pp_start = false;
+  /** Code token with a directive between it and the previous code token. */
+  bool after_pp = false;
+  bool replaced = false;
+  /** Whitespace and comments in front of the token start here. */
+  int64_t ws_begin = 0;
+  int64_t begin = 0;
+  int64_t end = 0;
+  std::string repl;
+  std::string append;
+};
+
+struct TokenStream {
+  std::string src;
+  Vector<Tok> toks;
+  /** Indices into `toks` of everything outside preprocessor directives. */
+  Vector<int> code;
+  /** `//*` line comments: offsets of the `*`, see #str. */
+  Vector<int64_t> comment_stars;
+  int64_t tail_begin = 0;
+
+  StringRef text(const int i) const
+  {
+    if (i < 0 || i >= toks.size()) {
+      return StringRef();
+    }
+    const Tok &tok = toks[i];
+    if (tok.replaced) {
+      return StringRef(tok.repl);
+    }
+    return StringRef(src.data() + tok.begin, tok.end - tok.begin);
+  }
+
+  bool is(const int i, const StringRef s) const
+  {
+    return i >= 0 && i < toks.size() && this->text(i) == s;
+  }
+
+  bool is_ident(const int i) const
+  {
+    return i >= 0 && i < toks.size() && toks[i].kind == TokKind::Ident;
+  }
+
+  void replace(const int i, const StringRef s)
+  {
+    toks[i].replaced = true;
+    toks[i].repl = std::string(s.data(), size_t(s.size()));
+  }
+
+  void blank(const int i)
+  {
+    this->replace(i, "");
+  }
+
+  /* Same accessors on the code view. */
+  StringRef ctext(const int ci) const
+  {
+    return (ci >= 0 && ci < code.size()) ? this->text(code[ci]) : StringRef();
+  }
+
+  bool cis(const int ci, const StringRef s) const
+  {
+    return ci >= 0 && ci < code.size() && this->text(code[ci]) == s;
+  }
+
+  bool c_ident(const int ci) const
+  {
+    return ci >= 0 && ci < code.size() && toks[code[ci]].kind == TokKind::Ident;
+  }
+
+  bool c_after_pp(const int ci) const
+  {
+    return ci < 0 || ci >= code.size() || toks[code[ci]].after_pp;
+  }
+
+  /** Index of the bracket closing the one at `ci`, or -1. */
+  int c_match(const int ci) const
+  {
+    int depth = 0;
+    for (int i = ci; i < code.size(); i++) {
+      const StringRef t = this->ctext(i);
+      if (toks[code[i]].kind != TokKind::Punct) {
+        continue;
+      }
+      if (t == "(" || t == "[" || t == "{") {
+        depth++;
+      }
+      else if (t == ")" || t == "]" || t == "}") {
+        depth--;
+        if (depth == 0) {
+          return i;
+        }
+      }
+    }
+    return -1;
+  }
+
+  /** One past the last token of the directive whose `#` is at `i`. */
+  int directive_end(const int i) const
+  {
+    int end = i + 1;
+    while (end < toks.size() && toks[end].pp && !toks[end].pp_start) {
+      end++;
+    }
+    return end;
+  }
+
+  /** Source text from the end of token `i` to the end of that line (trailing comment). */
+  StringRef rest_of_line(const int i) const
+  {
+    const int64_t from = toks[i].end;
+    size_t to = src.find('\n', size_t(from));
+    if (to == std::string::npos) {
+      to = src.size();
+    }
+    return StringRef(src.data() + from, int64_t(to) - from);
+  }
+
+  std::string str() const
+  {
+    std::string out;
+    out.reserve(src.size() + 256);
+    int star = 0;
+    auto trivia = [&](const int64_t from, const int64_t to) {
+      int64_t at = from;
+      /* `//*.7+.2` is a line comment, but scanners that look for block comments first
+       * read it as an unclosed one. Write it as `// *`. */
+      while (star < comment_stars.size() && comment_stars[star] < to) {
+        const int64_t pos = comment_stars[star++];
+        if (pos < at) {
+          continue;
+        }
+        out.append(src.data() + at, size_t(pos - at));
+        out.push_back(' ');
+        at = pos;
+      }
+      out.append(src.data() + at, size_t(to - at));
+    };
+    for (const Tok &tok : toks) {
+      trivia(tok.ws_begin, tok.begin);
+      if (tok.replaced) {
+        out += tok.repl;
+      }
+      else {
+        out.append(src.data() + tok.begin, size_t(tok.end - tok.begin));
+      }
+      out += tok.append;
+    }
+    trivia(tail_begin, int64_t(src.size()));
+    return out;
+  }
+};
+
+static TokenStream tokenize(const StringRef source)
 {
-  s = ltrim(s);
-  if (s.is_empty() || !is_ident_start(s[0])) {
-    return false;
+  TokenStream ts;
+  ts.src.assign(source.data(), size_t(source.size()));
+  const std::string &s = ts.src;
+  const int64_t n = int64_t(s.size());
+  auto newline_at = [&](const int64_t p) -> int {
+    if (p < n && s[p] == '\n') {
+      return 1;
+    }
+    if (p + 1 < n && s[p] == '\r' && s[p + 1] == '\n') {
+      return 2;
+    }
+    return 0;
+  };
+  int64_t i = 0;
+  int64_t ws_begin = 0;
+  bool line_start = true;
+  bool in_pp = false;
+  while (i < n) {
+    const char c = s[i];
+    if (c == '\n') {
+      in_pp = false;
+      line_start = true;
+      i++;
+      continue;
+    }
+    if (c == '\\' && newline_at(i + 1)) {
+      i += 1 + newline_at(i + 1);
+      continue;
+    }
+    if (c == ' ' || c == '\t' || c == '\r' || c == '\f' || c == '\v') {
+      i++;
+      continue;
+    }
+    if (c == '/' && i + 1 < n && s[i + 1] == '/') {
+      if (i + 2 < n && s[i + 2] == '*') {
+        ts.comment_stars.append(i + 2);
+      }
+      while (i < n && s[i] != '\n') {
+        if (s[i] == '\\' && newline_at(i + 1)) {
+          i += 1 + newline_at(i + 1);
+          continue;
+        }
+        i++;
+      }
+      continue;
+    }
+    if (c == '/' && i + 1 < n && s[i + 1] == '*') {
+      i += 2;
+      while (i + 1 < n && !(s[i] == '*' && s[i + 1] == '/')) {
+        i++;
+      }
+      i = math::min(i + 2, n);
+      continue;
+    }
+
+    Tok tok;
+    tok.ws_begin = ws_begin;
+    tok.begin = i;
+    if (c == '#' && line_start) {
+      in_pp = true;
+      tok.pp_start = true;
+      i++;
+    }
+    else if (is_ident_start(c)) {
+      tok.kind = TokKind::Ident;
+      while (i < n && is_ident_char(s[i])) {
+        i++;
+      }
+    }
+    else if (std::isdigit(static_cast<unsigned char>(c)) ||
+             (c == '.' && i + 1 < n && std::isdigit(static_cast<unsigned char>(s[i + 1]))))
+    {
+      tok.kind = TokKind::Number;
+      const bool hex = c == '0' && i + 1 < n && (s[i + 1] == 'x' || s[i + 1] == 'X');
+      i++;
+      while (i < n) {
+        const char d = s[i];
+        if (is_ident_char(d) || d == '.') {
+          i++;
+        }
+        else if ((d == '+' || d == '-') && !hex && (s[i - 1] == 'e' || s[i - 1] == 'E')) {
+          i++;
+        }
+        else {
+          break;
+        }
+      }
+    }
+    else {
+      static const char *ops[] = {"<<=", ">>=", "++", "--", "+=", "-=", "*=", "/=",
+                                  "%=",  "&=",  "|=", "^=", "<<", ">>", "<=", ">=",
+                                  "==",  "!=",  "&&", "||", "^^", "##"};
+      int64_t len = 1;
+      for (const char *op : ops) {
+        const int64_t op_len = int64_t(strlen(op));
+        if (i + op_len <= n && std::memcmp(s.data() + i, op, size_t(op_len)) == 0) {
+          len = op_len;
+          break;
+        }
+      }
+      i += len;
+    }
+    tok.end = i;
+    tok.pp = in_pp;
+    line_start = false;
+    ws_begin = i;
+    ts.toks.append(std::move(tok));
   }
-  int64_t n = 1;
-  while (n < s.size() && is_ident_char(s[n])) {
-    n++;
+  ts.tail_begin = ws_begin;
+
+  bool pp_seen = false;
+  for (int t = 0; t < ts.toks.size(); t++) {
+    Tok &tok = ts.toks[t];
+    if (tok.pp) {
+      pp_seen = true;
+    }
+    else {
+      tok.after_pp = pp_seen;
+      pp_seen = false;
+      ts.code.append(t);
+    }
   }
-  name.assign(s.data(), size_t(n));
-  s = s.substr(n);
-  return true;
+  return ts;
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Shader parameter scan (#define / const / #iUniform)
+ * \{ */
+
+enum class ShaderParamKind { Float, Int, Bool, Vec2, Vec3, Color };
+
+struct ShaderParam {
+  std::string name;
+  ShaderParamKind kind = ShaderParamKind::Float;
+  float values[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+  float min_v = 0.0f;
+  float max_v = 0.0f;
+  bool has_range = false;
+};
+
+/** A parameter definition and the literal tokens (`first`..`last`) that hold its value. */
+struct ParamDef {
+  ShaderParam param;
+  int first = -1;
+  int last = -1;
+};
 
 static bool parse_number_token(StringRef &s, float &out)
 {
@@ -205,147 +495,85 @@ static bool parse_number_token(StringRef &s, float &out)
   return true;
 }
 
-static bool parse_bool_token(StringRef &s, float &out)
+/* Decimal int or float literal. Hex and unsigned literals are not sliders: rewriting
+ * `0x7fffffff` or `1597334677U` as a float would change the type the shader hashes with. */
+static bool parse_literal(const StringRef t, float &r_value, bool &r_is_int)
 {
-  s = ltrim(s);
-  if (s.startswith("true") || s.startswith("TRUE")) {
-    out = 1.0f;
-    s = s.substr(4);
-    return true;
-  }
-  if (s.startswith("false") || s.startswith("FALSE")) {
-    out = 0.0f;
-    s = s.substr(5);
-    return true;
-  }
-  return parse_number_token(s, out);
-}
-
-static bool parse_vec_literal(StringRef &s, const int n, float out[4])
-{
-  s = ltrim(s);
-  const char *tag = (n == 2) ? "vec2" : (n == 3) ? "vec3" : "vec4";
-  if (!s.startswith(tag)) {
+  if (t.is_empty()) {
     return false;
   }
-  s = ltrim(s.substr(int64_t(strlen(tag))));
-  if (s.is_empty() || s[0] != '(') {
+  const std::string tmp(t.data(), size_t(t.size()));
+  if (tmp.size() > 1 && tmp[0] == '0' && (tmp[1] == 'x' || tmp[1] == 'X')) {
     return false;
   }
-  s = s.substr(1);
-  for (int i = 0; i < n; i++) {
-    if (i > 0) {
-      s = ltrim(s);
-      if (s.is_empty() || s[0] != ',') {
-        return false;
-      }
-      s = s.substr(1);
-    }
-    if (!parse_number_token(s, out[i])) {
-      return false;
-    }
-  }
-  s = ltrim(s);
-  if (s.is_empty() || s[0] != ')') {
+  char *end = nullptr;
+  const double v = std::strtod(tmp.c_str(), &end);
+  if (end == tmp.c_str() || !std::isfinite(v)) {
     return false;
   }
-  s = s.substr(1);
+  const std::string number(tmp.c_str(), size_t(end - tmp.c_str()));
+  const bool is_float = number.find_first_of(".eE") != std::string::npos;
+  const StringRef suffix(end);
+  if (!suffix.is_empty() && !(is_float && (suffix == "f" || suffix == "F"))) {
+    return false;
+  }
+  if (!is_float && std::fabs(v) > 1.0e7) {
+    /* Not exactly representable in the float the slider stores. */
+    return false;
+  }
+  r_value = float(v);
+  r_is_int = !is_float;
   return true;
 }
 
-static bool consume_div_255(StringRef &s)
+/* `[+-] NUMBER` at `i`. Returns the index after it, or -1. */
+static int parse_signed_literal(
+    const TokenStream &ts, int i, const int end, float &r_value, bool &r_is_int)
 {
-  StringRef t = ltrim(s);
-  if (t.is_empty() || t[0] != '/') {
-    return false;
+  float sign = 1.0f;
+  if (i < end && (ts.is(i, "-") || ts.is(i, "+"))) {
+    sign = ts.is(i, "-") ? -1.0f : 1.0f;
+    i++;
   }
-  t = ltrim(t.substr(1));
-  float v = 0.0f;
-  StringRef n = t;
-  if (!parse_number_token(n, v)) {
-    return false;
+  if (i >= end || ts.toks[i].kind != TokKind::Number ||
+      !parse_literal(ts.text(i), r_value, r_is_int))
+  {
+    return -1;
   }
-  if (std::fabs(v - 255.0f) > 0.01f) {
-    return false;
-  }
-  s = n;
-  return true;
+  r_value *= sign;
+  return i + 1;
 }
 
-static bool looks_like_srgb_bytes(const float rgb[3])
+/* `vec3(a, b, c)` with an optional `/ 255.` (byte palettes). Returns the index after it. */
+static int parse_vec3_literal(const TokenStream &ts, int i, const int end, float r_values[3])
 {
-  float mx = 0.0f;
-  for (int i = 0; i < 3; i++) {
-    if (rgb[i] < -0.01f || rgb[i] > 255.01f) {
-      return false;
-    }
-    const float nearest = std::round(rgb[i]);
-    if (std::fabs(rgb[i] - nearest) > 0.01f) {
-      return false;
-    }
-    mx = math::max(mx, rgb[i]);
+  if (!(i + 1 < end && (ts.is(i, "vec3") || ts.is(i, "color3") || ts.is(i, "float3")) &&
+        ts.is(i + 1, "(")))
+  {
+    return -1;
   }
-  /* 0/1/2 as a basis vector is not a palette. Palette bytes always have a
-   * channel well above 1 (dtSfzR skyColor vec3(101,164,208)/255.). */
-  return mx >= 8.0f;
-}
-
-static std::string glsl_number(const float v);
-
-/* dtSfzR / many ShaderToy palettes: `#define skyColor vec3(101, 164, 208)/255.`.
- * Dropping `/255` makes far mountains and clouds HDR-white against the sky. */
-static std::string fold_srgb_byte_vec3_defines(StringRef src)
-{
-  std::string out;
-  out.reserve(size_t(src.size()) + 32);
-  int64_t i = 0;
-  while (i < src.size()) {
-    const int64_t line_end = src.find('\n', i);
-    const int64_t end = (line_end == StringRef::not_found) ? src.size() : line_end;
-    StringRef line = src.substr(i, end - i);
-    StringRef t = ltrim(line);
-    bool replaced = false;
-    if (t.startswith("#")) {
-      StringRef rest = ltrim(t.substr(1));
-      if (rest.startswith("define")) {
-        rest = ltrim(rest.substr(6));
-        std::string name;
-        if (skip_ident_name(rest, name)) {
-          float rgb[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-          StringRef lit = ltrim(rest);
-          if (parse_vec_literal(lit, 3, rgb) && looks_like_srgb_bytes(rgb)) {
-            StringRef after = ltrim(lit);
-            const bool already = consume_div_255(after);
-            after = ltrim(after);
-            const bool rest_ok = after.is_empty() || after.startswith("//") ||
-                                 after.startswith("/*");
-            if (rest_ok && !already) {
-              const int64_t lead = line.size() - ltrim(line).size();
-              out.append(line.data(), size_t(lead));
-              out += "#define ";
-              out += name;
-              out += " vec3(";
-              out += glsl_number(rgb[0] / 255.0f);
-              out += ", ";
-              out += glsl_number(rgb[1] / 255.0f);
-              out += ", ";
-              out += glsl_number(rgb[2] / 255.0f);
-              out += ")";
-              replaced = true;
-            }
-          }
-        }
+  i += 2;
+  for (int c = 0; c < 3; c++) {
+    bool is_int = false;
+    i = parse_signed_literal(ts, i, end, r_values[c], is_int);
+    if (i < 0 || i >= end || !ts.is(i, c < 2 ? "," : ")")) {
+      return -1;
+    }
+    i++;
+  }
+  if (i + 1 < end && ts.is(i, "/")) {
+    float div = 0.0f;
+    bool is_int = false;
+    if (ts.toks[i + 1].kind == TokKind::Number && parse_literal(ts.text(i + 1), div, is_int) &&
+        std::fabs(div - 255.0f) < 0.01f)
+    {
+      for (int c = 0; c < 3; c++) {
+        r_values[c] /= 255.0f;
       }
+      i += 2;
     }
-    if (!replaced) {
-      out.append(line.data(), size_t(line.size()));
-    }
-    if (end < src.size()) {
-      out.push_back('\n');
-    }
-    i = (end < src.size()) ? end + 1 : src.size();
   }
-  return out;
+  return i;
 }
 
 static void parse_range_from_rest(StringRef rest, ShaderParam &param)
@@ -421,274 +649,296 @@ static bool is_skipped_param_name(const StringRef name)
   return false;
 }
 
-static bool add_param(Vector<ShaderParam> &params, Set<std::string> &seen, ShaderParam param)
+static bool is_unit_range_vec3(const float v[3])
 {
-  if (param.name.empty() || is_skipped_param_name(param.name)) {
-    return false;
-  }
-  if (params.size() >= MAX_SHADER_PARAMS) {
-    return false;
-  }
-  if (!seen.add(param.name)) {
-    return false;
-  }
-  if (param.kind == ShaderParamKind::Vec3 && param.values[0] >= 0.0f && param.values[0] <= 1.0f &&
-      param.values[1] >= 0.0f && param.values[1] <= 1.0f && param.values[2] >= 0.0f &&
-      param.values[2] <= 1.0f)
-  {
-    param.kind = ShaderParamKind::Color;
-  }
-  if (!param.has_range) {
-    const float v = param.values[0];
-    if (param.kind == ShaderParamKind::Bool) {
-      param.min_v = 0.0f;
-      param.max_v = 1.0f;
-      param.has_range = true;
-    }
-    else if (param.kind == ShaderParamKind::Int) {
-      param.min_v = 0.0f;
-      param.max_v = math::max(float(int(std::lround(v)) * 4), 16.0f);
-      param.has_range = true;
-    }
-    else if (v >= 0.0f && v <= 1.0f) {
-      param.min_v = 0.0f;
-      param.max_v = 1.0f;
-      param.has_range = true;
-    }
-    else {
-      const float mag = math::max(math::abs(v), 1.0f);
-      param.min_v = v - mag * 4.0f;
-      param.max_v = v + mag * 4.0f;
-      param.has_range = true;
-    }
-  }
-  params.append(std::move(param));
-  return true;
+  return v[0] >= 0.0f && v[0] <= 1.0f && v[1] >= 0.0f && v[1] <= 1.0f && v[2] >= 0.0f &&
+         v[2] <= 1.0f;
 }
 
-static void parse_params_from_source(const char *src, Vector<ShaderParam> &params, Set<std::string> &seen)
+/* `#define NAME value` and `#iUniform type NAME = value`. Only an un-indented directive whose
+ * whole value is one literal: `#define ZOOM (0.1 / iResolution.x)` is an expression. */
+static void find_directive_param(const TokenStream &ts, const int hash, Vector<ParamDef> &r_defs)
 {
-  if (src == nullptr || src[0] == '\0') {
+  const int end = ts.directive_end(hash);
+  const int64_t at = ts.toks[hash].begin;
+  if (at > 0 && ts.src[size_t(at - 1)] != '\n') {
     return;
   }
-  StringRef text(src);
-  int64_t i = 0;
-  bool in_block = false;
-  while (i < text.size()) {
-    const int64_t line_end = text.find('\n', i);
-    const int64_t end = (line_end == StringRef::not_found) ? text.size() : line_end;
-    StringRef line = text.substr(i, end - i);
-    i = (end < text.size()) ? end + 1 : text.size();
-
-    /* Crude block-comment skip. */
-    if (in_block) {
-      const int64_t close = line.find("*/");
-      if (close == StringRef::not_found) {
-        continue;
-      }
-      in_block = false;
-      line = line.substr(close + 2);
+  ParamDef def;
+  ShaderParam &param = def.param;
+  int value = -1;
+  bool want_bool = false;
+  bool want_int = false;
+  bool want_vec3 = false;
+  bool want_color = false;
+  if (ts.is(hash + 1, "define")) {
+    if (hash + 3 >= end || !ts.is_ident(hash + 2)) {
+      return;
     }
-    const int64_t block_open = line.find("/*");
-    if (block_open != StringRef::not_found && line.find("*/") == StringRef::not_found) {
-      in_block = true;
-      line = line.substr(0, block_open);
+    if (ts.toks[hash + 3].begin == ts.toks[hash + 2].end && ts.is(hash + 3, "(")) {
+      return; /* Function-like macro. */
     }
-
-    /* Only file-scope. Indented `const float tmax = 2000` inside mainImage must not
-     * become `#define tmax 2000` or function args named tmax get macro-replaced
-     * (Rainforest renderClouds → unexpected INTCONSTANT). */
-    if (!line.is_empty() && (line[0] == ' ' || line[0] == '\t')) {
-      continue;
+    value = hash + 3;
+  }
+  else if (ts.is(hash + 1, "iUniform") || ts.is(hash + 1, "iuniform")) {
+    if (hash + 5 >= end || !ts.is_ident(hash + 2) || !ts.is_ident(hash + 3) ||
+        !ts.is(hash + 4, "="))
+    {
+      return;
     }
-
-    StringRef t = ltrim(line);
-    if (t.startswith("//")) {
-      continue;
+    const StringRef type = ts.text(hash + 2);
+    want_bool = type == "bool";
+    want_int = type == "int";
+    want_color = type == "color3";
+    want_vec3 = want_color || type == "vec3" || type == "float3";
+    if (!(want_bool || want_int || want_vec3 || type == "float")) {
+      return;
     }
+    value = hash + 5;
+  }
+  else {
+    return;
+  }
+  const bool is_define = ts.is(hash + 1, "define");
+  const int name = is_define ? hash + 2 : hash + 3;
+  param.name = std::string(ts.text(name));
 
-    ShaderParam param;
-
-    if (t.startswith("#")) {
-      t = ltrim(t.substr(1));
-      const bool is_define = t.startswith("define");
-      const bool is_iuniform = t.startswith("iUniform") || t.startswith("iuniform");
-      if (!is_define && !is_iuniform) {
-        continue;
-      }
-      t = ltrim(t.substr(is_define ? 6 : 8));
-      if (is_iuniform) {
-        std::string type;
-        if (!skip_ident_name(t, type)) {
-          continue;
-        }
-        if (!skip_ident_name(t, param.name)) {
-          continue;
-        }
-        t = ltrim(t);
-        if (!t.is_empty() && t[0] == '=') {
-          t = t.substr(1);
-        }
-        if (type == "bool") {
-          param.kind = ShaderParamKind::Bool;
-          if (!parse_bool_token(t, param.values[0])) {
-            continue;
-          }
-        }
-        else if (type == "int") {
-          param.kind = ShaderParamKind::Int;
-          if (!parse_number_token(t, param.values[0])) {
-            continue;
-          }
-        }
-        else if (type == "vec2" || type == "float2") {
-          param.kind = ShaderParamKind::Vec2;
-          if (!parse_vec_literal(t, 2, param.values)) {
-            continue;
-          }
-        }
-        else if (type == "vec3" || type == "float3") {
-          param.kind = ShaderParamKind::Vec3;
-          if (!parse_vec_literal(t, 3, param.values)) {
-            continue;
-          }
-        }
-        else if (type == "color3") {
-          param.kind = ShaderParamKind::Color;
-          if (!parse_vec_literal(t, 3, param.values)) {
-            continue;
-          }
-          param.values[3] = 1.0f;
-        }
-        else if (type == "float") {
-          param.kind = ShaderParamKind::Float;
-          if (!parse_number_token(t, param.values[0])) {
-            continue;
-          }
-        }
-        else {
-          continue;
-        }
-        parse_range_from_rest(t, param);
-        add_param(params, seen, std::move(param));
-        continue;
-      }
-
-      /* #define NAME value */
-      if (!skip_ident_name(t, param.name)) {
-        continue;
-      }
-      t = ltrim(t);
-      if (!t.is_empty() && t[0] == '(') {
-        continue; /* Function-like macro. */
-      }
-      if (parse_vec_literal(t, 3, param.values)) {
-        param.kind = ShaderParamKind::Vec3;
-        if (consume_div_255(t) || looks_like_srgb_bytes(param.values)) {
-          param.values[0] /= 255.0f;
-          param.values[1] /= 255.0f;
-          param.values[2] /= 255.0f;
-        }
-      }
-      else if (parse_vec_literal(t, 2, param.values)) {
-        param.kind = ShaderParamKind::Vec2;
-      }
-      else if (parse_number_token(t, param.values[0])) {
-        const StringRef rest = ltrim(t);
-        const bool rest_ok = rest.is_empty() || rest.startswith("//") || rest.startswith("/*") ||
-                             rest.startswith("{") || rest.startswith("in ");
-        if (!rest_ok) {
-          /* Expression macro such as `(0.1 / iResolution.x)` — do not rewrite. */
-          continue;
-        }
-        /* Keep 1024-class sentinels (EMPTY) as the authored token, not Int 0–max. */
-        const bool looks_int = std::floor(param.values[0]) == param.values[0] &&
-                               std::fabs(param.values[0]) < 256.0f;
-        param.kind = looks_int ? ShaderParamKind::Int : ShaderParamKind::Float;
-      }
-      else {
-        continue;
-      }
-      parse_range_from_rest(line, param);
-      add_param(params, seen, std::move(param));
-      continue;
+  int after = -1;
+  bool is_int = false;
+  if (want_bool && (ts.is(value, "true") || ts.is(value, "false"))) {
+    param.kind = ShaderParamKind::Bool;
+    param.values[0] = ts.is(value, "true") ? 1.0f : 0.0f;
+    after = value + 1;
+  }
+  else if (!want_vec3 &&
+           (after = parse_signed_literal(ts, value, end, param.values[0], is_int)) >= 0)
+  {
+    if (want_bool) {
+      param.kind = ShaderParamKind::Bool;
     }
-
-    /* File-scope `const float NAME = 1.5;` */
-    if (t.startswith("const ")) {
-      t = ltrim(t.substr(6));
-      std::string type;
-      if (!skip_ident_name(t, type)) {
-        continue;
-      }
-      if (!skip_ident_name(t, param.name)) {
-        continue;
-      }
-      t = ltrim(t);
-      if (t.is_empty() || t[0] != '=') {
-        continue;
-      }
-      t = t.substr(1);
-      if (type == "float") {
-        param.kind = ShaderParamKind::Float;
-        if (!parse_number_token(t, param.values[0])) {
-          continue;
-        }
-      }
-      else if (type == "int") {
-        param.kind = ShaderParamKind::Int;
-        if (!parse_number_token(t, param.values[0])) {
-          continue;
-        }
-      }
-      else if (type == "bool") {
-        param.kind = ShaderParamKind::Bool;
-        if (!parse_bool_token(t, param.values[0])) {
-          continue;
-        }
-      }
-      else if (type == "vec2") {
-        param.kind = ShaderParamKind::Vec2;
-        if (!parse_vec_literal(t, 2, param.values)) {
-          continue;
-        }
-      }
-      else if (type == "vec3") {
-        param.kind = ShaderParamKind::Vec3;
-        if (!parse_vec_literal(t, 3, param.values)) {
-          continue;
-        }
-        if (consume_div_255(t) || looks_like_srgb_bytes(param.values)) {
-          param.values[0] /= 255.0f;
-          param.values[1] /= 255.0f;
-          param.values[2] /= 255.0f;
-        }
-        if (param.values[0] >= 0.0f && param.values[0] <= 1.0f &&
-            param.values[1] >= 0.0f && param.values[1] <= 1.0f &&
-            param.values[2] >= 0.0f && param.values[2] <= 1.0f)
-        {
-          param.kind = ShaderParamKind::Color;
-        }
-      }
-      else {
-        continue;
-      }
-      parse_range_from_rest(line, param);
-      add_param(params, seen, std::move(param));
+    else if (is_define) {
+      param.kind = is_int ? ShaderParamKind::Int : ShaderParamKind::Float;
+    }
+    else {
+      param.kind = want_int ? ShaderParamKind::Int : ShaderParamKind::Float;
     }
   }
+  else if ((is_define || want_vec3) &&
+           (after = parse_vec3_literal(ts, value, end, param.values)) >= 0)
+  {
+    param.kind = (want_color || is_unit_range_vec3(param.values)) ? ShaderParamKind::Color :
+                                                                    ShaderParamKind::Vec3;
+  }
+  else {
+    return;
+  }
+  /* A define must be nothing but the literal. iUniform may carry `in { a, b }` / `step s`. */
+  if (is_define && after != end) {
+    return;
+  }
+  def.first = value;
+  def.last = after - 1;
+  parse_range_from_rest(ts.rest_of_line(def.last), param);
+  r_defs.append(std::move(def));
+}
+
+/* File-scope `const float A = 1.5, B = 2.0;`. Each declarator whose initializer is exactly
+ * one literal is a parameter; `const float C = 2.0 * PI;` is not. */
+static void find_const_params(const TokenStream &ts, const int const_ci, Vector<ParamDef> &r_defs)
+{
+  int ci = const_ci + 1;
+  const StringRef precision = ts.ctext(ci);
+  if (precision == "highp" || precision == "mediump" || precision == "lowp") {
+    ci++;
+  }
+  const StringRef type = ts.ctext(ci);
+  const bool is_float = type == "float";
+  const bool is_int = type == "int";
+  const bool is_bool = type == "bool";
+  const bool is_vec3 = type == "vec3";
+  if (!(is_float || is_int || is_bool || is_vec3)) {
+    return;
+  }
+  ci++;
+  const int n = int(ts.code.size());
+  while (ci + 2 < n) {
+    if (!ts.c_ident(ci) || !ts.cis(ci + 1, "=") || ts.c_after_pp(ci) || ts.c_after_pp(ci + 2)) {
+      return;
+    }
+    ParamDef def;
+    ShaderParam &param = def.param;
+    param.name = std::string(ts.ctext(ci));
+    /* Literal tokens are adjacent in `toks` unless a directive splits them. */
+    const int value = ts.code[ci + 2];
+    int stop = value;
+    while (stop < ts.toks.size() && !ts.toks[stop].pp) {
+      stop++;
+    }
+    int after = -1;
+    bool literal_is_int = false;
+    if (is_bool && (ts.is(value, "true") || ts.is(value, "false"))) {
+      param.kind = ShaderParamKind::Bool;
+      param.values[0] = ts.is(value, "true") ? 1.0f : 0.0f;
+      after = value + 1;
+    }
+    else if ((is_float || is_int) &&
+             (after = parse_signed_literal(ts, value, stop, param.values[0], literal_is_int)) >= 0)
+    {
+      if (is_int && !literal_is_int) {
+        after = -1;
+      }
+      param.kind = is_int ? ShaderParamKind::Int : ShaderParamKind::Float;
+    }
+    else if (is_vec3 && (after = parse_vec3_literal(ts, value, stop, param.values)) >= 0) {
+      param.kind = is_unit_range_vec3(param.values) ? ShaderParamKind::Color :
+                                                      ShaderParamKind::Vec3;
+    }
+    if (after >= 0 && after < stop && (ts.is(after, ",") || ts.is(after, ";"))) {
+      def.first = value;
+      def.last = after - 1;
+      parse_range_from_rest(ts.rest_of_line(def.last), param);
+      const bool done = ts.is(after, ";");
+      r_defs.append(std::move(def));
+      if (done) {
+        return;
+      }
+      ci += 3 + (after - value);
+      continue;
+    }
+    /* Expression initializer: skip to the next declarator. */
+    int depth = 0;
+    int k = ci + 2;
+    for (; k < n; k++) {
+      if (ts.c_after_pp(k)) {
+        return;
+      }
+      const StringRef t = ts.ctext(k);
+      if (t == "(" || t == "[" || t == "{") {
+        depth++;
+      }
+      else if (t == ")" || t == "]" || t == "}") {
+        if (depth == 0) {
+          return;
+        }
+        depth--;
+      }
+      else if (depth == 0 && (t == "," || t == ";")) {
+        break;
+      }
+    }
+    if (k >= n || ts.cis(k, ";")) {
+      return;
+    }
+    ci = k + 1;
+  }
+}
+
+static Vector<ParamDef> find_param_defs(const TokenStream &ts)
+{
+  Vector<ParamDef> defs;
+  for (int t = 0; t < ts.toks.size(); t++) {
+    if (ts.toks[t].pp_start) {
+      find_directive_param(ts, t, defs);
+    }
+  }
+  /* A `const` outside braces and parentheses starts a file-scope declaration. Do not ask
+   * for a `;` in front of it: `MAKE_OVERLOADS(iStep)` macro lines have none. */
+  int depth = 0;
+  int paren = 0;
+  for (int ci = 0; ci < ts.code.size(); ci++) {
+    const StringRef t = ts.ctext(ci);
+    if (t == "{") {
+      depth++;
+    }
+    else if (t == "}") {
+      depth = math::max(depth - 1, 0);
+    }
+    else if (t == "(") {
+      paren++;
+    }
+    else if (t == ")") {
+      paren = math::max(paren - 1, 0);
+    }
+    else if (depth == 0 && paren == 0 && t == "const") {
+      find_const_params(ts, ci, defs);
+    }
+  }
+  return defs;
+}
+
+static void param_default_range(ShaderParam &param)
+{
+  if (param.has_range) {
+    return;
+  }
+  const float v = param.values[0];
+  if (param.kind == ShaderParamKind::Bool) {
+    param.min_v = 0.0f;
+    param.max_v = 1.0f;
+  }
+  else if (param.kind == ShaderParamKind::Int) {
+    param.min_v = math::min(float(int(std::lround(v)) * 4), 0.0f);
+    param.max_v = math::max(float(int(std::lround(v)) * 4), 16.0f);
+  }
+  else if (v >= 0.0f && v <= 1.0f) {
+    param.min_v = 0.0f;
+    param.max_v = 1.0f;
+  }
+  else {
+    const float mag = math::max(math::abs(v), 1.0f);
+    param.min_v = v - mag * 4.0f;
+    param.max_v = v + mag * 4.0f;
+  }
+  param.has_range = true;
 }
 
 static Vector<ShaderParam> parse_shader_params(const NodeImageShaderToy &storage)
 {
   Vector<ShaderParam> params;
-  Set<std::string> seen;
-  parse_params_from_source(storage.code_common, params, seen);
-  parse_params_from_source(storage.code_image, params, seen);
-  parse_params_from_source(storage.code_buffer_a, params, seen);
-  parse_params_from_source(storage.code_buffer_b, params, seen);
-  parse_params_from_source(storage.code_buffer_c, params, seen);
-  parse_params_from_source(storage.code_buffer_d, params, seen);
+  /* A name defined twice with different values (`#if`/`#else` quality presets, or the same
+   * constant in two passes) has no single slider value. Leave those as authored. */
+  Set<std::string> conflicts;
+  for (const char *src : {storage.code_common,
+                          storage.code_image,
+                          storage.code_buffer_a,
+                          storage.code_buffer_b,
+                          storage.code_buffer_c,
+                          storage.code_buffer_d})
+  {
+    if (src == nullptr || src[0] == '\0') {
+      continue;
+    }
+    const TokenStream ts = tokenize(src);
+    for (const ParamDef &def : find_param_defs(ts)) {
+      const ShaderParam &param = def.param;
+      if (param.name.empty() || is_skipped_param_name(param.name) ||
+          conflicts.contains(param.name))
+      {
+        continue;
+      }
+      int existing = -1;
+      for (int p = 0; p < params.size(); p++) {
+        if (params[p].name == param.name) {
+          existing = p;
+          break;
+        }
+      }
+      if (existing < 0) {
+        params.append(param);
+        continue;
+      }
+      const ShaderParam &other = params[existing];
+      if (other.kind != param.kind || other.values[0] != param.values[0] ||
+          other.values[1] != param.values[1] || other.values[2] != param.values[2])
+      {
+        conflicts.add(param.name);
+        params.remove(existing);
+      }
+    }
+  }
+  for (ShaderParam &param : params) {
+    param_default_range(param);
+  }
   return params;
 }
 
@@ -762,10 +1012,22 @@ static void sync_params_from_code(NodeImageShaderToy &storage)
       const char *suf[3] = {as_color ? ".r" : ".x",
                             as_color ? ".g" : ".y",
                             as_color ? ".b" : ".z"};
-      const float mn = as_color ? 0.0f : param.min_v;
-      const float mx = as_color ? 1.0f : param.max_v;
+      /* All three components fit, or none: a vec3 with a missing slider cannot be rebuilt. */
+      if (storage.param_count + 3 > MAX_SHADER_PARAMS) {
+        continue;
+      }
       for (int c = 0; c < 3; c++) {
-        push_scalar(param.name + suf[c], ShaderParamKind::Float, param.values[c], mn, mx);
+        ShaderParam comp;
+        comp.kind = ShaderParamKind::Float;
+        comp.values[0] = param.values[c];
+        if (!as_color) {
+          param_default_range(comp);
+        }
+        push_scalar(param.name + suf[c],
+                    ShaderParamKind::Float,
+                    param.values[c],
+                    as_color ? 0.0f : comp.min_v,
+                    as_color ? 1.0f : comp.max_v);
       }
       continue;
     }
@@ -776,44 +1038,27 @@ static void sync_params_from_code(NodeImageShaderToy &storage)
   }
 }
 
-static bool line_defines_param(StringRef trimmed, const StringRef name)
-{
-  auto after_keyword = [&](StringRef t) {
-    t = ltrim(t);
-    /* Optional type for iUniform / const. */
-    if (t.startswith(name) && (t.size() == name.size() || !is_ident_char(t[name.size()]))) {
-      return true;
-    }
-    std::string type;
-    if (!skip_ident_name(t, type)) {
-      return false;
-    }
-    t = ltrim(t);
-    return t.startswith(name) && (t.size() == name.size() || !is_ident_char(t[name.size()]));
-  };
-
-  if (trimmed.startswith("#")) {
-    StringRef t = ltrim(trimmed.substr(1));
-    if (t.startswith("define")) {
-      t = ltrim(t.substr(6));
-      return t.startswith(name) && (t.size() == name.size() || !is_ident_char(t[name.size()]));
-    }
-    if (t.startswith("iUniform") || t.startswith("iuniform")) {
-      t = ltrim(t.substr(8));
-      return after_keyword(t);
-    }
-  }
-  if (trimmed.startswith("const ")) {
-    return after_keyword(ltrim(trimmed.substr(6)));
-  }
-  return false;
-}
-
 static std::string glsl_number(const float v)
 {
   char buf[64];
   SNPRINTF(buf, "%.8g", double(v));
   return buf;
+}
+
+/* Always a float literal: `#define SCALE 2.0` printed as `2` turns `SCALE / 3` into integer
+ * division. */
+static std::string glsl_float(const float v)
+{
+  if (!std::isfinite(v)) {
+    return "0.0";
+  }
+  char buf[64];
+  SNPRINTF(buf, "%.9g", double(v));
+  std::string out = buf;
+  if (out.find_first_of(".e") == std::string::npos) {
+    out += ".0";
+  }
+  return out;
 }
 
 static std::string format_param_defines(const Span<ShaderParam> params)
@@ -858,77 +1103,6 @@ static std::string format_param_defines(const Span<ShaderParam> params)
   return out;
 }
 
-static std::string rewrite_param_line(const ShaderParam &param, const bool as_define)
-{
-  std::string out;
-  if (as_define) {
-    out += "#define ";
-    out += param.name;
-    out += " ";
-  }
-  else {
-    out += "const ";
-    out += (param.kind == ShaderParamKind::Int || param.kind == ShaderParamKind::Bool) ? "int " :
-                                                                                         "float ";
-    out += param.name;
-    out += " = ";
-  }
-  switch (param.kind) {
-    case ShaderParamKind::Int:
-      out += std::to_string(int(std::lround(param.values[0])));
-      break;
-    case ShaderParamKind::Bool:
-      out += (param.values[0] > 0.5f) ? "1" : "0";
-      break;
-    case ShaderParamKind::Vec2:
-      out += "vec2(";
-      out += glsl_number(param.values[0]);
-      out += ", ";
-      out += glsl_number(param.values[1]);
-      out += ")";
-      break;
-    case ShaderParamKind::Vec3:
-    case ShaderParamKind::Color:
-      out += "vec3(";
-      out += glsl_number(param.values[0]);
-      out += ", ";
-      out += glsl_number(param.values[1]);
-      out += ", ";
-      out += glsl_number(param.values[2]);
-      out += ")";
-      break;
-    default:
-      out += glsl_number(param.values[0]);
-      break;
-  }
-  if (!as_define) {
-    out += ";";
-  }
-  return out;
-}
-
-static bool extract_defined_name(StringRef trimmed, std::string &name)
-{
-  if (trimmed.startswith("#")) {
-    StringRef t = ltrim(trimmed.substr(1));
-    if (!t.startswith("define")) {
-      return false;
-    }
-    t = ltrim(t.substr(6));
-    return skip_ident_name(t, name);
-  }
-  if (trimmed.startswith("const ")) {
-    StringRef t = ltrim(trimmed.substr(6));
-    std::string type;
-    if (!skip_ident_name(t, type)) {
-      return false;
-    }
-    t = ltrim(t);
-    return skip_ident_name(t, name);
-  }
-  return false;
-}
-
 static bool gather_vec3_param(const Span<ShaderParam> params, const StringRef base, float rgb[3])
 {
   const char *sets[][3] = {{".r", ".g", ".b"}, {".x", ".y", ".z"}};
@@ -955,77 +1129,69 @@ static bool gather_vec3_param(const Span<ShaderParam> params, const StringRef ba
   return false;
 }
 
-static std::string apply_param_values(StringRef src, Span<ShaderParam> params)
+/* Write slider values back into the source. Only the literal is replaced, and only when the
+ * slider was moved: an untouched parameter leaves the pasted line exactly as it is. */
+static std::string apply_param_values(const StringRef src, const Span<ShaderParam> params)
 {
   if (params.is_empty()) {
     return src;
   }
-  std::string out;
-  out.reserve(size_t(src.size()) + 64);
-  int64_t i = 0;
-  while (i < src.size()) {
-    const int64_t line_end = src.find('\n', i);
-    const int64_t end = (line_end == StringRef::not_found) ? src.size() : line_end;
-    StringRef line = src.substr(i, end - i);
-    const StringRef trimmed = ltrim(line);
-    bool replaced = false;
-    /* Only rewrite un-indented definitions — never a function signature. */
-    if (!line.is_empty() && line[0] != ' ' && line[0] != '\t') {
-      std::string defined;
-      if (extract_defined_name(trimmed, defined)) {
-        float rgb[3];
-        if (gather_vec3_param(params, defined, rgb)) {
-          if (trimmed.startswith("#")) {
-            out += "#define ";
-            out += defined;
-            out += " vec3(";
-          }
-          else {
-            out += "const vec3 ";
-            out += defined;
-            out += " = vec3(";
-          }
-          out += glsl_number(rgb[0]);
-          out += ", ";
-          out += glsl_number(rgb[1]);
-          out += ", ";
-          out += glsl_number(rgb[2]);
-          out += ")";
-          if (!trimmed.startswith("#")) {
-            out += ";";
-          }
-          if (end < src.size()) {
-            out.push_back('\n');
-          }
-          replaced = true;
-        }
+  TokenStream ts = tokenize(src);
+  bool changed = false;
+  for (const ParamDef &def : find_param_defs(ts)) {
+    const ShaderParam &authored = def.param;
+    std::string value;
+    if (authored.kind == ShaderParamKind::Vec3 || authored.kind == ShaderParamKind::Color) {
+      float rgb[3];
+      if (!gather_vec3_param(params, authored.name, rgb) ||
+          (rgb[0] == authored.values[0] && rgb[1] == authored.values[1] &&
+           rgb[2] == authored.values[2]))
+      {
+        continue;
       }
-      if (!replaced) {
-        for (const ShaderParam &param : params) {
-          if (param.name.find('.') != std::string::npos) {
-            continue;
-          }
-          if (!line_defines_param(trimmed, param.name)) {
-            continue;
-          }
-          out += rewrite_param_line(param, trimmed.startswith("#"));
-          if (end < src.size()) {
-            out.push_back('\n');
-          }
-          replaced = true;
+      value = "vec3(" + glsl_float(rgb[0]) + ", " + glsl_float(rgb[1]) + ", " +
+              glsl_float(rgb[2]) + ")";
+    }
+    else {
+      const ShaderParam *slider = nullptr;
+      for (const ShaderParam &param : params) {
+        if (param.name == authored.name) {
+          slider = &param;
           break;
         }
       }
-    }
-    if (!replaced) {
-      out.append(line.data(), size_t(line.size()));
-      if (end < src.size()) {
-        out.push_back('\n');
+      if (slider == nullptr) {
+        continue;
+      }
+      const float v = slider->values[0];
+      if (authored.kind == ShaderParamKind::Bool) {
+        if ((v > 0.5f) == (authored.values[0] > 0.5f)) {
+          continue;
+        }
+        /* A numeric literal stays numeric (`#iUniform bool x = 1`). */
+        const bool numeric = ts.toks[def.first].kind == TokKind::Number;
+        value = (v > 0.5f) ? (numeric ? "1" : "true") : (numeric ? "0" : "false");
+      }
+      else if (authored.kind == ShaderParamKind::Int) {
+        if (std::lround(v) == std::lround(authored.values[0])) {
+          continue;
+        }
+        value = std::to_string(int(std::lround(v)));
+      }
+      else {
+        if (v == authored.values[0]) {
+          continue;
+        }
+        value = glsl_float(v);
       }
     }
-    i = (end < src.size()) ? end + 1 : src.size();
+    ts.replace(def.first, value);
+    for (int t = def.first + 1; t <= def.last; t++) {
+      ts.blank(t);
+    }
+    changed = true;
   }
-  return out;
+  return changed ? ts.str() : std::string(src.data(), size_t(src.size()));
 }
 
 /** \} */
@@ -1210,269 +1376,16 @@ static void node_label(const bNodeTree * /*ntree*/,
 
 /* -------------------------------------------------------------------- */
 /** \name GLSL wrapper + runtime compile (fullscreen fragment, so dFdx works)
+ *
+ * ShaderToy sources already compile as desktop GLSL when they are wrapped the way the site
+ * wraps them. Everything here is therefore a token edit that leaves the pasted code in
+ * place: names that collide with desktop keywords, WebGL's zero-initialized variables, and
+ * a few sampling fixes. Never split, move or re-emit user statements.
  * \{ */
 
 static bool is_ident_char_st(const char c)
 {
-  return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
-}
-
-static bool line_is_shadertoy_builtin_decl(StringRef trimmed)
-{
-  if (trimmed.startswith("#version") || trimmed.startswith("precision ") ||
-      trimmed.startswith("#extension"))
-  {
-    return true;
-  }
-  auto has_word = [&](const char *word) -> bool {
-    const int64_t p = trimmed.find(word);
-    if (p == StringRef::not_found) {
-      return false;
-    }
-    const char before = (p > 0) ? trimmed[p - 1] : ' ';
-    const int64_t after_i = p + int64_t(strlen(word));
-    const char after = (after_i < trimmed.size()) ? trimmed[after_i] : ' ';
-    return !is_ident_char_st(before) && !is_ident_char_st(after);
-  };
-  const bool builtin = has_word("iResolution") || has_word("iTime") || has_word("iTimeDelta") ||
-                       has_word("iFrame") || has_word("iFrameRate") || has_word("iMouse") ||
-                       has_word("iDate") || has_word("iSampleRate") || has_word("iChannel0") ||
-                       has_word("iChannel1") || has_word("iChannel2") || has_word("iChannel3") ||
-                       has_word("iChannelResolution") || has_word("iChannelTime") ||
-                       has_word("iGlobalTime");
-  if (trimmed.startswith("uniform") && builtin) {
-    return true;
-  }
-  if (trimmed.startswith("layout") && (has_word("fragColor") || has_word("fragCoord"))) {
-    return true;
-  }
-  /* Converted shaders often declare these at file scope. Do not strip mainImage's `out vec4`. */
-  if ((trimmed.startswith("out ") || trimmed.startswith("in ")) && trimmed.find('(') == StringRef::not_found)
-  {
-    if (has_word("fragColor") || has_word("fragCoord") || has_word("gl_FragColor")) {
-      return true;
-    }
-  }
-  return false;
-}
-
-static std::string rename_user_main(StringRef src)
-{
-  std::string out;
-  out.reserve(size_t(src.size()) + 32);
-  int64_t i = 0;
-  while (i < src.size()) {
-    const int64_t p = src.find("main", i);
-    if (p == StringRef::not_found) {
-      out.append(src.data() + i, size_t(src.size() - i));
-      break;
-    }
-    out.append(src.data() + i, size_t(p - i));
-    const char before = (p > 0) ? src[p - 1] : ' ';
-    const char after = (p + 4 < src.size()) ? src[p + 4] : ' ';
-    if (is_ident_char_st(before) || is_ident_char_st(after)) {
-      out.append("main", 4);
-      i = p + 4;
-      continue;
-    }
-    int64_t q = p + 4;
-    while (q < src.size() && std::isspace(static_cast<unsigned char>(src[q]))) {
-      q++;
-    }
-    if (q < src.size() && src[q] == '(') {
-      out.append("_st_unused_main");
-      i = p + 4;
-      continue;
-    }
-    out.append("main", 4);
-    i = p + 4;
-  }
-  return out;
-}
-
-/* WebGL/ShaderToy allows identifiers that desktop GLSL reserves.
- * Dsf3WH: `float drawFont(vec2 p, int char)` — `char` is a keyword. */
-static std::string rewrite_reserved_idents(StringRef src)
-{
-  static const char *words[] = {
-      "char",     "class",     "union",     "template", "this",     "packed",
-      "input",    "output",    "filter",    "partition","public",   "private",
-      "short",    "long",      "half",      "fixed",    "unsigned", "byte",
-      "goto",     "inline",    "typename",  "using",    "namespace","volatile",
-      "abstract", "active",    "asm",       "cast",     "extern",   "interface",
-      /* csc3RS: `SampleDepth(sampler2D sampler, ...)` — `sampler` is a keyword. */
-      "sampler",  "sample",    "buffer",    "shared",   "subroutine","patch",
-      "coherent", "restrict",  "readonly",  "writeonly","precise",  "invariant",
-  };
-  std::string s(src.data(), size_t(src.size()));
-  for (const char *word : words) {
-    const std::string from(word);
-    const std::string to = std::string("_st_") + word;
-    size_t pos = 0;
-    while ((pos = s.find(from, pos)) != std::string::npos) {
-      const char before = (pos > 0) ? s[pos - 1] : ' ';
-      const char after = (pos + from.size() < s.size()) ? s[pos + from.size()] : ' ';
-      if (is_ident_char_st(before) || is_ident_char_st(after)) {
-        pos += from.size();
-        continue;
-      }
-      s.replace(pos, from.size(), to);
-      pos += to.size();
-    }
-  }
-  return s;
-}
-
-/* Blender's GLSL preprocessor scans for `/*` before `//`. A line comment like
- * `//*.7+.2` (Shane Fractal Flythrough) contains the two-char `/*` start, is
- * treated as an unclosed block comment, and throws ParserException (闪退). */
-static std::string sanitize_line_comment_block_starts(StringRef src)
-{
-  std::string s(src.data(), size_t(src.size()));
-  size_t pos = 0;
-  while ((pos = s.find("//*", pos)) != std::string::npos) {
-    s.replace(pos, 3, "// *");
-    pos += 4;
-  }
-  return s;
-}
-
-static std::string strip_shadertoy_preamble(StringRef src)
-{
-  const std::string sanitized = sanitize_line_comment_block_starts(src);
-  src = sanitized;
-  std::string out;
-  out.reserve(size_t(src.size()));
-  int64_t i = 0;
-  while (i < src.size()) {
-    const int64_t line_end = src.find('\n', i);
-    const int64_t end = (line_end == StringRef::not_found) ? src.size() : line_end;
-    StringRef line = src.substr(i, end - i);
-    StringRef trimmed = line.trim();
-    /* IQ's `ZERO = min(iFrame,0)` stops WebGL from unrolling. Replacing it with the
-     * literal `0` lets desktop compilers unroll huge raymarch loops and TDR/crash
-     * (Shane 4s3SRN). A function call is a valid loop start and blocks unroll. */
-    if (trimmed.startswith("#define ZERO") && trimmed.find("iFrame") != StringRef::not_found) {
-      out += "#define ZERO _st_loop_zero()";
-      if (end < src.size()) {
-        out.push_back('\n');
-      }
-    }
-    else if (!line_is_shadertoy_builtin_decl(trimmed)) {
-      out.append(line.data(), size_t(line.size()));
-      if (end < src.size()) {
-        out.push_back('\n');
-      }
-    }
-    i = (end < src.size()) ? end + 1 : src.size();
-  }
-  return rewrite_reserved_idents(rename_user_main(out));
-}
-
-static int64_t matching_paren(StringRef s, const int64_t open)
-{
-  if (open < 0 || open >= s.size() || s[open] != '(') {
-    return StringRef::not_found;
-  }
-  int depth = 1;
-  for (int64_t i = open + 1; i < s.size(); i++) {
-    if (s[i] == '(') {
-      depth++;
-    }
-    else if (s[i] == ')') {
-      depth--;
-      if (depth == 0) {
-        return i;
-      }
-    }
-  }
-  return StringRef::not_found;
-}
-
-/* Vulkan `textureLod(..., 0.0)` on a 1-mip ping-pong buffer is often black / undefined.
- * Chimera's Breath (4tGfDW) samples all 4 neighbors with textureLod — if those return 0,
- * pressure projection dies and the two emitters stay split with a noisy middle.
- * Do NOT rewrite 2-arg `texture()` into `textureLod` globally: fljBWc samples a
- * volume with `texture(iChannel0, p/amplitude)` (vec3). Forcing lod 0 then
- * mismatches sampler2D and fails to compile. XsffWj world-space mips are handled
- * by binding 2D dummies without MIPMAP filtering. */
-static std::string rewrite_texturelod_zero(StringRef src)
-{
-  std::string out;
-  out.reserve(size_t(src.size()));
-  const StringRef key("textureLod");
-  int64_t i = 0;
-  while (i < src.size()) {
-    const int64_t hit = src.find(key, i);
-    if (hit == StringRef::not_found) {
-      out.append(src.data() + i, size_t(src.size() - i));
-      break;
-    }
-    const char before = (hit > 0) ? src[hit - 1] : ' ';
-    const int64_t after_i = hit + key.size();
-    const char after = (after_i < src.size()) ? src[after_i] : ' ';
-    if (is_ident_char_st(before) || is_ident_char_st(after)) {
-      out.append(src.data() + i, size_t(hit + 1 - i));
-      i = hit + 1;
-      continue;
-    }
-    int64_t q = after_i;
-    while (q < src.size() && std::isspace(static_cast<unsigned char>(src[q]))) {
-      q++;
-    }
-    if (q >= src.size() || src[q] != '(') {
-      out.append(src.data() + i, size_t(q - i));
-      i = q;
-      continue;
-    }
-    const int64_t close = matching_paren(src, q);
-    if (close == StringRef::not_found) {
-      out.append(src.data() + i, size_t(src.size() - i));
-      break;
-    }
-    StringRef inside = src.substr(q + 1, close - (q + 1));
-    int depth = 0;
-    int64_t c0 = StringRef::not_found;
-    int64_t c1 = StringRef::not_found;
-    for (int64_t k = 0; k < inside.size(); k++) {
-      const char ch = inside[k];
-      if (ch == '(') {
-        depth++;
-      }
-      else if (ch == ')') {
-        depth--;
-      }
-      else if (ch == ',' && depth == 0) {
-        if (c0 == StringRef::not_found) {
-          c0 = k;
-        }
-        else if (c1 == StringRef::not_found) {
-          c1 = k;
-          break;
-        }
-      }
-    }
-    bool replaced = false;
-    if (c0 != StringRef::not_found && c1 != StringRef::not_found) {
-      StringRef lod = rtrim(ltrim(inside.substr(c1 + 1)));
-      if (lod == "0" || lod == "0." || lod == "0.0" || lod == "0.00" || lod == "0.000") {
-        StringRef a0 = rtrim(ltrim(inside.substr(0, c0)));
-        StringRef a1 = rtrim(ltrim(inside.substr(c0 + 1, c1 - (c0 + 1))));
-        out.append(src.data() + i, size_t(hit - i));
-        out += "texture(";
-        out.append(a0.data(), size_t(a0.size()));
-        out += ", ";
-        out.append(a1.data(), size_t(a1.size()));
-        out += ")";
-        replaced = true;
-      }
-    }
-    if (!replaced) {
-      out.append(src.data() + i, size_t(close + 1 - i));
-    }
-    i = close + 1;
-  }
-  return out;
+  return is_ident_char(c);
 }
 
 static bool is_negative_mip_bias(StringRef s)
@@ -1488,190 +1401,6 @@ static bool is_negative_mip_bias(StringRef s)
   char *end = nullptr;
   const double v = std::strtod(tmp.c_str(), &end);
   return end != tmp.c_str() && v < -0.5;
-}
-
-static bool is_zero_literal_st(StringRef s)
-{
-  s = rtrim(ltrim(s));
-  if (s.is_empty()) {
-    return false;
-  }
-  std::string tmp(s.data(), size_t(s.size()));
-  char *end = nullptr;
-  const double v = std::strtod(tmp.c_str(), &end);
-  return end != tmp.c_str() && *end == '\0' && v == 0.0;
-}
-
-/* `for (int i = min(iFrame, 0); i < N; i++)` is IQ/Shane's anti-unroll trick.
- * Leaving it as-is crashes some desktop compilers; folding to a literal `0`
- * unrolls 100+ iteration fractals and TDR-kills the process (4s3SRN). */
-static std::string rewrite_iframe_zero_calls(StringRef src)
-{
-  std::string out;
-  out.reserve(size_t(src.size()));
-  const StringRef key("min");
-  int64_t i = 0;
-  while (i < src.size()) {
-    const int64_t hit = src.find(key, i);
-    if (hit == StringRef::not_found) {
-      out.append(src.data() + i, size_t(src.size() - i));
-      break;
-    }
-    const char before = (hit > 0) ? src[hit - 1] : ' ';
-    const char after = (hit + key.size() < src.size()) ? src[hit + key.size()] : ' ';
-    if (is_ident_char_st(before) || is_ident_char_st(after)) {
-      out.append(src.data() + i, size_t(hit + key.size() - i));
-      i = hit + key.size();
-      continue;
-    }
-    int64_t q = hit + key.size();
-    while (q < src.size() && std::isspace(static_cast<unsigned char>(src[q]))) {
-      q++;
-    }
-    if (q >= src.size() || src[q] != '(') {
-      out.append(src.data() + i, size_t(q - i));
-      i = q;
-      continue;
-    }
-    const int64_t close = matching_paren(src, q);
-    if (close == StringRef::not_found) {
-      out.append(src.data() + i, size_t(src.size() - i));
-      break;
-    }
-    StringRef inside = src.substr(q + 1, close - (q + 1));
-    int depth = 0;
-    int64_t comma = StringRef::not_found;
-    for (int64_t k = 0; k < inside.size(); k++) {
-      const char ch = inside[k];
-      if (ch == '(') {
-        depth++;
-      }
-      else if (ch == ')') {
-        depth--;
-      }
-      else if (ch == ',' && depth == 0) {
-        comma = k;
-        break;
-      }
-    }
-    bool replaced = false;
-    if (comma != StringRef::not_found) {
-      StringRef a0 = rtrim(ltrim(inside.substr(0, comma)));
-      StringRef a1 = rtrim(ltrim(inside.substr(comma + 1)));
-      const bool iframe_zero = (a0 == "iFrame" && is_zero_literal_st(a1)) ||
-                               (a1 == "iFrame" && is_zero_literal_st(a0));
-      if (iframe_zero) {
-        out.append(src.data() + i, size_t(hit - i));
-        out += "_st_loop_zero()";
-        replaced = true;
-      }
-    }
-    if (!replaced) {
-      out.append(src.data() + i, size_t(close + 1 - i));
-    }
-    i = close + 1;
-  }
-  return out;
-}
-
-/* Desktop GLSL/SPIR-V will unroll `for (int i = 0; i < 80; i++)` when 80 is a
- * #define constant. Nested raymarch + shadow (Saturday cubism, Shane, IQ)
- * then either hangs shaderc for minutes or TDR-kills the GPU. ShaderToy/WebGL
- * keeps these as loops; IQ's `ZERO = min(iFrame,0)` trick is the same idea. */
-static std::string rewrite_loop_zero_starts(StringRef src)
-{
-  std::string out;
-  out.reserve(size_t(src.size()) + 128);
-  auto skip_ws = [&](int64_t p) {
-    while (p < src.size() && std::isspace(static_cast<unsigned char>(src[p]))) {
-      p++;
-    }
-    return p;
-  };
-  auto starts_type = [&](int64_t p, const char *type) -> int64_t {
-    const int64_t n = int64_t(strlen(type));
-    if (p + n > src.size()) {
-      return -1;
-    }
-    if (std::memcmp(src.data() + p, type, size_t(n)) != 0) {
-      return -1;
-    }
-    if (p + n < src.size() && is_ident_char_st(src[p + n])) {
-      return -1;
-    }
-    return p + n;
-  };
-  int64_t i = 0;
-  while (i < src.size()) {
-    const int64_t hit = src.find("for", i);
-    if (hit == StringRef::not_found) {
-      out.append(src.data() + i, size_t(src.size() - i));
-      break;
-    }
-    const char before = (hit > 0) ? src[hit - 1] : ' ';
-    const char after = (hit + 3 < src.size()) ? src[hit + 3] : ' ';
-    if (is_ident_char_st(before) || is_ident_char_st(after)) {
-      out.append(src.data() + i, size_t(hit + 3 - i));
-      i = hit + 3;
-      continue;
-    }
-    int64_t p = skip_ws(hit + 3);
-    if (p >= src.size() || src[p] != '(') {
-      out.append(src.data() + i, size_t(p - i));
-      i = p;
-      continue;
-    }
-    p = skip_ws(p + 1);
-    int64_t t = starts_type(p, "int");
-    if (t < 0) {
-      t = starts_type(p, "uint");
-    }
-    if (t < 0) {
-      out.append(src.data() + i, size_t(hit + 3 - i));
-      i = hit + 3;
-      continue;
-    }
-    p = skip_ws(t);
-    if (p >= src.size() || !(std::isalpha(static_cast<unsigned char>(src[p])) || src[p] == '_')) {
-      out.append(src.data() + i, size_t(hit + 3 - i));
-      i = hit + 3;
-      continue;
-    }
-    while (p < src.size() && is_ident_char_st(src[p])) {
-      p++;
-    }
-    p = skip_ws(p);
-    if (p >= src.size() || src[p] != '=') {
-      out.append(src.data() + i, size_t(hit + 3 - i));
-      i = hit + 3;
-      continue;
-    }
-    p = skip_ws(p + 1);
-    if (p >= src.size() || src[p] != '0') {
-      out.append(src.data() + i, size_t(hit + 3 - i));
-      i = hit + 3;
-      continue;
-    }
-    const int64_t after0 = p + 1;
-    if (after0 < src.size() &&
-        (std::isdigit(static_cast<unsigned char>(src[after0])) || src[after0] == '.' ||
-         src[after0] == 'x' || src[after0] == 'X' || is_ident_char_st(src[after0])))
-    {
-      out.append(src.data() + i, size_t(hit + 3 - i));
-      i = hit + 3;
-      continue;
-    }
-    const int64_t semi = skip_ws(after0);
-    if (semi >= src.size() || src[semi] != ';') {
-      out.append(src.data() + i, size_t(hit + 3 - i));
-      i = hit + 3;
-      continue;
-    }
-    out.append(src.data() + i, size_t(p - i));
-    out += "_st_loop_zero()";
-    i = after0;
-  }
-  return out;
 }
 
 static bool looks_like_iq_noise_uv(StringRef uv)
@@ -1700,801 +1429,22 @@ static bool looks_like_keyboard_uv(StringRef uv)
   return uv.find("0.5") != StringRef::not_found || uv.find(".5") != StringRef::not_found;
 }
 
-/* IQ / Dave Hoskins 3D noise: `texture(iChannel0, (uv+0.5)/256.0, -99.0)`.
- * `uv` contains `floor(x)`, so implicit LOD spikes at every lattice face and
- * samples blurry mips — visible noise-grid seams (Remnant X 4sjSW1).
- * `textureLod(..., 0)` is still trilinear/aniso on some Vulkan drivers.
- * Manual wrap-REPEAT texelFetch bilinear is lod-proof. Do this AFTER
- * rewriting textureLod(...,0) → texture(), or that pass would undo us. */
-static std::string rewrite_texture_neg_bias(StringRef src)
-{
-  std::string out;
-  out.reserve(size_t(src.size()) + 64);
-  const char *funcs[] = {"texture2D", "texture"};
-  int64_t i = 0;
-  while (i < src.size()) {
-    int64_t best = StringRef::not_found;
-    const char *best_fn = nullptr;
-    for (const char *fn : funcs) {
-      const StringRef key(fn);
-      const int64_t hit = src.find(key, i);
-      if (hit == StringRef::not_found) {
-        continue;
-      }
-      const char before = (hit > 0) ? src[hit - 1] : ' ';
-      const int64_t after_i = hit + key.size();
-      const char after = (after_i < src.size()) ? src[after_i] : ' ';
-      if (is_ident_char_st(before) || is_ident_char_st(after)) {
-        continue;
-      }
-      if (best == StringRef::not_found || hit < best) {
-        best = hit;
-        best_fn = fn;
-      }
-    }
-    if (best == StringRef::not_found) {
-      out.append(src.data() + i, size_t(src.size() - i));
-      break;
-    }
-    const StringRef key(best_fn);
-    int64_t q = best + key.size();
-    while (q < src.size() && std::isspace(static_cast<unsigned char>(src[q]))) {
-      q++;
-    }
-    if (q >= src.size() || src[q] != '(') {
-      out.append(src.data() + i, size_t(q - i));
-      i = q;
-      continue;
-    }
-    const int64_t close = matching_paren(src, q);
-    if (close == StringRef::not_found) {
-      out.append(src.data() + i, size_t(src.size() - i));
-      break;
-    }
-    StringRef inside = src.substr(q + 1, close - (q + 1));
-    int depth = 0;
-    int64_t c0 = StringRef::not_found;
-    int64_t c1 = StringRef::not_found;
-    for (int64_t k = 0; k < inside.size(); k++) {
-      const char ch = inside[k];
-      if (ch == '(') {
-        depth++;
-      }
-      else if (ch == ')') {
-        depth--;
-      }
-      else if (ch == ',' && depth == 0) {
-        if (c0 == StringRef::not_found) {
-          c0 = k;
-        }
-        else if (c1 == StringRef::not_found) {
-          c1 = k;
-          break;
-        }
-      }
-    }
-    bool replaced = false;
-    if (c0 != StringRef::not_found) {
-      StringRef a0 = rtrim(ltrim(inside.substr(0, c0)));
-      StringRef a1;
-      bool use_fetch = false;
-      if (c1 != StringRef::not_found) {
-        a1 = rtrim(ltrim(inside.substr(c0 + 1, c1 - (c0 + 1))));
-        use_fetch = is_negative_mip_bias(inside.substr(c1 + 1)) || looks_like_iq_noise_uv(a1);
-      }
-      else {
-        a1 = rtrim(ltrim(inside.substr(c0 + 1)));
-        use_fetch = looks_like_iq_noise_uv(a1);
-      }
-      if (use_fetch) {
-        out.append(src.data() + i, size_t(best - i));
-        out += "_st_tex2d_lod0(";
-        out.append(a0.data(), size_t(a0.size()));
-        out += ", ";
-        out.append(a1.data(), size_t(a1.size()));
-        out += ")";
-        replaced = true;
-      }
-    }
-    if (!replaced) {
-      out.append(src.data() + i, size_t(close + 1 - i));
-    }
-    i = close + 1;
-  }
-  return out;
-}
-
-static std::string rewrite_pixel_texel_fetch(StringRef src,
-                                            const uint8_t nearest_mask,
-                                            const uint8_t wrap_mask)
-{
-  /* MlVfDR stores voronoi particle IDs as pixel positions and samples
-   * `texture(iChannel, U/R)` (nearest on the site). Linear blends two IDs and
-   * the mosaic washes out; a nearest sampler + implicit LOD collapsed every
-   * pixel onto one jet (flat green). texelFetch is filter- and lod-proof.
-   * wdsGWS uses `(u+m)*r` with r=1/res and EMPTY==1024 — same idea. */
-  if (nearest_mask == 0) {
-    return std::string(src.data(), size_t(src.size()));
-  }
-  std::string out;
-  out.reserve(size_t(src.size()) + 32);
-  const char *funcs[] = {"texture2D", "texture"};
-  int64_t i = 0;
-  while (i < src.size()) {
-    int64_t best = StringRef::not_found;
-    const char *best_fn = nullptr;
-    for (const char *fn : funcs) {
-      const StringRef key(fn);
-      const int64_t hit = src.find(key, i);
-      if (hit == StringRef::not_found) {
-        continue;
-      }
-      const char before = (hit > 0) ? src[hit - 1] : ' ';
-      const int64_t after_i = hit + key.size();
-      const char after = (after_i < src.size()) ? src[after_i] : ' ';
-      if (is_ident_char_st(before) || is_ident_char_st(after)) {
-        continue;
-      }
-      if (best == StringRef::not_found || hit < best) {
-        best = hit;
-        best_fn = fn;
-      }
-    }
-    if (best == StringRef::not_found) {
-      out.append(src.data() + i, size_t(src.size() - i));
-      break;
-    }
-    const StringRef key(best_fn);
-    int64_t q = best + key.size();
-    while (q < src.size() && std::isspace(static_cast<unsigned char>(src[q]))) {
-      q++;
-    }
-    if (q >= src.size() || src[q] != '(') {
-      out.append(src.data() + i, size_t(q - i));
-      i = q;
-      continue;
-    }
-    const int64_t close = matching_paren(src, q);
-    if (close == StringRef::not_found) {
-      out.append(src.data() + i, size_t(src.size() - i));
-      break;
-    }
-    StringRef inside = src.substr(q + 1, close - (q + 1));
-    int depth = 0;
-    int64_t c0 = StringRef::not_found;
-    for (int64_t k = 0; k < inside.size(); k++) {
-      const char ch = inside[k];
-      if (ch == '(') {
-        depth++;
-      }
-      else if (ch == ')') {
-        depth--;
-      }
-      else if (ch == ',' && depth == 0) {
-        c0 = k;
-        break;
-      }
-    }
-    bool replaced = false;
-    if (c0 != StringRef::not_found) {
-      StringRef a0 = rtrim(ltrim(inside.substr(0, c0)));
-      StringRef a1 = rtrim(ltrim(inside.substr(c0 + 1)));
-      int ch = -1;
-      if (a0.size() == 9 && a0.startswith("iChannel") && a0[8] >= '0' && a0[8] <= '3') {
-        ch = a0[8] - '0';
-      }
-      int64_t c1 = StringRef::not_found;
-      int d1 = 0;
-      for (int64_t k = c0 + 1; k < inside.size(); k++) {
-        const char ch2 = inside[k];
-        if (ch2 == '(') {
-          d1++;
-        }
-        else if (ch2 == ')') {
-          d1--;
-        }
-        else if (ch2 == ',' && d1 == 0) {
-          c1 = k;
-          break;
-        }
-      }
-      if (c1 != StringRef::not_found) {
-        /* 3-arg texture(samp, uv, lod) — leave it. */
-      }
-      else if (ch >= 0 && (nearest_mask & uint8_t(1u << ch)) != 0) {
-        StringRef expr;
-        bool div_r = false;
-        if (a1.size() >= 3 && a1[a1.size() - 2] == '/' && a1[a1.size() - 1] == 'R') {
-          expr = rtrim(a1.substr(0, a1.size() - 2));
-          div_r = !expr.is_empty();
-        }
-        else if (a1.size() >= 4 && a1[a1.size() - 3] == '/' && a1[a1.size() - 2] == ' ' &&
-                 a1[a1.size() - 1] == 'R')
-        {
-          expr = rtrim(a1.substr(0, a1.size() - 3));
-          div_r = !expr.is_empty();
-        }
-        const bool looks_vec3 = a1.startswith("normalize") || a1.startswith("vec3") ||
-                                a1.startswith("reflect") || a1.startswith("refract");
-        if (div_r) {
-          out.append(src.data() + i, size_t(best - i));
-          if (wrap_mask & uint8_t(1u << ch)) {
-            out += "_st_fetch_px_rep(";
-          }
-          else {
-            out += "_st_fetch_px(";
-          }
-          out.append(a0.data(), size_t(a0.size()));
-          out += ", ";
-          out.append(expr.data(), size_t(expr.size()));
-          out += ")";
-          replaced = true;
-        }
-        else if (!looks_vec3) {
-          /* wdsGWS: `texture(iChannel0, (u+m.xy)*r)` with r=1/res. Linear
-           * blends EMPTY=1024 into ball xy and `== EMPTY` never hits. */
-          out.append(src.data() + i, size_t(best - i));
-          if (wrap_mask & uint8_t(1u << ch)) {
-            out += "_st_fetch_uv_rep(";
-          }
-          else {
-            out += "_st_fetch_uv(";
-          }
-          out.append(a0.data(), size_t(a0.size()));
-          out += ", ";
-          out.append(a1.data(), size_t(a1.size()));
-          out += ")";
-          replaced = true;
-        }
-      }
-    }
-    if (!replaced) {
-      out.append(src.data() + i, size_t(close + 1 - i));
-    }
-    i = close + 1;
-  }
-  return out;
-}
-
-/* IQ packed 3D noise samples ONE bilinear tap and lerps .yx by f.z.
- * That is only continuous in Z if G(x,y) == R(x-37,y-17). Independent RGBA
- * (our dummy, and many user textures) makes every integer-Z plane a hard
- * seam — cube grid on Remnant X's sky, which is GetSky(dir) on a sphere.
- * Two taps of the same channel at uv and uv+(37,17) are actually C0. */
-static std::string rewrite_iq_z_slices(std::string s)
-{
-  const std::string mark = "_st_tex2d_lod0(";
-  size_t pos = 0;
-  while ((pos = s.find(mark, pos)) != std::string::npos) {
-    const size_t call = pos;
-    int depth = 0;
-    size_t close = std::string::npos;
-    for (size_t p = call + mark.size() - 1; p < s.size(); p++) {
-      if (s[p] == '(') {
-        depth++;
-      }
-      else if (s[p] == ')') {
-        depth--;
-        if (depth == 0) {
-          close = p;
-          break;
-        }
-      }
-    }
-    if (close == std::string::npos) {
-      break;
-    }
-    size_t sw = close + 1;
-    while (sw < s.size() && std::isspace(static_cast<unsigned char>(s[sw]))) {
-      sw++;
-    }
-    if (sw + 3 > s.size() || s.compare(sw, 3, ".yx") != 0) {
-      pos = close + 1;
-      continue;
-    }
-    size_t stmt = call;
-    while (stmt > 0 && s[stmt - 1] != ';' && s[stmt - 1] != '{' && s[stmt - 1] != '\n') {
-      stmt--;
-    }
-    if (stmt > 0 && s[stmt - 1] == '\n') {
-      /* keep indent; start after previous newline already */
-    }
-    while (stmt < call && (s[stmt] == ' ' || s[stmt] == '\t')) {
-      /* include indent in the replaced range */
-      break;
-    }
-    size_t ident_start = stmt;
-    while (ident_start < call && (s[ident_start] == ' ' || s[ident_start] == '\t')) {
-      ident_start++;
-    }
-    if (s.compare(ident_start, 4, "vec2") != 0) {
-      pos = close + 1;
-      continue;
-    }
-    size_t name_s = ident_start + 4;
-    while (name_s < call && std::isspace(static_cast<unsigned char>(s[name_s]))) {
-      name_s++;
-    }
-    size_t name_e = name_s;
-    while (name_e < call && is_ident_char_st(s[name_e])) {
-      name_e++;
-    }
-    if (name_e == name_s) {
-      pos = close + 1;
-      continue;
-    }
-    const std::string var = s.substr(name_s, name_e - name_s);
-    size_t semi = s.find(';', sw);
-    if (semi == std::string::npos || semi > sw + 8) {
-      pos = close + 1;
-      continue;
-    }
-    /* Mix is usually the next statement: return mix(rg.x, rg.y, f.z); */
-    size_t mix_at = semi + 1;
-    while (mix_at < s.size() && std::isspace(static_cast<unsigned char>(s[mix_at]))) {
-      mix_at++;
-    }
-    const bool ret = (s.compare(mix_at, 6, "return") == 0);
-    size_t mix_kw = mix_at;
-    if (ret) {
-      mix_kw = mix_at + 6;
-      while (mix_kw < s.size() && std::isspace(static_cast<unsigned char>(s[mix_kw]))) {
-        mix_kw++;
-      }
-    }
-    if (s.compare(mix_kw, 4, "mix(") != 0) {
-      pos = close + 1;
-      continue;
-    }
-    const size_t mix_paren = mix_kw + 3;
-    const int64_t mix_close_i = matching_paren(StringRef(s.c_str(), int64_t(s.size())),
-                                               int64_t(mix_paren));
-    if (mix_close_i == StringRef::not_found) {
-      pos = close + 1;
-      continue;
-    }
-    const size_t mix_close = size_t(mix_close_i);
-    const std::string inside = s.substr(mix_paren + 1, mix_close - (mix_paren + 1));
-    const std::string xname = var + ".x";
-    const std::string yname = var + ".y";
-    if (inside.find(xname) == std::string::npos || inside.find(yname) == std::string::npos) {
-      pos = close + 1;
-      continue;
-    }
-    /* Extract sampler + uv from _st_tex2d_lod0(samp, uv). */
-    const std::string args = s.substr(call + mark.size(), close - (call + mark.size()));
-    int ad = 0;
-    size_t comma = std::string::npos;
-    for (size_t k = 0; k < args.size(); k++) {
-      if (args[k] == '(') {
-        ad++;
-      }
-      else if (args[k] == ')') {
-        ad--;
-      }
-      else if (args[k] == ',' && ad == 0) {
-        comma = k;
-        break;
-      }
-    }
-    if (comma == std::string::npos) {
-      pos = close + 1;
-      continue;
-    }
-    std::string samp = args.substr(0, comma);
-    std::string uv = args.substr(comma + 1);
-    auto trim = [](std::string &t) {
-      size_t a = 0;
-      while (a < t.size() && std::isspace(static_cast<unsigned char>(t[a]))) {
-        a++;
-      }
-      size_t b = t.size();
-      while (b > a && std::isspace(static_cast<unsigned char>(t[b - 1]))) {
-        b--;
-      }
-      t = t.substr(a, b - a);
-    };
-    trim(samp);
-    trim(uv);
-    /* `(uv+0.5)/256` → extra slice is `(uv+vec2(37,17)+0.5)/256`. */
-    std::string uv1 = uv;
-    const size_t plus = uv.find("+");
-    if (plus != std::string::npos && uv.find("256") != std::string::npos) {
-      uv1 = uv.substr(0, plus) + "+vec2(37.0,17.0)" + uv.substr(plus);
-    }
-    else {
-      uv1 = "(" + uv + "+vec2(37.0,17.0)/256.0)";
-    }
-    std::string repl;
-    const std::string indent = s.substr(stmt, ident_start - stmt);
-    repl += indent;
-    repl += "float _st_n0 = _st_tex2d_lod0(";
-    repl += samp;
-    repl += ", ";
-    repl += uv;
-    repl += ").x;\n";
-    repl += indent;
-    repl += "float _st_n1 = _st_tex2d_lod0(";
-    repl += samp;
-    repl += ", ";
-    repl += uv1;
-    repl += ").x;\n";
-    repl += indent;
-    if (ret) {
-      repl += "return mix(_st_n0, _st_n1, f.z);";
-    }
-    else {
-      repl += "mix(_st_n0, _st_n1, f.z);";
-    }
-    size_t mix_semi = mix_close;
-    while (mix_semi < s.size() && s[mix_semi] != ';') {
-      mix_semi++;
-    }
-    if (mix_semi < s.size()) {
-      mix_semi++;
-    }
-    s.replace(stmt, mix_semi - stmt, repl);
-    pos = stmt + repl.size();
-  }
-  return s;
-}
-
-/* `fract(sin(x)*43758.5453)` aliases on desktop highp (tdG3Rd banding). Replacing it
- * also *rebuilds* Shane fractals (4s3SRN / 4scXzn) because the hash *is* the geometry.
- * Leave the original expression so ShaderToy matches; accept mediump vs highp drift. */
-static std::string rewrite_unstable_sin_hash(StringRef src)
-{
-  /* Identity: see comment above. */
-  return std::string(src.data(), size_t(src.size()));
-}
-
-static bool is_glsl_value_type(const StringRef t)
-{
-  return t == "float" || t == "int" || t == "uint" || t == "bool" || t == "vec2" || t == "vec3" ||
-         t == "vec4" || t == "ivec2" || t == "ivec3" || t == "ivec4" || t == "uvec2" ||
-         t == "uvec3" || t == "uvec4" || t == "mat2" || t == "mat3" || t == "mat4" ||
-         t == "bvec2" || t == "bvec3" || t == "bvec4";
-}
-
-/* WebGL2 allows `vec3[3] a` / `inout vec2[3] id` (prefix size). Desktop GLSL wants
- * `vec3 a[3]` / `inout vec2 id[3]`. dl2fzz Buffer A `tr()`/`nr()` used the prefix
- * form; if that pass fails, Image's DOF samples a cleared buffer → solid black.
- *
- * Keep sized constructors `vec2[3](...)`. Rewriting them to unsized `vec2[](...)`
- * is what some NVIDIA/OpenGL parsers reject even after the declaration rewrite. */
-static std::string rewrite_c_style_array_types(StringRef src)
-{
-  std::string s(src.data(), size_t(src.size()));
-  std::string out;
-  out.reserve(s.size() + 16);
-  int64_t i = 0;
-  const StringRef in(s.c_str(), int64_t(s.size()));
-  while (i < in.size()) {
-    std::string type;
-    StringRef rest = in.substr(i);
-    const int64_t type_at = i;
-    if (!((i == 0 || !is_ident_char_st(in[i - 1])) && skip_ident_name(rest, type) &&
-          is_glsl_value_type(type)))
-    {
-      out.push_back(in[i]);
-      i++;
-      continue;
-    }
-    i = in.size() - rest.size();
-    StringRef after = ltrim(rest);
-    if (after.size() < 3 || after[0] != '[') {
-      out.append(in.data() + type_at, size_t(i - type_at));
-      continue;
-    }
-    int64_t n = 1;
-    while (n < after.size() && std::isdigit(static_cast<unsigned char>(after[n]))) {
-      n++;
-    }
-    if (n == 1 || n >= after.size() || after[n] != ']') {
-      out.append(in.data() + type_at, size_t(i - type_at));
-      continue;
-    }
-    StringRef tail = ltrim(after.substr(n + 1));
-    /* Constructor `vec2[3](...)` — leave the sized form alone. */
-    if (!tail.is_empty() && tail[0] == '(') {
-      out.append(in.data() + type_at, size_t(i - type_at));
-      continue;
-    }
-    std::string name;
-    StringRef namest = tail;
-    if (!skip_ident_name(namest, name)) {
-      out.append(in.data() + type_at, size_t(i - type_at));
-      continue;
-    }
-    out += type;
-    out += ' ';
-    out += name;
-    out.append(after.data(), size_t(n + 1));
-    i = in.size() - namest.size();
-  }
-  return out;
-}
-
 static std::string glsl_zero_for_type(const StringRef type,
-                                     const Map<std::string, std::string> &struct_ctors);
-
-/* Vulkan GLSL forbids initializers on non-const file-scope variables
- * (`vec2 res = vec2(0);` in XsK3RR, `float tau = atan(1.0)*8.0;`).
- * Declare the variable, then assign it from `_st_init_globals()` in main.
- * Promoting `atan(...)` to `const` is also illegal (not a constant expression). */
-struct VulkanRewrite {
-  std::string source;
-  std::string inits;
-  /* File-scope `type name;` emitted outside `#if` so a `#if AA>1` dead branch
-   * cannot drop the declaration while `_st_init_globals` still assigns it
-   * (3dlSzs `once_AAlgs` / `retv_AA`). */
-  std::string decls;
-};
-
-static StringRef strip_expr_tail(StringRef s)
+                                     const Map<std::string, std::string> &struct_ctors)
 {
-  s = rtrim(s);
-  const int64_t cmt = s.find("//");
-  if (cmt != StringRef::not_found) {
-    s = rtrim(s.substr(0, cmt));
-  }
-  const int64_t blk = s.find("/*");
-  if (blk != StringRef::not_found) {
-    s = rtrim(s.substr(0, blk));
-  }
-  if (!s.is_empty() && s[s.size() - 1] == ';') {
-    s = rtrim(s.substr(0, s.size() - 1));
-  }
-  return s;
-}
-
-static VulkanRewrite rewrite_vulkan_globals(StringRef src)
-{
-  VulkanRewrite result;
-  result.source.reserve(size_t(src.size()) + 32);
-  int depth = 0;
-  int64_t i = 0;
-  static Map<std::string, std::string> no_ctors;
-  while (i < src.size()) {
-    const int64_t line_end = src.find('\n', i);
-    const int64_t end = (line_end == StringRef::not_found) ? src.size() : line_end;
-    StringRef line = src.substr(i, end - i);
-
-    bool rewritten = false;
-    if (depth == 0) {
-      StringRef t = ltrim(line);
-      if (!(t.startswith("#") || t.startswith("//") || t.startswith("const ") ||
-            t.startswith("uniform ") || t.startswith("struct") || t.startswith("void ") ||
-            t.startswith("layout") || t.startswith("precision") || t.startswith("in ") ||
-            t.startswith("out ") || t.startswith("inout ")))
-      {
-        std::string type;
-        StringRef parse = t;
-        if (skip_ident_name(parse, type) && is_glsl_value_type(type)) {
-          /* Vulkan forbids *initializers* on non-const file-scope vars
-           * (`vec2 res = vec2(0);`). Bare `float light;` is legal but not
-           * zero on desktop; hoist + assign in `_st_init_globals`. Keep any
-           * unparsed tail (MlVfDR `float N` after `vec2 R;`). */
-          struct Item {
-            std::string type;
-            std::string name;
-            std::string expr;
-          };
-          Vector<Item> items;
-          bool abort_line = false;
-          StringRef leftover;
-          while (!abort_line) {
-            parse = ltrim(parse);
-            leftover = parse;
-            std::string name;
-            if (!skip_ident_name(parse, name)) {
-              break;
-            }
-            parse = ltrim(parse);
-            if (!parse.is_empty() && (parse[0] == '(' || parse[0] == '[')) {
-              items.clear();
-              abort_line = true;
-              break;
-            }
-            std::string expr;
-            if (!parse.is_empty() && parse[0] == '=') {
-              parse = ltrim(parse.substr(1));
-              int pd = 0;
-              int64_t k = 0;
-              for (; k < parse.size(); k++) {
-                const char c = parse[k];
-                if (c == '/' && k + 1 < parse.size() &&
-                    (parse[k + 1] == '/' || parse[k + 1] == '*'))
-                {
-                  break;
-                }
-                if (c == '(' || c == '[' || c == '{') {
-                  pd++;
-                }
-                else if (c == ')' || c == ']' || c == '}') {
-                  pd--;
-                }
-                else if ((c == ',' || c == ';') && pd == 0) {
-                  break;
-                }
-              }
-              StringRef e = rtrim(parse.substr(0, k));
-              expr.assign(e.data(), size_t(e.size()));
-              parse = parse.substr(k);
-            }
-            items.append({type, name, expr});
-            leftover = parse;
-            parse = ltrim(parse);
-            if (parse.is_empty() || parse.startswith("//")) {
-              leftover = StringRef();
-              break;
-            }
-            if (parse[0] == ',') {
-              parse = parse.substr(1);
-              continue;
-            }
-            if (parse[0] == ';') {
-              parse = ltrim(parse.substr(1));
-              leftover = parse;
-              if (parse.is_empty() || parse.startswith("//")) {
-                leftover = StringRef();
-                break;
-              }
-              std::string next_type;
-              StringRef peek = parse;
-              if (skip_ident_name(peek, next_type) && is_glsl_value_type(next_type)) {
-                type = next_type;
-                parse = peek;
-                continue;
-              }
-              /* Keep the unparsed tail in the shader (do not drop `float N`). */
-              break;
-            }
-            items.clear();
-            abort_line = true;
-            break;
-          }
-          if (!abort_line && !items.is_empty()) {
-            /* Hoist every file-scope value decl, with or without `=`.
-             * Vulkan forbids `float light = 0.0;` at global scope, so we
-             * emit a bare `type name;` and assign from `_st_init_globals`.
-             * Uninitialized globals (`float light;` in 3ccyD7) are 0 on
-             * WebGL and garbage on desktop; `light +=` then HDR-blows the
-             * image. Do not drop an unparsed tail on the same line. */
-            for (const Item &it : items) {
-              result.decls += it.type;
-              result.decls += " ";
-              result.decls += it.name;
-              result.decls += ";\n";
-              std::string rhs = it.expr;
-              if (rhs.empty()) {
-                rhs = glsl_zero_for_type(it.type, no_ctors);
-              }
-              if (!rhs.empty()) {
-                result.inits += "  ";
-                result.inits += it.name;
-                result.inits += " = ";
-                result.inits += rhs;
-                result.inits += ";\n";
-              }
-            }
-            rewritten = true;
-            leftover = ltrim(leftover);
-            if (!leftover.is_empty() && !leftover.startswith("//")) {
-              result.source.append(leftover.data(), size_t(leftover.size()));
-            }
-          }
-        }
-      }
+  static const char *zeros[][2] = {
+      {"float", "0.0"},          {"int", "0"},           {"uint", "0u"},
+      {"bool", "false"},         {"vec2", "vec2(0.0)"},  {"vec3", "vec3(0.0)"},
+      {"vec4", "vec4(0.0)"},     {"ivec2", "ivec2(0)"},  {"ivec3", "ivec3(0)"},
+      {"ivec4", "ivec4(0)"},     {"uvec2", "uvec2(0u)"}, {"uvec3", "uvec3(0u)"},
+      {"uvec4", "uvec4(0u)"},    {"bvec2", "bvec2(false)"}, {"bvec3", "bvec3(false)"},
+      {"bvec4", "bvec4(false)"}, {"mat2", "mat2(0.0)"},  {"mat3", "mat3(0.0)"},
+      {"mat4", "mat4(0.0)"},
+  };
+  for (const auto &zero : zeros) {
+    if (type == zero[0]) {
+      return zero[1];
     }
-
-    if (!rewritten) {
-      result.source.append(line.data(), size_t(line.size()));
-    }
-    if (end < src.size()) {
-      result.source.push_back('\n');
-    }
-
-    for (int64_t c = 0; c < line.size(); c++) {
-      if (c + 1 < line.size() && line[c] == '/' && line[c + 1] == '/') {
-        break;
-      }
-      if (line[c] == '{') {
-        depth++;
-      }
-      else if (line[c] == '}' && depth > 0) {
-        depth--;
-      }
-    }
-    i = (end < src.size()) ? end + 1 : src.size();
-  }
-  return result;
-}
-
-static int64_t matching_brace(StringRef s, const int64_t open)
-{
-  if (open < 0 || open >= s.size() || s[open] != '{') {
-    return StringRef::not_found;
-  }
-  int depth = 1;
-  for (int64_t i = open + 1; i < s.size(); i++) {
-    if (i + 1 < s.size() && s[i] == '/' && s[i + 1] == '/') {
-      while (i < s.size() && s[i] != '\n') {
-        i++;
-      }
-      continue;
-    }
-    if (s[i] == '{') {
-      depth++;
-    }
-    else if (s[i] == '}') {
-      depth--;
-      if (depth == 0) {
-        return i;
-      }
-    }
-  }
-  return StringRef::not_found;
-}
-
-static std::string glsl_zero_for_type(const StringRef type, const Map<std::string, std::string> &struct_ctors)
-{
-  if (type == "float") {
-    return "0.0";
-  }
-  if (type == "int") {
-    return "0";
-  }
-  if (type == "uint") {
-    return "0u";
-  }
-  if (type == "bool") {
-    return "false";
-  }
-  if (type == "vec2") {
-    return "vec2(0.0)";
-  }
-  if (type == "vec3") {
-    return "vec3(0.0)";
-  }
-  if (type == "vec4") {
-    return "vec4(0.0)";
-  }
-  if (type == "ivec2") {
-    return "ivec2(0)";
-  }
-  if (type == "ivec3") {
-    return "ivec3(0)";
-  }
-  if (type == "ivec4") {
-    return "ivec4(0)";
-  }
-  if (type == "uvec2") {
-    return "uvec2(0u)";
-  }
-  if (type == "uvec3") {
-    return "uvec3(0u)";
-  }
-  if (type == "uvec4") {
-    return "uvec4(0u)";
-  }
-  if (type == "bvec2") {
-    return "bvec2(false)";
-  }
-  if (type == "bvec3") {
-    return "bvec3(false)";
-  }
-  if (type == "bvec4") {
-    return "bvec4(false)";
-  }
-  if (type == "mat2") {
-    return "mat2(0.0)";
-  }
-  if (type == "mat3") {
-    return "mat3(0.0)";
-  }
-  if (type == "mat4") {
-    return "mat4(0.0)";
   }
   if (const std::string *ctor = struct_ctors.lookup_ptr(std::string(type))) {
     return *ctor;
@@ -2502,91 +1452,1052 @@ static std::string glsl_zero_for_type(const StringRef type, const Map<std::strin
   return "";
 }
 
-static Map<std::string, std::string> collect_struct_zero_ctors(const StringRef src)
+static bool is_precision_qualifier(const StringRef t)
 {
-  Map<std::string, std::string> ctors;
-  int64_t i = 0;
-  while (i < src.size()) {
-    const int64_t hit = src.find("struct", i);
-    if (hit == StringRef::not_found) {
-      break;
+  return t == "highp" || t == "mediump" || t == "lowp";
+}
+
+/* Words that are never a type or a variable name. */
+static bool is_statement_keyword(const StringRef t)
+{
+  static const char *words[] = {
+      "return",  "if",       "else",    "for",       "while",     "do",      "switch",
+      "case",    "default",  "break",   "continue",  "discard",   "const",   "in",
+      "out",     "inout",    "uniform", "layout",    "precision", "highp",   "mediump",
+      "lowp",    "struct",   "flat",    "smooth",    "centroid",  "invariant",
+  };
+  for (const char *word : words) {
+    if (t == word) {
+      return true;
     }
-    const char before = (hit > 0) ? src[hit - 1] : ' ';
-    const char after = (hit + 6 < src.size()) ? src[hit + 6] : ' ';
-    if (is_ident_char_st(before) || is_ident_char_st(after)) {
-      i = hit + 1;
+  }
+  return false;
+}
+
+/* WebGL lets shaders use names that desktop and Vulkan GLSL reserve.
+ * Dsf3WH: `float drawFont(vec2 p, int char)`, csc3RS: `SampleDepth(sampler2D sampler, ...)`. */
+static bool is_reserved_ident(const StringRef t)
+{
+  static const char *words[] = {
+      "char",           "class",          "union",        "template",      "this",
+      "packed",         "input",          "output",       "filter",        "partition",
+      "public",         "private",        "short",        "long",          "half",
+      "fixed",          "unsigned",       "byte",         "goto",          "inline",
+      "typename",       "using",          "namespace",    "volatile",      "abstract",
+      "active",         "asm",            "cast",         "extern",        "interface",
+      "sampler",        "sample",         "buffer",       "shared",        "subroutine",
+      "patch",          "coherent",       "restrict",     "readonly",      "writeonly",
+      "precise",        "resource",       "common",       "noperspective", "samplerShadow",
+      "texture1D",      "texture1DArray", "texture2DArray", "texture2DMS", "texture2DMSArray",
+      "texture2DRect",  "textureBuffer",  "textureCubeArray", "subpassInput", "subpassInputMS",
+  };
+  for (const char *word : words) {
+    if (t == word) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/* WebGL 1 sampling functions. Mapped to the modern builtin unless the shader brings its own
+ * `vec4 texture2D(sampler2D s, vec2 uv)` wrapper, which is then renamed instead. */
+static const char *legacy_texture_names[][2] = {
+    {"texture2D", "texture"},           {"textureCube", "texture"},
+    {"texture3D", "texture"},           {"texture2DLod", "textureLod"},
+    {"textureCubeLod", "textureLod"},   {"texture2DLodEXT", "textureLod"},
+    {"textureCubeLodEXT", "textureLod"}, {"texture2DGrad", "textureGrad"},
+    {"texture2DGradEXT", "textureGrad"}, {"textureCubeGradEXT", "textureGrad"},
+    {"texture2DProj", "textureProj"},   {"texture2DProjLod", "textureProjLod"},
+};
+
+static bool is_legacy_texture_name(const StringRef t)
+{
+  for (const auto &legacy : legacy_texture_names) {
+    if (t == legacy[0]) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/* Builtins that exist on desktop but not in WebGL 2, so shaders write their own:
+ * `int bitCount(int x)`, `float max3(float a, float b, float c)`. With identical parameter
+ * types that is a redeclaration of the builtin, which glslang rejects ("must have the same
+ * parameter precision qualifiers"). A shader that declares one gets its own name. */
+static bool is_desktop_builtin_name(const StringRef t)
+{
+  static const char *names[] = {
+      "fma",            "frexp",          "ldexp",           "bitCount",        "bitfieldExtract",
+      "bitfieldInsert", "bitfieldReverse", "findLSB",        "findMSB",         "uaddCarry",
+      "usubBorrow",     "umulExtended",   "imulExtended",    "noise1",          "noise2",
+      "noise3",         "noise4",         "min3",            "max3",            "mid3",
+      "packUnorm4x8",   "packSnorm4x8",   "unpackUnorm4x8",  "unpackSnorm4x8",  "packDouble2x32",
+      "unpackDouble2x32", "textureQueryLod", "textureQueryLevels", "textureGather",
+      "textureGatherOffset", "textureSamples", "dFdxFine",   "dFdyFine",        "fwidthFine",
+      "dFdxCoarse",     "dFdyCoarse",     "fwidthCoarse",    "interpolateAtCentroid",
+      "interpolateAtSample", "interpolateAtOffset",
+  };
+  for (const char *name : names) {
+    if (t == name) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/* Builtins glslang does not fold, see #demote_non_constant_consts. */
+static bool is_unfoldable_builtin_name(const StringRef t)
+{
+  static const char *names[] = {
+      "uintBitsToFloat", "intBitsToFloat", "floatBitsToInt", "floatBitsToUint", "inverse",
+      "determinant",     "transpose",      "texture",        "textureLod",      "texelFetch",
+      "textureSize",
+  };
+  for (const char *name : names) {
+    if (t == name) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool is_shadertoy_uniform_name(const StringRef t)
+{
+  static const char *names[] = {
+      "iResolution", "iTime",     "iTimeDelta", "iFrame",    "iFrameRate",
+      "iMouse",      "iDate",     "iSampleRate", "iChannel0", "iChannel1",
+      "iChannel2",   "iChannel3", "iChannelResolution", "iChannelTime", "iGlobalTime",
+  };
+  for (const char *name : names) {
+    if (t == name) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** What Common and the pass declare. Gathered before any edit so both halves agree. */
+struct SourceInfo {
+  Set<std::string> macros;
+  /** Function-like macros that take at least one parameter. */
+  Set<std::string> macros_with_params;
+  /** Replacement tokens of every macro. */
+  Map<std::string, Vector<std::string>> macro_bodies;
+  /** Functions and variables declared at file scope. */
+  Set<std::string> globals;
+  Set<std::string> functions;
+  /** Every `name(`. */
+  Set<std::string> calls;
+  Set<std::string> struct_names;
+  Map<std::string, std::string> struct_zero;
+  /** File-scope `const` that had to become a plain global. */
+  Set<std::string> demoted_consts;
+
+  bool declares(const StringRef name) const
+  {
+    const std::string key(name.data(), size_t(name.size()));
+    return macros.contains(key) || globals.contains(key);
+  }
+};
+
+/* `[N]` at `ci` with a small literal size. Returns N, or 0. */
+static int literal_array_size(const TokenStream &ts, const int ci)
+{
+  if (!ts.cis(ci, "[") || !ts.cis(ci + 2, "]")) {
+    return 0;
+  }
+  const std::string text(ts.ctext(ci + 1));
+  if (text.empty() || text.find_first_not_of("0123456789") != std::string::npos ||
+      text.size() > 2)
+  {
+    return 0;
+  }
+  const int count = std::atoi(text.c_str());
+  return (count >= 1 && count <= 64) ? count : 0;
+}
+
+/* `Particle(vec3(0.0), 0.0, ...)` for each struct whose members are all known. */
+static void collect_struct_zero_ctors(const TokenStream &ts, Map<std::string, std::string> &ctors)
+{
+  const int n = int(ts.code.size());
+  for (int ci = 0; ci + 2 < n; ci++) {
+    if (!ts.cis(ci, "struct") || !ts.c_ident(ci + 1) || !ts.cis(ci + 2, "{")) {
       continue;
     }
-    int64_t q = hit + 6;
-    while (q < src.size() && std::isspace(static_cast<unsigned char>(src[q]))) {
-      q++;
+    const int close = ts.c_match(ci + 2);
+    if (close < 0) {
+      return;
     }
-    std::string sname;
-    StringRef rest = src.substr(q);
-    if (!skip_ident_name(rest, sname)) {
-      i = hit + 1;
-      continue;
-    }
-    q = src.size() - rest.size();
-    while (q < src.size() && std::isspace(static_cast<unsigned char>(src[q]))) {
-      q++;
-    }
-    if (q >= src.size() || src[q] != '{') {
-      i = hit + 1;
-      continue;
-    }
-    const int64_t close = matching_brace(src, q);
-    if (close == StringRef::not_found) {
-      break;
-    }
-    Vector<std::string> member_zeros;
+    const std::string name(ts.ctext(ci + 1));
+    std::string args;
     bool ok = true;
-    StringRef body = src.substr(q + 1, close - (q + 1));
-    int64_t b = 0;
-    while (b < body.size() && ok) {
-      const int64_t line_end = body.find('\n', b);
-      const int64_t end = (line_end == StringRef::not_found) ? body.size() : line_end;
-      StringRef line = ltrim(rtrim(body.substr(b, end - b)));
-      const int64_t cmt = line.find("//");
-      if (cmt != StringRef::not_found) {
-        line = rtrim(line.substr(0, cmt));
-      }
-      b = (end < body.size()) ? end + 1 : body.size();
-      if (line.is_empty() || line.startswith("/*")) {
-        continue;
-      }
-      std::string mtype;
-      StringRef parse = line;
-      if (!skip_ident_name(parse, mtype)) {
-        continue;
-      }
-      std::string mname;
-      parse = ltrim(parse);
-      if (!skip_ident_name(parse, mname)) {
-        continue;
-      }
-      const std::string z = glsl_zero_for_type(mtype, ctors);
-      if (z.empty()) {
+    int m = ci + 3;
+    while (ok && m < close) {
+      if (ts.c_after_pp(m)) {
+        /* `#if` inside the struct: the member list depends on the preprocessor. */
         ok = false;
         break;
       }
-      member_zeros.append(z);
-    }
-    if (ok && !member_zeros.is_empty()) {
-      std::string ctor = sname;
-      ctor += "(";
-      for (int mi = 0; mi < member_zeros.size(); mi++) {
-        if (mi > 0) {
-          ctor += ", ";
-        }
-        ctor += member_zeros[mi];
+      if (is_precision_qualifier(ts.ctext(m))) {
+        m++;
       }
-      ctor += ")";
-      ctors.add_overwrite(sname, ctor);
+      const std::string type(ts.ctext(m));
+      const std::string zero = glsl_zero_for_type(type, ctors);
+      m++;
+      /* `float[3] a;` and `float a[3];` both declare an array member. */
+      const int type_count = literal_array_size(ts, m);
+      if (zero.empty() || (ts.cis(m, "[") && type_count == 0)) {
+        ok = false;
+        break;
+      }
+      if (type_count > 0) {
+        m += 3;
+      }
+      while (true) {
+        if (!ts.c_ident(m) || ts.c_after_pp(m)) {
+          ok = false;
+          break;
+        }
+        m++;
+        int count = type_count;
+        if (ts.cis(m, "[")) {
+          count = literal_array_size(ts, m);
+          if (count == 0 || type_count > 0) {
+            ok = false;
+            break;
+          }
+          m += 3;
+        }
+        if (!args.empty()) {
+          args += ", ";
+        }
+        if (count > 0) {
+          args += type + "[" + std::to_string(count) + "](";
+          for (int k = 0; k < count; k++) {
+            args += (k > 0) ? ", " : "";
+            args += zero;
+          }
+          args += ")";
+        }
+        else {
+          args += zero;
+        }
+        if (ts.cis(m, ",")) {
+          m++;
+          continue;
+        }
+        if (ts.cis(m, ";")) {
+          m++;
+        }
+        else {
+          ok = false;
+        }
+        break;
+      }
     }
-    i = close + 1;
+    if (ok && !args.empty()) {
+      ctors.add_overwrite(name, name + "(" + args + ")");
+    }
+    ci = close;
   }
-  return ctors;
+}
+
+static void analyze_source(const TokenStream &ts, SourceInfo &info)
+{
+  const int n = int(ts.toks.size());
+  for (int t = 0; t < n; t++) {
+    if (ts.is_ident(t) && ts.is(t + 1, "(")) {
+      info.calls.add(std::string(ts.text(t)));
+    }
+    if (!(ts.toks[t].pp_start && ts.is(t + 1, "define") && ts.is_ident(t + 2))) {
+      continue;
+    }
+    const int end = ts.directive_end(t);
+    const std::string name(ts.text(t + 2));
+    info.macros.add(name);
+    int body = t + 3;
+    if (body < end && ts.is(body, "(") && ts.toks[body].begin == ts.toks[t + 2].end) {
+      if (!ts.is(body + 1, ")")) {
+        info.macros_with_params.add(name);
+      }
+      while (body < end && !ts.is(body, ")")) {
+        body++;
+      }
+      body++;
+    }
+    Vector<std::string> tokens;
+    for (int k = body; k < end; k++) {
+      tokens.append(std::string(ts.text(k)));
+      /* `#define FUNC_LERP(T) T lerp(T a, T b, float t) { ... }` declares `lerp`. */
+      if (k > body && ts.is_ident(k) && ts.is_ident(k - 1) && ts.is(k + 1, "(") &&
+          !is_statement_keyword(ts.text(k - 1)))
+      {
+        info.globals.add(std::string(ts.text(k)));
+        info.functions.add(std::string(ts.text(k)));
+      }
+    }
+    info.macro_bodies.add_overwrite(name, std::move(tokens));
+  }
+  int depth = 0;
+  for (int ci = 0; ci < ts.code.size(); ci++) {
+    const StringRef t = ts.ctext(ci);
+    if (t == "{") {
+      depth++;
+      /* `struct S {`, and `ST S {` with `#define ST struct`. */
+      if (ci >= 2 && ts.c_ident(ci - 1) && ts.c_ident(ci - 2) &&
+          (ts.cis(ci - 2, "struct") || !is_statement_keyword(ts.ctext(ci - 2))))
+      {
+        info.struct_names.add(std::string(ts.ctext(ci - 1)));
+      }
+    }
+    else if (t == "}") {
+      depth = math::max(depth - 1, 0);
+    }
+    else if (depth == 0 && ci > 0 && ts.c_ident(ci) && ts.c_ident(ci - 1) &&
+             !is_statement_keyword(ts.ctext(ci - 1)) && !ts.c_after_pp(ci))
+    {
+      const StringRef next = ts.ctext(ci + 1);
+      if (next == "(" || next == ";" || next == "=" || next == "," || next == "[") {
+        info.globals.add(std::string(t));
+      }
+      if (next == "(") {
+        info.functions.add(std::string(t));
+      }
+    }
+  }
+  collect_struct_zero_ctors(ts, info.struct_zero);
+}
+
+/* `#iUniform float speed = 1.0 in { 0.0, 4.0 }` is an editor extension, not GLSL. */
+static void convert_iuniform(TokenStream &ts, const int hash, const int end)
+{
+  if (hash + 3 >= end) {
+    for (int t = hash; t < end; t++) {
+      ts.blank(t);
+    }
+    return;
+  }
+  ts.replace(hash + 1, "define");
+  ts.blank(hash + 2);
+  if (hash + 4 < end && ts.is(hash + 4, "=")) {
+    ts.blank(hash + 4);
+  }
+  for (int t = hash + 5; t < end; t++) {
+    if (ts.is(t, "in") || ts.is(t, "step")) {
+      ts.replace(t, "// " + std::string(ts.text(t)));
+      break;
+    }
+    if (ts.is(t, "color3") || ts.is(t, "float3")) {
+      ts.replace(t, "vec3");
+    }
+  }
+}
+
+/* True when `name` cannot be part of a constant expression for glslang: a call to a user
+ * function or an unfolded builtin, a uniform, or a macro / demoted const that leads to one. */
+static bool is_non_constant_name(const SourceInfo &info,
+                                 const StringRef name,
+                                 const bool is_call,
+                                 const int rec = 0)
+{
+  const std::string key(name.data(), size_t(name.size()));
+  if (info.demoted_consts.contains(key) || is_shadertoy_uniform_name(name)) {
+    return true;
+  }
+  if (const Vector<std::string> *body = info.macro_bodies.lookup_ptr(key)) {
+    if (rec > 6) {
+      return false;
+    }
+    for (int k = 0; k < body->size(); k++) {
+      const StringRef token = (*body)[k];
+      if (!token.is_empty() && is_ident_start(token[0]) &&
+          is_non_constant_name(info, token, k + 1 < body->size() && (*body)[k + 1] == "(", rec + 1))
+      {
+        return true;
+      }
+    }
+    return false;
+  }
+  return is_call && (is_unfoldable_builtin_name(name) || info.functions.contains(key));
+}
+
+/* `const float MaxFloat = uintBitsToFloat(0x7F800000u);` and `const mat3 toCam =
+ * inverse(diag(...));` are accepted by browsers, but glslang wants a file-scope `const`
+ * initializer it can fold ("global const initializers must be constant"). Drop the `const`:
+ * the value is the same, and constants built from it follow in declaration order. */
+static void demote_non_constant_consts(TokenStream &ts, SourceInfo &info)
+{
+  const int n = int(ts.code.size());
+  int depth = 0;
+  int paren = 0;
+  for (int ci = 0; ci < n; ci++) {
+    const StringRef t = ts.ctext(ci);
+    if (t == "{") {
+      depth++;
+    }
+    else if (t == "}") {
+      depth = math::max(depth - 1, 0);
+    }
+    else if (t == "(") {
+      paren++;
+    }
+    else if (t == ")") {
+      paren = math::max(paren - 1, 0);
+    }
+    if (depth != 0 || paren != 0 || t != "const") {
+      continue;
+    }
+    Vector<std::string> names;
+    bool non_constant = false;
+    bool in_init = false;
+    int nest = 0;
+    int end = ci + 1;
+    for (; end < n; end++) {
+      if (ts.c_after_pp(end)) {
+        break;
+      }
+      const StringRef s = ts.ctext(end);
+      if (s == "(" || s == "[" || s == "{") {
+        nest++;
+      }
+      else if (s == ")" || s == "]" || s == "}") {
+        nest--;
+      }
+      else if (nest == 0 && s == ";") {
+        break;
+      }
+      else if (nest == 0 && s == "=") {
+        in_init = true;
+        if (ts.c_ident(end - 1)) {
+          names.append(std::string(ts.ctext(end - 1)));
+        }
+        else if (ts.cis(end - 1, "]")) {
+          /* `const float a[2] = ...`: the name is in front of the brackets. */
+          int k = end - 1;
+          while (k > ci && !ts.cis(k, "[")) {
+            k--;
+          }
+          if (ts.c_ident(k - 1)) {
+            names.append(std::string(ts.ctext(k - 1)));
+          }
+        }
+      }
+      else if (nest == 0 && s == ",") {
+        in_init = false;
+      }
+      else if (in_init && ts.c_ident(end) && !ts.cis(end - 1, ".")) {
+        non_constant |= is_non_constant_name(info, s, ts.cis(end + 1, "("));
+      }
+    }
+    if (end >= n || !ts.cis(end, ";") || !non_constant) {
+      continue;
+    }
+    ts.blank(ts.code[ci]);
+    for (const std::string &name : names) {
+      info.demoted_consts.add(name);
+    }
+    ci = end;
+  }
+}
+
+/* Declarations the site (or a converter) adds around the shader, and names that mean
+ * something else on desktop. */
+static void rewrite_names_and_preamble(TokenStream &ts, const SourceInfo &info)
+{
+  const int n = int(ts.toks.size());
+  for (int t = 0; t < n; t++) {
+    /* `H()` for `#define H(s) ...` passes one empty argument. glslang calls that "too few
+     * args"; a macro that expands to nothing is the same argument with a token in it. */
+    if (ts.is_ident(t) && t + 2 < n && ts.is(t + 1, "(") && ts.is(t + 2, ")") &&
+        ts.toks[t].pp == ts.toks[t + 2].pp && !(t > 0 && ts.toks[t - 1].pp_start) &&
+        info.macros_with_params.contains(std::string(ts.text(t))) &&
+        !(t >= 2 && ts.toks[t - 2].pp_start && ts.is(t - 1, "define")))
+    {
+      ts.toks[t + 1].append = "_st_empty";
+    }
+    if (!ts.toks[t].pp_start) {
+      continue;
+    }
+    const int end = ts.directive_end(t);
+    if (t + 1 >= end) {
+      continue;
+    }
+    if (ts.is(t + 1, "version") || ts.is(t + 1, "extension")) {
+      for (int k = t; k < end; k++) {
+        ts.blank(k);
+      }
+    }
+    else if (ts.is(t + 1, "iUniform") || ts.is(t + 1, "iuniform")) {
+      convert_iuniform(ts, t, end);
+    }
+    else if (ts.is(t + 1, "if") || ts.is(t + 1, "elif")) {
+      /* `#if VOLUME_RES == 64u`: glslang's preprocessor has no unsigned literals. */
+      for (int k = t + 2; k < end; k++) {
+        const StringRef number = ts.text(k);
+        if (ts.toks[k].kind == TokKind::Number && number.size() > 1 &&
+            (number.endswith("u") || number.endswith("U")))
+        {
+          ts.replace(k, std::string(number.substr(0, number.size() - 1)));
+        }
+      }
+    }
+    else if (ts.is(t + 1, "define") && t + 3 < end && !ts.is(t + 3, "(") &&
+             ts.toks[t + 3].begin == ts.toks[t + 2].end)
+    {
+      /* `#define update; if (x) {...}`: glslang needs the space after the name. */
+      ts.toks[t + 2].append = " ";
+    }
+  }
+
+  /* File-scope `precision ...;`, `uniform ...;` and `out vec4 fragColor;`. Statements, not
+   * lines: a `mainImage(` signature broken over lines also has a line starting with `out`. */
+  const int cn = int(ts.code.size());
+  int depth = 0;
+  int paren = 0;
+  bool stmt_start = true;
+  for (int ci = 0; ci < cn; ci++) {
+    const StringRef t = ts.ctext(ci);
+    const bool start = stmt_start;
+    stmt_start = false;
+    if (t == "{") {
+      depth++;
+      stmt_start = true;
+      continue;
+    }
+    if (t == "}") {
+      depth = math::max(depth - 1, 0);
+      stmt_start = true;
+      continue;
+    }
+    if (t == "(") {
+      paren++;
+    }
+    else if (t == ")") {
+      paren = math::max(paren - 1, 0);
+    }
+    else if (t == ";") {
+      stmt_start = (paren == 0);
+    }
+    if (!start || depth != 0 || paren != 0) {
+      continue;
+    }
+    if (!(t == "precision" || t == "uniform" || t == "in" || t == "out" || t == "layout")) {
+      continue;
+    }
+    int end = ci;
+    int nest = 0;
+    int uniform_at = -1;
+    bool ok = true;
+    for (; end < cn; end++) {
+      const StringRef s = ts.ctext(end);
+      if ((end > ci && ts.c_after_pp(end)) || s == "{" || s == "}") {
+        ok = false;
+        break;
+      }
+      if (s == "(" || s == "[") {
+        nest++;
+      }
+      else if (s == ")" || s == "]") {
+        nest--;
+      }
+      else if (s == "uniform") {
+        uniform_at = end;
+      }
+      else if (s == ";" && nest == 0) {
+        break;
+      }
+    }
+    if (!ok || end >= cn) {
+      continue;
+    }
+    int name = end - 1;
+    while (name > ci && ts.cis(name, "]")) {
+      while (name > ci && !ts.cis(name, "[")) {
+        name--;
+      }
+      name--;
+    }
+    const StringRef declared = ts.c_ident(name) ? ts.ctext(name) : StringRef();
+    int blank_to = ci - 1;
+    if (t == "precision") {
+      blank_to = end;
+    }
+    else if (uniform_at >= 0) {
+      const StringRef type = ts.ctext(uniform_at + 1);
+      if (is_shadertoy_uniform_name(declared)) {
+        blank_to = end;
+      }
+      else if (type.find("sampler") == StringRef::not_found) {
+        /* `uniform float u_time;` from another host. Loose uniforms are not allowed on
+         * Vulkan; the site leaves them at zero, so a plain global behaves the same. */
+        blank_to = uniform_at;
+      }
+    }
+    else if (declared == "fragColor" || declared == "fragCoord" || declared == "gl_FragColor") {
+      blank_to = end;
+    }
+    for (int k = ci; k <= blank_to; k++) {
+      ts.blank(ts.code[k]);
+    }
+    ci = end;
+    stmt_start = true;
+  }
+
+  for (int t = 0; t < n; t++) {
+    if (!ts.is_ident(t) || ts.toks[t].replaced || (t > 0 && ts.toks[t - 1].pp_start)) {
+      continue;
+    }
+    const StringRef name = ts.text(t);
+    if (name == "main" && ts.is(t + 1, "(")) {
+      ts.replace(t, "_st_unused_main");
+    }
+    else if (is_reserved_ident(name)) {
+      ts.replace(t, "_st_" + std::string(name));
+    }
+    else if ((is_legacy_texture_name(name) || is_desktop_builtin_name(name)) &&
+             info.declares(name))
+    {
+      ts.replace(t, "_st_u_" + std::string(name));
+    }
+  }
+}
+
+struct ArgRange {
+  /** First token of the argument, and the `,` or `)` that ends it. */
+  int begin;
+  int end;
+};
+
+/* Arguments of the call whose `(` is at `open`. Returns the index of `)`, or -1. A call
+ * inside a `#define` must end inside it. */
+static int parse_call_tokens(const TokenStream &ts, const int open, Vector<ArgRange> &r_args)
+{
+  r_args.clear();
+  const bool pp = ts.toks[open].pp;
+  int depth = 0;
+  int start = open + 1;
+  for (int t = open; t < ts.toks.size(); t++) {
+    const Tok &tok = ts.toks[t];
+    if (tok.pp != pp || (t > open && tok.pp_start)) {
+      return -1;
+    }
+    if (tok.kind != TokKind::Punct) {
+      continue;
+    }
+    const StringRef s = ts.text(t);
+    if (s == "(" || s == "[" || s == "{") {
+      depth++;
+    }
+    else if (s == ")" || s == "]" || s == "}") {
+      depth--;
+      if (depth == 0) {
+        r_args.append({start, t});
+        return t;
+      }
+    }
+    else if (s == "," && depth == 1) {
+      r_args.append({start, t});
+      start = t + 1;
+    }
+  }
+  return -1;
+}
+
+static std::string arg_text(const TokenStream &ts, const ArgRange &arg)
+{
+  std::string out;
+  for (int t = arg.begin; t < arg.end; t++) {
+    const StringRef s = ts.text(t);
+    out.append(s.data(), size_t(s.size()));
+  }
+  return out;
+}
+
+static bool arg_is_zero_literal(const TokenStream &ts, const ArgRange &arg)
+{
+  if (arg.end - arg.begin != 1 || ts.toks[arg.begin].kind != TokKind::Number) {
+    return false;
+  }
+  float v = 1.0f;
+  bool is_int = false;
+  return parse_literal(ts.text(arg.begin), v, is_int) && v == 0.0f;
+}
+
+/* Sampling fixes, all on the call's own tokens:
+ *
+ * - `textureLod(s, uv, 0.0)` -> `texture(s, uv)`. Vulkan `textureLod(..., 0.0)` on a 1-mip
+ *   ping-pong buffer is often black. Chimera's Breath (4tGfDW) samples all 4 neighbors that
+ *   way; if those return 0, pressure projection dies.
+ * - IQ / Dave Hoskins 3D noise `texture(iChannel0, (uv+0.5)/256.0, -99.0)`: `uv` contains
+ *   `floor(x)`, so implicit LOD spikes at every lattice face and samples blurry mips (noise
+ *   grid seams in Remnant X, 4sjSW1). `_st_tex2d_lod0` is a wrap-REPEAT texelFetch bilinear.
+ * - The `.yx` of that fetch lerps two channels by f.z, which is only continuous if
+ *   G(x,y) == R(x-37,y-17). `_st_iq_yx` takes both taps from one channel instead.
+ * - Nearest channels: MlVfDR stores voronoi particle IDs as pixel positions and samples
+ *   `texture(iChannel, U/R)`. Linear blends two IDs; texelFetch is filter- and lod-proof.
+ *   wdsGWS uses `(u+m)*r` with r=1/res and EMPTY==1024 — same idea.
+ *
+ * Do NOT turn 2-arg `texture()` into `textureLod` globally: fljBWc samples a volume with
+ * `texture(iChannel0, p/amplitude)`. */
+static void rewrite_texture_calls(TokenStream &ts,
+                                  const uint8_t nearest_mask,
+                                  const uint8_t wrap_mask,
+                                  const uint8_t non_2d_mask)
+{
+  Vector<ArgRange> args;
+  for (int t = 0; t + 1 < ts.toks.size(); t++) {
+    if (!ts.is_ident(t) || ts.toks[t].replaced || !ts.is(t + 1, "(") ||
+        ts.toks[t].pp != ts.toks[t + 1].pp)
+    {
+      continue;
+    }
+    const StringRef name = ts.text(t);
+    const bool is_lod = name == "textureLod";
+    if (!is_lod && name != "texture" && name != "texture2D") {
+      continue;
+    }
+    if (!ts.toks[t].pp && t > 0 && ts.is_ident(t - 1) && !is_statement_keyword(ts.text(t - 1)))
+    {
+      continue; /* A declaration of that name, not a call. */
+    }
+    const int close = parse_call_tokens(ts, t + 1, args);
+    if (close < 0) {
+      continue;
+    }
+    int argc = int(args.size());
+    if (is_lod) {
+      if (argc != 3 || !arg_is_zero_literal(ts, args[2])) {
+        continue;
+      }
+      for (int k = args[1].end; k < close; k++) {
+        ts.blank(k);
+      }
+      ts.replace(t, "texture");
+      argc = 2;
+    }
+    if (argc < 2 || argc > 3) {
+      continue;
+    }
+    const std::string coord = arg_text(ts, args[1]);
+    if (looks_like_iq_noise_uv(coord) ||
+        (argc == 3 && is_negative_mip_bias(arg_text(ts, args[2]))))
+    {
+      for (int k = args[1].end; k < close; k++) {
+        ts.blank(k);
+      }
+      const bool yx = close + 2 < ts.toks.size() && ts.is(close + 1, ".") &&
+                      ts.is(close + 2, "yx") && ts.toks[close + 2].pp == ts.toks[t].pp &&
+                      !ts.toks[close + 1].pp_start;
+      if (yx) {
+        ts.blank(close + 1);
+        ts.blank(close + 2);
+      }
+      ts.replace(t, yx ? "_st_iq_yx" : "_st_tex2d_lod0");
+      continue;
+    }
+    if (argc != 2 || args[0].end - args[0].begin != 1) {
+      continue;
+    }
+    const StringRef sampler = ts.text(args[0].begin);
+    if (!(sampler.size() == 9 && sampler.startswith("iChannel") && sampler[8] >= '0' &&
+          sampler[8] <= '3'))
+    {
+      continue;
+    }
+    const uint8_t bit = uint8_t(1u << (sampler[8] - '0'));
+    if ((nearest_mask & bit) == 0 || (non_2d_mask & bit) != 0) {
+      continue;
+    }
+    const bool repeat = (wrap_mask & bit) != 0;
+    /* `expr / R`: fetch at `expr` directly. Only when the division covers the whole
+     * coordinate (`a + b/R` does not). */
+    bool div_r = args[1].end - args[1].begin >= 3 && ts.is(args[1].end - 1, "R") &&
+                 ts.is(args[1].end - 2, "/");
+    int nest = 0;
+    for (int k = args[1].begin; div_r && k < args[1].end - 2; k++) {
+      const StringRef s = ts.text(k);
+      if (s == "(" || s == "[") {
+        nest++;
+      }
+      else if (s == ")" || s == "]") {
+        nest--;
+      }
+      else if (nest == 0 && (s == "+" || s == "-")) {
+        div_r = false;
+      }
+    }
+    const StringRef coord_ref(coord);
+    const bool looks_vec3 = coord_ref.startswith("normalize") || coord_ref.startswith("vec3") ||
+                            coord_ref.startswith("reflect") || coord_ref.startswith("refract");
+    if (div_r) {
+      ts.blank(args[1].end - 2);
+      ts.blank(args[1].end - 1);
+      ts.replace(t, repeat ? "_st_fetch_px_rep" : "_st_fetch_px");
+    }
+    else if (!looks_vec3) {
+      ts.replace(t, repeat ? "_st_fetch_uv_rep" : "_st_fetch_uv");
+    }
+  }
+}
+
+/* Desktop drivers unroll `for (int i = 0; i < 80; i++)` when 80 is a constant. Nested
+ * raymarch + shadow (Saturday cubism, Shane, IQ) then hangs the compiler for minutes or
+ * TDR-kills the GPU. ShaderToy/WebGL keeps these as loops; IQ's `ZERO = min(iFrame,0)` is
+ * the same idea. `_st_loop_zero()` reads iFrame, so the trip count stays dynamic. */
+static void rewrite_loop_zero_starts(TokenStream &ts)
+{
+  for (int ci = 0; ci + 6 < ts.code.size(); ci++) {
+    if (!ts.cis(ci, "for") || !ts.cis(ci + 1, "(") || !ts.c_ident(ci + 3) ||
+        !ts.cis(ci + 4, "=") || !ts.cis(ci + 6, ";"))
+    {
+      continue;
+    }
+    const bool is_int = ts.cis(ci + 2, "int");
+    const bool is_uint = ts.cis(ci + 2, "uint");
+    const StringRef zero = ts.ctext(ci + 5);
+    if (is_int && zero == "0") {
+      ts.replace(ts.code[ci + 5], "_st_loop_zero()");
+    }
+    else if (is_uint && (zero == "0" || zero == "0u" || zero == "0U")) {
+      ts.replace(ts.code[ci + 5], "uint(_st_loop_zero())");
+    }
+  }
+}
+
+/* WebGL zero-fills every variable; desktop Vulkan does not.
+ *
+ * - Locals: mstfzS does `Particle p0; ApplyForce` / `density +=` with no init. Golf shaders
+ *   rely on it everywhere: `vec4 o,p,P,U=vec4(1,2,3,0);`, `for(float i,z,d; ++i<77.;)`
+ *   (4D Beats, tfK3Dy) is a billion-iteration TDR when `i` starts as garbage.
+ * - Globals: `float light;` then `light +=` (3ccyD7) HDR-blows the image.
+ * - `out` parameters: `void mainImage(out vec4 O, vec2 U) { O += ...; }`.
+ *
+ * Only ` = zero` is added after a declarator that has no initializer. Initialized
+ * declarators, arrays and anything a preprocessor branch cuts through are left alone. */
+struct ZeroInit {
+  TokenStream &ts;
+  const SourceInfo &info;
+
+  void append(const int ci, const std::string &text)
+  {
+    ts.toks[ts.code[ci]].append += text;
+  }
+
+  /* `ret name(params) {` at `ci`: zero the `out` parameters at the top of the body. */
+  void function_definition(const int ci)
+  {
+    const int close = ts.c_match(ci + 2);
+    if (close < 0 || !ts.cis(close + 1, "{")) {
+      return;
+    }
+    for (int k = ci + 1; k <= close + 1; k++) {
+      if (ts.c_after_pp(k)) {
+        return;
+      }
+    }
+    std::string inits;
+    int a = ci + 3;
+    while (a < close) {
+      int b = a;
+      int nest = 0;
+      for (; b < close; b++) {
+        const StringRef s = ts.ctext(b);
+        if (s == "(" || s == "[") {
+          nest++;
+        }
+        else if (s == ")" || s == "]") {
+          nest--;
+        }
+        else if (s == "," && nest == 0) {
+          break;
+        }
+      }
+      int p = a;
+      bool is_out = false;
+      for (; p < b; p++) {
+        const StringRef s = ts.ctext(p);
+        if (s == "out") {
+          is_out = true;
+        }
+        else if (!(s == "const" || s == "in" || s == "inout" || is_precision_qualifier(s))) {
+          break;
+        }
+      }
+      if (is_out && p + 2 == b && ts.c_ident(p) && ts.c_ident(p + 1)) {
+        const std::string name(ts.ctext(p + 1));
+        const std::string zero = glsl_zero_for_type(ts.ctext(p), info.struct_zero);
+        if (!zero.empty() && !info.macros.contains(name)) {
+          inits += " " + name + " = " + zero + ";";
+        }
+      }
+      a = b + 1;
+    }
+    if (!inits.empty()) {
+      this->append(close + 1, inits);
+    }
+  }
+
+  /* A statement starts at `ci`. */
+  void statement(const int ci, const bool file_scope)
+  {
+    int j = ci;
+    if (is_precision_qualifier(ts.ctext(j))) {
+      j++;
+    }
+    if (!ts.c_ident(j)) {
+      return;
+    }
+    if (file_scope && ts.c_ident(j + 1) && ts.cis(j + 2, "(")) {
+      this->function_definition(j);
+      return;
+    }
+    const StringRef type = ts.ctext(j);
+    if (is_statement_keyword(type)) {
+      return;
+    }
+    const std::string zero = glsl_zero_for_type(type, info.struct_zero);
+    if (zero.empty()) {
+      return;
+    }
+    j++;
+    const int n = int(ts.code.size());
+    Vector<int> names;
+    while (true) {
+      if (!ts.c_ident(j) || ts.c_after_pp(j)) {
+        return;
+      }
+      const int name = j;
+      int k = j + 1;
+      bool plain = true;
+      /* `vec2 d0, d1;` may reuse a struct's name for a variable, but glslang only parses
+       * that while no declarator in the list has an initializer (3tffRH). */
+      if (ts.cis(k, "(") || info.struct_names.contains(std::string(ts.ctext(name)))) {
+        return;
+      }
+      while (ts.cis(k, "[")) {
+        k = ts.c_match(k);
+        if (k < 0) {
+          return;
+        }
+        k++;
+        plain = false;
+      }
+      if (ts.cis(k, "=")) {
+        plain = false;
+        int nest = 0;
+        for (k++;; k++) {
+          if (k >= n || ts.c_after_pp(k)) {
+            return;
+          }
+          const StringRef s = ts.ctext(k);
+          if (s == "(" || s == "[" || s == "{") {
+            nest++;
+          }
+          else if (s == ")" || s == "]" || s == "}") {
+            if (nest == 0) {
+              return;
+            }
+            nest--;
+          }
+          else if (nest == 0 && (s == "," || s == ";")) {
+            break;
+          }
+        }
+      }
+      if (k >= n || ts.c_after_pp(k)) {
+        return;
+      }
+      if (plain && !info.macros.contains(std::string(ts.ctext(name)))) {
+        names.append(name);
+      }
+      if (ts.cis(k, ",")) {
+        j = k + 1;
+        continue;
+      }
+      if (ts.cis(k, ";")) {
+        break;
+      }
+      return;
+    }
+    for (const int name : names) {
+      this->append(name, " = " + zero);
+    }
+  }
+
+  void run()
+  {
+    /* True for a struct body: members cannot have initializers. */
+    Vector<bool> braces;
+    bool pending_struct = false;
+    bool stmt_start = true;
+    int paren = 0;
+    for (int ci = 0; ci < ts.code.size(); ci++) {
+      const StringRef t = ts.ctext(ci);
+      const bool start = stmt_start;
+      stmt_start = false;
+      if (t == "{") {
+        braces.append(pending_struct);
+        pending_struct = false;
+        stmt_start = true;
+        continue;
+      }
+      if (t == "}") {
+        if (!braces.is_empty()) {
+          braces.pop_last();
+        }
+        stmt_start = true;
+        continue;
+      }
+      if (t == "(") {
+        paren++;
+        /* `for (float i, d; ...)`. */
+        stmt_start = ts.cis(ci - 1, "for");
+        continue;
+      }
+      if (t == ")") {
+        paren = math::max(paren - 1, 0);
+        continue;
+      }
+      if (t == ";") {
+        pending_struct = false;
+        stmt_start = (paren == 0);
+        continue;
+      }
+      if (t == "struct") {
+        pending_struct = true;
+        continue;
+      }
+      if (!start || (!braces.is_empty() && braces.last())) {
+        continue;
+      }
+      this->statement(ci, braces.is_empty() && paren == 0);
+    }
+  }
+};
+
+static const char *fullscreen_vertex_src()
+{
+  /* Two-triangle clip-space quad. A single oversized triangle (the old -1/-1/3 trick)
+   * interpolates across a huge hypoteneuse and shows up as a diagonal seam on Seascape,
+   * warp-fBM, and other smooth fields. */
+  return "void main()\n"
+         "{\n"
+         "  int v = gl_VertexID;\n"
+         "  vec2 pos;\n"
+         "  if (v == 0 || v == 3) {\n"
+         "    pos = vec2(-1.0, -1.0);\n"
+         "  }\n"
+         "  else if (v == 1) {\n"
+         "    pos = vec2(1.0, -1.0);\n"
+         "  }\n"
+         "  else if (v == 2 || v == 4) {\n"
+         "    pos = vec2(1.0, 1.0);\n"
+         "  }\n"
+         "  else {\n"
+         "    pos = vec2(-1.0, 1.0);\n"
+         "  }\n"
+         "  gl_Position = vec4(pos, 0.0, 1.0);\n"
+         "}\n";
 }
 
 static void replace_all_str(std::string &s, const StringRef from, const StringRef to)
@@ -2637,369 +2548,56 @@ static std::string rewrite_shadertoy_grid_compat(std::string src)
   return src;
 }
 
-/* WebGL/ANGLE typically zero-fills locals; desktop Vulkan does not. mstfzS
- * does `Particle p0; ApplyForce` / `density +=` with no init, so pressure and
- * normals become garbage and the liquid both moves and shades wrong. */
-static std::string rewrite_zero_init_locals(StringRef src,
-                                           const Map<std::string, std::string> &struct_ctors)
+/* Blender prepends `gpu_shader_compat_glsl.glsl` to every shader. Its macros are ordinary
+ * ShaderToy names: `#define FLT_MAX 3.4e38` is a "macro redefined" error, `const uint
+ * UINT_MAX = ...` and `float select(...)` expand into nonsense, and a variable called
+ * `device` or `thread` disappears. None of them are used by the wrapper. */
+static void append_blender_macro_undefs(std::string &src)
 {
-  std::string out;
-  out.reserve(size_t(src.size()) + 256);
-  int depth = 0;
-  int struct_depth = -1;
-  int64_t i = 0;
-  while (i < src.size()) {
-    const int64_t line_end = src.find('\n', i);
-    const int64_t end = (line_end == StringRef::not_found) ? src.size() : line_end;
-    StringRef line = src.substr(i, end - i);
-    StringRef t = ltrim(line);
-    bool rewritten = false;
-    if (struct_depth < 0 && t.startswith("struct") &&
-        (t.size() == 6 || !is_ident_char_st(t[6])))
-    {
-      struct_depth = depth;
-    }
-    if (depth >= 1 && struct_depth < 0) {
-      StringRef parse = t;
-      std::string type;
-      if (!parse.startswith("const ") && !parse.startswith("uniform ") &&
-          !parse.startswith("in ") && !parse.startswith("out ") &&
-          !parse.startswith("inout ") && !parse.startswith("layout") &&
-          !parse.startswith("precision") && !parse.startswith("return") &&
-          !parse.startswith("if") && !parse.startswith("for") &&
-          !parse.startswith("while") && !parse.startswith("switch") &&
-          !parse.startswith("discard") && !parse.startswith("#") &&
-          !parse.startswith("//") && skip_ident_name(parse, type))
-      {
-        const std::string zero = glsl_zero_for_type(type, struct_ctors);
-        if (!zero.empty()) {
-          /* WebGL zeros every local. Golf shaders mix bare and initialized
-           * names on one line: `vec4 o,p,P,U=vec4(1,2,3,0);` and
-           * `float i,z,d,k,T=iChannelTime[0]*1.9,...` (4D Beats / tfK3Dy).
-           * The old rewriter bailed on `=`, left `i`/`o` garbage, then
-           * `++i<77.` became a billion-iteration TDR and NaN pixels went
-           * black. Split the list; zero only the names with no initializer. */
-          struct LocalDecl {
-            std::string name;
-            std::string init;
-          };
-          Vector<LocalDecl> decls;
-          bool ok = true;
-          parse = ltrim(parse);
-          while (ok) {
-            parse = ltrim(parse);
-            std::string name;
-            if (!skip_ident_name(parse, name)) {
-              ok = false;
-              break;
-            }
-            parse = ltrim(parse);
-            if (!parse.is_empty() && (parse[0] == '(' || parse[0] == '[')) {
-              /* Function signature or array — leave the line alone. */
-              ok = false;
-              break;
-            }
-            std::string init;
-            if (!parse.is_empty() && parse[0] == '=') {
-              parse = ltrim(parse.substr(1));
-              int pd = 0;
-              int64_t k = 0;
-              for (; k < parse.size(); k++) {
-                const char c = parse[k];
-                if (c == '/' && k + 1 < parse.size() &&
-                    (parse[k + 1] == '/' || parse[k + 1] == '*'))
-                {
-                  break;
-                }
-                if (c == '(' || c == '[' || c == '{') {
-                  pd++;
-                }
-                else if (c == ')' || c == ']' || c == '}') {
-                  pd--;
-                }
-                else if ((c == ',' || c == ';') && pd == 0) {
-                  break;
-                }
-              }
-              if (pd != 0) {
-                ok = false;
-                break;
-              }
-              StringRef expr = rtrim(parse.substr(0, k));
-              init.assign(expr.data(), size_t(expr.size()));
-              if (init.empty()) {
-                ok = false;
-                break;
-              }
-              parse = parse.substr(k);
-            }
-            decls.append({std::move(name), std::move(init)});
-            parse = ltrim(parse);
-            if (parse.is_empty() || parse[0] == ';' || parse.startswith("//")) {
-              break;
-            }
-            if (parse[0] == ',') {
-              parse = parse.substr(1);
-              continue;
-            }
-            ok = false;
-            break;
-          }
-          if (ok && !decls.is_empty()) {
-            /* Shane packs a second statement after the decl (XsffWj):
-             * `vec3 i = floor(...);  p -= i - dot(i, vec3(1./6.));`
-             * Dropping the tail deletes the simplex unskew, rays miss, fog
-             * is `vec3(0)`, and the image is pure black.
-             * dl2fzz: `vec3 d; vec2 id[3]; int oID;` — WebGL zeros oID. */
-            std::string leftover;
-            if (!parse.is_empty() && parse[0] == ';') {
-              leftover.assign(parse.data() + 1, size_t(parse.size() - 1));
-            }
-            const int64_t lead = line.size() - ltrim(line).size();
-            for (int n = 0; n < decls.size(); n++) {
-              if (n > 0) {
-                out.push_back('\n');
-              }
-              out.append(line.data(), size_t(lead));
-              out += type;
-              out += ' ';
-              out += decls[n].name;
-              out += " = ";
-              out += decls[n].init.empty() ? zero : decls[n].init;
-              out += ';';
-            }
-            StringRef more(leftover.c_str(), int64_t(leftover.size()));
-            while (!more.is_empty()) {
-              more = ltrim(more);
-              if (more.is_empty() || more.startswith("//")) {
-                out.append(more.data(), size_t(more.size()));
-                break;
-              }
-              std::string t2;
-              StringRef peek = more;
-              if (!skip_ident_name(peek, t2) || glsl_zero_for_type(t2, struct_ctors).empty()) {
-                out.append(more.data(), size_t(more.size()));
-                break;
-              }
-              peek = ltrim(peek);
-              std::string n2;
-              if (!skip_ident_name(peek, n2)) {
-                out.append(more.data(), size_t(more.size()));
-                break;
-              }
-              peek = ltrim(peek);
-              if (!peek.is_empty() && peek[0] == '[') {
-                int64_t end_decl = 0;
-                while (end_decl < more.size() && more[end_decl] != ';') {
-                  end_decl++;
-                }
-                if (end_decl < more.size()) {
-                  end_decl++;
-                }
-                out.push_back('\n');
-                out.append(line.data(), size_t(lead));
-                out.append(more.data(), size_t(end_decl));
-                more = more.substr(end_decl);
-                continue;
-              }
-              if (!peek.is_empty() && peek[0] == '=') {
-                int64_t end_decl = 0;
-                int pd = 0;
-                for (; end_decl < more.size(); end_decl++) {
-                  const char c = more[end_decl];
-                  if (c == '(' || c == '[' || c == '{') {
-                    pd++;
-                  }
-                  else if (c == ')' || c == ']' || c == '}') {
-                    pd--;
-                  }
-                  else if (c == ';' && pd == 0) {
-                    end_decl++;
-                    break;
-                  }
-                }
-                out.push_back('\n');
-                out.append(line.data(), size_t(lead));
-                out.append(more.data(), size_t(end_decl));
-                more = more.substr(end_decl);
-                continue;
-              }
-              out.push_back('\n');
-              out.append(line.data(), size_t(lead));
-              out += t2;
-              out += ' ';
-              out += n2;
-              out += " = ";
-              out += glsl_zero_for_type(t2, struct_ctors);
-              out += ';';
-              more = ltrim(peek);
-              if (!more.is_empty() && more[0] == ';') {
-                more = more.substr(1);
-              }
-            }
-            rewritten = true;
-          }
-        }
-      }
-    }
-
-    if (!rewritten) {
-      out.append(line.data(), size_t(line.size()));
-    }
-    if (end < src.size()) {
-      out.push_back('\n');
-    }
-
-    for (int64_t c = 0; c < line.size(); c++) {
-      if (c + 1 < line.size() && line[c] == '/' && line[c + 1] == '/') {
-        break;
-      }
-      if (line[c] == '{') {
-        depth++;
-      }
-      else if (line[c] == '}' && depth > 0) {
-        depth--;
-        if (struct_depth >= 0 && depth <= struct_depth) {
-          struct_depth = -1;
-        }
-      }
-    }
-    i = (end < src.size()) ? end + 1 : src.size();
-  }
-  return out;
-}
-
-static const char *fullscreen_vertex_src()
-{
-  /* Two-triangle clip-space quad. A single oversized triangle (the old -1/-1/3 trick)
-   * interpolates across a huge hypoteneuse and shows up as a diagonal seam on Seascape,
-   * warp-fBM, and other smooth fields. */
-  return "void main()\n"
-         "{\n"
-         "  int v = gl_VertexID;\n"
-         "  vec2 pos;\n"
-         "  if (v == 0 || v == 3) {\n"
-         "    pos = vec2(-1.0, -1.0);\n"
-         "  }\n"
-         "  else if (v == 1) {\n"
-         "    pos = vec2(1.0, -1.0);\n"
-         "  }\n"
-         "  else if (v == 2 || v == 4) {\n"
-         "    pos = vec2(1.0, 1.0);\n"
-         "  }\n"
-         "  else {\n"
-         "    pos = vec2(-1.0, 1.0);\n"
-         "  }\n"
-         "  gl_Position = vec4(pos, 0.0, 1.0);\n"
-         "}\n";
-}
-
-/* True if `name` is declared as a function (or `#define name(`) in user GLSL.
- * HLSL-style `#define saturate(a) clamp(...)` must not wrap such a definition:
- * `vec3 saturate(vec3 x)` becomes `vec3 clamp((vec3 x), ...)` and the GPU
- * compiler reports a paren error (often mis-attributed to an include). */
-static bool source_has_fn_or_macro_def(StringRef src, const char *name)
-{
-  const int64_t n = int64_t(strlen(name));
-  auto is_call_kw = [](StringRef t) {
-    return t == "return" || t == "if" || t == "while" || t == "for" || t == "switch" ||
-           t == "else" || t == "discard" || t == "break" || t == "continue" || t == "case";
+  static const char *names[] = {
+      "constexpr",      "bool32_t",       "bool2",          "bool3",          "bool4",
+      "float2",         "float3",         "float4",         "int2",           "int3",
+      "int4",           "uint2",          "uint3",          "uint4",          "packed_float2",
+      "packed_int2",    "packed_uint2",   "packed_float3",  "packed_int3",    "packed_uint3",
+      "packed_float4",  "packed_int4",    "packed_uint4",   "float2x2",       "float3x2",
+      "float4x2",       "float2x3",       "float3x3",       "float4x3",       "float2x4",
+      "float3x4",       "float4x4",       "char",           "char2",          "char3",
+      "char4",          "short",          "short2",         "short3",         "short4",
+      "uchar",          "uchar2",         "uchar3",         "uchar4",         "ushort",
+      "ushort2",        "ushort3",        "ushort4",        "half",           "half2",
+      "half3",          "half4",          "int32_t",        "uint32_t",       "imageStoreFast",
+      "imageLoadFast",  "sampler2DDepth", "sampler2DArrayDepth", "samplerCubeDepth",
+      "samplerCubeArrayDepth", "usampler2DArrayAtomic", "usampler2DAtomic", "usampler3DAtomic",
+      "isampler2DArrayAtomic", "isampler2DAtomic", "isampler3DAtomic", "bitfieldInsertAssign",
+      "imageFence",     "select",         "float_array",    "float2_array",   "float3_array",
+      "float4_array",   "int_array",      "int2_array",     "int3_array",     "int4_array",
+      "uint_array",     "uint2_array",    "uint3_array",    "uint4_array",    "bool_array",
+      "bool2_array",    "bool3_array",    "bool4_array",    "ARRAY_T",        "ARRAY_V",
+      "ATTR_FALLTHROUGH", "static",       "constant",       "device",         "thread",
+      "threadgroup",    "textureGather0", "textureGather1", "textureGather2", "textureGather3",
+      "saturate",       "GPU_THREAD",     "FLT_MAX",        "FLT_MIN",        "FLT_EPSILON",
+      "SHRT_MAX",       "INT_MAX",        "USHRT_MAX",      "UINT_MAX",       "NAN_FLT",
   };
-  int64_t i = 0;
-  while (i < src.size()) {
-    if (src[i] == '/' && i + 1 < src.size()) {
-      if (src[i + 1] == '/') {
-        i += 2;
-        while (i < src.size() && src[i] != '\n') {
-          i++;
-        }
-        continue;
-      }
-      if (src[i + 1] == '*') {
-        i += 2;
-        while (i + 1 < src.size() && !(src[i] == '*' && src[i + 1] == '/')) {
-          i++;
-        }
-        i = (i + 1 < src.size()) ? i + 2 : src.size();
-        continue;
-      }
-    }
-    if (src[i] == '"' || src[i] == '\'') {
-      const char q = src[i++];
-      while (i < src.size() && src[i] != q) {
-        if (src[i] == '\\' && i + 1 < src.size()) {
-          i += 2;
-        }
-        else {
-          i++;
-        }
-      }
-      if (i < src.size()) {
-        i++;
-      }
-      continue;
-    }
-    if (i + n <= src.size() && std::memcmp(src.data() + i, name, size_t(n)) == 0 &&
-        (i == 0 || !is_ident_char_st(src[i - 1])) &&
-        (i + n == src.size() || !is_ident_char_st(src[i + n])))
-    {
-      int64_t q = i + n;
-      while (q < src.size() && std::isspace(static_cast<unsigned char>(src[q]))) {
-        q++;
-      }
-      if (q < src.size() && src[q] == '(') {
-        int64_t p = i;
-        while (p > 0 && std::isspace(static_cast<unsigned char>(src[p - 1]))) {
-          p--;
-        }
-        int64_t d = p;
-        while (d > 0 && is_ident_char_st(src[d - 1])) {
-          d--;
-        }
-        const StringRef prev = src.substr(d, p - d);
-        if (prev == "define") {
-          int64_t h = d;
-          while (h > 0 && std::isspace(static_cast<unsigned char>(src[h - 1]))) {
-            h--;
-          }
-          if (h > 0 && src[h - 1] == '#') {
-            return true;
-          }
-        }
-        if (!prev.is_empty() && is_ident_char_st(prev[0]) && !is_call_kw(prev)) {
-          return true;
-        }
-      }
-      i += n;
-      continue;
-    }
-    i++;
+  for (const char *name : names) {
+    src += "#undef ";
+    src += name;
+    src += "\n";
   }
-  return false;
 }
 
-static void append_hlsl_helpers(std::string &src, const char *common, const char *body)
+/* HLSL-style helpers for pasted code that is not from the site. Only when the shader calls
+ * one and does not bring its own: `vec3 saturate(vec3 x)` or a global named `frac` must not
+ * meet a second definition. */
+static void append_hlsl_helpers(std::string &src, const SourceInfo &info)
 {
-  const StringRef common_ref = common ? StringRef(common) : StringRef();
-  const StringRef body_ref = body ? StringRef(body) : StringRef();
-  auto user_has = [&](const char *name) {
-    return source_has_fn_or_macro_def(common_ref, name) ||
-           source_has_fn_or_macro_def(body_ref, name);
-  };
-  /* Includes (or leftover driver macros) may still `#define saturate`. Undef
-   * first so `vec3 saturate(vec3 x)` in user code stays a function. */
-  src += "#undef saturate\n";
-  src += "#undef lerp\n";
-  src += "#undef frac\n";
-  src += "#undef atan2\n";
-  src += "#undef fmod\n";
-  if (!user_has("saturate")) {
+  auto wanted = [&](const char *name) { return info.calls.contains(name) && !info.declares(name); };
+  if (wanted("saturate")) {
     src += "float saturate(float x) { return clamp(x, 0.0, 1.0); }\n";
     src += "vec2 saturate(vec2 x) { return clamp(x, 0.0, 1.0); }\n";
     src += "vec3 saturate(vec3 x) { return clamp(x, 0.0, 1.0); }\n";
     src += "vec4 saturate(vec4 x) { return clamp(x, 0.0, 1.0); }\n";
   }
-  if (!user_has("lerp")) {
+  if (wanted("lerp")) {
     src += "float lerp(float a, float b, float t) { return mix(a, b, t); }\n";
     src += "vec2 lerp(vec2 a, vec2 b, float t) { return mix(a, b, t); }\n";
     src += "vec2 lerp(vec2 a, vec2 b, vec2 t) { return mix(a, b, t); }\n";
@@ -3008,23 +2606,27 @@ static void append_hlsl_helpers(std::string &src, const char *common, const char
     src += "vec4 lerp(vec4 a, vec4 b, float t) { return mix(a, b, t); }\n";
     src += "vec4 lerp(vec4 a, vec4 b, vec4 t) { return mix(a, b, t); }\n";
   }
-  if (!user_has("frac")) {
+  if (wanted("frac")) {
     src += "float frac(float x) { return fract(x); }\n";
     src += "vec2 frac(vec2 x) { return fract(x); }\n";
     src += "vec3 frac(vec3 x) { return fract(x); }\n";
     src += "vec4 frac(vec4 x) { return fract(x); }\n";
   }
-  if (!user_has("atan2")) {
+  if (wanted("atan2")) {
     src += "float atan2(float y, float x) { return atan(y, x); }\n";
     src += "vec2 atan2(vec2 y, vec2 x) { return atan(y, x); }\n";
     src += "vec3 atan2(vec3 y, vec3 x) { return atan(y, x); }\n";
     src += "vec4 atan2(vec4 y, vec4 x) { return atan(y, x); }\n";
   }
-  if (!user_has("fmod")) {
+  if (wanted("fmod")) {
     src += "float fmod(float a, float b) { return mod(a, b); }\n";
     src += "vec2 fmod(vec2 a, vec2 b) { return mod(a, b); }\n";
     src += "vec3 fmod(vec3 a, vec3 b) { return mod(a, b); }\n";
     src += "vec4 fmod(vec4 a, vec4 b) { return mod(a, b); }\n";
+  }
+  if (wanted("st_assert")) {
+    src += "void st_assert(bool cond) {}\n";
+    src += "void st_assert(bool cond, int v) {}\n";
   }
 }
 
@@ -3038,35 +2640,69 @@ static std::string build_fragment(const char *common,
                                   const uint8_t nearest_mask,
                                   const uint8_t wrap_mask)
 {
+  std::string common_src = (common && common[0]) ?
+                               apply_param_values(rewrite_shadertoy_grid_compat(common), params) :
+                               "";
+  std::string body_src = apply_param_values(rewrite_shadertoy_grid_compat(body ? body : ""),
+                                            params);
+  SourceInfo info;
+  analyze_source(tokenize(common_src), info);
+  analyze_source(tokenize(body_src), info);
+  auto translate = [&](std::string &source) {
+    if (source.empty()) {
+      return;
+    }
+    {
+      TokenStream ts = tokenize(source);
+      demote_non_constant_consts(ts, info);
+      rewrite_names_and_preamble(ts, info);
+      source = ts.str();
+    }
+    {
+      TokenStream ts = tokenize(source);
+      rewrite_texture_calls(ts, nearest_mask, wrap_mask, cube_mask | vol_mask);
+      source = ts.str();
+    }
+    {
+      TokenStream ts = tokenize(source);
+      rewrite_loop_zero_starts(ts);
+      ZeroInit{ts, info}.run();
+      source = ts.str();
+    }
+  };
+  translate(common_src);
+  translate(body_src);
+
   std::string src;
-  src.reserve(8192 + (common ? strlen(common) : 0) + (body ? strlen(body) : 0));
+  src.reserve(8192 + common_src.size() + body_src.size());
   /* GPU_shader_create_from_info_python only injects CREATE_INFO_RES_PASS_pyGPU_Shader,
    * so the ShaderCreateInfo must be named pyGPU_Shader (see gpu_shader.cc). */
-  src += "#define iGlobalTime iTime\n";
-  /* Push constant is vec4 (std430). ShaderToy iResolution is vec3; `vec3 r=iResolution`
-   * (tfK3Dy) fails if the uniform stays float4. Name must not contain the token
-   * iResolution or a string-replace preprocessor can recurse forever. */
-  src += "#define iResolution _st_ires.xyz\n";
-  src += "#define texture2D texture\n";
-  src += "#define textureCube texture\n";
-  src += "#define texture2DLod textureLod\n";
-  src += "#define textureCubeLod textureLod\n";
-  src += "#define texture2DGrad textureGrad\n";
-  src += "#define texture2DProj textureProj\n";
-  src += "#define highp\n";
-  src += "#define mediump\n";
-  src += "#define lowp\n";
-  append_hlsl_helpers(src, common, body);
+  append_blender_macro_undefs(src);
+  src += "#define _st_empty\n";
+  /* A shader may define these itself (`#define iGlobalTime (iTime / SPEED)`, NdGfzG). */
+  auto define = [&](const char *name, const char *value) {
+    if (!info.macros.contains(name)) {
+      src += "#define ";
+      src += name;
+      src += " ";
+      src += value;
+      src += "\n";
+    }
+  };
+  define("iGlobalTime", "iTime");
+  for (const auto &legacy : legacy_texture_names) {
+    define(legacy[0], legacy[1]);
+  }
+  define("highp", "");
+  define("mediump", "");
+  define("lowp", "");
+  append_hlsl_helpers(src, info);
   src += "const float iSampleRate = 44100.0;\n";
-  src += "float iChannelTime[4];\n";
-  src += "vec3 iChannelResolution[4];\n";
-  src += "float _st_hash11(float n)\n";
-  src += "{\n";
-  src += "  n = fract(n * 0.1031);\n";
-  src += "  n *= n + 33.33;\n";
-  src += "  n *= n + n;\n";
-  src += "  return fract(n);\n";
-  src += "}\n";
+  /* Push constant is vec4 (std430). ShaderToy iResolution is vec3, and shaders pass it
+   * around by that name (`float cone(vec2 uv, vec3 iResolution)`, 3sXSzl), so it has to be
+   * a real variable rather than a macro. Globals initialize in order: this one is first. */
+  src += "vec3 iResolution = _st_ires.xyz;\n";
+  src += "float iChannelTime[4] = float[4](iTime, iTime, iTime, iTime);\n";
   /* ShaderToy canvas is display-referred sRGB. Convert the Image pass so the Texture
    * Editor can apply scene color management (Standard ≈ website, AgX = filmic). */
   src += "vec3 _st_srgb_to_linear(vec3 c)\n";
@@ -3103,6 +2739,19 @@ static std::string build_fragment(const char *common,
   src += "  vec4 d = texelFetch(samp, i1, 0);\n";
   src += "  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);\n";
   src += "}\n";
+  /* The sampler behind a rewritten call is not always 2D (a helper taking `samplerCube`). */
+  src += "vec4 _st_tex2d_lod0(samplerCube samp, vec3 p) { return textureLod(samp, p, 0.0); }\n";
+  src += "vec4 _st_tex2d_lod0(sampler3D samp, vec3 p) { return textureLod(samp, p, 0.0); }\n";
+  /* IQ packed 3D noise samples ONE bilinear tap and lerps .yx by f.z. Independent RGBA
+   * (many user textures) makes every integer-Z plane a hard seam — cube grid on
+   * Remnant X's sky. Two taps of the same channel at uv and uv+(37,17) are C0. */
+  src += "vec2 _st_iq_yx(sampler2D samp, vec2 uv)\n";
+  src += "{\n";
+  src += "  return vec2(_st_tex2d_lod0(samp, uv).x,\n";
+  src += "              _st_tex2d_lod0(samp, uv + vec2(37.0, 17.0) / 256.0).x);\n";
+  src += "}\n";
+  src += "vec2 _st_iq_yx(samplerCube samp, vec3 p) { return textureLod(samp, p, 0.0).yx; }\n";
+  src += "vec2 _st_iq_yx(sampler3D samp, vec3 p) { return textureLod(samp, p, 0.0).yx; }\n";
   /* Pixel-space nearest (ShaderToy `filter: nearest` on particle buffers). */
   src += "vec4 _st_fetch_px(sampler2D samp, vec2 p)\n";
   src += "{\n";
@@ -3139,121 +2788,94 @@ static std::string build_fragment(const char *common,
   src += "  t = clamp(t, ivec2(0), sz - ivec2(1));\n";
   src += "  return texelFetch(samp, t, 0);\n";
   src += "}\n";
-  /* Fill iChannelResolution BEFORE the user shader. Common tabs often
-   * `#define textureSize iResolution.xy` (7tSSDD); that turns later
-   * `textureSize(iChannel0, 0)` into `iResolution.xy(...)` which is
-   * "function call expected". This helper is parsed above that define. */
-  src += "void _st_fill_ichannel_res()\n";
-  src += "{\n";
+  /* Declared BEFORE the user shader. Common tabs often
+   * `#define textureSize iResolution.xy` (7tSSDD); that turns a later
+   * `textureSize(iChannel0, 0)` into `iResolution.xy(...)`. */
+  src += "vec3 iChannelResolution[4] = vec3[4](\n";
   for (int ch = 0; ch < 4; ch++) {
     char line[192];
     if (cube_mask & (1u << ch)) {
       SNPRINTF(line,
-               "  { ivec2 _ts = textureSize(iChannel%d, 0); "
-               "iChannelResolution[%d] = vec3(vec2(_ts), float(_ts.x)); }\n",
+               "  vec3(vec2(textureSize(iChannel%d, 0)), float(textureSize(iChannel%d, 0).x))",
                ch,
                ch);
     }
     else if (vol_mask & (1u << ch)) {
-      SNPRINTF(line,
-               "  iChannelResolution[%d] = vec3(textureSize(iChannel%d, 0));\n",
-               ch,
-               ch);
+      SNPRINTF(line, "  vec3(textureSize(iChannel%d, 0))", ch);
     }
     else {
-      SNPRINTF(line,
-               "  iChannelResolution[%d] = vec3(vec2(textureSize(iChannel%d, 0)), 1.0);\n",
-               ch,
-               ch);
+      SNPRINTF(line, "  vec3(vec2(textureSize(iChannel%d, 0)), 1.0)", ch);
     }
     src += line;
+    src += (ch < 3) ? ",\n" : ");\n";
   }
-  src += "}\n";
-  src += "\n";
-  /* Rewrite original #define/const lines in place. Do NOT inject a global #define NAME
-   * block — that hijacks function parameters (tmax, px, ro, …). */
-  std::string common_src = (common && common[0]) ?
-                               rewrite_loop_zero_starts(rewrite_iq_z_slices(
-                                   rewrite_texture_neg_bias(rewrite_texturelod_zero(
-                                       rewrite_iframe_zero_calls(rewrite_shadertoy_grid_compat(
-                                           rewrite_unstable_sin_hash(apply_param_values(
-                                               rewrite_c_style_array_types(
-                                                   fold_srgb_byte_vec3_defines(
-                                                       strip_shadertoy_preamble(common))),
-                                               params)))))))) :
-                               "";
-  std::string body_src = rewrite_loop_zero_starts(rewrite_iq_z_slices(
-      rewrite_texture_neg_bias(rewrite_texturelod_zero(rewrite_iframe_zero_calls(
-          rewrite_shadertoy_grid_compat(rewrite_unstable_sin_hash(apply_param_values(
-              rewrite_c_style_array_types(fold_srgb_byte_vec3_defines(
-                  strip_shadertoy_preamble(body ? body : ""))),
-              params))))))));
-  if (nearest_mask != 0) {
-    if (!common_src.empty()) {
-      common_src = rewrite_pixel_texel_fetch(common_src, nearest_mask, wrap_mask);
-    }
-    body_src = rewrite_pixel_texel_fetch(body_src, nearest_mask, wrap_mask);
-  }
-  const std::string joined_for_structs = common_src + "\n" + body_src;
-  const Map<std::string, std::string> struct_ctors = collect_struct_zero_ctors(joined_for_structs);
-
-  VulkanRewrite common_rw;
-  if (!common_src.empty()) {
-    common_rw = rewrite_vulkan_globals(rewrite_zero_init_locals(common_src, struct_ctors));
-  }
-  VulkanRewrite body_rw = rewrite_vulkan_globals(rewrite_zero_init_locals(body_src, struct_ctors));
-  /* Hoisted globals MUST sit before any user `#if` / `#define`. 3dlSzs keeps
-   * `bool once_AAlgs = false;` inside `#if AA>1`; leaving the decl there makes
-   * `_st_init_globals` assign a name the preprocessor deleted. */
-  src += common_rw.decls;
-  src += body_rw.decls;
-  if (!common_rw.source.empty()) {
-    src += common_rw.source;
-    src += "\n";
-  }
-  src += body_rw.source;
-  src += "\nvoid _st_init_globals()\n{\n";
-  src += common_rw.inits;
-  src += body_rw.inits;
-  src += "}\n";
-  src += "void main()\n";
-  src += "{\n";
-  src += "  iChannelTime[0] = iTime;\n";
-  src += "  iChannelTime[1] = iTime;\n";
-  src += "  iChannelTime[2] = iTime;\n";
-  src += "  iChannelTime[3] = iTime;\n";
-  src += "  _st_fill_ichannel_res();\n";
-  src += "  _st_init_globals();\n";
-  src += "  vec4 fragColor = vec4(0.0, 0.0, 0.0, 1.0);\n";
+  /* Like the site, `main` goes in front of the user code and reaches the entry point
+   * through a prototype. User macros cannot touch it there: golfed shaders `#define a 2.0`
+   * (M3B3WK), and a common anti-aliasing wrapper is `#define mainImage mainImage0(...);
+   * void mainImage(...) {...} void mainImage0` (DsByzG), which would also expand a call
+   * placed after it. */
   if (cubemap_pass) {
-    /* ShaderToy Cubemap A: mainCubemap(..., rayOri, rayDir). Face layout matches GL/Vulkan. */
-    src += "  vec2 _st = gl_FragCoord.xy / iResolution.xy * 2.0 - 1.0;\n";
-    src += "  vec3 rd;\n";
-    src += "  if (iCubeFace == 0) { rd = vec3(1.0, -_st.y, -_st.x); }\n";
-    src += "  else if (iCubeFace == 1) { rd = vec3(-1.0, -_st.y, _st.x); }\n";
-    src += "  else if (iCubeFace == 2) { rd = vec3(_st.x, 1.0, _st.y); }\n";
-    src += "  else if (iCubeFace == 3) { rd = vec3(_st.x, -1.0, -_st.y); }\n";
-    src += "  else if (iCubeFace == 4) { rd = vec3(_st.x, -_st.y, 1.0); }\n";
-    src += "  else { rd = vec3(-_st.x, -_st.y, -1.0); }\n";
-    src += "  rd = normalize(rd);\n";
-    src += "  mainCubemap(fragColor, gl_FragCoord.xy, vec3(0.0), rd);\n";
+    src += "void mainCubemap(out vec4 c, in vec2 f, in vec3 ro, in vec3 rd);\n";
   }
   else {
-    src += "  mainImage(fragColor, gl_FragCoord.xy);\n";
+    src += "void mainImage(out vec4 c, in vec2 f);\n";
+  }
+  src += "void main()\n";
+  src += "{\n";
+  src += "  vec4 color = vec4(0.0, 0.0, 0.0, 1.0);\n";
+  if (cubemap_pass) {
+    /* ShaderToy Cubemap A: mainCubemap(..., rayOri, rayDir). Face layout matches GL/Vulkan. */
+    src += "  vec2 uv = gl_FragCoord.xy / _st_ires.xy * 2.0 - 1.0;\n";
+    src += "  vec3 rd;\n";
+    src += "  if (iCubeFace == 0) { rd = vec3(1.0, -uv.y, -uv.x); }\n";
+    src += "  else if (iCubeFace == 1) { rd = vec3(-1.0, -uv.y, uv.x); }\n";
+    src += "  else if (iCubeFace == 2) { rd = vec3(uv.x, 1.0, uv.y); }\n";
+    src += "  else if (iCubeFace == 3) { rd = vec3(uv.x, -1.0, -uv.y); }\n";
+    src += "  else if (iCubeFace == 4) { rd = vec3(uv.x, -uv.y, 1.0); }\n";
+    src += "  else { rd = vec3(-uv.x, -uv.y, -1.0); }\n";
+    src += "  mainCubemap(color, gl_FragCoord.xy, vec3(0.0), normalize(rd));\n";
+  }
+  else {
+    src += "  mainImage(color, gl_FragCoord.xy);\n";
   }
   /* Image pass: ShaderToy writes display-referred sRGB (browser canvas). Convert
    * to scene-linear so the *blend file* view transform applies (Standard ≈ site,
    * AgX/Filmic = that file's look). Do not tag Non-Color — that locks CM.
    * Buffer passes MUST keep raw bits (camera packing / uintBitsToFloat). */
   if (force_opaque) {
-    src += "  if (any(isnan(fragColor))) {\n";
-    src += "    fragColor = vec4(0.0, 0.0, 0.0, 1.0);\n";
+    src += "  if (any(isnan(color))) {\n";
+    src += "    color = vec4(0.0, 0.0, 0.0, 1.0);\n";
     src += "  }\n";
-    src += "  fragColor.rgb = _st_srgb_to_linear(fragColor.rgb);\n";
-    src += "  fragColor.a = 1.0;\n";
+    src += "  color.rgb = _st_srgb_to_linear(color.rgb);\n";
+    src += "  color.a = 1.0;\n";
   }
-  src += "  out_fragColor = fragColor;\n";
+  src += "  out_fragColor = color;\n";
   src += "}\n";
+  src += "\n";
+  if (!common_src.empty()) {
+    src += common_src;
+    src += "\n";
+  }
+  src += body_src;
+  src += "\n";
+  /* Older golfed shaders have no function at all: `#define mainImage(O,U) <statements>`,
+   * expanded by the call the site used to place after the code (Md2BWh). Expand it into a
+   * real entry point. Decided by the preprocessor, as such a macro often sits in an `#if`
+   * next to a regular `void mainImage`. */
+  if (!cubemap_pass && info.macros_with_params.contains("mainImage")) {
+    src += "#ifdef mainImage\n";
+    src += "void _st_macro_main(inout vec4 _st_o, in vec2 _st_u)\n";
+    src += "{\n";
+    src += "  mainImage(_st_o, _st_u);\n";
+    src += "}\n";
+    src += "#undef mainImage\n";
+    src += "void mainImage(out vec4 c, in vec2 f)\n";
+    src += "{\n";
+    src += "  c = vec4(0.0, 0.0, 0.0, 1.0);\n";
+    src += "  _st_macro_main(c, f);\n";
+    src += "}\n";
+    src += "#endif\n";
+  }
   return src;
 }
 
@@ -3892,6 +3514,74 @@ static uint8_t detect_texelfetch_mask(const char *common, const char *body)
   return mask;
 }
 
+/* Comments blanked out, so `// iChannel1: keyboard` does not count as a use. */
+static std::string blank_glsl_comments(const StringRef src)
+{
+  std::string out(src.data(), size_t(src.size()));
+  const size_t n = out.size();
+  for (size_t i = 0; i + 1 < n; i++) {
+    if (out[i] == '/' && out[i + 1] == '/') {
+      while (i < n && out[i] != '\n') {
+        out[i++] = ' ';
+      }
+    }
+    else if (out[i] == '/' && out[i + 1] == '*') {
+      while (i + 1 < n && !(out[i] == '*' && out[i + 1] == '/')) {
+        if (out[i] != '\n') {
+          out[i] = ' ';
+        }
+        i++;
+      }
+      if (i + 1 < n) {
+        out[i] = ' ';
+        out[i + 1] = ' ';
+        i++;
+      }
+    }
+  }
+  return out;
+}
+
+/* `ivec2(KEY, row)`: a key code and row 0-2 (down / pressed / toggle) of the keyboard
+ * texture. Small literals are left alone: `ivec2(0, 0)` is how shaders read their own state. */
+static bool is_keyboard_texel(StringRef coord)
+{
+  coord = rtrim(ltrim(coord));
+  if (!type_starts_at(coord, "ivec2") || !coord.endswith(")")) {
+    return false;
+  }
+  const int64_t paren = coord.find('(');
+  Vector<StringRef> xy;
+  if (paren == StringRef::not_found || coord.find('(', paren + 1) != StringRef::not_found ||
+      !parse_call_args(coord, paren, xy) || xy.size() != 2)
+  {
+    return false;
+  }
+  const StringRef key = xy[0];
+  const StringRef row = xy[1];
+  if (key.is_empty() || !(row == "0" || row == "1" || row == "2")) {
+    return false;
+  }
+  bool digits = true;
+  bool ident = is_ident_start(key[0]);
+  for (const char c : key) {
+    digits &= std::isdigit(static_cast<unsigned char>(c)) != 0;
+    ident &= is_ident_char_st(c);
+  }
+  if (digits) {
+    const int code = (key.size() <= 3) ? std::atoi(std::string(key).c_str()) : 0;
+    return code >= 8 && code <= 255;
+  }
+  if (!ident) {
+    return false;
+  }
+  std::string lower(key.data(), size_t(key.size()));
+  for (char &c : lower) {
+    c = char(std::tolower(static_cast<unsigned char>(c)));
+  }
+  return lower.find("key") != std::string::npos;
+}
+
 static uint8_t detect_keyboard_mask(const char *common, const char *body)
 {
   std::string joined;
@@ -3923,6 +3613,41 @@ static uint8_t detect_keyboard_mask(const char *common, const char *body)
         }
       }
       from = paren + 1;
+    }
+  }
+
+  /* Modern shaders read keys with `texelFetch(iChannelN, ivec2(KEY, row), 0)`. When that is
+   * the only thing a pass does with a channel, the channel is the keyboard. Pasted code has
+   * no input list, and auto-wiring such a channel to Buffer N reads that buffer as key
+   * state: a terrain demo's "Enter toggles erosion" flipped with Buffer B's scrolling noise. */
+  const std::string code = blank_glsl_comments(src);
+  const StringRef code_ref(code);
+  for (int ch = 0; ch < 4; ch++) {
+    char name[16];
+    SNPRINTF(name, "iChannel%d", ch);
+    int uses = 0;
+    for (int64_t at = code_ref.find(name); at != StringRef::not_found;
+         at = code_ref.find(name, at + 1))
+    {
+      uses += match_ident_at(code_ref, at, name) ? 1 : 0;
+    }
+    int key_reads = 0;
+    int64_t from = 0;
+    while (uses > 0 && from < code_ref.size()) {
+      const int64_t paren = find_call_paren(code_ref, "texelFetch", from);
+      if (paren == StringRef::not_found) {
+        break;
+      }
+      Vector<StringRef> args;
+      if (parse_call_args(code_ref, paren, args) && args.size() == 3 &&
+          args[0] == StringRef(name) && args[2] == "0" && is_keyboard_texel(args[1]))
+      {
+        key_reads++;
+      }
+      from = paren + 1;
+    }
+    if (key_reads > 0 && key_reads == uses) {
+      mask |= uint8_t(1u << ch);
     }
   }
   return mask;
@@ -4014,8 +3739,25 @@ static bool is_cubemap_only_pass(const char *body)
     return false;
   }
   const StringRef s(body);
-  return s.find("mainCubemap") != StringRef::not_found &&
-         s.find("mainImage") == StringRef::not_found;
+  if (s.find("mainCubemap") == StringRef::not_found) {
+    return false;
+  }
+  if (s.find("mainImage") == StringRef::not_found) {
+    return true;
+  }
+  /* Both words appear. A comment that mentions the other entry point does not count. */
+  const TokenStream ts = tokenize(s);
+  bool cubemap = false;
+  for (int ci = 0; ci + 1 < ts.code.size(); ci++) {
+    if (!ts.cis(ci + 1, "(")) {
+      continue;
+    }
+    if (ts.cis(ci, "mainImage")) {
+      return false;
+    }
+    cubemap |= ts.cis(ci, "mainCubemap");
+  }
+  return cubemap;
 }
 
 /* Cube-map passes (Dry Ice 2 Cubemap A) use mainCubemap. 2D Image/Buffer keep mainImage. */
@@ -4112,7 +3854,7 @@ static uint64_t hash_source(const char *common,
                             const uint8_t wrap_mask)
 {
   DefaultHash<StringRef> hasher;
-  uint64_t h = hasher("shadertoy_v58_zero_file_globals");
+  uint64_t h = hasher("shadertoy_v59_token_rewrite");
   h = h * 33 + hasher(common ? common : "");
   h = h * 33 + hasher(body ? body : "");
   h = h * 33 + hasher(format_param_defines(params));
@@ -4132,6 +3874,8 @@ static void apply_buffer_channel_sampler_types(const NodeImageShaderToy &storage
                                                uint8_t &vol_mask);
 static uint8_t detect_nearest_channel_mask(const NodeImageShaderToy &storage, const char pass_tag);
 static uint8_t detect_wrap_channel_mask(const NodeImageShaderToy &storage, const char pass_tag);
+static bool pass_has_code(const char *common, const char *code);
+static bool buffer_is_cubemap_pass(const NodeImageShaderToy &storage, int buffer);
 
 static CompiledPass &compile_pass(const char * /*debug_name*/,
                                   const char *common,
@@ -4144,7 +3888,10 @@ static CompiledPass &compile_pass(const char * /*debug_name*/,
 {
   using namespace gpu::shader;
   /* Cubemap A is a Buffer pass. If the user pasted it into Image, fall back to a 2D view. */
-  bool cubemap_pass = is_cubemap_only_pass(body) && !force_opaque;
+  const bool is_buffer = channel_storage && pass_tag >= 'A' && pass_tag <= 'D';
+  bool cubemap_pass = !force_opaque &&
+                      (is_buffer ? buffer_is_cubemap_pass(*channel_storage, pass_tag - 'A') :
+                                   is_cubemap_only_pass(body));
   std::string body_owned;
   if (cubemap_pass) {
     body_owned = body ? body : "";
@@ -4200,8 +3947,7 @@ static CompiledPass &compile_pass(const char * /*debug_name*/,
   compiled.fetch_mask = fetch_mask;
   compiled.tex_like_mask = tex_like_mask;
   compiled.cubemap_pass = cubemap_pass;
-  const bool has_entry = cubemap_pass ||
-                         StringRef(body_use).find("mainImage") != StringRef::not_found;
+  const bool has_entry = cubemap_pass || pass_has_code(common, body_use);
   if (body_owned.empty() || !has_entry) {
     compiled.error = "Pass has no mainImage() / mainCubemap()";
     std::lock_guard lock(shader_cache_mutex());
@@ -5375,14 +5121,42 @@ static ChannelBind parse_channel(const NodeImageShaderToy &storage,
   return bind;
 }
 
-static bool pass_has_code(const char *code)
+static bool pass_has_code(const char *common, const char *code)
 {
   if (code == nullptr || code[0] == '\0') {
     return false;
   }
   const StringRef s(code);
-  return s.find("mainImage") != StringRef::not_found ||
-         s.find("mainCubemap") != StringRef::not_found;
+  if (s.find("mainImage") != StringRef::not_found ||
+      s.find("mainCubemap") != StringRef::not_found)
+  {
+    return true;
+  }
+  if (common == nullptr || common[0] == '\0') {
+    return false;
+  }
+  /* `#define Main void mainImage(out vec4 Q, in vec2 U)` in Common and `Main { ... }` in
+   * every pass (WcsSDl). The pass text alone never mentions mainImage. */
+  const TokenStream ts = tokenize(common);
+  for (int t = 0; t < ts.toks.size(); t++) {
+    if (!ts.toks[t].pp_start || !ts.is(t + 1, "define") || !ts.is_ident(t + 2)) {
+      continue;
+    }
+    bool is_entry = false;
+    for (int k = t + 3; k < ts.directive_end(t); k++) {
+      is_entry |= ts.is(k, "mainImage") || ts.is(k, "mainCubemap");
+    }
+    if (!is_entry) {
+      continue;
+    }
+    const StringRef name = ts.text(t + 2);
+    for (int64_t at = s.find(name); at != StringRef::not_found; at = s.find(name, at + 1)) {
+      if (match_ident_at(s, at, name)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 /* NS pressure Jacobi: 4-neighbor average, often `* 0.25`, reading the same
@@ -5477,6 +5251,30 @@ static const char *storage_buffer_code(const NodeImageShaderToy &storage, const 
   }
 }
 
+/* Whether Buffer A–D slot `buffer` holds a ShaderToy Cubemap pass. The importer records it
+ * as `CUBE:<letters>` in the channel map, because the code cannot tell: a Cubemap tab may
+ * keep a `mainImage` next to `mainCubemap` (NtjSzd), and a Buffer tab may have a helper
+ * called `mainCubemap` (3s33Rn). Hand-pasted code has no record and goes by its content. */
+static bool buffer_is_cubemap_pass(const NodeImageShaderToy &storage, const int buffer)
+{
+  const char *code = storage_buffer_code(storage, buffer);
+  const StringRef map(storage.channel_map);
+  for (int64_t at = map.find("CUBE:"); at != StringRef::not_found; at = map.find("CUBE:", at + 1))
+  {
+    if (at > 0 && map[at - 1] != '|') {
+      continue;
+    }
+    StringRef letters = map.substr(at + 5);
+    const int64_t end = letters.find('|');
+    if (end != StringRef::not_found) {
+      letters = letters.substr(0, end);
+    }
+    return code != nullptr && code[0] != '\0' &&
+           letters.find(char('A' + buffer)) != StringRef::not_found;
+  }
+  return is_cubemap_only_pass(code);
+}
+
 static bool shadertoy_uses_empty_id(const NodeImageShaderToy &st)
 {
   auto has = [](const char *c) -> bool {
@@ -5552,6 +5350,10 @@ static void apply_buffer_channel_sampler_types(const NodeImageShaderToy &storage
   /* Buffer A–D are 2D ping-pong (unless that pass is Cubemap A). Vec3 samples in Common
    * must not promote a mapped Buffer channel to samplerCube/sampler3D — that binds the
    * dummy sky/volume instead of the sim, which looks like noise (mstfzS). */
+  /* A pass loaded from ShaderToy JSON lists its inputs, and the site declares every one
+   * that is not a cubemap or volume as sampler2D. Guessing from the code can only be wrong
+   * there: `texture(iChannel0, reflect(rd, n).xy)` is not a cubemap lookup. */
+  const bool from_site = !channel_map_slice(storage, pass_tag).is_empty();
   for (int c = 0; c < 4; c++) {
     const ChannelBind bind = parse_channel(storage, pass_tag, c);
     const uint8_t bit = uint8_t(1u << c);
@@ -5567,16 +5369,20 @@ static void apply_buffer_channel_sampler_types(const NodeImageShaderToy &storage
     }
     if (bind.kind == ChannelKind::None) {
       /* Empty spec auto-wires iChannelN -> Buffer N. Cubemap A must stay cube. */
-      if (is_cubemap_only_pass(storage_buffer_code(storage, c))) {
+      if (buffer_is_cubemap_pass(storage, c)) {
         cube_mask |= bit;
         vol_mask &= uint8_t(~bit);
       }
       continue;
     }
     if (bind.kind != ChannelKind::Buffer) {
+      if (from_site) {
+        cube_mask &= uint8_t(~bit);
+        vol_mask &= uint8_t(~bit);
+      }
       continue;
     }
-    if (is_cubemap_only_pass(storage_buffer_code(storage, bind.buffer))) {
+    if (buffer_is_cubemap_pass(storage, bind.buffer)) {
       cube_mask |= bit;
       vol_mask &= uint8_t(~bit);
     }
@@ -5847,11 +5653,11 @@ class ShaderToyOperation : public NodeOperation {
     };
 
     auto find_cube_buffer = [&](const int hint) -> int {
-      if (hint >= 0 && hint < 4 && is_cubemap_only_pass(storage_buffer_code(storage, hint))) {
+      if (hint >= 0 && hint < 4 && buffer_is_cubemap_pass(storage, hint)) {
         return hint;
       }
       for (int b = 0; b < 4; b++) {
-        if (is_cubemap_only_pass(storage_buffer_code(storage, b))) {
+        if (buffer_is_cubemap_pass(storage, b)) {
           return b;
         }
       }
@@ -5866,7 +5672,7 @@ class ShaderToyOperation : public NodeOperation {
       out_nearest[c] = bind.nearest;
 
       auto bind_buffer = [&](const int buffer) {
-        const bool src_cube = is_cubemap_only_pass(storage_buffer_code(storage, buffer));
+        const bool src_cube = buffer_is_cubemap_pass(storage, buffer);
         if (src_cube) {
           const int idx = image_pass ? latest_index :
                                        ((buffer < pass_buffer) ? latest_index : prev_index);
@@ -5966,8 +5772,8 @@ class ShaderToyOperation : public NodeOperation {
 
       const bool want_site_tex = (tex_like_mask & (1u << c)) != 0;
       int buffer = -1;
-      if (pass_has_code(storage_buffer_code(storage, c)) &&
-          !is_cubemap_only_pass(storage_buffer_code(storage, c)))
+      if (pass_has_code(storage.code_common, storage_buffer_code(storage, c)) &&
+          !buffer_is_cubemap_pass(storage, c))
       {
         buffer = c;
       }
@@ -6087,7 +5893,7 @@ class ShaderToyOperation : public NodeOperation {
     int ticks = simulate ? 1 : 0;
     if (ticks == 0 && bufs.shader_frame == 0) {
       for (int p = 0; p < 4; p++) {
-        if (pass_has_code(passes[p].code)) {
+        if (pass_has_code(common, passes[p].code)) {
           ticks = 1;
           break;
         }
@@ -6105,7 +5911,7 @@ class ShaderToyOperation : public NodeOperation {
       i_time = float(i_frame) / st_fps * time_scale;
       i_dt = 1.0f / st_fps;
       for (int p = 0; p < 4; p++) {
-        if (!pass_has_code(passes[p].code)) {
+        if (!pass_has_code(common, passes[p].code)) {
           continue;
         }
         CompiledPass &compiled = compile_pass(
@@ -6216,7 +6022,7 @@ class ShaderToyOperation : public NodeOperation {
     if (buffer_failed) {
       this->fill_error_color(color_out, Color(1.0f, 0.15f, 0.45f, 1.0f));
     }
-    else if (pass_has_code(storage.code_image)) {
+    else if (pass_has_code(common, storage.code_image)) {
       gpu::Texture *out_gpu = color_out.gpu_texture();
       gpu::Texture *cache = bufs.ensure_image_cache(size, fmt);
       DefaultHash<StringRef> key_hash;
@@ -6354,7 +6160,7 @@ static void NODE_OT_shadertoy_reset_buffers(wmOperatorType *ot)
 
 static std::string compile_all_passes(const NodeImageShaderToy &storage)
 {
-  if (!pass_has_code(storage.code_image)) {
+  if (!pass_has_code(storage.code_common, storage.code_image)) {
     return "Image pass has no mainImage() / mainCubemap()";
   }
   const Vector<ShaderParam> params = params_from_storage(storage);
@@ -6374,7 +6180,7 @@ static std::string compile_all_passes(const NodeImageShaderToy &storage)
   };
   std::string errors;
   for (const PassSpec &pass : passes) {
-    if (pass.code != storage.code_image && !pass_has_code(pass.code)) {
+    if (pass.code != storage.code_image && !pass_has_code(common, pass.code)) {
       continue;
     }
     const bool force_opaque = (pass.code == storage.code_image);

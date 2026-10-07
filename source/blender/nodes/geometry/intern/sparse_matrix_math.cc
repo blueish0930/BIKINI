@@ -158,6 +158,23 @@ COOMatrix sparse_matrix_scale(const float *a_w,
   return eigen_to_coo(A * scale);
 }
 
+COOMatrix sparse_matrix_transpose(const float *a_w,
+                                  const int *a_r,
+                                  const int *a_c,
+                                  const int64_t a_size)
+{
+  if (a_size == 0) {
+    return {};
+  }
+  /* The transpose of (row, col) is (col, row): build it with the index lists swapped. */
+  const int rows = max_index(a_c, a_size) + 1;
+  const int cols = max_index(a_r, a_size) + 1;
+  if (rows <= 0 || cols <= 0) {
+    return {};
+  }
+  return eigen_to_coo(coo_to_eigen(a_w, a_c, a_r, a_size, rows, cols));
+}
+
 COOMatrix sparse_matrix_apply(const Operation op,
                               const float *a_w,
                               const int *a_r,
@@ -176,6 +193,7 @@ COOMatrix sparse_matrix_apply(const Operation op,
     case Operation::Multiply:
       return sparse_matrix_multiply(a_w, a_r, a_c, a_size, b_w, b_r, b_c, b_size);
     case Operation::Scale:
+    case Operation::Transpose:
       break;
   }
   return {};

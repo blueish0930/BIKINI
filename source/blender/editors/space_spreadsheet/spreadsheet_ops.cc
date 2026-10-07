@@ -1246,6 +1246,22 @@ static void inspect_append_array(InspectPopupArg &arg, const bke::WrangleArrayVa
                                    inspect_fmt_float(arr.d.f[i * 3 + 2], arg.precision)));
     }
   }
+  else if (arr.kind == bke::WrangleArrayKind::Float2) {
+    for (int i = 0; i < n; i++) {
+      arg.items.append(fmt::format("({}, {})",
+                                   inspect_fmt_float(arr.d.f[i * 2 + 0], arg.precision),
+                                   inspect_fmt_float(arr.d.f[i * 2 + 1], arg.precision)));
+    }
+  }
+  else if (arr.kind == bke::WrangleArrayKind::Float4) {
+    for (int i = 0; i < n; i++) {
+      arg.items.append(fmt::format("({}, {}, {}, {})",
+                                   inspect_fmt_float(arr.d.f[i * 4 + 0], arg.precision),
+                                   inspect_fmt_float(arr.d.f[i * 4 + 1], arg.precision),
+                                   inspect_fmt_float(arr.d.f[i * 4 + 2], arg.precision),
+                                   inspect_fmt_float(arr.d.f[i * 4 + 3], arg.precision)));
+    }
+  }
   else if (arr.kind == bke::WrangleArrayKind::String) {
     for (int i = 0; i < n; i++) {
       arg.items.append(fmt::format("\"{}\"", arr.string_at(i)));

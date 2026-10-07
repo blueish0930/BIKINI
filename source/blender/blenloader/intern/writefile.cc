@@ -2118,18 +2118,11 @@ static bool BLO_write_file_impl(Main *mainvar,
   std::ostream *debug_dst = nullptr;
 #endif
 
-  /* Black-box node group lock: encrypt locked groups and strip their in-file nodes, so
-   * the written file contains no plaintext graph. In-memory nodes are restored right
-   * after the write below. No-op for partial writes (own Main) and lock mini-blends. */
-  blender::bke::node_tree_lock_seal_all_for_write(*mainvar);
-
   /* Actual file writing. */
   const bool err = write_file_handle(
       mainvar, &ww, filepath, nullptr, nullptr, write_flags, use_userdef, thumb, debug_dst);
 
   const bool close_error = !ww.close();
-
-  blender::bke::node_tree_lock_restore_after_write(*mainvar);
 
   if (path_list_backup) [[unlikely]] {
     BKE_bpath_list_restore(mainvar, path_list_flag, path_list_backup);

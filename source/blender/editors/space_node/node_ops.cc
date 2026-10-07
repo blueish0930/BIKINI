@@ -85,9 +85,6 @@ void node_operatortypes()
   WM_operatortype_append(NODE_OT_group_edit);
   WM_operatortype_append(NODE_OT_recursion_tree);
   WM_operatortype_append(NODE_OT_group_enter_exit);
-  WM_operatortype_append(NODE_OT_group_lock_toggle);
-  WM_operatortype_append(NODE_OT_group_password_enter);
-  WM_operatortype_append(NODE_OT_unlock_locked_groups);
 
   WM_operatortype_append(NODE_OT_default_group_width_set);
 

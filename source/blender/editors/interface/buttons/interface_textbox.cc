@@ -547,7 +547,14 @@ Vector<StringRef> textbox_wrap_lines(ButtonTextBox *textbox)
     const int h_px = std::max(8, int(std::lround(BLI_rctf_size_y(&textbox->rect) / aspect)));
     const int vpad = int(std::lround(textbox_vertical_padding() / aspect)) * 2;
     const int hscroll_h = int(std::lround(textbox_hscroll_height() / aspect));
+    /* The number of rows that fit was measured by the last draw on the real pixel rectangle.
+     * The estimate made here can be one row more, and scrolling to the caret would then leave
+     * the line that is being typed just below the visible rows. */
+    const int drawn_rows_fit = textbox->last_code_rows_fit;
     textbox_code_sync_font(textbox, w_px, std::max(1, h_px - vpad - hscroll_h));
+    if (drawn_rows_fit > 0) {
+      textbox->last_code_rows_fit = std::min(textbox->last_code_rows_fit, drawn_rows_fit);
+    }
     code_font_px = textbox->last_code_font_px;
   }
   if (cache.aspect == aspect && cache.wrap_width == width && text == cache.text &&

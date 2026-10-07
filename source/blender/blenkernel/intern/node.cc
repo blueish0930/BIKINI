@@ -282,33 +282,6 @@ static void ntree_copy_data(Main * /*bmain*/,
 
   ntree_dst->description = BLI_strdup_null(ntree_src->description);
 
-  ntree_dst->lock_blob_size = ntree_src->lock_blob_size;
-  ntree_dst->lock_kdf_iters = ntree_src->lock_kdf_iters;
-  ntree_dst->lock_used_ids_num = ntree_src->lock_used_ids_num;
-  memcpy(ntree_dst->lock_password_hash,
-         ntree_src->lock_password_hash,
-         sizeof(ntree_dst->lock_password_hash));
-  memcpy(ntree_dst->lock_salt, ntree_src->lock_salt, sizeof(ntree_dst->lock_salt));
-  memcpy(ntree_dst->lock_nonce, ntree_src->lock_nonce, sizeof(ntree_dst->lock_nonce));
-  ntree_dst->lock_blob = nullptr;
-  if (ntree_src->lock_blob && ntree_src->lock_blob_size > 0) {
-    ntree_dst->lock_blob = MEM_new_array<char>(size_t(ntree_src->lock_blob_size), __func__);
-    memcpy(ntree_dst->lock_blob, ntree_src->lock_blob, size_t(ntree_src->lock_blob_size));
-  }
-  ntree_dst->lock_used_ids = nullptr;
-  if (ntree_src->lock_used_ids && ntree_src->lock_used_ids_num > 0) {
-    ntree_dst->lock_used_ids = MEM_new_array<ID *>(size_t(ntree_src->lock_used_ids_num), __func__);
-    memcpy(ntree_dst->lock_used_ids,
-           ntree_src->lock_used_ids,
-           sizeof(ID *) * size_t(ntree_src->lock_used_ids_num));
-  }
-  if (ntree_src->runtime && ntree_dst->runtime) {
-    ntree_dst->runtime->lock_decrypted = ntree_src->runtime->lock_decrypted;
-    ntree_dst->runtime->lock_view_granted = ntree_src->runtime->lock_view_granted;
-    ntree_dst->runtime->lock_decrypt_users = 0;
-    memcpy(ntree_dst->runtime->lock_key, ntree_src->runtime->lock_key, 32);
-  }
-
   /* Copies do not inherit ID_FLAG_FAKEUSER. Re-apply it so duplicated GPU Texture
    * Editor graphs survive Purge Unused Data the same way newly created ones do. */
   if (ELEM(ntree_dst->type, NTREE_IMAGE, NTREE_OBJECT) &&
@@ -373,8 +346,6 @@ static void ntree_free_data(ID *id)
   }
 
   MEM_SAFE_DELETE(ntree->description);
-  MEM_SAFE_DELETE(ntree->lock_blob);
-  MEM_SAFE_DELETE(ntree->lock_used_ids);
   BKE_previewimg_id_free(&ntree->id);
   MEM_delete(ntree->runtime);
 }
@@ -517,14 +488,6 @@ static void node_foreach_id(ID *id, LibraryForeachIDData *data)
   }
 
   ntree->tree_interface.foreach_id(data);
-
-  /* When nodes are still in memory they already hold the ID users. Counting
-   * lock_used_ids as extra users makes Blender report user-count errors on exit. */
-  const LibraryForeachIDCallbackFlag lock_ids_flag = ntree->nodes.is_empty() ? IDWALK_CB_USER :
-                                                                              IDWALK_CB_NOP;
-  for (int i = 0; i < ntree->lock_used_ids_num; i++) {
-    BKE_LIB_FOREACHID_PROCESS_ID(data, ntree->lock_used_ids[i], lock_ids_flag);
-  }
 
   if (ntree->runtime->eval_dependencies) {
     for (ID *&id_ref : ntree->runtime->eval_dependencies->ids.values()) {
@@ -1474,9 +1437,6 @@ void node_tree_blend_write(BlendWriter *writer, bNodeTree *ntree)
     forward_compat::write_legacy_properties(*ntree, ids_to_restore);
   }
 
-  /* Iterate the DNA ListBase, not the runtime cache. Locked trees temporarily
-   * clear `nodes`/`links` so plaintext is not written; `all_nodes()` would still
-   * walk the cache and leak the graph into the .blend. */
   for (bNode &node : ntree->nodes) {
     if (ntree->type == NTREE_SHADER && node.type_legacy == SH_NODE_BSDF_HAIR_PRINCIPLED) {
       /* For Principled Hair BSDF, also write to `node->custom1` for forward compatibility, because
@@ -1543,13 +1503,6 @@ void node_tree_blend_write(BlendWriter *writer, bNodeTree *ntree)
   writer->write_struct_array(ntree->nested_node_refs_num, ntree->nested_node_refs);
 
   BKE_previewimg_blend_write(writer, ntree->preview);
-
-  if (ntree->lock_blob && ntree->lock_blob_size > 0) {
-    writer->write_char_array(ntree->lock_blob_size, ntree->lock_blob);
-  }
-  if (ntree->lock_used_ids && ntree->lock_used_ids_num > 0) {
-    writer->write_pointer_array(ntree->lock_used_ids_num, ntree->lock_used_ids);
-  }
 
   /* Freeing temporary allocations needs to happen at the very end, because if we free after the
    * data is no longer needed, future allocations might be given the same address by the OS, which
@@ -2369,9 +2322,6 @@ void node_tree_blend_read_data(BlendDataReader *reader, ID *owner_id, bNodeTree 
 
   BLO_read_struct(reader, PreviewImage, &ntree->preview);
   BKE_previewimg_blend_read(reader, ntree->preview);
-
-  BLO_read_array_and_validate_size(reader, &ntree->lock_blob, &ntree->lock_blob_size);
-  BLO_read_pointer_array_and_validate_size(reader, &ntree->lock_used_ids, &ntree->lock_used_ids_num);
 
   /* type verification is in lib-link */
 }

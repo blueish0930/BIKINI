@@ -20,6 +20,11 @@
 #include "BLI_utildefines.hh"
 #include "BLI_vector.hh"
 
+#include "BLT_translation.hh"
+#include "BLT_translation_any_thread.hh"
+
+#include <fmt/format.h>
+
 #include "NOD_vex.hh"
 #include "vex_program.hh"
 
@@ -62,6 +67,18 @@ std::string type_name(const Type type)
       return "float[]";
     case Type::VecArray:
       return "vector[]";
+    case Type::Vec2Array:
+      return "vector2[]";
+    case Type::Vec4Array:
+      return "vector4[]";
+    case Type::ColorArray:
+      return "color[]";
+    case Type::RotArray:
+      return "rotation[]";
+    case Type::Mat2Array:
+      return "matrix2[]";
+    case Type::Mat3Array:
+      return "matrix3[]";
     case Type::StringArray:
       return "string[]";
     case Type::MatArray:
@@ -152,8 +169,14 @@ bool type_is_array(const Type type)
               Type::IntArray,
               Type::FloatArray,
               Type::VecArray,
+              Type::Vec2Array,
+              Type::Vec4Array,
+              Type::ColorArray,
+              Type::RotArray,
               Type::StringArray,
               Type::MatArray,
+              Type::Mat2Array,
+              Type::Mat3Array,
               Type::RayArray);
 }
 
@@ -245,6 +268,18 @@ static bool type_fits_tag(const StringRef tag, const Type got)
   return true;
 }
 
+/** Array types the GLSL emitter has no representation for, they run on the CPU. */
+static bool gpu_array_type_unsupported(const Type type)
+{
+  return ELEM(type,
+              Type::Vec2Array,
+              Type::Vec4Array,
+              Type::ColorArray,
+              Type::RotArray,
+              Type::Mat2Array,
+              Type::Mat3Array);
+}
+
 Type array_type_of(const Type elem)
 {
   switch (elem) {
@@ -253,15 +288,23 @@ Type array_type_of(const Type elem)
       return Type::IntArray;
     case Type::Ray:
       return Type::RayArray;
-    case Type::Vector:
     case Type::Vector2:
-    case Type::Vector4:
+      return Type::Vec2Array;
+    case Type::Vector:
       return Type::VecArray;
+    case Type::Vector4:
+      return Type::Vec4Array;
+    case Type::Color:
+      return Type::ColorArray;
+    case Type::Rotation:
+      return Type::RotArray;
     case Type::String:
       return Type::StringArray;
-    case Type::Matrix:
     case Type::Matrix2:
+      return Type::Mat2Array;
     case Type::Matrix3:
+      return Type::Mat3Array;
+    case Type::Matrix:
     case Type::MatArray:
       return Type::MatArray;
     case Type::Float:
@@ -277,6 +320,18 @@ Type array_elem_type(const Type type)
       return Type::Int;
     case Type::VecArray:
       return Type::Vector;
+    case Type::Vec2Array:
+      return Type::Vector2;
+    case Type::Vec4Array:
+      return Type::Vector4;
+    case Type::ColorArray:
+      return Type::Color;
+    case Type::RotArray:
+      return Type::Rotation;
+    case Type::Mat2Array:
+      return Type::Matrix2;
+    case Type::Mat3Array:
+      return Type::Matrix3;
     case Type::StringArray:
       return Type::String;
     case Type::MatArray:
@@ -313,6 +368,37 @@ static void offset_to_line_col(
   r_snippet = std::string(src.substr(line_start, std::min<int64_t>(80, line_end - line_start)));
 }
 
+/** The prefix of an array attribute with this array type (`i[]` of `i[]@ids`), or empty. */
+static std::string array_attr_prefix(const Type array_type)
+{
+  switch (array_type) {
+    case Type::IntArray:
+      return "i[]";
+    case Type::FloatArray:
+      return "f[]";
+    case Type::VecArray:
+      return "v[]";
+    case Type::Vec2Array:
+      return "u[]";
+    case Type::Vec4Array:
+      return "q[]";
+    case Type::ColorArray:
+      return "c[]";
+    case Type::RotArray:
+      return "r[]";
+    case Type::Mat2Array:
+      return "2[]";
+    case Type::Mat3Array:
+      return "3[]";
+    case Type::MatArray:
+      return "4[]";
+    case Type::StringArray:
+      return "s[]";
+    default:
+      return "";
+  }
+}
+
 struct ErrHint {
   std::string title;
   std::string hint;
@@ -320,147 +406,271 @@ struct ErrHint {
 
 static std::string unknown_func_fix(StringRef what);
 
+/** The \a index-th `'quoted'` part of a message, or empty. */
+static std::string quoted_part(const StringRef what, const int index)
+{
+  int64_t pos = 0;
+  for (int i = 0;; i++) {
+    const int64_t q1 = what.find('\'', pos);
+    const int64_t q2 = (q1 == StringRef::not_found) ? StringRef::not_found :
+                                                      what.find('\'', q1 + 1);
+    if (q1 == StringRef::not_found || q2 == StringRef::not_found) {
+      return "";
+    }
+    if (i == index) {
+      return std::string(what.substr(q1 + 1, q2 - q1 - 1));
+    }
+    pos = q2 + 1;
+  }
+}
+
+/** Edit distance that counts a swap of two neighbors as one edit, capped at \a limit + 1. */
+static int edit_distance(const StringRef a, const StringRef b, const int limit)
+{
+  const int n = int(a.size());
+  const int m = int(b.size());
+  if (std::abs(n - m) > limit) {
+    return limit + 1;
+  }
+  Vector<int> before(m + 1, 0);
+  Vector<int> prev(m + 1);
+  Vector<int> row(m + 1);
+  for (int j = 0; j <= m; j++) {
+    prev[j] = j;
+  }
+  for (int i = 1; i <= n; i++) {
+    row[0] = i;
+    for (int j = 1; j <= m; j++) {
+      const int cost = (a[i - 1] == b[j - 1]) ? 0 : 1;
+      row[j] = std::min({prev[j] + 1, row[j - 1] + 1, prev[j - 1] + cost});
+      if (i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1]) {
+        row[j] = std::min(row[j], before[j - 2] + 1);
+      }
+    }
+    before = prev;
+    prev = row;
+  }
+  return std::min(prev[m], limit + 1);
+}
+
+/** The candidate a mistyped \a name most likely meant, or empty when nothing is close. */
+static std::string closest_name(const StringRef name, const Span<std::string> candidates)
+{
+  if (name.size() < 2) {
+    return "";
+  }
+  const int limit = name.size() <= 3 ? 1 : 2;
+  int best = limit + 1;
+  std::string result;
+  for (const std::string &candidate : candidates) {
+    if (candidate == name) {
+      continue;
+    }
+    const int distance = edit_distance(name, candidate, limit);
+    if (distance < best) {
+      best = distance;
+      result = candidate;
+    }
+  }
+  return result;
+}
+
+/**
+ * Messages are written in English and shown in the language of the interface. A message that was
+ * already translated (the formatted ones are) is simply not found and stays as it is.
+ */
+static std::string tr(const StringRef msgid)
+{
+  const std::string id(msgid);
+  return BLT_translate_do_tooltip_any_thread(id.c_str());
+}
+
+template<typename... Args> static std::string trf(const char *msgid, Args &&...args)
+{
+  return fmt::format(fmt::runtime(BLT_translate_do_tooltip_any_thread(msgid)), std::forward<Args>(args)...);
+}
+
+static ErrHint err_hint_base(StringRef what);
+
+/**
+ * Messages of a missing `;` / `)` name what they follow (`Expected ';' after 'x'`), the error
+ * itself is reported there and not at whatever comes next.
+ */
 static ErrHint err_hint(const StringRef what)
 {
+  const int64_t after = what.find(" after '");
+  if (after == StringRef::not_found) {
+    return err_hint_base(what);
+  }
+  ErrHint h = err_hint_base(what.substr(0, after));
+  const std::string previous = quoted_part(what.drop_prefix(after), 0);
+  if (!previous.empty()) {
+    h.title = trf("{} (after {})", h.title, previous);
+  }
+  return h;
+}
+
+/**
+ * The parser reports short English keys, this turns them into a message and a line of advice.
+ * Everything else is a complete message already, optionally followed by advice on a second line.
+ */
+static ErrHint err_hint_base(const StringRef what)
+{
   ErrHint h;
-  if (what.startswith("Unknown prefix") || what.find("attribute prefix") != StringRef::not_found) {
-    h.title = "属性前缀不对";
-    h.hint = "f@ float  i@ int  v@ vector  u@ vector2  q@ vector4  r@ rotation  2@/3@/4@ 矩阵";
+  auto set = [&](const char *title, const char *hint = nullptr) {
+    h.title = tr(title);
+    h.hint = hint ? tr(hint) : "";
+  };
+  if (what.startswith("Unknown prefix")) {
+    const std::string prefix = quoted_part(what, 0);
+    h.title = prefix.empty() ? tr("Unknown attribute prefix") :
+                               trf("Unknown attribute prefix {}@", prefix);
+    h.hint = tr("f@ float  i@ int  b@ bool  v@ vector  u@ vector2  q@ vector4  c@ color\n"
+                "  s@ string  r@ rotation  2@/3@/4@ matrix; arrays are written f[]@name");
+    return h;
+  }
+  if (what.startswith("Unknown statement")) {
+    const std::string name = quoted_part(what, 0);
+    const std::string guess = quoted_part(what, 1);
+    h.title = guess.empty() ? trf("Unknown statement {}", name) :
+                              trf("Unknown statement {}, did you mean {}?", name, guess);
+    h.hint = tr("Only if / else / for / foreach / while can be followed by { }; a function call "
+                "ends with ;");
+    return h;
+  }
+  if (what.startswith("Unexpected '}'")) {
+    set("Unexpected }", "There is no { before this }.");
+    return h;
+  }
+  if (what.startswith("Unclosed '{'")) {
+    set("This { is never closed", "Every { needs a matching }.");
+    return h;
+  }
+  if (what.startswith("'else' without 'if'")) {
+    set("else without an if before it", "else comes right after if (...) { ... }.");
+    return h;
+  }
+  if (what.startswith("Unexpected type name")) {
+    h.title = trf("A type name cannot be used here: {}", quoted_part(what, 0));
+    h.hint = tr("Declare a variable: float x = 1;  A function needs its return type first: "
+                "float sq(float x) { return x * x; }");
+    return h;
+  }
+  if (what.startswith("Missing value")) {
+    set("A value is missing here",
+        "An operator, a comma or = has to be followed by a number, variable, attribute or "
+        "function call.");
     return h;
   }
   if (what.startswith("Unknown function")) {
-    h.title = "没有这个函数";
-    h.hint = unknown_func_fix(what);
-    const int64_t q1 = what.find('\'');
-    const int64_t q2 = (q1 == StringRef::not_found) ? StringRef::not_found :
-                                                      what.find('\'', q1 + 1);
-    if (q1 != StringRef::not_found && q2 != StringRef::not_found && q2 > q1 + 1) {
-      h.title = "没有函数 " + std::string(what.substr(q1 + 1, q2 - q1 - 1));
+    const std::string name = quoted_part(what, 0);
+    const std::string guess = quoted_part(what, 1);
+    if (name.empty()) {
+      h.title = tr("Unknown function");
     }
-    return h;
-  }
-  if (what.startswith("Type mismatch") || what.find("类型不对") != StringRef::not_found) {
-    h.title = std::string(what);
-    if (StringRef(h.title).startswith("Type mismatch: ")) {
-      h.title = h.title.substr(15);
+    else if (guess.empty()) {
+      h.title = trf("Unknown function {}", name);
+      h.hint = unknown_func_fix(what);
     }
-    h.hint = "对照函数签名，把参数换成它要的类型。";
+    else {
+      h.title = trf("Unknown function {}, did you mean {}?", name, guess);
+    }
     return h;
   }
   if (what.startswith("Unterminated string")) {
-    h.title = "字符串少了结束引号";
-    h.hint = "把 \" 或 ' 配对写完。";
+    set("The string has no closing quote", "Close the string with \" or '.");
     return h;
   }
   if (what.startswith("Unterminated comment")) {
-    h.title = "块注释少了结束符 */";
-    h.hint = "每个 /* 都必须有对应的 */。";
+    set("The block comment has no closing */", "Every /* needs a matching */.");
     return h;
   }
   if (what.startswith("Unexpected character")) {
-    h.title = "这里有非法字符";
-    h.hint = "属性写成 f@name / v@P，不要用 $ 或 #。";
+    set("This character is not allowed here",
+        "Attributes are written f@name / v@P, not with $ or #.");
     return h;
   }
   if (what.find("Expected ';'") != StringRef::not_found) {
-    h.title = "少了分号";
-    h.hint = "这句写完后加 ;";
+    set("Missing ;", "End the statement with ;");
     return h;
   }
   if (what.find("Expected ')'") != StringRef::not_found) {
-    h.title = "少了 )";
-    h.hint = "把 ( 和 ) 配齐。";
+    set("Missing )", "Every ( needs a matching ).");
     return h;
   }
   if (what.find("Expected '('") != StringRef::not_found) {
-    h.title = "少了 (";
-    h.hint = "if / for / 函数名后面要跟 (。";
+    set("Missing (", "if / for / a function name is followed by (.");
     return h;
   }
   if (what.find("Expected '}'") != StringRef::not_found) {
-    h.title = "少了 }";
-    h.hint = "每个 { 都要有对应的 }。";
+    set("Missing }", "Every { needs a matching }.");
     return h;
   }
   if (what.find("Expected '{'") != StringRef::not_found) {
-    h.title = "少了 {";
-    h.hint = "代码块用 { } 包起来。";
+    set("Missing {", "Put the block in { }.");
     return h;
   }
   if (what.find("Expected ']'") != StringRef::not_found) {
-    h.title = "少了 ]";
-    h.hint = "数组下标写成 xs[0]。";
+    set("Missing ]", "An array index is written xs[0].");
     return h;
   }
   if (what.find("Expected ','") != StringRef::not_found) {
-    h.title = "少了逗号";
-    h.hint = "参数之间用逗号隔开。";
+    set("Missing comma", "Separate the arguments with commas.");
     return h;
   }
   if (what.find("Expected ':'") != StringRef::not_found) {
-    h.title = "三元运算少了 :";
-    h.hint = "写成 条件 ? 真 : 假";
+    set("The ?: operator misses its :", "Write: condition ? a : b");
     return h;
   }
   if (what.find("Expected '@'") != StringRef::not_found) {
-    h.title = "属性要写成 前缀@名字";
-    h.hint = "例: f@scale  i@index  v@P";
+    set("An attribute is written prefix@name", "Example: f@scale  i@index  v@P");
     return h;
   }
   if (what.find("Expected expression") != StringRef::not_found) {
-    h.title = "这里缺一个值";
-    h.hint = "写数字、变量、属性或函数调用。";
+    set("A value is missing here", "Write a number, variable, attribute or function call.");
     return h;
   }
   if (what.find("Expected variable name") != StringRef::not_found) {
-    h.title = "类型后面要跟变量名";
-    h.hint = "例: int n = 0;";
+    set("A type has to be followed by a variable name", "Example: int n = 0;");
     return h;
   }
   if (what.find("Expected attribute name") != StringRef::not_found) {
-    h.title = "@ 后面要写属性名";
-    h.hint = "例: f@scale = 2;";
+    set("An attribute name is missing after @", "Example: f@scale = 2;");
     return h;
   }
   if (what.find("Expected member name") != StringRef::not_found ||
       what.find("Unknown member") != StringRef::not_found)
   {
-    h.title = "分量名只能是 x/y/z/w、r/g/b/a，或它们的组合";
-    h.hint = "例: v@P.z += 1;  p = p.zxy;  vector2 a = p.zx;";
+    set("A component is one of x/y/z/w or r/g/b/a, or a combination of them",
+        "Example: v@P.z += 1;  p = p.zxy;  vector2 a = p.zx;");
     return h;
   }
   if (what.find("Cannot assign to i@index") != StringRef::not_found) {
-    h.title = "i@index 是只读的";
-    h.hint = "写到别的属性，例如 i@id = i@index;";
+    set("i@index is read-only", "Write to another attribute, for example i@id = i@index;");
     return h;
   }
   if (what.find("Invalid assignment target") != StringRef::not_found) {
-    h.title = "等号左边必须是变量或属性";
-    h.hint = "例: f@scale = 2;";
+    set("The left side of = has to be a variable or an attribute", "Example: f@scale = 2;");
     return h;
   }
   if (what.find("break outside loop") != StringRef::not_found) {
-    h.title = "break 只能写在循环里";
+    set("break is only allowed inside a loop");
     return h;
   }
   if (what.find("continue outside loop") != StringRef::not_found) {
-    h.title = "continue 只能写在循环里";
-    return h;
-  }
-  if (what.find("维度") != StringRef::not_found || what.find("左乘") != StringRef::not_found ||
-      what.find("矩阵") != StringRef::not_found)
-  {
-    h.title = std::string(what);
+    set("continue is only allowed inside a loop");
     return h;
   }
   if (what.startswith("Expected")) {
-    h.title = "这里的符号不对";
-    h.hint = "对照 ^ 的位置：缺分号就加 ;，括号要成对。";
+    set("Unexpected symbol here", "Check for a missing ; and for brackets that are not closed.");
     return h;
   }
-  h.title = std::string(what);
-  if (h.title.size() > 80) {
-    h.title.resize(80);
+  /* A complete message. The advice, when there is any, follows on a second line. */
+  h.title = tr(what);
+  const size_t line_break = h.title.find('\n');
+  if (line_break != std::string::npos) {
+    h.hint = h.title.substr(line_break + 1);
+    h.title.resize(line_break);
   }
   return h;
 }
@@ -475,71 +685,57 @@ static std::string format_vex_error(const StringRef src,
   std::string snippet;
   offset_to_line_col(src, off, line, col, snippet);
   const ErrHint h = err_hint(what);
-  std::string msg = "L" + std::to_string(line) + ": " + h.title;
-  if (!snippet.empty()) {
-    msg += "\n  " + snippet;
-    msg += "\n  ";
-    const int caret = std::clamp(col - 1, 0, int(snippet.size()));
-    msg += std::string(size_t(caret), ' ');
-    msg += '^';
-  }
+  /* No copy of the source line with a caret below it: that only lines up in a monospace font
+   * and the node draws this text with the interface font. The editor underlines the place. */
+  std::string msg = trf("Line {}: {}", line, h.title);
   if (!h.hint.empty()) {
     msg += "\n  " + h.hint;
   }
   return msg;
 }
 
+/** Advice for an unknown function name that is close to a group of functions. */
 static std::string unknown_func_fix(const StringRef what)
 {
-  std::string name;
-  const int64_t q1 = what.find('\'');
-  const int64_t q2 = (q1 == StringRef::not_found) ? StringRef::not_found :
-                                                    what.find('\'', q1 + 1);
-  if (q1 != StringRef::not_found && q2 != StringRef::not_found && q2 > q1 + 1) {
-    name = std::string(what.substr(q1 + 1, q2 - q1 - 1));
-  }
+  const std::string name = quoted_part(what, 0);
   auto has = [&](const char *s) {
     return name.find(s) != std::string::npos;
   };
-  if (has("neigh") || has("neighbor")) {
-    return "点邻居用 pointneighbours(geo, index)；面邻居用 faceneighbours(geo, index)。\n"
-           "  例: i[]@nbr = pointneighbours(0, i@index);";
+  if (has("neigh")) {
+    return tr("Point neighbors: pointneighbours(geo, index); face neighbors: "
+              "faceneighbours(geo, index).\n"
+              "  Example: i[]@nbr = pointneighbours(0, i@index);");
   }
   if (has("prox") || has("dist")) {
-    return "靠近采样用 geometry_proximity(geo, \"face\", 采样点, 命中位置, 距离)。\n"
-           "  例: vector hit; float d; geometry_proximity(1, \"face\", v@P, hit, d);";
+    return tr("The closest point of a surface: geometry_proximity(geo, \"face\", sample, "
+              "hit_pos, dist).\n"
+              "  Example: vector hit; float d; geometry_proximity(1, \"face\", v@P, hit, d);");
   }
   if (has("nearest") || has("nearpoint") || has("knn") || has("rnn")) {
-    return "近邻只有 nearestpoints(geo, k_or_r, mode)，返回 int[]。\n"
-           "  mode 0/\"k\": k 近邻         i[]@pts = nearestpoints(0, 8, \"k\");\n"
-           "  mode 1/\"r\": 半径内全部      i[]@pts = nearestpoints(0, 0.25, \"r\");\n"
-           "  mode 2/\"rk\": 半径内最多 k 个 i[]@pts = nearestpoints(0, 0.25, 8, \"rk\");";
+    return tr("Nearest points: nearestpoints(geo, k_or_r, mode), it returns int[].\n"
+              "  mode 0/\"k\": the k nearest          i[]@pts = nearestpoints(0, 8, \"k\");\n"
+              "  mode 1/\"r\": all within a radius     i[]@pts = nearestpoints(0, 0.25, \"r\");\n"
+              "  mode 2/\"rk\": at most k in a radius  i[]@pts = nearestpoints(0, 0.25, 8, "
+              "\"rk\");");
   }
   if (has("ray")) {
-    return "射线用 raycast(geo, origin, dir, length, is_hit, hit_pos, hit_n, hit_dist)。\n"
-           "  全部命中: ray hits[] = raycastall(...)，再用 rayishit(hits[i]) / rayhitpos(hits[i]) 读每条射线。\n"
-           "  例: int hit; vector hp, hn; float hd; raycast(0, v@P, {0,0,-1}, 10, hit, hp, hn, hd);";
+    return tr("Rays: raycast(geo, origin, dir, length, is_hit, hit_pos, hit_n, hit_dist).\n"
+              "  All hits: ray hits[] = raycastall(...), then rayishit(hits[i]) / "
+              "rayhitpos(hits[i]).\n"
+              "  Example: int hit; vector hp, hn; float hd; raycast(0, v@P, {0,0,-1}, 10, hit, "
+              "hp, hn, hd);");
   }
   if (has("noise") || has("rand") || has("hash") || has("voronoi")) {
-    return "噪声: noise(P, scale, detail, roughness, lacunarity, distortion, dim, type)。\n"
-           "  dim 1-4；type: fbm|multifractal|hybrid|ridged|hetero。\n"
-           "  voronoi 同样有 lacunarity / distortion / dimension / type(f1|f2|smooth_f1|edge|radius)。\n"
-           "  随机: rand(i@index)。";
+    return tr("Noise: noise(P, scale, detail, roughness, lacunarity, distortion, dim, type).\n"
+              "  dim 1-4; type: fbm|multifractal|hybrid|ridged|hetero.\n"
+              "  voronoi(P, ...) has feature f1|f2|smooth_f1|edge|radius.\n"
+              "  Random: rand(i@index).");
   }
   if (has("arr") || has("len") || has("append")) {
-    return "数组: int[] xs = {1,2,3};  或  i[]@ids = array(1,2,3);  长度用 len(xs)。";
+    return tr("Arrays: int[] xs = {1,2,3};  or  i[]@ids = array(1,2,3);  the length is len(xs).");
   }
-  return "把函数名改成下面之一（注意全小写、不要空格）：\n"
-         "  拓扑: pointneighbours / pointedges / pointfaces / facepoints / faceneighbours /\n"
-         "        edgecorners / edgepoints / edgefaces / facecorners /\n"
-         "        cornerpoint / corneredges / offsetcorner /\n"
-         "        pointcurve / curvepoints\n"
-         "  空间: nearestpoints / raycast / raycastall / geometry_proximity / sample_nearest_surface\n"
-         "  写入: addpoint / addprim / setattribute / delete_geometry（geo 只能是 0）\n"
-         "  数学: sin, cos, clamp, mix, map, smooth, length, normalize, noise, rand, array, len\n"
-         "  屏幕导数(仅着色器 wrangle / EEVEE): ddx, ddy, fwidth\n"
-         "  通道: chf(\"name\"), chi(\"name\"), chv(\"name\")\n"
-         "  例: i[]@nbr = pointneighbours(0, i@index);";
+  return tr("Function names are lower case without spaces. Press Ctrl+Space in the editor for "
+            "the list of functions, or open Docs.");
 }
 
 static Diagnostic make_diag(const int64_t off,
@@ -554,141 +750,6 @@ static Diagnostic make_diag(const int64_t off,
   d.message = err_hint(what).title;
   return d;
 }
-
-#if 0
-static void infer_why_fix_unused(const StringRef what, std::string &r_why, std::string &r_fix)
-{
-  if (what.startswith("Unknown prefix") || what.find("attribute prefix") != StringRef::not_found) {
-    r_why = "属性前缀不对。";
-    r_fix = "f@ float, i@ int, b@ bool, u@ vector2, v@ vector, q@ vector4, c@ color,\n"
-            "  r@ rotation, 2@ matrix2, 3@ matrix3, 4@ / m@ matrix, s@ string。";
-    return;
-  }
-  if (what.startswith("Unknown function")) {
-    r_why = "没有这个函数名（拼写、大小写或旧名字都不行）。";
-    r_fix = unknown_func_fix(what);
-    return;
-  }
-  if (what.startswith("Type mismatch")) {
-    r_why = "函数参数的类型对不上。";
-    r_fix = "int / geo 参数不能传 vector。例: pointneighbours(0, i@index);\n"
-            "  不要写 pointneighbours(0, v@P)。float 可以用 int；vector 用 v@P 或 {x,y,z}。";
-    return;
-  }
-  if (what.startswith("Unterminated string")) {
-    r_why = "字符串少了结束引号。";
-    r_fix = "在这一行把 \" 或 ' 配对写完。例: s@name = \"hello\";  或  chf(\"amp\");";
-    return;
-  }
-  if (what.startswith("Unexpected character")) {
-    r_why = "这个字符不是 wrangle 语法的一部分。";
-    r_fix = "删掉它，或放进字符串里。属性用 f@name / i@index / v@P，不要用 $ 或 #。";
-    return;
-  }
-  if (what.find("Expected ';'") != StringRef::not_found) {
-    r_why = "这句话写完了但少了分号。";
-    r_fix = "在语句末尾加 ;  例:\n"
-            "  v@P += {0, 0, 1};\n"
-            "  i[]@nbr = pointneighbours(0, i@index);";
-    return;
-  }
-  if (what.find("Expected ')'") != StringRef::not_found) {
-    r_why = "括号没闭合，少了 )。";
-    r_fix = "把 ( 和 ) 配齐。函数调用例: noise(v@P);  clamp(x, 0, 1);  if (i@index == 0) { ... }";
-    return;
-  }
-  if (what.find("Expected '('") != StringRef::not_found) {
-    r_why = "if / for / while / 函数后面必须跟 (。";
-    r_fix = "例: if (x > 0) { v@P.z += 1; }\n"
-            "     for (int i = 0; i < 10; i++) { ... }\n"
-            "     float n = noise(v@P);";
-    return;
-  }
-  if (what.find("Expected '}'") != StringRef::not_found) {
-    r_why = "花括号没闭合，少了 }。";
-    r_fix = "每个 { 都要有对应的 }。例: if (x > 0) { v@P.z += 1; }";
-    return;
-  }
-  if (what.find("Expected '{'") != StringRef::not_found) {
-    r_why = "这里需要用 { } 包住代码块。";
-    r_fix = "例: if (i@index == 0) { v@P = {0,0,0}; }";
-    return;
-  }
-  if (what.find("Expected ']'") != StringRef::not_found) {
-    r_why = "方括号没闭合，少了 ]。";
-    r_fix = "数组属性: i[]@ids = {1,2,3};  下标: xs[0] = 1;";
-    return;
-  }
-  if (what.find("Expected ','") != StringRef::not_found) {
-    r_why = "参数或列表项之间要用逗号隔开。";
-    r_fix = "例: clamp(x, 0, 1);  vector v = {1, 0, 0};  array(1, 2, 3);";
-    return;
-  }
-  if (what.find("Expected ':'") != StringRef::not_found) {
-    r_why = "三元运算符少了冒号。";
-    r_fix = "写法: 条件 ? 真值 : 假值;  例: float x = (i@index > 0) ? 1.0 : 0.0;";
-    return;
-  }
-  if (what.find("Expected '@'") != StringRef::not_found) {
-    r_why = "属性必须写成 类型前缀 + @ + 名字。";
-    r_fix = "例: f@scale = 1;  i@id = i@index;  v@P += {0,0,1};  s@name = \"a\";  i[]@nbr = pointneighbours(0, i@index);";
-    return;
-  }
-  if (what.find("Expected expression") != StringRef::not_found) {
-    r_why = "这里需要一个值（数字、变量、属性或函数调用）。";
-    r_fix = "例: float x = 1.0;  v@P += v@N;  int n = i@index;";
-    return;
-  }
-  if (what.find("Expected variable name") != StringRef::not_found) {
-    r_why = "类型后面要跟变量名。";
-    r_fix = "例: int n = 0;  float d = 1.0;  vector p = v@P;  int[] ids = {1,2,3};";
-    return;
-  }
-  if (what.find("Expected attribute name") != StringRef::not_found) {
-    r_why = "@ 后面要写属性名字。";
-    r_fix = "例: f@scale = 2;  i[]@ids = {1,2,3};  当前点编号是 i@index，位置是 v@P。";
-    return;
-  }
-  if (what.find("Expected member name") != StringRef::not_found ||
-      what.find("Unknown member") != StringRef::not_found)
-  {
-    r_why = "点号后面只能用分量 x/y/z/w、r/g/b/a，或组合（.xy .zx .zxy）。";
-    r_fix = "例: v@P.z += 1;  p = p.zxy;  vector2 a = p.zx;";
-    return;
-  }
-  if (what.find("Cannot assign to i@index") != StringRef::not_found) {
-    r_why = "i@index 是只读的（当前元素编号），不能赋值。";
-    r_fix = "写到别的属性。例: i@id = i@index;  或  f@score = float(i@index);";
-    return;
-  }
-  if (what.find("Invalid assignment target") != StringRef::not_found) {
-    r_why = "等号左边必须是变量或属性。";
-    r_fix = "例: f@scale = 2;  int n = 1;  xs[0] = 3;  不能写  1 = x;  或  v@P.x.y = 0;";
-    return;
-  }
-  if (what.find("break outside loop") != StringRef::not_found) {
-    r_why = "break 只能写在 for / while 里面。";
-    r_fix = "例: for (int i = 0; i < 10; i++) { if (i == 3) { break; } }";
-    return;
-  }
-  if (what.find("continue outside loop") != StringRef::not_found) {
-    r_why = "continue 只能写在 for / while 里面。";
-    r_fix = "例: for (int i = 0; i < 10; i++) { if (i == 3) { continue; } v@P.z += 1; }";
-    return;
-  }
-  if (what.startswith("Expected")) {
-    r_why = "这一格的符号不对，编译器在等另一个符号。";
-    r_fix = "对照 ^ 指向的位置：缺分号就加 ; ，括号要成对 () [] {}。\n"
-            "  例: v@P += {0,0,1};  if (x > 0) { f@a = 1; }";
-    return;
-  }
-  r_why = "这一行语法不符合 wrangle 规则。";
-  r_fix = "看 ^ 指到的字符。常见写法:\n"
-          "  v@P += {0, 0, 1};\n"
-          "  i[]@nbr = pointneighbours(0, i@index);\n"
-          "  if (i@index == 0) { f@a = 1; }";
-}
-#endif
 
 static bool is_element_index_name(const StringRef name)
 {
@@ -1183,11 +1244,61 @@ struct Expr {
   bool lit_b = false;
   int src_off = 0;
   int src_len = 1;
+  /** Channel call that is a direct `array()` argument and reads a whole list input. */
+  bool list_ch = false;
   Expr *a = nullptr;
   Expr *b = nullptr;
   Expr *c = nullptr;
   Vector<Expr *> args;
 };
+
+/** A channel call such as `chi("name")` reads a whole list when passed directly to `array()`. */
+static bool expr_is_list_channel_arg(const Expr *e)
+{
+  return e && e->kind == ExprKind::Call &&
+         ELEM(e->name,
+              "chi",
+              "chf",
+              "ch",
+              "chb",
+              "chu",
+              "chv",
+              "chq",
+              "chc",
+              "chm",
+              "chr",
+              "chs") &&
+         e->args.size() == 1 && e->args[0] && e->args[0]->kind == ExprKind::LitString;
+}
+
+/** The list reading form of a channel builtin, or the builtin itself when it has none. */
+static Builtin list_channel_builtin(const Builtin builtin)
+{
+  switch (builtin) {
+    case Builtin::Chi:
+      return Builtin::ChiArr;
+    case Builtin::Chf:
+      return Builtin::ChfArr;
+    case Builtin::Chb:
+      return Builtin::ChbArr;
+    case Builtin::Chv:
+      return Builtin::ChvArr;
+    case Builtin::Chc:
+      return Builtin::ChcArr;
+    case Builtin::Chm:
+      return Builtin::ChmArr;
+    case Builtin::Chq:
+      return Builtin::ChqArr;
+    case Builtin::Chr:
+      return Builtin::ChrArr;
+    case Builtin::Chu:
+      return Builtin::ChuArr;
+    case Builtin::Chs:
+      return Builtin::ChsArr;
+    default:
+      return builtin;
+  }
+}
 
 static Type expr_arg_type(const Expr *e, const int i)
 {
@@ -1266,6 +1377,9 @@ struct Parser {
   Vector<Diagnostic> diags;
   Vector<Stmt *> fns;
   int foreach_uid = 0;
+  /** The last consumed token: where a missing `;`, `)` or `,` belongs. */
+  int prev_off = -1;
+  int prev_len = 0;
 
   explicit Parser(const StringRef src) : lex{src}
   {
@@ -1317,10 +1431,87 @@ struct Parser {
     diags.append(make_diag(off, len, true, msg));
   }
 
+  void fail_at_pos(const int64_t off, const int64_t len, const StringRef msg)
+  {
+    if (!error.empty()) {
+      return;
+    }
+    error = format_vex_error(lex.src, off, msg);
+    diags.append(make_diag(off, len, true, msg));
+  }
+
+  int64_t cur_offset() const
+  {
+    return cur.text.data() ? int64_t(cur.text.data() - lex.src.data()) : lex.i;
+  }
+
+  /**
+   * Something is missing after what was written last: report it there. The current token is
+   * usually the start of the next statement, often on another line.
+   */
+  void fail_after_prev(const StringRef msg)
+  {
+    if (prev_off < 0 || prev_off >= cur_offset()) {
+      fail(msg);
+      return;
+    }
+    const StringRef previous = lex.src.substr(prev_off, prev_len);
+    if (previous.size() <= 24 && previous.find('\'') == StringRef::not_found) {
+      fail_at_pos(prev_off, prev_len, std::string(msg) + " after '" + std::string(previous) + "'");
+    }
+    else {
+      fail_at_pos(prev_off, prev_len, msg);
+    }
+  }
+
+  static bool token_is_type_keyword(const TokKind k)
+  {
+    return ELEM(k,
+                TokKind::KwFloat,
+                TokKind::KwInt,
+                TokKind::KwBool,
+                TokKind::KwVector,
+                TokKind::KwVector2,
+                TokKind::KwVector4,
+                TokKind::KwMatrix,
+                TokKind::KwMatrix2,
+                TokKind::KwMatrix3,
+                TokKind::KwRotation,
+                TokKind::KwString,
+                TokKind::KwColor,
+                TokKind::KwVoid,
+                TokKind::KwRay);
+  }
+
+  /** The statement or list ends here, so a closing token is what is missing. */
+  bool at_statement_end() const
+  {
+    return ELEM(cur.kind, TokKind::Semi, TokKind::LBrace, TokKind::RBrace, TokKind::Eof);
+  }
+
+  /**
+   * Between two items of a list. When the statement ends here the closing token is missing,
+   * otherwise the comma between the items.
+   */
+  bool expect_comma_or_close(const char *close_msg, const char *comma_msg)
+  {
+    if (eat(TokKind::Comma)) {
+      return true;
+    }
+    if (ok()) {
+      fail_after_prev(at_statement_end() ? close_msg : comma_msg);
+    }
+    return false;
+  }
+
   bool eat(const TokKind k)
   {
     if (cur.kind != k) {
       return false;
+    }
+    if (cur.text.data()) {
+      prev_off = int(cur.text.data() - lex.src.data());
+      prev_len = std::max(1, int(cur.text.size()));
     }
     cur = lex.next();
     if (!lex.error.empty()) {
@@ -1341,7 +1532,19 @@ struct Parser {
     if (eat(k)) {
       return true;
     }
-    fail(what);
+    if (ELEM(k,
+             TokKind::Semi,
+             TokKind::RParen,
+             TokKind::RBracket,
+             TokKind::RBrace,
+             TokKind::Comma,
+             TokKind::Colon))
+    {
+      fail_after_prev(what);
+    }
+    else {
+      fail(what);
+    }
     return false;
   }
 
@@ -1429,6 +1632,12 @@ struct Parser {
     if (!ok()) {
       return nullptr;
     }
+    /* `2@m` / `3@m` / `4@m` matrix attributes start with a number token. */
+    if (cur.kind == TokKind::Number && !cur.is_float && cur.text.size() == 1 &&
+        ELEM(cur.text[0], '2', '3', '4') && peek_at_after_ident())
+    {
+      return parse_attr();
+    }
     if (cur.kind == TokKind::Number) {
       Expr *e = new_expr();
       const StringRef t = cur.text;
@@ -1501,7 +1710,7 @@ struct Parser {
           if (eat(TokKind::RBrace)) {
             break;
           }
-          if (!expect(TokKind::Comma, "Expected ',' in vector literal")) {
+          if (!expect_comma_or_close("Expected '}'", "Expected ',' in vector literal")) {
             break;
           }
         }
@@ -1530,7 +1739,7 @@ struct Parser {
           if (eat(TokKind::RParen)) {
             break;
           }
-          if (!expect(TokKind::Comma, "Expected ',' in vector list")) {
+          if (!expect_comma_or_close("Expected ')'", "Expected ',' in vector list")) {
             break;
           }
         }
@@ -1571,7 +1780,7 @@ struct Parser {
             if (eat(TokKind::RParen)) {
               break;
             }
-            if (!expect(TokKind::Comma, "Expected ',' in call")) {
+            if (!expect_comma_or_close("Expected ')'", "Expected ',' in call")) {
               break;
             }
           }
@@ -1607,7 +1816,7 @@ struct Parser {
             if (eat(TokKind::RParen)) {
               break;
             }
-            if (!expect(TokKind::Comma, "Expected ',' in call")) {
+            if (!expect_comma_or_close("Expected ')'", "Expected ',' in call")) {
               break;
             }
           }
@@ -1615,7 +1824,18 @@ struct Parser {
       }
       return e;
     }
-    fail("Expected expression");
+    if (token_is_type_keyword(cur.kind)) {
+      fail("Unexpected type name '" + std::string(cur.text) + "'");
+    }
+    else if (at_statement_end() ||
+             ELEM(cur.kind, TokKind::RParen, TokKind::RBracket, TokKind::Comma))
+    {
+      /* `f@x = 1 + ;` misses a value after the `+`, the `;` itself is fine. */
+      fail_after_prev("Missing value");
+    }
+    else {
+      fail("Expected expression");
+    }
     return nullptr;
   }
 
@@ -1644,9 +1864,14 @@ struct Parser {
 
   Expr *parse_attr()
   {
+    const int attr_off = int(cur_offset());
     Type ptype = Type::Void;
     if (cur.kind == TokKind::Ident && cur.text.size() == 1) {
       ptype = prefix_type(cur.text[0]);
+      if (ptype == Type::Void) {
+        fail("Unknown prefix '" + std::string(cur.text) + "'");
+        return nullptr;
+      }
       eat(TokKind::Ident);
     }
     else if (cur.kind == TokKind::Number && !cur.is_float && cur.text.size() == 1 &&
@@ -1670,6 +1895,9 @@ struct Parser {
     Expr *e = new_expr();
     e->kind = ExprKind::Attr;
     e->name = std::string(cur.text);
+    /* Diagnostics underline the whole attribute, prefix included. */
+    e->src_len = std::max(1, int(cur_offset() + cur.text.size()) - attr_off);
+    e->src_off = attr_off;
     if (is_arr) {
       ptype = (ptype == Type::Void) ? Type::FloatArray : array_type_of(ptype);
     }
@@ -1716,6 +1944,8 @@ struct Parser {
       if (eat(TokKind::LBracket)) {
         Expr *idx = new_expr();
         idx->kind = ExprKind::Index;
+        idx->src_off = e->src_off;
+        idx->src_len = e->src_len;
         idx->a = e;
         idx->b = parse_expr();
         expect(TokKind::RBracket, "Expected ']'");
@@ -1839,6 +2069,8 @@ struct Parser {
       Expr *rhs = parse_expr();
       Expr *a = new_expr();
       a->kind = ExprKind::Assign;
+      a->src_off = e->src_off;
+      a->src_len = e->src_len;
       a->op = op;
       a->a = e;
       a->b = rhs;
@@ -2013,8 +2245,25 @@ struct Parser {
     if (eat(TokKind::Semi)) {
       return new_stmt();
     }
-    if (eat(TokKind::LBrace)) {
+    if (cur.kind == TokKind::RBrace) {
+      fail("Unexpected '}'");
+      return nullptr;
+    }
+    if (cur.kind == TokKind::KwElse) {
+      fail("'else' without 'if'");
+      return nullptr;
+    }
+    /* Statements are created after their keyword was read, they still start at the keyword. */
+    const int stmt_off = int(cur_offset());
+    const int stmt_len = std::max(1, int(cur.text.size()));
+    auto new_stmt_here = [&]() {
       Stmt *s = new_stmt();
+      s->src_off = stmt_off;
+      s->src_len = stmt_len;
+      return s;
+    };
+    if (eat(TokKind::LBrace)) {
+      Stmt *s = new_stmt_here();
       s->kind = StmtKind::Block;
       while (ok() && cur.kind != TokKind::RBrace && cur.kind != TokKind::Eof) {
         Stmt *inner = parse_stmt();
@@ -2025,11 +2274,14 @@ struct Parser {
           break;
         }
       }
-      expect(TokKind::RBrace, "Expected '}'");
+      if (!eat(TokKind::RBrace) && ok()) {
+        /* The brace that was never closed is easier to find than the end of the file. */
+        fail_at_pos(stmt_off, 1, "Unclosed '{'");
+      }
       return s;
     }
     if (eat(TokKind::KwIf)) {
-      Stmt *s = new_stmt();
+      Stmt *s = new_stmt_here();
       s->kind = StmtKind::If;
       expect(TokKind::LParen, "Expected '('");
       s->expr = parse_expr();
@@ -2041,7 +2293,7 @@ struct Parser {
       return s;
     }
     if (eat(TokKind::KwWhile)) {
-      Stmt *s = new_stmt();
+      Stmt *s = new_stmt_here();
       s->kind = StmtKind::While;
       expect(TokKind::LParen, "Expected '('");
       s->expr = parse_expr();
@@ -2053,7 +2305,7 @@ struct Parser {
       return parse_foreach();
     }
     if (eat(TokKind::KwFor)) {
-      Stmt *s = new_stmt();
+      Stmt *s = new_stmt_here();
       s->kind = StmtKind::For;
       expect(TokKind::LParen, "Expected '('");
       if (!eat(TokKind::Semi)) {
@@ -2073,19 +2325,19 @@ struct Parser {
       return s;
     }
     if (eat(TokKind::KwBreak)) {
-      Stmt *s = new_stmt();
+      Stmt *s = new_stmt_here();
       s->kind = StmtKind::Break;
       expect(TokKind::Semi, "Expected ';'");
       return s;
     }
     if (eat(TokKind::KwContinue)) {
-      Stmt *s = new_stmt();
+      Stmt *s = new_stmt_here();
       s->kind = StmtKind::Continue;
       expect(TokKind::Semi, "Expected ';'");
       return s;
     }
     if (eat(TokKind::KwReturn)) {
-      Stmt *s = new_stmt();
+      Stmt *s = new_stmt_here();
       s->kind = StmtKind::Return;
       if (!eat(TokKind::Semi)) {
         s->expr = parse_expr();
@@ -2100,6 +2352,16 @@ struct Parser {
     Stmt *s = new_stmt();
     s->kind = StmtKind::Expr;
     s->expr = parse_expr();
+    if (ok() && cur.kind == TokKind::LBrace && s->expr && s->expr->kind == ExprKind::Call) {
+      /* `fi (x) {` or `whlie (x) {`: a call followed by a block is a mistyped statement. */
+      static const Vector<std::string> keywords = {"if", "for", "foreach", "while", "else"};
+      const std::string guess = closest_name(s->expr->name, keywords);
+      fail_at_pos(s->expr->src_off,
+                  s->expr->src_len,
+                  "Unknown statement '" + s->expr->name + "'" +
+                      (guess.empty() ? "" : ", did you mean '" + guess + "'?"));
+      return s;
+    }
     expect(TokKind::Semi, "Expected ';'");
     return s;
   }
@@ -2335,6 +2597,143 @@ struct Compiler {
     diags.append(make_diag(off, len, true, msg));
   }
 
+  /** Names that already got a "not declared" warning, one warning per name is enough. */
+  Vector<std::string> typo_warned;
+
+  /**
+   * A name that is not declared is an attribute (`pscale`, `P`). When it is one typo away from a
+   * declared variable it is far more likely a mistake, which would otherwise pass silently.
+   */
+  void warn_if_misspelled_local(const Expr *e)
+  {
+    /* Shader wrangles name their inputs and outputs without a prefix all the time. */
+    if (!e || shader_material || e->name.size() < 3 || typo_warned.contains(e->name)) {
+      return;
+    }
+    /* Attributes that are commonly read by their bare name, next to a variable like `scale`. */
+    if (ELEM(StringRef(e->name),
+             "pscale",
+             "position",
+             "normal",
+             "color",
+             "radius",
+             "orient",
+             "velocity",
+             "density",
+             "scale",
+             "name",
+             "rest",
+             "weight"))
+    {
+      return;
+    }
+    Vector<std::string> names;
+    for (const Local &local : locals) {
+      if (!StringRef(local.name).startswith("__")) {
+        names.append(local.name);
+      }
+    }
+    const std::string guess = closest_name(e->name, names);
+    if (guess.empty()) {
+      return;
+    }
+    typo_warned.append(e->name);
+    int line = 1;
+    int col = 1;
+    std::string snippet;
+    if (parser) {
+      offset_to_line_col(parser->lex.src, e->src_off, line, col, snippet);
+    }
+    warn_at(e,
+            trf("Line {}: {} is not declared and is used as attribute @{} here. Did you mean {}?",
+                line,
+                e->name,
+                e->name,
+                guess));
+  }
+
+  /** Whether the type of \a e is known for sure. Attributes read by a bare name or through
+   * `point()` only get a guessed type, those must not cause type errors. */
+  bool expr_type_is_certain(const Expr *e)
+  {
+    if (!e) {
+      return false;
+    }
+    switch (e->kind) {
+      case ExprKind::LitInt:
+      case ExprKind::LitFloat:
+      case ExprKind::LitBool:
+      case ExprKind::LitString:
+        return true;
+      case ExprKind::Ident:
+        return find_local(e->name) != nullptr;
+      case ExprKind::Attr:
+        return e->attr_type != Type::Void;
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * Report an assignment that cannot work: a whole array into a single value (or the other way
+   * around) and strings into numbers. Returns false after reporting.
+   */
+  bool check_assignable(const Expr *value,
+                        const Type from,
+                        const Type to,
+                        const Expr *attribute = nullptr)
+  {
+    if (from == Type::Void || to == Type::Void || from == to) {
+      return true;
+    }
+    const bool from_array = type_is_array(from);
+    const bool to_array = type_is_array(to);
+    if (from_array && !to_array) {
+      if (attribute) {
+        /* `i@nbr = pointneighbours(...)`: a single value attribute cannot hold an array, it has
+         * to be declared as one with `[]`. Attributes exist for these four element types. */
+        const std::string prefix = array_attr_prefix(from);
+        fail_at(attribute,
+                prefix.empty() ?
+                    trf("Cannot store the array {} in the single value attribute @{}",
+                        type_name(from),
+                        attribute->name) :
+                    trf("Cannot store the array {} in the single value attribute @{}\n"
+                        "An array attribute needs [], write {}@{}",
+                        type_name(from),
+                        attribute->name,
+                        prefix,
+                        attribute->name));
+        return false;
+      }
+      fail_at(value,
+              trf("Cannot assign the array {} to {}\n"
+                  "Use a variable with [], for example {} xs[] = ...; a single item is xs[0]",
+                  type_name(from),
+                  type_name(to),
+                  type_name(array_elem_type(from))));
+      return false;
+    }
+    if (!from_array && to_array) {
+      if (expr_type_is_certain(value)) {
+        fail_at(value,
+                trf("Cannot assign {} to the array {}\n"
+                    "Build an array with array(...) or {{a, b, c}}",
+                    type_name(from),
+                    type_name(to)));
+        return false;
+      }
+      return true;
+    }
+    if (!from_array && (from == Type::String) != (to == Type::String) &&
+        (from == Type::String || expr_type_is_certain(value)))
+    {
+      fail_at(value, trf("Cannot assign {} to {}", type_name(from), type_name(to)));
+      return false;
+    }
+    return true;
+  }
+
   void emit(const Op op, const int32_t imm = 0)
   {
     Inst inst;
@@ -2539,6 +2938,7 @@ struct Compiler {
       m.add("lerp", int(Builtin::Mix));
       m.add("map", int(Builtin::Map));
       m.add("smooth", int(Builtin::Smooth));
+      m.add("smoothstep", int(Builtin::Smooth));
       m.add("noise", int(Builtin::Noise));
       m.add("hash", int(Builtin::Hash));
       m.add("rand", int(Builtin::Rand));
@@ -2577,6 +2977,20 @@ struct Compiler {
       m.add("eigendecomp", int(Builtin::EigenFn));
       m.add("invert", int(Builtin::Invert));
       m.add("rotate_rotation", int(Builtin::RotateRotation));
+      m.add("qmultiply", int(Builtin::RotateRotation));
+      m.add("qinvert", int(Builtin::Invert));
+      m.add("invert_rotation", int(Builtin::Invert));
+      m.add("qrotate", int(Builtin::QRotate));
+      m.add("slerp", int(Builtin::Slerp));
+      m.add("dihedral", int(Builtin::Dihedral));
+      m.add("eulertoquaternion", int(Builtin::EulerToQuat));
+      m.add("quaterniontoeuler", int(Builtin::QuatToEuler));
+      m.add("qconvert", int(Builtin::QConvert));
+      m.add("qdistance", int(Builtin::QDistance));
+      m.add("rotate", int(Builtin::RotateFn));
+      m.add("lookat", int(Builtin::LookAt));
+      m.add("hsvtorgb", int(Builtin::HsvToRgb));
+      m.add("rgbtohsv", int(Builtin::RgbToHsv));
       m.add("to_euler", int(Builtin::RotationFn));
       m.add("array", int(Builtin::ArrayFn));
       m.add("stringarray", int(Builtin::ArrayStr));
@@ -2585,6 +2999,13 @@ struct Compiler {
       m.add("removeindex", int(Builtin::RemoveIndex));
       m.add("removevalue", int(Builtin::RemoveValue));
       m.add("sort", int(Builtin::SortArr));
+      m.add("sum", int(Builtin::ArraySum));
+      m.add("unique", int(Builtin::ArrayUnique));
+      m.add("find", int(Builtin::ArrayFind));
+      m.add("slice", int(Builtin::ArraySlice));
+      m.add("union", int(Builtin::ArrayUnion));
+      m.add("subtract", int(Builtin::ArraySubtract));
+      m.add("intersect", int(Builtin::ArrayIntersect));
       m.add("sortorder", int(Builtin::SortOrder));
       m.add("sortbyorder", int(Builtin::SortByOrder));
       m.add("len", int(Builtin::Len));
@@ -2630,6 +3051,8 @@ struct Compiler {
       m.add("chm", int(Builtin::Chm));
       m.add("chr", int(Builtin::Chr));
       m.add("chs", int(Builtin::Chs));
+      m.add("chramp", int(Builtin::Chramp));
+      m.add("chcurve", int(Builtin::ChcurveF));
       m.add("valuetostring", int(Builtin::ValueToString));
       m.add("format", int(Builtin::Format));
       m.add("color", int(Builtin::ColorFn));
@@ -2675,6 +3098,34 @@ static bool expr_const_vec3(const Expr *e, float3 &r);
 void Compiler::emit_coerce(const Type from, const Type to)
 {
   if (to == Type::Void || from == to) {
+    return;
+  }
+  if (from == Type::IntArray && to == Type::FloatArray) {
+    /* `f[]@a = array(1, 2);` is read back from this value later in the program, so it has to be a
+     * float array already, otherwise `append(f[]@a, 0.5)` appends an integer. */
+    emit(Op::Call, int(Builtin::ArrayFloat));
+    prog.code.last().a = 1;
+    return;
+  }
+  if (type_is_array(from) && type_is_array(to)) {
+    /* 3D and 4D vector arrays are different values at run time. */
+    const Type runtime_from = array_runtime_type(from);
+    const Type runtime_to = array_runtime_type(to);
+    const bool from_vectors = runtime_from == Type::VecArray || type_is_vec4_array(runtime_from);
+    if (runtime_from == runtime_to || !from_vectors) {
+      return;
+    }
+    if (runtime_to == Type::VecArray) {
+      emit(Op::Call, int(Builtin::ArrayVec));
+      prog.code.last().a = 1;
+    }
+    else if (type_is_vec4_array(runtime_to)) {
+      emit(Op::Call,
+           int(runtime_to == Type::ColorArray ? Builtin::ArrayColor :
+               runtime_to == Type::RotArray   ? Builtin::ArrayRot :
+                                                Builtin::ArrayVec4));
+      prog.code.last().a = 1;
+    }
     return;
   }
   Builtin fn = Builtin::FloatFn;
@@ -2784,6 +3235,7 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
         return e->type;
       }
       /* Bare attribute name (Houdini-style P / pscale / previously written i[]@pts). */
+      warn_if_misspelled_local(e);
       const Type t = ident_fallback_type(e->name);
       const std::string aname = canonical_attr_name(e->name);
       emit_push_attr(aname, t);
@@ -2925,7 +3377,9 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
         if (tb == Type::Rotation &&
             ELEM(ta, Type::Vector, Type::Vector2, Type::Vector4, Type::Color))
         {
-          warn_at(e, "向量×旋转：请改成左乘 q * v。这里仍按 q 旋转 v。");
+          warn_at(e,
+                  tr("vector × rotation: write q * v instead. The vector is still rotated by "
+                     "q."));
           e->type = (ta == Type::Vector2) ? Type::Vector2 :
                     (ta == Type::Vector4) ? Type::Vector4 :
                                             Type::Vector;
@@ -2940,8 +3394,9 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
         if (am && bm) {
           if (type_linear_dim(ta) != type_linear_dim(tb)) {
             fail_at(e,
-                    "矩阵乘法维度不一致：" + type_name(ta) + " × " + type_name(tb) +
-                        "。两边阶数必须相同。");
+                    trf("Matrix sizes do not match: {} × {}\nBoth sides need the same size.",
+                        type_name(ta),
+                        type_name(tb)));
             return Type::Void;
           }
           e->type = ta;
@@ -2952,8 +3407,12 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
           const int vd = type_linear_dim(tb);
           if (md != vd) {
             fail_at(e,
-                    "矩阵×向量维度不一致：" + type_name(ta) + " × " + type_name(tb) + "。左乘要 " +
-                        std::to_string(md) + " 维向量。4×4 变换点请用 transform_point(v, M)。");
+                    trf("Matrix and vector sizes do not match: {} × {}\n"
+                        "This matrix multiplies a {}D vector. To transform a point by a 4×4 "
+                        "matrix use transform_point(v, M).",
+                        type_name(ta),
+                        type_name(tb),
+                        md));
             return Type::Void;
           }
           e->type = vec_type_for_dim(md);
@@ -2964,11 +3423,15 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
           const int md = type_linear_dim(tb);
           if (vd != md) {
             fail_at(e,
-                    "向量×矩阵维度不一致：" + type_name(ta) + " × " + type_name(tb) +
-                        "。请写成矩阵左乘 M * v，且两边维数相同。");
+                    trf("Vector and matrix sizes do not match: {} × {}\n"
+                        "Write M * v with the matrix on the left and matching sizes.",
+                        type_name(ta),
+                        type_name(tb)));
             return Type::Void;
           }
-          warn_at(e, "向量×矩阵：请改成矩阵左乘 M * v。这里按 vᵀ × M 计算。");
+          warn_at(e,
+                  tr("vector × matrix: write M * v with the matrix on the left. This is "
+                     "computed as vᵀ × M."));
           e->type = vec_type_for_dim(md);
           return e->type;
         }
@@ -2978,8 +3441,11 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
         }
         if (am || bm) {
           fail_at(e,
-                  "不能做 " + type_name(ta) + " × " + type_name(tb) +
-                      "。矩阵只能乘同阶矩阵、同维向量，或 float（缩放）。");
+                  trf("Cannot multiply {} × {}\n"
+                      "A matrix multiplies a matrix or a vector of the same size, or a float "
+                      "(scale).",
+                      type_name(ta),
+                      type_name(tb)));
           return Type::Void;
         }
       }
@@ -3013,14 +3479,27 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
           }
         }
         if (ufi < 0) {
-          fail("Unknown function '" + e->name + "'");
+          Vector<std::string> owned;
+          Vector<expression::CompletionItem> items;
+          gather_completions(owned, items, shader_material);
+          Vector<std::string> names;
+          for (const expression::CompletionItem &item : items) {
+            if (item.kind == expression::CompletionKind::Function) {
+              names.append(std::string(item.name));
+            }
+          }
+          for (const UserFn &fn : prog.user_fns) {
+            names.append(fn.name);
+          }
+          const std::string guess = closest_name(e->name, names);
+          fail("Unknown function '" + e->name + "'" +
+               (guess.empty() ? "" : ", did you mean '" + guess + "'?"));
           return Type::Void;
         }
         const UserFn &fn = prog.user_fns[ufi];
         if (int(e->args.size()) != int(fn.param_types.size())) {
           fail_at(e,
-                  "函数 " + e->name + " 需要 " + std::to_string(int(fn.param_types.size())) +
-                      " 个参数");
+                  trf("Function {} takes {} arguments", e->name, int(fn.param_types.size())));
           return Type::Void;
         }
         for (int i = 0; i < int(e->args.size()); i++) {
@@ -3033,6 +3512,17 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
       }
       Builtin builtin = Builtin(bid);
       int call_id = bid;
+      if (e->list_ch) {
+        builtin = list_channel_builtin(builtin);
+        call_id = int(builtin);
+      }
+      if (builtin == Builtin::ArrayFn) {
+        for (Expr *arg : e->args) {
+          if (expr_is_list_channel_arg(arg)) {
+            arg->list_ch = true;
+          }
+        }
+      }
       if (builtin == Builtin::Identity && type_is_matrix(hint) && hint != Type::Matrix) {
         builtin = matrix_ctor_of(hint);
         call_id = int(builtin);
@@ -3131,8 +3621,10 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
         if (!arg || arg->kind != ExprKind::LitInt || arg->i == 0) {
           return;
         }
-        warn(std::string(fn) + ": geo 输入为 " + std::to_string(arg->i) +
-             "，已自动改为 0（只支持当前几何 geo 0）");
+        warn(trf("{}: the geometry input {} was changed to 0, only the current geometry (geo 0) is "
+                 "supported",
+                 fn,
+                 arg->i));
         arg->i = 0;
       };
       if (builtin == Builtin::Addpoint && n_in >= 2) {
@@ -3161,11 +3653,11 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
         }
       }
       if (builtin == Builtin::Map && n_in != 5) {
-        fail("map(value, from_min, from_max, to_min, to_max) 需要 5 个参数");
+        fail("map(value, from_min, from_max, to_min, to_max) takes 5 arguments");
         return Type::Void;
       }
       if (builtin == Builtin::Smooth && n_in != 1 && n_in != 3) {
-        fail("smooth(value) 或 smooth(min, max, value)");
+        fail("smooth(value) or smooth(min, max, value)");
         return Type::Void;
       }
       if (builtin == Builtin::ValueToString && n_in != 2 && n_in != 3) {
@@ -3177,15 +3669,16 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
         return Type::Void;
       }
       if (builtin == Builtin::SvdFn && argc < 4) {
-        fail("svd(m, U, s, V) 需要矩阵和三个输出：U、奇异值、V");
+        fail("svd(m, U, s, V) takes a matrix and three outputs: U, the singular values and V");
         return Type::Void;
       }
       if (builtin == Builtin::PolarDecompFn && argc < 3) {
-        fail("pd(m, R, S) 需要矩阵和两个输出：旋转 R、缩放 S");
+        fail("pd(m, R, S) takes a matrix and two outputs: the rotation R and the stretch S");
         return Type::Void;
       }
       if (builtin == Builtin::EigenFn && argc < 3) {
-        fail("eigen(m, evals, evecs) 需要矩阵和两个输出：特征值、特征向量");
+        fail("eigen(m, evals, evecs) takes a matrix and two outputs: the eigenvalues and the "
+             "eigenvectors");
         return Type::Void;
       }
       bool decomp_arg0_done = false;
@@ -3196,7 +3689,7 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
         decomp_arg0_done = true;
         const Type mt = e->args[0]->type;
         if (!type_is_matrix(mt)) {
-          fail_at(e->args[0], "svd / pd / eigen 的第一个参数必须是矩阵");
+          fail_at(e->args[0], "The first argument of svd / pd / eigen has to be a matrix");
           return Type::Void;
         }
         const int dim = type_linear_dim(mt);
@@ -3589,11 +4082,88 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
             continue;
           }
         }
+        if (builtin == Builtin::Append && i > 0 && arg && arg->kind == ExprKind::VecLit &&
+            e->args[0] && e->args[0]->type != Type::Void)
+        {
+          /* `append(xs, {4, 5, 6})`: the braces are a list of items for a number or string array,
+           * and a single item for an array of vectors or matrices. */
+          const Type first = e->args[0]->type;
+          const Type array_type = type_is_array(first) ? first : array_type_of(first);
+          const Type elem = array_elem_type(array_type);
+          const bool list = ELEM(elem, Type::Int, Type::Float, Type::Bool, Type::String);
+          compile_expr(arg, false, list ? array_type : elem);
+          continue;
+        }
         compile_expr(arg);
+      }
+      /* `min(arr)` / `max(arr)` reduce an array instead of comparing two values. */
+      const bool array_min_max = ELEM(builtin, Builtin::Min, Builtin::Max) && n_in == 1 &&
+                                 type_is_array(expr_arg_type(e, 0));
+      {
+        /* Math functions with a fixed number of arguments. Extra arguments used to be ignored
+         * and missing ones read as zero, without any message. */
+        int min_args = -1;
+        int max_args = -1;
+        switch (builtin) {
+          case Builtin::Sin:
+          case Builtin::Cos:
+          case Builtin::Tan:
+          case Builtin::Asin:
+          case Builtin::Acos:
+          case Builtin::Atan:
+          case Builtin::Floor:
+          case Builtin::Ceil:
+          case Builtin::Round:
+          case Builtin::Trunc:
+          case Builtin::Sqrt:
+          case Builtin::Exp:
+          case Builtin::Log:
+          case Builtin::Sign:
+          case Builtin::Fract:
+          case Builtin::Radians:
+          case Builtin::Degrees:
+          case Builtin::Abs:
+          case Builtin::Normalize:
+          case Builtin::Length:
+            min_args = max_args = 1;
+            break;
+          case Builtin::Atan2:
+          case Builtin::Pow:
+          case Builtin::Distance:
+          case Builtin::Dot:
+          case Builtin::Cross:
+            min_args = max_args = 2;
+            break;
+          case Builtin::Min:
+          case Builtin::Max:
+            min_args = array_min_max ? 1 : 2;
+            max_args = 2;
+            break;
+          case Builtin::Mix:
+            min_args = max_args = 3;
+            break;
+          case Builtin::Clamp:
+            min_args = 1;
+            max_args = 3;
+            break;
+          default:
+            break;
+        }
+        if (min_args >= 0 && (n_in < min_args || n_in > max_args)) {
+          fail_at(e,
+                  (min_args == max_args) ?
+                      trf("{} takes {} arguments, got {}", e->name, min_args, n_in) :
+                      trf("{} takes {} to {} arguments, got {}",
+                          e->name,
+                          min_args,
+                          max_args,
+                          n_in));
+          return Type::Void;
+        }
       }
       {
         const StringRef tags = function_param_types(e->name);
-        if (!tags.is_empty() && n_in > 0) {
+        if (!tags.is_empty() && n_in > 0 && !array_min_max) {
           StringRef ins[16];
           int n_tag = 0;
           StringRef rest = tags;
@@ -3615,6 +4185,18 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
             const bool second_fits = n_in >= 2 && e->args[1] &&
                                      type_fits_tag(ins[1], e->args[1]->type);
             offset = (first_is_geo && second_fits) ? 0 : 1;
+            /* The leading arguments can be left out as well: `point(3)` is only the index. */
+            auto fits_from = [&](const int first_tag) {
+              for (int i = 0; i < n_in; i++) {
+                if (e->args[i] && !type_fits_tag(ins[first_tag + i], e->args[i]->type)) {
+                  return false;
+                }
+              }
+              return true;
+            };
+            if (!fits_from(offset) && fits_from(n_tag - n_in)) {
+              offset = n_tag - n_in;
+            }
           }
           else if (n_in == n_tag + 1 && ins[0] != "geo" && e->args[0] &&
                    e->args[0]->type == Type::Int)
@@ -3630,12 +4212,220 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
             }
             const StringRef want = ins[offset + i];
             if (!type_fits_tag(want, arg->type)) {
-              fail("Type mismatch: argument " + std::to_string(arg_base + i + 1) + " of '" +
-                   e->name + "' expected " + expect_tag_name(want) + ", got " +
-                   type_name(arg->type));
+              if (arg->kind == ExprKind::Ident && find_local(arg->name) == nullptr) {
+                /* A name that was never declared is read as a float attribute. Saying
+                 * "expected matrix, got float" hides that the variable does not exist. */
+                fail_at(arg,
+                        trf("{} is not declared (it is read as attribute @{}), but argument {} "
+                            "of {} has to be {}\n"
+                            "Declare the variable before using it, or check its spelling.",
+                            arg->name,
+                            arg->name,
+                            arg_base + i + 1,
+                            e->name,
+                            tr(expect_tag_name(want))));
+                return Type::Void;
+              }
+              fail_at(arg,
+                      trf("Argument {} of {} has to be {}, but this is {}\n"
+                          "Compare with the signature of the function and pass the type it "
+                          "asks for.",
+                          arg_base + i + 1,
+                          e->name,
+                          tr(expect_tag_name(want)),
+                          type_name(arg->type)));
               return Type::Void;
             }
           }
+        }
+      }
+      /* `vector r = rand();` is a random value per component, not one value in all of them. */
+      if (builtin == Builtin::Rand && hint == Type::Vector) {
+        builtin = Builtin::RandVec;
+        call_id = int(builtin);
+      }
+      if (array_min_max) {
+        builtin = (builtin == Builtin::Min) ? Builtin::ArrayMin : Builtin::ArrayMax;
+        call_id = int(builtin);
+      }
+      if (ELEM(builtin,
+               Builtin::ArrayMin,
+               Builtin::ArrayMax,
+               Builtin::ArraySum,
+               Builtin::ArrayUnique))
+      {
+        const Type array_type = expr_arg_type(e, 0);
+        const bool allow_strings = builtin != Builtin::ArraySum;
+        if (n_in != 1 ||
+            !(ELEM(array_type,
+                   Type::IntArray,
+                   Type::FloatArray,
+                   Type::VecArray,
+                   Type::Vec2Array) ||
+              (allow_strings && array_type == Type::StringArray)))
+        {
+          fail(allow_strings ?
+                   trf("{}(array) needs one int, float, vector or string array", e->name) :
+                   trf("{}(array) needs one int, float or vector array", e->name));
+          return Type::Void;
+        }
+      }
+      if (ELEM(builtin, Builtin::ArrayUnion, Builtin::ArraySubtract, Builtin::ArrayIntersect)) {
+        const Type type_a = expr_arg_type(e, 0);
+        const Type type_b = expr_arg_type(e, 1);
+        const bool same_kind = type_a == type_b && ELEM(type_a,
+                                                        Type::IntArray,
+                                                        Type::FloatArray,
+                                                        Type::VecArray,
+                                                        Type::StringArray);
+        const bool int_and_float = ELEM(type_a, Type::IntArray, Type::FloatArray) &&
+                                   ELEM(type_b, Type::IntArray, Type::FloatArray);
+        const bool vectors = ELEM(type_a, Type::VecArray, Type::Vec2Array) &&
+                             ELEM(type_b, Type::VecArray, Type::Vec2Array);
+        if (n_in != 2 || !(same_kind || int_and_float || vectors)) {
+          fail(trf("{}(a, b) needs two arrays of the same kind: int, float, vector or string",
+                   e->name));
+          return Type::Void;
+        }
+      }
+      if (builtin == Builtin::Append) {
+        /* `append(array, item, ...)`: every further argument is one item, or an array of items. */
+        if (n_in < 2) {
+          fail("append(array, item, ...) needs an array and at least one item or array to add");
+          return Type::Void;
+        }
+        const Type first = expr_arg_type(e, 0);
+        const Type array_type = type_is_array(first) ? first : array_type_of(first);
+        auto kind_of = [](const Type type) {
+          if (ELEM(type, Type::Int, Type::Float, Type::Bool)) {
+            return 0;
+          }
+          if (type == Type::String) {
+            return 1;
+          }
+          if (type_is_matrix(type)) {
+            return 3;
+          }
+          if (type == Type::Ray) {
+            return 4;
+          }
+          return 2;
+        };
+        const int array_kind = kind_of(array_elem_type(array_type));
+        for (int i = 1; i < n_in && first != Type::Void; i++) {
+          const Expr *item = e->args[i];
+          const Type item_type = expr_arg_type(e, i);
+          if (!item || item_type == Type::Void) {
+            continue;
+          }
+          if (type_is_array(item_type)) {
+            if (kind_of(array_elem_type(item_type)) != array_kind) {
+              fail_at(item,
+                      trf("Cannot append the array {} to the array {}\n"
+                          "Both arrays need items of the same kind.",
+                          type_name(item_type),
+                          type_name(array_type)));
+              return Type::Void;
+            }
+          }
+          else if (kind_of(item_type) != array_kind &&
+                   /* A number becomes a vector with that value in every component. */
+                   !(array_kind == 2 && kind_of(item_type) == 0) &&
+                   expr_type_is_certain(item))
+          {
+            fail_at(item,
+                    trf("Cannot append {} to the array {}\n"
+                        "The items of this array are {}.",
+                        type_name(item_type),
+                        type_name(array_type),
+                        type_name(array_elem_type(array_type))));
+            return Type::Void;
+          }
+        }
+      }
+      if (builtin == Builtin::ArrayFind) {
+        const Type array_type = expr_arg_type(e, 0);
+        if (n_in != 2 ||
+            !(ELEM(array_type,
+                   Type::IntArray,
+                   Type::FloatArray,
+                   Type::VecArray,
+                   Type::Vec2Array,
+                   Type::StringArray) ||
+              type_is_vec4_array(array_type)))
+        {
+          fail("find(array, value) needs an int, float, vector or string array and a value");
+          return Type::Void;
+        }
+        const bool string_value = expr_arg_type(e, 1) == Type::String;
+        if (string_value != (array_type == Type::StringArray)) {
+          fail(string_value ? "find: a string can only be searched in a string array" :
+                              "find: a string array needs a string to search for");
+          return Type::Void;
+        }
+      }
+      if (builtin == Builtin::ArraySlice) {
+        if (n_in < 2 || n_in > 4 || !type_is_array(expr_arg_type(e, 0))) {
+          fail("slice(array, start, end, step) needs an array and a start index, end and step are "
+               "optional");
+          return Type::Void;
+        }
+      }
+      if (ELEM(builtin, Builtin::Chramp, Builtin::ChcurveF)) {
+        const bool is_ramp = builtin == Builtin::Chramp;
+        if (n_in < 2 || n_in > (is_ramp ? 2 : 3) || !e->args[0] ||
+            e->args[0]->kind != ExprKind::LitString || e->args[0]->name.empty())
+        {
+          fail(is_ramp ? "chramp(\"name\", position) needs a quoted name and a position" :
+                         "chcurve(\"name\", value) needs a quoted name and a value");
+          return Type::Void;
+        }
+        RampKind kind = RampKind::ColorRamp;
+        if (is_ramp) {
+          /* `float f = chramp(...)` reads the ramp as a float ramp. */
+          if (ELEM(hint, Type::Float, Type::Int, Type::Bool)) {
+            builtin = Builtin::ChrampF;
+          }
+        }
+        else {
+          /* The value decides whether this is a float, vector or color curve. */
+          const Type value_type = e->args[1] ? e->args[1]->type : Type::Float;
+          if (ELEM(value_type, Type::Color, Type::Vector4)) {
+            builtin = Builtin::ChcurveC;
+            kind = RampKind::ColorCurve;
+          }
+          else if (ELEM(value_type, Type::Vector, Type::Vector2)) {
+            builtin = Builtin::ChcurveV;
+            kind = RampKind::VectorCurve;
+          }
+          else if (ELEM(value_type, Type::Float, Type::Int, Type::Bool)) {
+            kind = RampKind::FloatCurve;
+          }
+          else {
+            fail(trf("chcurve: the value has to be a float, vector or color, got {}",
+                     type_name(value_type)));
+            return Type::Void;
+          }
+        }
+        call_id = int(builtin);
+        const std::string &parm_name = e->args[0]->name;
+        bool known = false;
+        for (const Program::RampParm &parm : prog.ramp_parms) {
+          if (parm.name != parm_name) {
+            continue;
+          }
+          if (parm.kind != kind) {
+            fail(trf("{} is used as more than one kind of ramp or curve\n"
+                     "Use a different name for each chramp() and each float, vector or color "
+                     "chcurve()",
+                     parm_name));
+            return Type::Void;
+          }
+          known = true;
+          break;
+        }
+        if (!known) {
+          prog.ramp_parms.append({parm_name, kind});
         }
       }
       /* `float abc[] = array();` must be a float array, not the untyped int array(). */
@@ -3645,12 +4435,24 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
             builtin = Builtin::ArrayFloat;
             break;
           case Type::VecArray:
+          case Type::Vec2Array:
             builtin = Builtin::ArrayVec;
+            break;
+          case Type::Vec4Array:
+            builtin = Builtin::ArrayVec4;
+            break;
+          case Type::ColorArray:
+            builtin = Builtin::ArrayColor;
+            break;
+          case Type::RotArray:
+            builtin = Builtin::ArrayRot;
             break;
           case Type::StringArray:
             builtin = Builtin::ArrayStr;
             break;
           case Type::MatArray:
+          case Type::Mat2Array:
+          case Type::Mat3Array:
             builtin = Builtin::ArrayMat;
             break;
           case Type::RayArray:
@@ -3747,6 +4549,77 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
             e->type = Type::Float;
           }
           break;
+        case Builtin::RandVec:
+        case Builtin::QRotate:
+        case Builtin::QuatToEuler:
+        case Builtin::ChcurveV:
+          e->type = Type::Vector;
+          break;
+        case Builtin::ArrayMin:
+        case Builtin::ArrayMax:
+        case Builtin::ArraySum:
+          e->type = array_elem_type(expr_arg_type(e, 0));
+          break;
+        case Builtin::ArrayUnique:
+        case Builtin::ArraySlice:
+          e->type = expr_arg_type(e, 0);
+          break;
+        case Builtin::ArrayFind:
+          e->type = Type::IntArray;
+          break;
+        case Builtin::ArrayUnion:
+        case Builtin::ArraySubtract:
+        case Builtin::ArrayIntersect:
+          /* An int array combined with a float array gives floats. */
+          if (expr_arg_type(e, 0) == expr_arg_type(e, 1)) {
+            e->type = expr_arg_type(e, 0);
+          }
+          else if (ELEM(expr_arg_type(e, 0), Type::VecArray, Type::Vec2Array)) {
+            e->type = Type::VecArray;
+          }
+          else {
+            e->type = Type::FloatArray;
+          }
+          break;
+        case Builtin::HsvToRgb:
+        case Builtin::RgbToHsv:
+          e->type = (n_in < 3 && expr_arg_type(e, 0) == Type::Color) ? Type::Color : Type::Vector;
+          break;
+        case Builtin::Slerp:
+        case Builtin::Dihedral:
+        case Builtin::EulerToQuat:
+          e->type = Type::Rotation;
+          break;
+        case Builtin::QConvert:
+        case Builtin::LookAt:
+          e->type = Type::Matrix3;
+          break;
+        case Builtin::QDistance:
+        case Builtin::ChrampF:
+        case Builtin::ChcurveF:
+          e->type = Type::Float;
+          break;
+        case Builtin::Chramp:
+        case Builtin::ChcurveC:
+          e->type = Type::Color;
+          break;
+        case Builtin::RotateFn: {
+          /* `rotate(a, b)` multiplies rotations, `rotate(x, angle, axis)` keeps the type of x. */
+          const Type first = expr_arg_type(e, 0);
+          if (n_in < 3 || first == Type::Rotation) {
+            e->type = Type::Rotation;
+          }
+          else if (first == Type::Matrix) {
+            e->type = Type::Matrix;
+          }
+          else if (type_is_matrix(first)) {
+            e->type = Type::Matrix3;
+          }
+          else {
+            e->type = Type::Vector;
+          }
+          break;
+        }
         case Builtin::Sin:
         case Builtin::Cos:
         case Builtin::Tan:
@@ -3866,14 +4739,16 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
           e->type = Type::Matrix3;
           break;
         case Builtin::Vec2Fn:
+        case Builtin::Chu:
           e->type = Type::Vector2;
           break;
         case Builtin::Vec4Fn:
+        case Builtin::Chq:
           e->type = Type::Vector4;
           break;
         case Builtin::RotateRotation:
         case Builtin::QuatFn:
-        case Builtin::Chq:
+        case Builtin::Chr:
           e->type = Type::Rotation;
           break;
         case Builtin::Chs:
@@ -3970,6 +4845,15 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
         case Builtin::ArrayVec:
           e->type = Type::VecArray;
           break;
+        case Builtin::ArrayVec4:
+          e->type = Type::Vec4Array;
+          break;
+        case Builtin::ArrayColor:
+          e->type = Type::ColorArray;
+          break;
+        case Builtin::ArrayRot:
+          e->type = Type::RotArray;
+          break;
         case Builtin::ArrayStr:
           e->type = Type::StringArray;
           break;
@@ -4008,6 +4892,28 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
           break;
         case Builtin::Chi:
           e->type = Type::Int;
+          break;
+        case Builtin::ChiArr:
+        case Builtin::ChbArr:
+          e->type = Type::IntArray;
+          break;
+        case Builtin::ChfArr:
+          e->type = Type::FloatArray;
+          break;
+        case Builtin::ChuArr:
+          e->type = Type::Vec2Array;
+          break;
+        case Builtin::ChvArr:
+        case Builtin::ChqArr:
+        case Builtin::ChcArr:
+          e->type = Type::VecArray;
+          break;
+        case Builtin::ChmArr:
+        case Builtin::ChrArr:
+          e->type = Type::MatArray;
+          break;
+        case Builtin::ChsArr:
+          e->type = Type::StringArray;
           break;
         case Builtin::Chf:
           e->type = Type::Float;
@@ -4127,6 +5033,12 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
           e->type = Type::IntArray;
         }
       }
+      if (ELEM(builtin, Builtin::ArrayMin, Builtin::ArrayMax, Builtin::ArraySum) &&
+          expr_arg_type(e, 0) == Type::Vec2Array)
+      {
+        emit(Op::Call, int(Builtin::Vec2Fn));
+        prog.code.last().a = 1;
+      }
       if (ELEM(builtin,
                Builtin::Append,
                Builtin::Insert,
@@ -4146,6 +5058,11 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
       const Type ta = compile_expr(e->a);
       compile_expr(e->b);
       emit(Op::GetIndex);
+      if (type_is_array(ta) && array_runtime_type(ta) != ta) {
+        /* The items are kept in a wider type at run time: 2D vectors as 3D vectors, small
+         * matrices as 4x4 matrices. */
+        emit_coerce(array_elem_type(array_runtime_type(ta)), array_elem_type(ta));
+      }
       if (type_is_array(ta)) {
         e->type = array_elem_type(ta);
       }
@@ -4156,7 +5073,7 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
         e->type = Type::Float;
       }
       else {
-        fail_at(e, "下标只能用于数组、向量、矩阵或旋转");
+        fail_at(e, "An index can only be used on an array, vector, matrix or rotation");
         e->type = Type::Float;
       }
       return e->type;
@@ -4580,6 +5497,7 @@ void Compiler::compile_lvalue_store(Expr *lval, const Type value_type)
       emit(Op::StoreLocal, loc->slot);
       return;
     }
+    warn_if_misspelled_local(lval);
     Type t = ident_fallback_type(lval->name);
     if (type_is_array(value_type) && !type_is_array(t)) {
       t = value_type;
@@ -4737,13 +5655,37 @@ Type Compiler::compile_assign(Expr *e, const bool as_stmt)
         dest = loc->type;
       }
     }
-    compile_expr(e->b, false, dest);
+    const Type got = compile_expr(e->b, false, dest);
+    const bool to_local = e->a && e->a->kind == ExprKind::Ident && find_local(e->a->name);
+    if (!check_assignable(e->b, got, dest, to_local ? nullptr : e->a)) {
+      return Type::Void;
+    }
+    /* A bare name that is not a variable is an attribute as well. Unless it was written as an
+     * array attribute before, it holds a single value. */
+    if (type_is_array(got) && e->a && e->a->kind == ExprKind::Ident && !to_local &&
+        !type_is_array(ident_fallback_type(e->a->name)))
+    {
+      fail_at(e->a,
+              trf("Cannot store the array {} in {}: it is not declared, so it is the single "
+                  "value attribute @{}\n"
+                  "Declare an array variable ({} {}[] = ...) or write the array attribute "
+                  "{}@{}",
+                  type_name(got),
+                  e->a->name,
+                  e->a->name,
+                  type_name(array_elem_type(got)),
+                  e->a->name,
+                  array_attr_prefix(got),
+                  e->a->name));
+      return Type::Void;
+    }
     if (dest != Type::Void && e->b && e->b->kind == ExprKind::Call &&
         e->b->name == "sample_nearest_surface" && e->b->type != dest)
     {
       fail_at(e,
-              "sample_nearest_surface 返回 " + type_name(e->b->type) + "，变量是 " +
-                  type_name(dest));
+              trf("sample_nearest_surface returns {}, but the variable is {}",
+                  type_name(e->b->type),
+                  type_name(dest)));
     }
   }
   if (!as_stmt) {
@@ -4940,6 +5882,9 @@ void Compiler::compile_stmt(Stmt *s)
       locals.append(loc);
       if (s->expr) {
         const Type got = compile_expr(s->expr, false, loc.type);
+        if (!check_assignable(s->expr, got, loc.type)) {
+          return;
+        }
         if (loc.type == Type::Void && got != Type::Void) {
           loc.type = got;
           locals.last().type = got;
@@ -4981,15 +5926,22 @@ void Compiler::compile_stmt(Stmt *s)
           emit(Op::Call, int(Builtin::ArrayFloat));
           prog.code.last().a = 0;
         }
-        else if (loc.type == Type::VecArray) {
+        else if (ELEM(loc.type, Type::VecArray, Type::Vec2Array)) {
           emit(Op::Call, int(Builtin::ArrayVec));
+          prog.code.last().a = 0;
+        }
+        else if (type_is_vec4_array(loc.type)) {
+          emit(Op::Call,
+               int(loc.type == Type::ColorArray ? Builtin::ArrayColor :
+                   loc.type == Type::RotArray   ? Builtin::ArrayRot :
+                                                  Builtin::ArrayVec4));
           prog.code.last().a = 0;
         }
         else if (loc.type == Type::StringArray) {
           emit(Op::Call, int(Builtin::ArrayStr));
           prog.code.last().a = 0;
         }
-        else if (loc.type == Type::MatArray) {
+        else if (ELEM(loc.type, Type::MatArray, Type::Mat2Array, Type::Mat3Array)) {
           emit(Op::Call, int(Builtin::ArrayMat));
           prog.code.last().a = 0;
         }
@@ -5214,8 +6166,9 @@ static bool gpu_builtin_ok(const StringRef name)
       "abs",     "floor",      "ceil",     "round",    "trunc",    "sqrt",     "exp",
       "log",     "pow",        "min",      "max",      "clamp",    "length",   "distance",
       "dot",     "cross",      "normalize","radians",  "degrees",  "sign",     "frac",
-      "fract",   "mix",     "lerp",       "map",      "smooth",   "noise",    "hash",
+      "fract",   "mix",     "lerp",       "map",      "smooth",   "smoothstep", "noise",    "hash",
       "ddx",     "ddy",        "fwidth",   "dFdx",     "dFdy",
+      "hsvtorgb", "rgbtohsv",
       "rand",     "float",
       "int",     "bool",       "vec2",     "vec3",     "vec4",     "vector",   "set",
       "matrix",  "ident",
@@ -5226,7 +6179,7 @@ static bool gpu_builtin_ok(const StringRef name)
       "color",   "quaternion", "quat",     "combine_transform", "translation", "rotation",
       "vector2", "vector4",    "matrix2",  "matrix3",  "mat2",     "mat3",     "mat4",
       "scale",   "chf",        "chi",      "chv",      "chb",      "chc",      "chm",
-      "chq",     "ch",
+      "chr",     "ch",
       "pointneighbours", "point_neighbours", "pointneighbors", "point_neighbors",
       "neighbours", "neighbors", nullptr};
   for (int i = 0; ok[i]; i++) {
@@ -5338,6 +6291,7 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
 
   std::string fail;
   bool has_loop = false;
+  bool uses_color_convert = false;
   auto bad = [&](const StringRef m) {
     if (fail.empty()) {
       fail = m;
@@ -5348,7 +6302,7 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
     prog.gpu_src.clear();
     prog.gpu_helpers.clear();
     if (!fail.empty()) {
-      prog.gpu_error = fail;
+      prog.gpu_error = tr(fail);
     }
   };
   auto user_fn_index = [&](const StringRef name) -> int {
@@ -5373,7 +6327,7 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
     }
     if (e->kind == ExprKind::Call) {
       if (user_fn_index(e->name) < 0 && !gpu_builtin_ok(e->name)) {
-        bad("GPU: unsupported function '" + e->name + "'");
+        bad(trf("GPU: unsupported function {}", e->name));
         return;
       }
       if (shader_material && gpu_shader_geo_fn(e->name)) {
@@ -5457,7 +6411,7 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
         prog.gpu_neighbors = true;
       }
       std::string ch_nm;
-      if (ELEM(e->name, "chi", "chf", "chv", "chb", "chc", "chm", "chq", "ch") &&
+      if (ELEM(e->name, "chi", "chf", "chv", "chb", "chc", "chm", "chr", "ch") &&
           !e->args.is_empty() && gpu_channel_arg_name(e->args[0], ch_nm))
       {
         Type ct = Type::Float;
@@ -5476,7 +6430,7 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
         else if (e->name == "chm") {
           ct = Type::Matrix;
         }
-        else if (e->name == "chq") {
+        else if (e->name == "chr") {
           ct = Type::Rotation;
         }
         bool found = false;
@@ -5647,6 +6601,7 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
       case Type::IntArray:
       case Type::FloatArray:
       case Type::VecArray:
+      case Type::Vec2Array:
       case Type::MatArray:
       case Type::RayArray:
         return "WrangleArr";
@@ -6298,6 +7253,9 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
       case ExprKind::Index: {
         GpuVal a = em(e->a, Type::Void);
         GpuVal i = em(e->b, Type::Int);
+        if (gpu_array_type_unsupported(a.type)) {
+          bad("GPU: arrays of this type are CPU-only");
+        }
         if (a.type == Type::VecArray) {
           r.s = "wr_arr_v(" + a.s + ", " + cast_to(i, Type::Int) + ")";
           r.type = Type::Vector;
@@ -6524,6 +7482,25 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
           r.type = uf.ret;
           return r;
         }
+        if ((fn == "rand" || fn == "random") && e->type == Type::Vector) {
+          /* Same hash as the scalar overloads below, expanded to a value per component. */
+          if (e->args.is_empty()) {
+            r.s = "wr_rand0_vec(elem_i, rand_seq)";
+          }
+          else if (arg(0).type == Type::Int) {
+            r.s = "wr_hash_to_vec3(uint(" + arg(0).s + "))";
+          }
+          else if (arg(0).type == Type::Vector) {
+            const GpuVal a = arg(0);
+            r.s = "wr_hash_to_vec3(wr_hash3(floatBitsToUint((" + a.s +
+                  ").x), floatBitsToUint((" + a.s + ").y), floatBitsToUint((" + a.s + ").z)))";
+          }
+          else {
+            r.s = "wr_hash_to_vec3(floatBitsToUint(" + cast_to(arg(0), Type::Float) + "))";
+          }
+          r.type = Type::Vector;
+          return r;
+        }
         if (fn == "rand" || fn == "random") {
           if (e->args.is_empty()) {
             r.s = "wr_rand0(elem_i, rand_seq)";
@@ -6646,7 +7623,32 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
           r.type = rt;
           return r;
         }
-        if (fn == "smooth") {
+        if (fn == "hsvtorgb" || fn == "rgbtohsv") {
+          uses_color_convert = true;
+          std::string in;
+          Type rt = Type::Vector;
+          if (e->args.size() >= 3) {
+            in = "vec3(" + cast_to(arg(0), Type::Float) + ", " + cast_to(arg(1), Type::Float) +
+                 ", " + cast_to(arg(2), Type::Float) + ")";
+          }
+          else {
+            const GpuVal a0 = arg(0);
+            if (a0.type == Type::Color) {
+              rt = Type::Color;
+            }
+            in = cast_to(a0, rt);
+          }
+          const char *convert = (fn == "hsvtorgb") ? "wr_hsv_to_rgb" : "wr_rgb_to_hsv";
+          if (rt == Type::Color) {
+            r.s = std::string(convert) + "4(" + in + ")";
+          }
+          else {
+            r.s = std::string(convert) + "(" + in + ")";
+          }
+          r.type = rt;
+          return r;
+        }
+        if (fn == "smooth" || fn == "smoothstep") {
           if (e->args.size() >= 3) {
             const GpuVal x = arg(2);
             const Type rt = type_is_vec_like(x.type) ? x.type : Type::Float;
@@ -6763,9 +7765,18 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
         }
         if (fn == "array") {
           Type at = Type::FloatArray;
+          /* Shader wrangles have no list inputs, there the channel stays a single uniform. */
+          for (const Expr *list_arg : e->args) {
+            if (!shader_material && expr_is_list_channel_arg(list_arg)) {
+              bad("GPU: list channels are CPU-only");
+            }
+          }
           if (!e->args.is_empty()) {
             GpuVal a0 = arg(0);
             at = type_is_array(a0.type) ? a0.type : array_type_of(a0.type);
+            if (gpu_array_type_unsupported(at)) {
+              bad("GPU: arrays of this type are CPU-only");
+            }
             for (int i = 0; i < int(e->args.size()); i++) {
               GpuVal ai = arg(i);
               if (ai.type == Type::Vector) {
@@ -6805,7 +7816,7 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
           return r;
         }
         if (fn == "chi" || fn == "chf" || fn == "chv" || fn == "chb" || fn == "chc" ||
-            fn == "chm" || fn == "chq" || fn == "ch")
+            fn == "chm" || fn == "chr" || fn == "ch")
         {
           if (in_user_fn) {
             bad("GPU: chf/chi/... cannot be used inside user functions");
@@ -6853,7 +7864,7 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
             else if (fn == "chm") {
               r.type = Type::Matrix;
             }
-            else if (fn == "chq") {
+            else if (fn == "chr") {
               r.type = Type::Rotation;
             }
             wrap_chf();
@@ -6863,7 +7874,7 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
           r.type = (fn == "chi") ? Type::Int :
                    (fn == "chv" ? Type::Vector :
                     (fn == "chm" ? Type::Matrix :
-                     (fn == "chq" ? Type::Rotation : Type::Float)));
+                     (fn == "chr" ? Type::Rotation : Type::Float)));
           return r;
         }
         if (fn == "pointneighbours" || fn == "point_neighbours" || fn == "pointneighbors" ||
@@ -6969,6 +7980,11 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
           return r;
         }
         if (fn == "min" || fn == "max") {
+          if (e->args.size() == 1 && type_is_array(expr_arg_type(e, 0))) {
+            bad("GPU: min/max of an array is CPU-only");
+            r.s = "0.0";
+            return r;
+          }
           const GpuVal a0 = arg(0);
           const GpuVal a1 = arg(1);
           Type rt = dominant_vec_type(a0.type, a1.type);
@@ -7221,6 +8237,9 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
           line += " = mat3(1.0)";
         }
         else if (type_is_array(t)) {
+          if (gpu_array_type_unsupported(t)) {
+            bad("GPU: arrays of this type are CPU-only");
+          }
           int kind = 1;
           if (t == Type::IntArray) {
             kind = 0;
@@ -7385,7 +8404,30 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
     return;
   }
 
+  /* Same math as `hsv_to_rgb` / `rgb_to_hsv` in BLI_math_color, with a cyclic hue. */
+  std::string color_convert;
+  if (uses_color_convert) {
+    color_convert =
+        "vec3 wr_hsv_to_rgb(vec3 c)\n{\n"
+        "  float h = c.x - floor(c.x);\n"
+        "  vec3 n = clamp(vec3(abs(h * 6.0 - 3.0) - 1.0, 2.0 - abs(h * 6.0 - 2.0), "
+        "2.0 - abs(h * 6.0 - 4.0)), 0.0, 1.0);\n"
+        "  return ((n - 1.0) * c.y + 1.0) * c.z;\n"
+        "}\n"
+        "vec3 wr_rgb_to_hsv(vec3 c)\n{\n"
+        "  float r = c.x;\n  float g = c.y;\n  float b = c.z;\n  float k = 0.0;\n"
+        "  if (g < b) { float t = g; g = b; b = t; k = -1.0; }\n"
+        "  float min_gb = b;\n"
+        "  if (r < g) { float t = r; r = g; g = t; k = -2.0 / 6.0 - k; min_gb = min(g, b); }\n"
+        "  float chroma = r - min_gb;\n"
+        "  return vec3(abs(k + (g - b) / (6.0 * chroma + 1e-20)), chroma / (r + 1e-20), r);\n"
+        "}\n"
+        "vec4 wr_hsv_to_rgb4(vec4 c) { return vec4(wr_hsv_to_rgb(c.xyz), c.w); }\n"
+        "vec4 wr_rgb_to_hsv4(vec4 c) { return vec4(wr_rgb_to_hsv(c.xyz), c.w); }\n";
+  }
+
   if (shader_material) {
+    gpu_material_dialect(color_convert);
     gpu_material_dialect(helpers);
     gpu_material_dialect(body);
     /* Jenkins hash.glsl `#define mix` and SMAA `#define lerp` must not apply.
@@ -7445,13 +8487,15 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
         "float3 wr_fwidth(float3 v, KernelGlobals kg) { return v * 0.0; }\n"
         "float4 wr_fwidth(float4 v, KernelGlobals kg) { return v * 0.0; }\n"
         "#endif\n";
-    prog.gpu_helpers = std::string("#undef mix\n#undef lerp\n") + interp + deriv + helpers;
+    prog.gpu_helpers = std::string("#undef mix\n#undef lerp\n") + interp + deriv +
+                       color_convert + helpers;
     prog.gpu_src = body;
     prog.gpu_ok = true;
     return;
   }
 
   std::string src;
+  src += color_convert;
   if (!helpers.empty()) {
     src += helpers;
   }

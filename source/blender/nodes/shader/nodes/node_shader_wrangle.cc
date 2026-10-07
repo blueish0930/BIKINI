@@ -274,6 +274,24 @@ static void wrangle_suggest_fn(const char *str,
   Vector<expression::CompletionItem> all_items;
   Vector<const expression::CompletionItem *> matches;
   collect_matches(match_token, is_member, show_all, owned, all_items, matches);
+  /* Tab inserts the first row: an exact match first, then the shortest names, which are the
+   * closest to what is typed, then alphabetically. Ctrl-Space on nothing keeps the table order,
+   * which is grouped by topic. */
+  if (!match_token.is_empty()) {
+    auto key = [](const expression::CompletionItem *item) {
+      return item->insert_text.is_empty() ? item->name : item->insert_text;
+    };
+    std::stable_sort(matches.begin(),
+                     matches.end(),
+                     [&](const expression::CompletionItem *a, const expression::CompletionItem *b) {
+                       const StringRef key_a = key(a);
+                       const StringRef key_b = key(b);
+                       if (key_a.size() != key_b.size()) {
+                         return key_a.size() < key_b.size();
+                       }
+                       return key_a < key_b;
+                     });
+  }
   int n = 0;
   for (const expression::CompletionItem *item : matches) {
     if (n >= max_num) {
@@ -283,14 +301,14 @@ static void wrangle_suggest_fn(const char *str,
                                 (item->insert_text.is_empty() ? item->name : item->insert_text) :
                                 item->usage;
     const StringRef ins = item->insert_text.is_empty() ? item->name : item->insert_text;
+    /* `text \x1f parameter types \x1f category`, the list draws the three apart. */
     std::string packed = std::string(shown);
+    packed.push_back('\x1f');
     if (item->kind == expression::CompletionKind::Function) {
-      const StringRef types = vex::function_param_types(item->name);
-      if (!types.is_empty()) {
-        packed.push_back('\x1f');
-        packed += types;
-      }
+      packed += vex::function_param_types(item->name);
     }
+    packed.push_back('\x1f');
+    packed += item->category_label;
     bool dup = false;
     for (int i = 0; i < n; i++) {
       if (StringRef(packed) == StringRef(out[i])) {
@@ -788,7 +806,7 @@ static std::optional<eNodeSocketDatatype> wrangle_channel_fn_type(const StringRe
   if (ident == "chm") {
     return SOCK_MATRIX;
   }
-  if (ident == "chq") {
+  if (ident == "chr") {
     return SOCK_ROTATION;
   }
   return std::nullopt;
@@ -1016,6 +1034,8 @@ static void node_layout(ui::Layout &layout, bContext * /*C*/, PointerRNA *ptr)
   PointerRNA op_ptr = compile_row.op(
       "NODE_OT_shader_wrangle_compile", IFACE_("Compile"), ICON_FILE_REFRESH);
   RNA_int_set(&op_ptr, "node_identifier", node.identifier);
+  PointerRNA docs_ptr = compile_row.op("WM_OT_url_open", IFACE_("Docs"), ICON_HELP);
+  RNA_string_set(&docs_ptr, "url", vex::docs_url);
 
   ui::Block *block = layout.block();
   const int64_t buttons_before = block ? block->buttons_ptrs.size() : 0;
@@ -1936,6 +1956,8 @@ static ui::Block *wrangle_edit_popup(bContext *C, ARegion *region, void *arg_v)
   PointerRNA compile_hdr = header.op(
       "NODE_OT_shader_wrangle_compile", IFACE_("Compile"), ICON_FILE_REFRESH);
   RNA_int_set(&compile_hdr, "node_identifier", live_node->identifier);
+  PointerRNA docs_hdr = header.op("WM_OT_url_open", IFACE_("Docs"), ICON_HELP);
+  RNA_string_set(&docs_hdr, "url", vex::docs_url);
   header.separator_spacer();
   header.button("",
                 arg->pinned ? ICON_PINNED : ICON_UNPINNED,
@@ -2027,7 +2049,7 @@ static void node_operators()
     ot->idname = "NODE_OT_shader_wrangle_compile";
     ot->description =
         "Commit the editor draft and evaluate. Creates Constant panel inputs from "
-        "chf/chi/chv/chb/chc/chm/chq and removes unused channel sockets";
+        "chf/chi/chv/chb/chc/chm/chr and removes unused channel sockets";
     ot->exec = wrangle_compile_exec;
     ot->poll = socket_items::ops::editable_node_active_poll<ShaderWrangleInputItemsAccessor>;
     ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;

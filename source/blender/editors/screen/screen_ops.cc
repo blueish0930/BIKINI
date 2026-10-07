@@ -469,9 +469,6 @@ bool ED_operator_node_editable(bContext *C)
   SpaceNode *snode = CTX_wm_space_node(C);
 
   if (snode && snode->edittree && BKE_id_is_editable(CTX_data_main(C), &snode->edittree->id)) {
-    if (ED_node_edit_tree_is_lock_blocked(snode)) {
-      return false;
-    }
     return true;
   }
 

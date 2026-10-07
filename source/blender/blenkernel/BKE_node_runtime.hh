@@ -149,22 +149,6 @@ class bNodeTreeRuntime : NonCopyable, NonMovable {
   uint8_t runtime_flag = 0;
 
   /**
-   * Encrypted node group is currently decrypted in this session.
-   * #lock_key is the 32-byte ChaCha20 key; zeroed when the graph is sealed.
-   */
-  bool lock_decrypted = false;
-  int lock_decrypt_users = 0;
-  uint8_t lock_key[32] = {};
-
-  /**
-   * The lock password was verified in this session (or the lock was just applied by its
-   * author). Gates UI viewing/editing and Python access to a locked group's internals.
-   * Note the graph contents may still be decrypted in memory for evaluation (black-box
-   * at-rest encryption); this flag specifically means "the user proved the password".
-   */
-  bool lock_view_granted = false;
-
-  /**
    * Contains a number increased for each node-tree update.
    * Store a state variable in the #NestedTreePreviews structure to compare if they differ.
    */

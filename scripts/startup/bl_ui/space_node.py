@@ -1204,7 +1204,6 @@ class NODE_PT_node_tree_properties(Panel):
         col.textbox(data, "description", placeholder="Description")
 
         if not group.bl_use_group_interface:
-            self._draw_lock_toggle(col, group)
             return
 
         col.prop(group, "color_tag")
@@ -1235,17 +1234,6 @@ class NODE_PT_node_tree_properties(Panel):
                 usage_col = body.column(align=True)
                 usage_col.prop(group, "is_strip_modifier")
                 usage_col.prop(group, "allow_usage_in_scene_compositor_effect")
-
-        self._draw_lock_toggle(col, group)
-
-    @staticmethod
-    def _draw_lock_toggle(col, group):
-        row = col.row(align=True)
-        row.operator_context = 'INVOKE_DEFAULT'
-        if group.is_locked:
-            row.operator("node.group_lock_toggle", text="Lock", icon='LOCKED', depress=True)
-        else:
-            row.operator("node.group_lock_toggle", text="Lock", icon='UNLOCKED', depress=False)
 
 
 class NODE_PT_node_tree_animation(Panel):

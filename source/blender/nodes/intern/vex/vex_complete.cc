@@ -44,9 +44,10 @@ StringRef function_param_types(const StringRef name)
       {"lerp", "num,num,float"},
       {"map", "num,num,num,num,num"},
       {"smooth", "num"},
+      {"smoothstep", "num,num,num"},
       {"noise", "vec,float,float,float,float,float,enum,enum"},
-      {"hash", "num"},
-      {"rand", "int"},
+      {"hash", "value"},
+      {"rand", "seed,seed"},
       {"float", "num"},
       {"int", "num"},
       {"bool", "num"},
@@ -70,18 +71,41 @@ StringRef function_param_types(const StringRef name)
       {"chc", "str"},
       {"chm", "str"},
       {"chq", "str"},
+      {"chr", "str"},
+      {"chu", "str"},
       {"chs", "str"},
       {"cht", "str"},
+      {"chramp", "str,float"},
+      {"chcurve", "str,num,float"},
+      {"hsvtorgb", "num,float,float"},
+      {"rgbtohsv", "num,float,float"},
+      {"qrotate", "quat,vec"},
+      {"qmultiply", "quat,quat"},
+      {"qinvert", "quat"},
+      {"slerp", "quat,quat,float"},
+      {"dihedral", "vec,vec"},
+      {"eulertoquaternion", "vec,enum"},
+      {"quaterniontoeuler", "quat,enum"},
+      {"qconvert", "quat"},
+      {"qdistance", "quat,quat"},
+      {"lookat", "vec,vec,vec"},
       {"valuetostring", "num,int,int"},
       {"value_to_string", "num,int,int"},
       {"format", "str"},
       {"sprintf", "str"},
       {"len", "arr"},
-      {"append", "arr,num"},
-      {"insert", "arr,int,num"},
+      {"append", "arr,value"},
+      {"insert", "arr,int,value"},
       {"removeindex", "arr,int"},
-      {"removevalue", "arr,num"},
+      {"removevalue", "arr,value"},
       {"sort", "arr"},
+      {"sum", "arr"},
+      {"unique", "arr"},
+      {"find", "arr,value"},
+      {"union", "arr,arr"},
+      {"subtract", "arr,arr"},
+      {"intersect", "arr,arr"},
+      {"slice", "arr,int,int,int"},
       {"invert", "mat"},
       {"invert_matrix", "mat"},
       {"transpose", "mat"},
@@ -99,7 +123,6 @@ StringRef function_param_types(const StringRef name)
       {"transform_direction", "vec,mat"},
       {"project_point", "vec,mat"},
       {"translation", "mat"},
-      {"rotation", "mat"},
       {"scale", "mat"},
       {"pointneighbours", "geo,int"},
       {"point_neighbours", "geo,int"},
@@ -173,7 +196,7 @@ StringRef function_param_types(const StringRef name)
       {"bounding_box", "out vec,out vec"},
       {"geometry_proximity", "geo,enum,vec,out vec,out float"},
       {"proximity", "geo,enum,vec,out vec,out float"},
-      {"sample_nearest_surface", "geo,str,vec,out"},
+      {"sample_nearest_surface", "geo,str,value,value"},
       {"delete_geometry", "enum,int,enum"},
       {"deletegeometry", "enum,int,enum"},
       {"deletegeo", "enum,int,enum"},
@@ -182,21 +205,18 @@ StringRef function_param_types(const StringRef name)
       {"combine_transform", "vec,quat,vec"},
       {"invert_rotation", "quat"},
       {"rotate_rotation", "quat,quat"},
-      {"rotate", "quat,quat"},
-      {"quaternion", "float,float,float,float"},
-      {"rotation", "float,float,float,float"},
       {"vector2", "num,num"},
       {"vector4", "num,num,num,num"},
       {"matrix2", "num"},
       {"matrix3", "num"},
       {"accumulate", "num"},
       {"accumulate_field", "num"},
-      {"field_average", "str"},
-      {"fieldaverage", "str"},
-      {"field_min", "str"},
-      {"field_max", "str"},
-      {"fieldminmax", "str"},
-      {"field_minmax", "str"},
+      {"field_average", "value"},
+      {"fieldaverage", "value"},
+      {"field_min", "value"},
+      {"field_max", "value"},
+      {"fieldminmax", "value"},
+      {"field_minmax", "value"},
       {"edges_of_corner", "geo,int"},
       {"face_of_corner", "geo,int"},
       {"vertex_of_corner", "geo,int"},
@@ -308,8 +328,8 @@ void gather_completions(Vector<std::string> &r_owned_names,
   add("exp", "Float", C::Float, K::Function, "exp", "exp(x)", true);
   add("log", "Float", C::Float, K::Function, "log", "log(x)", true);
   add("pow", "Float", C::Float, K::Function, "pow", "pow(x, y)", true);
-  add("min", "Float", C::Float, K::Function, "min", "min(a, b)", true);
-  add("max", "Float", C::Float, K::Function, "max", "max(a, b)", true);
+  add("min", "Float", C::Float, K::Function, "min", "min(a, b)  or  min(arr)", true);
+  add("max", "Float", C::Float, K::Function, "max", "max(a, b)  or  max(arr)", true);
   add("clamp", "Float", C::Float, K::Function, "clamp", "clamp(x, lo, hi)", true);
   add("radians", "Float", C::Float, K::Function, "radians", "radians(deg)", true);
   add("degrees", "Float", C::Float, K::Function, "degrees", "degrees(rad)", true);
@@ -331,6 +351,7 @@ void gather_completions(Vector<std::string> &r_owned_names,
       "smooth",
       "smooth(value)  or  smooth(min, max, value)",
       true);
+  add("smoothstep", "Float", C::Float, K::Function, "smoothstep", "smoothstep(min, max, value)", true);
   add("noise",
       "Float",
       C::Float,
@@ -414,9 +435,45 @@ void gather_completions(Vector<std::string> &r_owned_names,
   add("invert_matrix", "Matrix", C::Matrix, K::Function, "invert_matrix", "invert_matrix(m)", true);
   add("invert_rotation", "Rotation", C::Rotation, K::Function, "invert_rotation", "invert_rotation(q)", true);
   add("rotate_rotation", "Rotation", C::Rotation, K::Function, "rotate_rotation", "rotate_rotation(a, b)", true);
-  add("rotate", "Rotation", C::Rotation, K::Function, "rotate", "rotate(a, b)", true);
+  add("rotate",
+      "Rotation",
+      C::Rotation,
+      K::Function,
+      "rotate",
+      "rotate(a, b)  or  rotate(vector|matrix|rotation, angle, axis)",
+      true);
   add("rotation", "Rotation", C::Rotation, K::Function, "rotation", "rotation(x, y, z, w)", true);
-  add("quaternion", "Rotation", C::Rotation, K::Function, "quaternion", "quaternion(x, y, z, w)", true);
+  add("quaternion",
+      "Rotation",
+      C::Rotation,
+      K::Function,
+      "quaternion",
+      "quaternion(x, y, z, w) / quaternion(angle, axis) / quaternion(matrix)",
+      true);
+  add("qrotate", "Rotation", C::Rotation, K::Function, "qrotate", "qrotate(q, v)", true);
+  add("qmultiply", "Rotation", C::Rotation, K::Function, "qmultiply", "qmultiply(a, b)", true);
+  add("qinvert", "Rotation", C::Rotation, K::Function, "qinvert", "qinvert(q)", true);
+  add("slerp", "Rotation", C::Rotation, K::Function, "slerp", "slerp(a, b, t)", true);
+  add("dihedral", "Rotation", C::Rotation, K::Function, "dihedral", "dihedral(from, to)", true);
+  add("eulertoquaternion",
+      "Rotation",
+      C::Rotation,
+      K::Function,
+      "eulertoquaternion",
+      "eulertoquaternion(radians, order)  order: 0..5 or \"xyz\"",
+      true);
+  add("quaterniontoeuler",
+      "Rotation",
+      C::Rotation,
+      K::Function,
+      "quaterniontoeuler",
+      "quaterniontoeuler(q, order)  order: 0..5 or \"xyz\"",
+      true);
+  add("qconvert", "Rotation", C::Rotation, K::Function, "qconvert", "qconvert(q)  -> matrix3", true);
+  add("qdistance", "Rotation", C::Rotation, K::Function, "qdistance", "qdistance(a, b)  angle", true);
+  add("lookat", "Rotation", C::Rotation, K::Function, "lookat", "lookat(from, to, up)  -> matrix3", true);
+  add("hsvtorgb", "Color", C::Color, K::Function, "hsvtorgb", "hsvtorgb(h, s, v) / hsvtorgb(hsv)", true);
+  add("rgbtohsv", "Color", C::Color, K::Function, "rgbtohsv", "rgbtohsv(r, g, b) / rgbtohsv(rgb)", true);
   add("vector2", "Vector", C::Vector, K::Function, "vector2", "vector2(x, y)", true);
   add("vec2", "Vector", C::Vector, K::Function, "vec2", "vec2(x, y) alias of vector2", true);
   add("vec3", "Vector", C::Vector, K::Function, "vec3", "vec3(x, y, z) alias of vector", true);
@@ -449,7 +506,7 @@ void gather_completions(Vector<std::string> &r_owned_names,
   add("svd", "Matrix", C::Matrix, K::Function, "svd", "svd(m, U, s, V)  —  m = U * diag(s) * Vᵀ", true);
   add("pd", "Matrix", C::Matrix, K::Function, "pd", "pd(m, R, S)  —  polar: m = R * S", true);
   add("polardecomp", "Matrix", C::Matrix, K::Function, "polardecomp", "polardecomp(m, R, S)", true);
-  add("eigen", "Matrix", C::Matrix, K::Function, "eigen", "eigen(m, evals, evecs)  对称特征分解", true);
+  add("eigen", "Matrix", C::Matrix, K::Function, "eigen", "eigen(m, evals, evecs)  symmetric eigen-decomposition", true);
   add("transform_direction",
       "Matrix",
       C::Matrix,
@@ -469,9 +526,15 @@ void gather_completions(Vector<std::string> &r_owned_names,
   add("chb", "Channel", C::Variable, K::Function, "chb", "chb(\"name\")", true);
   add("chc", "Channel", C::Color, K::Function, "chc", "chc(\"name\")", true);
   add("chm", "Channel", C::Matrix, K::Function, "chm", "chm(\"name\")", true);
-  add("chq", "Channel", C::Rotation, K::Function, "chq", "chq(\"name\")", true);
+  add("chu", "Channel", C::Vector, K::Function, "chu", "chu(\"name\")", true);
+  add("chq", "Channel", C::Vector, K::Function, "chq", "chq(\"name\")", true);
+  add("chr", "Channel", C::Rotation, K::Function, "chr", "chr(\"name\")", true);
   add("chs", "Channel", C::Variable, K::Function, "chs", "chs(\"name\")", true);
   add("cht", "Channel", C::Variable, K::Function, "cht", "cht(\"code\")", true);
+  if (!shader_material) {
+    add("chramp", "Channel", C::Color, K::Function, "chramp", "chramp(\"name\", position)", true);
+    add("chcurve", "Channel", C::Float, K::Function, "chcurve", "chcurve(\"name\", value)", true);
+  }
   add("valuetostring",
       "String",
       C::Variable,
@@ -489,11 +552,36 @@ void gather_completions(Vector<std::string> &r_owned_names,
   add("sprintf", "String", C::Variable, K::Function, "sprintf", "sprintf(\"%05d\", i)", true);
 
   add("array", "Array", C::Variable, K::Function, "array", "array(1, 2, 3)", true);
-  add("append", "Array", C::Variable, K::Function, "append", "append(arr, x)", true);
+  add("append", "Array", C::Variable, K::Function, "append", "append(arr, x, ...)", true);
   add("insert", "Array", C::Variable, K::Function, "insert", "insert(arr, i, x)", true);
   add("removeindex", "Array", C::Variable, K::Function, "removeindex", "removeindex(arr, i)", true);
   add("removevalue", "Array", C::Variable, K::Function, "removevalue", "removevalue(arr, x)", true);
   add("sort", "Array", C::Variable, K::Function, "sort", "sort(arr)", true);
+  add("sum", "Array", C::Variable, K::Function, "sum", "sum(arr)", true);
+  add("unique", "Array", C::Variable, K::Function, "unique", "unique(arr)  -> new array", true);
+  add("find", "Array", C::Variable, K::Function, "find", "find(arr, value)  -> int[] indices", true);
+  add("union", "Array", C::Variable, K::Function, "union", "union(a, b)  values in a or b", true);
+  add("subtract",
+      "Array",
+      C::Variable,
+      K::Function,
+      "subtract",
+      "subtract(a, b)  values in a but not in b",
+      true);
+  add("intersect",
+      "Array",
+      C::Variable,
+      K::Function,
+      "intersect",
+      "intersect(a, b)  values in both a and b",
+      true);
+  add("slice",
+      "Array",
+      C::Variable,
+      K::Function,
+      "slice",
+      "slice(arr, start, end, step)  -> new array",
+      true);
   add("len", "Array", C::Variable, K::Function, "len", "len(arr)", true);
 
   add("pointneighbours", "Topology", C::Variable, K::Function, "pointneighbours", "pointneighbours(0, i@index)", true);

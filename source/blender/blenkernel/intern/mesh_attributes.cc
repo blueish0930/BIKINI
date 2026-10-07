@@ -13,6 +13,7 @@
 #include "BKE_attribute_math.hh"
 #include "BKE_deform.hh"
 #include "BKE_mesh.hh"
+#include "BKE_wrangle_array.hh"
 
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
@@ -603,6 +604,10 @@ static GVArray adapt_mesh_attribute_domain(const Mesh &mesh,
       varray.get_internal_single(value);
       return GVArray::from_single(varray.type(), mesh.attributes().domain_size(to_domain), value);
     }
+  }
+  if (varray.type().is_any<WrangleArrayValue, MStringProperty>()) {
+    /* Lists and strings can't be mixed, they are only available on their own domain. */
+    return {};
   }
 
   switch (from_domain) {

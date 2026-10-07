@@ -19,11 +19,19 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "BLT_translation.hh"
+#include "BLT_translation_any_thread.hh"
+
+#include <fmt/format.h>
+
 #include "BKE_attribute.hh"
 #include "BKE_attribute_filters.hh"
 #include "BKE_attribute_math.hh"
 #include "BKE_bvh.hh"
 #include "BKE_bvhutils.hh"
+#include "BKE_colorband.hh"
+#include "BKE_colortools.hh"
+#include "DNA_color_types.h"
 #include "BKE_curves.hh"
 #include "BKE_customdata.hh"
 #include "BKE_geometry_fields.hh"
@@ -121,6 +129,12 @@ bke::AttrType to_attr_type(const Type type)
     case Type::IntArray:
     case Type::FloatArray:
     case Type::VecArray:
+    case Type::Vec2Array:
+    case Type::Vec4Array:
+    case Type::ColorArray:
+    case Type::RotArray:
+    case Type::Mat2Array:
+    case Type::Mat3Array:
     case Type::StringArray:
     case Type::MatArray:
     case Type::RayArray:
@@ -200,6 +214,8 @@ struct ElemUser {
   const bke::GeometrySet *self = nullptr; /* geometry currently being wrangled (geo 0) */
   Vector<std::string> parm_names;
   Vector<GVArray> parm_arrays;
+  Span<ChList> parm_lists;
+  Span<ChRamp> parm_ramps;
   Span<AttrInfo> attr_infos;
   Span<AttrRT> sample_attrs; /* working arrays `point(0, …)` reads (Jacobi snapshot) */
   Vector<ElementSampleCache> element_samples;
@@ -838,6 +854,23 @@ Value load_parm_fn(void *user, const StringRef name, const int index, std::strin
   if (!u || name.is_empty()) {
     return Value::from_float(0.0f);
   }
+  for (const ChList &list : u->parm_lists) {
+    if (list.name != name) {
+      continue;
+    }
+    switch (list.kind) {
+      case ChList::Kind::Int:
+        return value_from_int_span(list.ints);
+      case ChList::Kind::Float:
+        return value_from_float_array(list.floats);
+      case ChList::Kind::Vector:
+        return value_from_vec_array(list.vectors);
+      case ChList::Kind::String:
+        return value_from_string_array(list.strings);
+      case ChList::Kind::Matrix:
+        return value_from_mat_array(list.matrices);
+    }
+  }
   for (const int i : u->parm_names.index_range()) {
     if (u->parm_names[i] == name) {
       const GVArray &va = u->parm_arrays[i];
@@ -868,6 +901,95 @@ Value load_parm_fn(void *user, const StringRef name, const int index, std::strin
   return load_elem_fn(user, 0, vex_domain, name, index, Type::Float, dummy);
 }
 
+/** Number of leading channels of \a curve that have points. */
+static int curve_channels_num(const CurveMapping &curve)
+{
+  int channels = 0;
+  while (channels < CM_TOT && curve.cm[channels].curve != nullptr) {
+    channels++;
+  }
+  return channels;
+}
+
+/**
+ * `chramp()` and `chcurve()`. The curve behind a `chcurve()` can be a float, vector or color
+ * curve, whichever is connected is used and adapted to the requested kind.
+ */
+Value eval_ramp_fn(void *user, const StringRef name, const RampKind kind, const Value &input)
+{
+  auto *u = static_cast<ElemUser *>(user);
+  const ChRamp *ramp = nullptr;
+  if (u) {
+    for (const ChRamp &item : u->parm_ramps) {
+      if (item.name == name) {
+        ramp = &item;
+        break;
+      }
+    }
+  }
+  if (!ramp) {
+    return ramp_identity(kind, input);
+  }
+  if (kind == RampKind::ColorRamp) {
+    if (!ramp->color_ramp) {
+      return ramp_identity(kind, input);
+    }
+    float4 color(0.0f, 0.0f, 0.0f, 1.0f);
+    BKE_colorband_evaluate(ramp->color_ramp, input.as_float(), color);
+    return Value::from_vec4(color, Type::Color);
+  }
+  const CurveMapping *curve = ramp->curve;
+  const int channels = curve ? curve_channels_num(*curve) : 0;
+  if (channels == 0) {
+    return ramp_identity(kind, input);
+  }
+  /* A float curve applied to a vector or color maps every component. */
+  auto eval_float_curve = [&](const float3 &value) {
+    return float3(BKE_curvemapping_evaluateF(curve, 0, value.x),
+                  BKE_curvemapping_evaluateF(curve, 0, value.y),
+                  BKE_curvemapping_evaluateF(curve, 0, value.z));
+  };
+  switch (kind) {
+    case RampKind::FloatCurve: {
+      /* The combined channel of a color curve is the one that maps a single value. */
+      const int channel = channels >= 4 ? 3 : 0;
+      return Value::from_float(BKE_curvemapping_evaluateF(curve, channel, input.as_float()));
+    }
+    case RampKind::VectorCurve: {
+      const float3 value = input.as_vec();
+      float3 result;
+      if (channels >= 4) {
+        BKE_curvemapping_evaluateRGBF(curve, result, value);
+      }
+      else if (channels == 3) {
+        BKE_curvemapping_evaluate3F(curve, result, value);
+      }
+      else {
+        result = eval_float_curve(value);
+      }
+      return Value::from_vec(result);
+    }
+    case RampKind::ColorCurve: {
+      const float3 value = input.as_vec();
+      float3 result;
+      if (channels >= 4) {
+        BKE_curvemapping_evaluateRGBF(curve, result, value);
+      }
+      else if (channels == 3) {
+        BKE_curvemapping_evaluate3F(curve, result, value);
+      }
+      else {
+        result = eval_float_curve(value);
+      }
+      const float alpha = ELEM(input.type, Type::Color, Type::Vector4) ? input.v.w : 1.0f;
+      return Value::from_vec4(float4(result.x, result.y, result.z, alpha), Type::Color);
+    }
+    case RampKind::ColorRamp:
+      break;
+  }
+  return ramp_identity(kind, input);
+}
+
 struct BindState {
   ResourceScope scope;
   Vector<bke::GSpanAttributeWriter *> writers;
@@ -893,6 +1015,25 @@ struct BindState {
   Vector<CopyBack> copy_back;
 };
 
+/** Types that are stored as a plain attribute, so an attribute of another type converts. */
+static bool bind_type_converts(const Type type)
+{
+  switch (type) {
+    case Type::Bool:
+    case Type::Int:
+    case Type::Float:
+    case Type::Vector2:
+    case Type::Vector:
+    case Type::Vector4:
+    case Type::Color:
+    case Type::Rotation:
+    case Type::Matrix:
+      return true;
+    default:
+      return false;
+  }
+}
+
 bool bind_attrs(bke::MutableAttributeAccessor attributes,
                 const bke::AttrDomain domain,
                 const int domain_size,
@@ -911,13 +1052,28 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
     }
     const bke::AttrType at = to_attr_type(info.type);
     if (info.write) {
-      /* i[]@pts must replace an existing float3 `pts`, otherwise the spreadsheet
-       * still shows Vector and the packed list is never stored. */
-      bke::GAttributeWriter aw = attributes.convert_or_add_for_write_only(
-          info.name, domain, at);
+      const std::optional<bke::AttributeMetaData> meta = attributes.lookup_meta_data(info.name);
+      const bool mismatch = meta && (meta->domain != domain || meta->data_type != at);
+      bke::GAttributeWriter aw;
+      /* Elements that are not written (condition, selection) must not be left uninitialized. */
+      bool fill_default = false;
+      if (!mismatch) {
+        aw = attributes.lookup_or_add_for_write(
+            info.name, domain, at, bke::AttributeInitDefaultValue());
+      }
+      else if (bind_type_converts(info.type) && attributes.lookup(info.name, domain, at)) {
+        /* `i@mask += 1` on a boolean attribute: convert the stored values, do not drop them. */
+        aw = attributes.convert_or_add_for_write(
+            info.name, domain, at, bke::AttributeInitDefaultValue());
+      }
+      else {
+        /* i[]@pts must replace an existing float3 `pts`, otherwise the spreadsheet
+         * still shows Vector and the packed list is never stored. */
+        aw = attributes.convert_or_add_for_write_only(info.name, domain, at);
+        fill_default = bool(aw);
+      }
       if (!aw) {
-        const std::optional<bke::AttributeMetaData> meta = attributes.lookup_meta_data(info.name);
-        if (meta && (meta->domain != domain || meta->data_type != at)) {
+        if (mismatch) {
           attributes.remove(info.name);
         }
         aw = attributes.lookup_or_add_for_write(
@@ -932,6 +1088,10 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
         return false;
       }
       state.writers.append(&writer);
+      if (fill_default) {
+        const CPPType &type = writer.span.type();
+        type.fill_assign_n(type.default_value(), writer.span.data(), writer.span.size());
+      }
       switch (info.type) {
         case Type::Bool: {
           MutableSpan<bool> span = writer.span.typed<bool>();
@@ -986,6 +1146,12 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
         case Type::IntArray:
         case Type::FloatArray:
         case Type::VecArray:
+        case Type::Vec2Array:
+        case Type::Vec4Array:
+        case Type::ColorArray:
+        case Type::RotArray:
+        case Type::Mat2Array:
+        case Type::Mat3Array:
         case Type::StringArray:
         case Type::MatArray:
         case Type::RayArray: {
@@ -1039,10 +1205,20 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
       }
     }
     else {
-      const bke::GAttributeReader reader = attributes.lookup(info.name, domain);
+      bke::GAttributeReader reader = attributes.lookup(info.name, domain);
       if (!reader) {
         continue;
       }
+      if (bind_type_converts(info.type) &&
+          reader.varray.type() != bke::attribute_type_to_cpp_type(at))
+      {
+        /* Stored with another type, e.g. `i@mask` on a boolean attribute. */
+        if (bke::GAttributeReader converted = attributes.lookup(info.name, domain, at)) {
+          reader = std::move(converted);
+        }
+      }
+      /* Below, a buffer whose attribute could not be converted is filled with a default instead
+       * of being left uninitialized. */
       const GVArray &varray = reader.varray;
       switch (info.type) {
         case Type::Bool: {
@@ -1055,6 +1231,9 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
           buf.reinitialize(domain_size);
           if (varray.type().is<bool>()) {
             varray.typed<bool>().materialize(mask, buf);
+          }
+          else {
+            buf.fill(false);
           }
           a.rb = buf.data();
           break;
@@ -1070,6 +1249,9 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
           if (varray.type().is<int>()) {
             varray.typed<int>().materialize(mask, buf);
           }
+          else {
+            buf.fill(0);
+          }
           a.ri = buf.data();
           break;
         }
@@ -1083,6 +1265,9 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
           buf.reinitialize(domain_size);
           if (varray.type().is<float3>()) {
             varray.typed<float3>().materialize(mask, buf);
+          }
+          else {
+            buf.fill(float3(0.0f));
           }
           a.rv = buf.data();
           break;
@@ -1098,6 +1283,9 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
           if (varray.type().is<float2>()) {
             varray.typed<float2>().materialize(mask, buf);
           }
+          else {
+            buf.fill(float2(0.0f));
+          }
           a.r2 = buf.data();
           break;
         }
@@ -1111,6 +1299,9 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
           buf.reinitialize(domain_size);
           if (varray.type().is<float4>()) {
             varray.typed<float4>().materialize(mask, buf);
+          }
+          else {
+            buf.fill(float4(0.0f));
           }
           a.r4 = buf.data();
           break;
@@ -1127,6 +1318,9 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
           if (varray.type().is<ColorGeometry4f>()) {
             varray.typed<ColorGeometry4f>().materialize(mask, buf);
           }
+          else {
+            buf.fill(ColorGeometry4f(0.0f, 0.0f, 0.0f, 1.0f));
+          }
           a.r4 = reinterpret_cast<const float4 *>(buf.data());
           break;
         }
@@ -1140,6 +1334,9 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
           buf.reinitialize(domain_size);
           if (varray.type().is<math::Quaternion>()) {
             varray.typed<math::Quaternion>().materialize(mask, buf);
+          }
+          else {
+            buf.fill(math::Quaternion::identity());
           }
           a.rq = buf.data();
           break;
@@ -1155,6 +1352,9 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
           if (varray.type().is<float4x4>()) {
             varray.typed<float4x4>().materialize(mask, buf);
           }
+          else {
+            buf.fill(float4x4::identity());
+          }
           a.rm = buf.data();
           break;
         }
@@ -1163,6 +1363,12 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
         case Type::IntArray:
         case Type::FloatArray:
         case Type::VecArray:
+        case Type::Vec2Array:
+        case Type::Vec4Array:
+        case Type::ColorArray:
+        case Type::RotArray:
+        case Type::Mat2Array:
+        case Type::Mat3Array:
         case Type::StringArray:
         case Type::MatArray:
         case Type::RayArray: {
@@ -1206,6 +1412,9 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
           buf.reinitialize(domain_size);
           if (varray.type().is<float>()) {
             varray.typed<float>().materialize(mask, buf);
+          }
+          else {
+            buf.fill(0.0f);
           }
           a.rf = buf.data();
           break;
@@ -6458,7 +6667,7 @@ ExecOutput run_on_accessor(const Program &program,
   BindState state;
   if (!bind_attrs(attributes, bind_domain, domain_size, mask, program, state)) {
     out.ok = false;
-    out.error = "Failed to bind attributes";
+    out.error = BLT_translate_do_tooltip_any_thread("Failed to bind attributes");
     return out;
   }
   profile_bind = ProfileClock::now();
@@ -6556,6 +6765,7 @@ ExecOutput run_on_accessor(const Program &program,
   }
   env.parm_user = &elem_user;
   env.load_parm = load_parm_fn;
+  env.eval_ramp = eval_ramp_fn;
   env.addpoints = &addpoints;
   env.topo_user = &topo;
   env.topo_fn = geo_builtin_fn;
@@ -6821,12 +7031,15 @@ ExecOutput run_on_accessor(const Program &program,
   }
   if (topo.geo_forced.load(std::memory_order_relaxed)) {
     const int g = topo.geo_forced_from.load(std::memory_order_relaxed);
-    out.warning = "geo 输入为 " + std::to_string(g) +
-                  "，已自动改为 0（addpoint / addprim / setattribute / delete_geometry 只支持当前几何）";
+    out.warning = fmt::format(
+        fmt::runtime(BLT_translate_do_tooltip_any_thread("The geometry input {} was changed to 0, addpoint / addprim / "
+                          "setattribute / delete_geometry only work on the current geometry")),
+        g);
   }
   if (!ok.load()) {
     out.ok = false;
-    out.error = error.empty() ? "Wrangle evaluation failed" : error;
+    /* Messages of the interpreter are English, show them in the language of the interface. */
+    out.error = BLT_translate_do_tooltip_any_thread(error.empty() ? "Wrangle evaluation failed" : error.c_str());
   }
   if (profile) {
     const auto profile_end = ProfileClock::now();
@@ -6864,7 +7077,7 @@ ExecOutput run_on_component(const Program &program,
   std::optional<bke::MutableAttributeAccessor> attributes = component.attributes_for_write();
   if (!attributes) {
     out.ok = false;
-    out.error = "Cannot write attributes on this geometry";
+    out.error = BLT_translate_do_tooltip_any_thread("Cannot write attributes on this geometry");
     return out;
   }
   const int domain_size = component.attribute_domain_size(domain);
@@ -6887,11 +7100,15 @@ ExecOutput execute(const Program &program,
                    const Span<const bke::GeometrySet *> extra_geometry,
                    const Domain domain,
                    const fn::Field<bool> &selection,
-                   const Span<ChField> ch_parms)
+                   const Span<ChField> ch_parms,
+                   const Span<ChList> ch_lists,
+                   const Span<ChRamp> ch_ramps)
 {
   ExecOutput out;
   geometry.ensure_owns_direct_data();
   ElemUser elem_user;
+  elem_user.parm_lists = ch_lists;
+  elem_user.parm_ramps = ch_ramps;
   elem_user.geos.append(&geometry);
   for (const bke::GeometrySet *g : extra_geometry) {
     if (g) {
@@ -6921,6 +7138,8 @@ ExecOutput execute(const Program &program,
       return;
     }
     ElemUser local_user;
+    local_user.parm_lists = elem_user.parm_lists;
+    local_user.parm_ramps = elem_user.parm_ramps;
     local_user.geos = elem_user.geos;
     if (local_user.geos.is_empty()) {
       local_user.geos.append(&geo);

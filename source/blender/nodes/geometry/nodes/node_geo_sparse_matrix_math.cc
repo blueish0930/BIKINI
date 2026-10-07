@@ -31,6 +31,7 @@ static void node_declare(NodeDeclarationBuilder &b)
   const bNode *node = b.node_or_null();
   const Operation operation = node ? Operation(node->custom1) : Operation::Add;
   const bool is_scale = operation == Operation::Scale;
+  const bool is_transpose = operation == Operation::Transpose;
 
   b.add_input<decl::Bundle>("A"_ustr)
       .create_signature([](const bNode &) { return BundleSignature::sparse_coo(); })
@@ -47,7 +48,7 @@ static void node_declare(NodeDeclarationBuilder &b)
                     .default_value(1.0f)
                     .description("Scalar multiplied with every stored value of A");
 
-  b_in.available(!is_scale);
+  b_in.available(!is_scale && !is_transpose);
   scale.available(is_scale);
 }
 
@@ -204,6 +205,10 @@ static void node_geo_exec(GeoNodeExecParams params)
     result = sparse_matrix::sparse_matrix_scale(
         a_w.data(), a_r.data(), a_c.data(), int64_t(a_w.size()), scale);
   }
+  else if (operation == Operation::Transpose) {
+    result = sparse_matrix::sparse_matrix_transpose(
+        a_w.data(), a_r.data(), a_c.data(), int64_t(a_w.size()));
+  }
   else {
     BundlePtr b_bundle = params.extract_input<BundlePtr>("B"_ustr);
     Vector<float> b_w;
@@ -242,13 +247,18 @@ static void node_rna(StructRNA *srna)
        0,
        "Scale",
        "Multiply every stored value of A by a float constant"},
+      {int(Operation::Transpose),
+       "TRANSPOSE",
+       0,
+       "Transpose",
+       "Swap the rows and columns of A"},
       {0, nullptr, 0, nullptr, nullptr},
   };
 
   RNA_def_node_enum(srna,
                     "operation",
                     "Operation",
-                    "Sparse matrix operation to apply to the two input matrices",
+                    "Sparse matrix operation to apply to the input matrices",
                     operation_items,
                     NOD_inline_enum_accessors(custom1),
                     int(Operation::Add));
@@ -261,7 +271,8 @@ static void node_register()
   geo_node_type_base(&ntype, "GeometryNodeSparseMatrixMath"_ustr, GEO_NODE_SPARSE_MATRIX_MATH);
   ntype.ui_name = "Sparse Matrix Math";
   ntype.ui_description =
-      "Add, subtract, multiply, or scale large sparse matrices stored as weight/row/col bundles";
+      "Add, subtract, multiply, scale, or transpose large sparse matrices stored as weight/row/col "
+      "bundles";
   ntype.enum_name_legacy = "SPARSE_MATRIX_MATH";
   ntype.nclass = NODE_CLASS_CONVERTER;
   ntype.initfunc = node_init;

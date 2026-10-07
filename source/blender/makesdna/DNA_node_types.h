@@ -2246,22 +2246,6 @@ struct bNodeTree {
   /** Image representing what the node group does. */
   struct PreviewImage *preview = nullptr;
 
-  /**
-   * SHA-256 of the password-derived key (first 32 bytes). Empty means unlocked.
-   */
-  char lock_password_hash[40] = "";
-  /** Random salt for PBKDF2. */
-  char lock_salt[16] = {};
-  /** ChaCha20 nonce; regenerated on every encrypt. */
-  char lock_nonce[12] = {};
-  int lock_blob_size = 0;
-  int lock_kdf_iters = 0;
-  /** IDs referenced by the encrypted graph, kept so they are not purged. */
-  int lock_used_ids_num = 0;
-  /** Encrypted mini-blend of the node graph (ciphertext || HMAC). */
-  char *lock_blob = nullptr;
-  ID **lock_used_ids = nullptr;
-
   bke::bNodeTreeRuntime *runtime = nullptr;
 
 #ifdef __cplusplus

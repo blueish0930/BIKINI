@@ -100,7 +100,9 @@ struct WrangleInputItemsAccessor : public socket_items::SocketItemsAccessorDefau
                 SOCK_RGBA,
                 SOCK_MATRIX,
                 SOCK_STRING,
-                SOCK_ROTATION);
+                SOCK_ROTATION,
+                SOCK_COLOR_RAMP,
+                SOCK_CURVE);
   }
 
   static void init_with_socket_type_and_name(bNode &node,

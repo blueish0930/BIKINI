@@ -89,6 +89,16 @@ static std::string format_wrangle_array_cell(const bke::WrangleArrayValue &arr,
       comma(i);
     }
   }
+  else if (arr.kind == bke::WrangleArrayKind::Float2) {
+    for (int i = 0; i < n; i++) {
+      s += '(';
+      s += format_preview_float(arr.d.f[i * 2 + 0], precision);
+      s += ", ";
+      s += format_preview_float(arr.d.f[i * 2 + 1], precision);
+      s += ')';
+      comma(i);
+    }
+  }
   else if (arr.kind == bke::WrangleArrayKind::String) {
     for (int i = 0; i < n; i++) {
       s += '"';
@@ -109,25 +119,33 @@ static std::string format_wrangle_array_cell(const bke::WrangleArrayValue &arr,
       comma(i);
     }
   }
-  else if (arr.kind == bke::WrangleArrayKind::Matrix2) {
-    s += '[';
-    for (int k = 0; k < 4; k++) {
-      s += format_preview_float(arr.d.f[k], precision);
-      if (k + 1 < 4) {
-        s += ", ";
+  else if (arr.kind == bke::WrangleArrayKind::Float4) {
+    for (int i = 0; i < n; i++) {
+      s += '(';
+      for (int k = 0; k < 4; k++) {
+        s += format_preview_float(arr.d.f[i * 4 + k], precision);
+        if (k + 1 < 4) {
+          s += ", ";
+        }
       }
+      s += ')';
+      comma(i);
     }
-    s += ']';
   }
-  else if (arr.kind == bke::WrangleArrayKind::Matrix3) {
-    s += '[';
-    for (int k = 0; k < 9; k++) {
-      s += format_preview_float(arr.d.f[k], precision);
-      if (k + 1 < 9) {
-        s += ", ";
+  else if (ELEM(arr.kind, bke::WrangleArrayKind::Matrix2, bke::WrangleArrayKind::Matrix3)) {
+    /* A single `2@` / `3@` matrix, or the items of a `2[]@` / `3[]@` array. */
+    const int floats = (arr.kind == bke::WrangleArrayKind::Matrix2) ? 4 : 9;
+    for (int i = 0; i < n; i++) {
+      s += '[';
+      for (int k = 0; k < floats; k++) {
+        s += format_preview_float(arr.d.f[i * floats + k], precision);
+        if (k + 1 < floats) {
+          s += ", ";
+        }
       }
+      s += ']';
+      comma(i);
     }
-    s += ']';
   }
   else if (arr.kind == bke::WrangleArrayKind::Ray) {
     for (int i = 0; i < n; i++) {

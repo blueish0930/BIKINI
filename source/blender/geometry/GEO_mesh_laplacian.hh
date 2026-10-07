@@ -20,10 +20,21 @@ enum class MeshLaplacianWeightMode {
   Uniform = 0,
   /** Cotangent Laplacian (triangle meshes); off-diagonals accumulate −½ cot of opposite angles. */
   Cotangent = 1,
+  /** Caller-provided matrix entries, see #MeshLaplacianOptions::custom_weights. */
+  Custom = 2,
 };
 
 struct MeshLaplacianOptions {
   MeshLaplacianWeightMode mode = MeshLaplacianWeightMode::Cotangent;
+  /**
+   * Entries for #MeshLaplacianWeightMode::Custom, all three spans have the same length. The value
+   * at (row, col) is used as it is: the sign is not changed and no diagonal is derived, so the
+   * caller provides the diagonal too. Entries that share (row, col) accumulate; entries with
+   * indices outside of the vertex range are skipped.
+   */
+  Span<float> custom_weights;
+  Span<int> custom_rows;
+  Span<int> custom_cols;
   /** When true, assemble I+tL, or M+tML when #use_mass is also true. */
   bool build_diffusion = false;
   /** Scalar t used when #build_diffusion is true. */
@@ -55,6 +66,7 @@ struct MeshLaplacianCOO {
  *
  * Non-triangle faces must be triangulated by the caller. Exact-zero weights are dropped.
  * Indices are vertex indices in [0, positions.size()).
+ * In custom mode the triangles are only used for the mass, so there may be none.
  */
 MeshLaplacianCOO mesh_laplacian_build(Span<float3> positions,
                                       Span<int> corner_verts,

@@ -19401,10 +19401,6 @@ msgid "Library Weak Reference"
 msgstr "库弱引用"
 
 
-msgid "Weak reference to the data-block in a library .blend file this originated from. For re-use of already appended data and linked editable assets"
-msgstr "对源库文件 .blend 中数据块的弱引用。用于复用已追加的数据和已关联的可编辑资产"
-
-
 msgid "Unique data-block ID name (within a same type and library)"
 msgstr "唯一的数据块 ID 名称（在相同的类型和库中）"
 
@@ -51883,10 +51879,6 @@ msgstr ""
 "最终结果的计算方式为：(漫射光 * 漫射颜色) + (光泽光 * 光泽颜色)"
 
 
-msgid "Defines parametrization of the light evaluation"
-msgstr "定义光照评估的参数化设置"
-
-
 msgid "Light Falloff"
 msgstr "光线衰减"
 
@@ -53905,10 +53897,6 @@ msgstr "节点接口集合"
 
 msgid "Node Internal Link"
 msgstr "节点内部连线"
-
-
-msgid "Internal link used by muted nodes to connect input to output sockets"
-msgstr "用于被屏蔽的节点将输入与输出接口相连的内部链接"
 
 
 msgid "From Socket"
@@ -103431,36 +103419,12 @@ msgid "Sample to start denoising the preview at"
 msgstr "用于开始对预览降噪的采样点"
 
 
-msgid "Viewport Denoising Upscale Quality"
-msgstr "视图降噪放大品质"
-
-
 msgid "Overall upscale factor and denoising quality when using DLSS"
 msgstr "使用 DLSS 时的整体放大系数和降噪质量"
 
 
-msgid "Highest quality without upscaling"
-msgstr "无放大的最高质量"
-
-
-msgid "Offers higher image quality than balanced mode"
-msgstr "比均衡模式更高的图像质量"
-
-
-msgid "Offers both optimized performance and image quality"
-msgstr "既提供优化的性能，又保证图像质量"
-
-
-msgid "Offers a higher performance boost than balanced mode"
-msgstr "相比于均衡模式，性能提升更显著"
-
-
 msgid "Ultra Performance"
 msgstr "极致性能"
-
-
-msgid "Offers the highest performance boost"
-msgstr "提供最大的性能提升"
 
 
 msgid "Denoise Preview on GPU"
@@ -107464,10 +107428,6 @@ msgid "Scene Effect Properties"
 msgstr "场景效果属性"
 
 
-msgid "Scene Effect Empty Properties"
-msgstr "场景效果空白属性"
-
-
 msgid "Collection of scene effects"
 msgstr "场景效果集合"
 
@@ -108497,10 +108457,6 @@ msgstr "缩略图样式"
 
 msgid "How thumbnails are displayed"
 msgstr "缩略图的显示方式"
-
-
-msgid "Show single thumbnail in the middle of each strip"
-msgstr "在每条片段的中部显示单幅缩略图"
 
 
 msgid "Strip Ends"
@@ -127676,10 +127632,6 @@ msgid "See OperatorList.txt text block"
 msgstr "见 OperatorList.txt 文本块"
 
 
-msgid "Timeline Marker(s)"
-msgstr "时间轴标记"
-
-
 msgid "Renamed {:d} of {:d} {:s}"
 msgstr "已重命名 {:d} / {:d} {:s}"
 
@@ -140171,10 +140123,6 @@ msgstr "动画属性"
 
 msgid "Menu Missing:"
 msgstr "菜单丢失:"
-
-
-msgid "Cannot edit source in popup regions that does not support refresh."
-msgstr "无法在无刷新功能的弹出区块中编辑源码。"
 
 
 msgid "Active button is not from a script, cannot edit source"
@@ -158811,10 +158759,6 @@ msgid "AO"
 msgstr "AO"
 
 
-msgid "LightIndex"
-msgstr "光照索引"
-
-
 msgid "Color of the emitted light"
 msgstr "发射光的颜色"
 
@@ -166979,6 +166923,9 @@ msgstr "针阈值"
 msgid "Collapse Length"
 msgstr "塌缩长度"
 
+msgid "Texel Stretch"
+msgstr "纹素拉伸"
+
 msgid "Area Stretch"
 msgstr "面积拉伸"
 
@@ -167006,8 +166953,8 @@ msgstr "用 CGAL 移除精确退化与近似退化三角形（针/帽）。比�
 msgid "Compute surface intersection polylines of two meshes (CGAL surface_intersection). Output is Curves, not a solid boolean volume (use Mesh Boolean for that)."
 msgstr "计算两网格表面交线（CGAL surface_intersection）。输出为曲线，不是实体布尔体积（实体请用网格布尔）。"
 
-msgid "Measure parameterization distortion per face from Corner UV vs 3D geometry. Area Stretch ≈ 1 means area-preserving; Conformal Stretch ≈ 1 means angle-preserving. Related to CGAL measure_distortion (L2 stretch family)."
-msgstr "按角点 UV 与三维几何测量每面参数化扭曲。面积拉伸≈1 表示保面积；共形拉伸≈1 表示保角。与 CGAL measure_distortion（L2 拉伸族）相关。"
+msgid "Measure UV distortion per face from Corner UV vs 3D geometry. All three outputs are 1 on a layout without distortion. Texel Stretch and Conformal Stretch get higher with more distortion, Area Stretch moves away from 1 in both directions. Texel and Area Stretch are relative to the total UV to surface area ratio of the mesh."
+msgstr "按角点 UV 与三维几何测量每面 UV 畸变。无畸变的布局上三个输出都为 1。纹素拉伸和共形拉伸随畸变增大而变大，面积拉伸则向 1 的两侧偏离。纹素与面积拉伸相对于网格的 UV 总面积与表面总面积之比。"
 
 msgid "Scale-space reconstruction for noisy unorganized points: Weighted-PCA multi-scale smoothing, then Alpha-shape connectivity mapped back onto the original samples (interpolating surface). Different pipeline from standalone Alpha Shape / Advancing Front."
 msgstr "面向噪声无序点云的尺度空间重建：加权 PCA 多尺度平滑后，用 Alpha 形状在平滑坐标上建连接，再把三角形索引映回原始采样点（插值表面）。与单独的 Alpha 形状/推进前沿管线不同。"
@@ -174420,78 +174367,6 @@ msgstr "流体模拟输出"
 msgid "Output of a black-box 2D fluid simulation zone (Pavel WebGL-Fluid-Simulation step)"
 msgstr "黑盒二维流体模拟区的输出（Pavel WebGL-Fluid-Simulation 步进）"
 
-msgid "Lock Node Group"
-msgstr "锁定节点组"
-
-msgid "Unlock Node Group"
-msgstr "解锁节点组"
-
-msgid "Lock or unlock this node group with a password"
-msgstr "使用密码锁定或解锁此节点组"
-
-msgid "Enter Node Group Password"
-msgstr "输入节点组密码"
-
-msgid "Enter the password to view a locked node group"
-msgstr "输入密码以查看已锁定的节点组"
-
-msgid "Node Group Locked"
-msgstr "节点组已锁定"
-
-msgid "Enter the password to view this node group."
-msgstr "请输入密码以查看此节点组。"
-
-msgid "Enter the password to view and edit this node group."
-msgstr "请输入密码以查看并编辑此节点组。"
-
-msgid "Set a password. It will be required the next time this node group is entered."
-msgstr "设置密码。下次进入此节点组时需要输入该密码。"
-
-msgid "Set a password. The node graph is encrypted in the .blend file. Without this password the internals cannot be viewed, used, or extracted."
-msgstr "设置密码。节点图会加密写入 blend 文件。没有此密码无法查看、使用或提取内部节点。"
-
-msgid "Node group '%s' is encrypted; enter the password to edit it"
-msgstr "节点组“%s”已加密，请输入密码后再编辑"
-
-msgid "Failed to encrypt node group"
-msgstr "加密节点组失败"
-
-msgid "Failed to decrypt node group"
-msgstr "解密节点组失败"
-
-msgid "Failed to generate encryption salt"
-msgstr "生成加密盐失败"
-
-msgid "Enter the password to remove the lock."
-msgstr "请输入密码以解除锁定。"
-
-msgid "Incorrect password"
-msgstr "密码不正确"
-
-msgid "Password cannot be empty"
-msgstr "密码不能为空"
-
-msgid "Passwords do not match"
-msgstr "两次输入的密码不一致"
-
-msgid "Re-enter the password to confirm"
-msgstr "再次输入密码以确认"
-
-msgid "Password for this node group"
-msgstr "此节点组的密码"
-
-msgid "Node group is locked; a password is required to enter it"
-msgstr "节点组已锁定，进入时需要密码"
-
-msgid "Node group is encrypted; a password is required to view or extract its internals"
-msgstr "节点组已加密，查看或提取内部节点需要密码"
-
-msgid "Cannot ungroup locked node group '%s'"
-msgstr "无法解散已锁定的节点组“%s”"
-
-msgid "Cannot insert into a locked node group"
-msgstr "无法插入到已锁定的节点组中"
-
 # BIKINI node descriptions (Optimal Transport / Make It Stand / GTE)
 
 # BIKINI global translations (default context and RNA "*")
@@ -175189,12 +175064,12 @@ msgctxt "*"
 msgid "Contact"
 msgstr "接触"
 
-msgid "Add, subtract, multiply, or scale large sparse matrices stored as weight/row/col bundles"
-msgstr "对以 weight/row/col 捆包存储的大型稀疏矩阵做加、减、乘或缩放"
+msgid "Add, subtract, multiply, scale, or transpose large sparse matrices stored as weight/row/col bundles"
+msgstr "对以 weight/row/col 捆包存储的大型稀疏矩阵做加、减、乘、缩放或转置"
 
 msgctxt "*"
-msgid "Add, subtract, multiply, or scale large sparse matrices stored as weight/row/col bundles"
-msgstr "对以 weight/row/col 捆包存储的大型稀疏矩阵做加、减、乘或缩放"
+msgid "Add, subtract, multiply, scale, or transpose large sparse matrices stored as weight/row/col bundles"
+msgstr "对以 weight/row/col 捆包存储的大型稀疏矩阵做加、减、乘、缩放或转置"
 
 msgid "Left sparse COO matrix bundle (weight/row/col lists)"
 msgstr "左侧稀疏 COO 矩阵捆包（weight/row/col 列表）"
@@ -175954,6 +175829,480 @@ msgstr "对色盲友好的顺序色图"
 msgid "Compile"
 msgstr "编译"
 
+msgid "Docs"
+msgstr "文档"
+
+msgid "Tab: complete"
+msgstr "Tab：补全"
+
+msgid "Line {}: {}"
+msgstr "第 {} 行：{}"
+
+msgid "{} (after {})"
+msgstr "{}（在 {} 后面）"
+
+msgid "Unknown attribute prefix"
+msgstr "属性前缀不对"
+
+msgid "Unknown attribute prefix {}@"
+msgstr "属性前缀 {}@ 不对"
+
+msgid "f@ float  i@ int  b@ bool  v@ vector  u@ vector2  q@ vector4  c@ color\n  s@ string  r@ rotation  2@/3@/4@ matrix; arrays are written f[]@name"
+msgstr "f@ float  i@ int  b@ bool  v@ vector  u@ vector2  q@ vector4  c@ color\n  s@ string  r@ rotation  2@/3@/4@ 矩阵；数组写成 f[]@name"
+
+msgid "Unknown statement {}"
+msgstr "不认识的语句 {}"
+
+msgid "Unknown statement {}, did you mean {}?"
+msgstr "不认识的语句 {}，是不是 {}？"
+
+msgid "Only if / else / for / foreach / while can be followed by { }; a function call ends with ;"
+msgstr "后面带 { } 的只能是 if / else / for / foreach / while；函数调用要以 ; 结尾。"
+
+msgid "Unexpected }"
+msgstr "多了一个 }"
+
+msgid "There is no { before this }."
+msgstr "这个 } 前面没有对应的 {。"
+
+msgid "This { is never closed"
+msgstr "这个 { 没有对应的 }"
+
+msgid "Every { needs a matching }."
+msgstr "每个 { 都要有对应的 }。"
+
+msgid "else without an if before it"
+msgstr "else 前面没有对应的 if"
+
+msgid "else comes right after if (...) { ... }."
+msgstr "else 要紧跟在 if (...) { ... } 后面。"
+
+msgid "A type name cannot be used here: {}"
+msgstr "这里不能写类型名 {}"
+
+msgid "Declare a variable: float x = 1;  A function needs its return type first: float sq(float x) { return x * x; }"
+msgstr "声明变量: float x = 1;  定义函数要先写返回类型: float sq(float x) { return x * x; }"
+
+msgid "A value is missing here"
+msgstr "这里缺一个值"
+
+msgid "An operator, a comma or = has to be followed by a number, variable, attribute or function call."
+msgstr "运算符、逗号或 = 后面要接数字、变量、属性或函数调用。"
+
+msgid "Write a number, variable, attribute or function call."
+msgstr "写数字、变量、属性或函数调用。"
+
+msgid "Unknown function {}"
+msgstr "没有函数 {}"
+
+msgid "Unknown function {}, did you mean {}?"
+msgstr "没有函数 {}，是不是 {}？"
+
+msgid "The string has no closing quote"
+msgstr "字符串少了结束引号"
+
+msgid "Close the string with \" or '."
+msgstr "把 \" 或 ' 配对写完。"
+
+msgid "The block comment has no closing */"
+msgstr "块注释少了结束符 */"
+
+msgid "Every /* needs a matching */."
+msgstr "每个 /* 都必须有对应的 */。"
+
+msgid "This character is not allowed here"
+msgstr "这里有非法字符"
+
+msgid "Attributes are written f@name / v@P, not with $ or #."
+msgstr "属性写成 f@name / v@P，不要用 $ 或 #。"
+
+msgid "Missing ;"
+msgstr "少了分号"
+
+msgid "End the statement with ;"
+msgstr "这句写完后加 ;"
+
+msgid "Missing )"
+msgstr "少了 )"
+
+msgid "Every ( needs a matching )."
+msgstr "把 ( 和 ) 配齐。"
+
+msgid "Missing ("
+msgstr "少了 ("
+
+msgid "if / for / a function name is followed by (."
+msgstr "if / for / 函数名后面要跟 (。"
+
+msgid "Missing }"
+msgstr "少了 }"
+
+msgid "Missing {"
+msgstr "少了 {"
+
+msgid "Put the block in { }."
+msgstr "代码块用 { } 包起来。"
+
+msgid "Missing ]"
+msgstr "少了 ]"
+
+msgid "An array index is written xs[0]."
+msgstr "数组下标写成 xs[0]。"
+
+msgid "Missing comma"
+msgstr "少了逗号"
+
+msgid "Separate the arguments with commas."
+msgstr "参数之间用逗号隔开。"
+
+msgid "The ?: operator misses its :"
+msgstr "三元运算少了 :"
+
+msgid "Write: condition ? a : b"
+msgstr "写成 条件 ? 真 : 假"
+
+msgid "An attribute is written prefix@name"
+msgstr "属性要写成 前缀@名字"
+
+msgid "Example: f@scale  i@index  v@P"
+msgstr "例: f@scale  i@index  v@P"
+
+msgid "A type has to be followed by a variable name"
+msgstr "类型后面要跟变量名"
+
+msgid "Example: int n = 0;"
+msgstr "例: int n = 0;"
+
+msgid "An attribute name is missing after @"
+msgstr "@ 后面要写属性名"
+
+msgid "Example: f@scale = 2;"
+msgstr "例: f@scale = 2;"
+
+msgid "A component is one of x/y/z/w or r/g/b/a, or a combination of them"
+msgstr "分量名只能是 x/y/z/w、r/g/b/a，或它们的组合"
+
+msgid "Example: v@P.z += 1;  p = p.zxy;  vector2 a = p.zx;"
+msgstr "例: v@P.z += 1;  p = p.zxy;  vector2 a = p.zx;"
+
+msgid "i@index is read-only"
+msgstr "i@index 是只读的"
+
+msgid "Write to another attribute, for example i@id = i@index;"
+msgstr "写到别的属性，例如 i@id = i@index;"
+
+msgid "The left side of = has to be a variable or an attribute"
+msgstr "等号左边必须是变量或属性"
+
+msgid "break is only allowed inside a loop"
+msgstr "break 只能写在循环里"
+
+msgid "continue is only allowed inside a loop"
+msgstr "continue 只能写在循环里"
+
+msgid "Unexpected symbol here"
+msgstr "这里的符号不对"
+
+msgid "Check for a missing ; and for brackets that are not closed."
+msgstr "检查是不是少了 ;，括号要成对。"
+
+msgid "Empty parentheses"
+msgstr "括号里是空的"
+
+msgid "Empty expression"
+msgstr "表达式是空的"
+
+msgid "Point neighbors: pointneighbours(geo, index); face neighbors: faceneighbours(geo, index).\n  Example: i[]@nbr = pointneighbours(0, i@index);"
+msgstr "点邻居用 pointneighbours(geo, index)；面邻居用 faceneighbours(geo, index)。\n  例: i[]@nbr = pointneighbours(0, i@index);"
+
+msgid "The closest point of a surface: geometry_proximity(geo, \"face\", sample, hit_pos, dist).\n  Example: vector hit; float d; geometry_proximity(1, \"face\", v@P, hit, d);"
+msgstr "靠近采样用 geometry_proximity(geo, \"face\", 采样点, 命中位置, 距离)。\n  例: vector hit; float d; geometry_proximity(1, \"face\", v@P, hit, d);"
+
+msgid "Nearest points: nearestpoints(geo, k_or_r, mode), it returns int[].\n  mode 0/\"k\": the k nearest          i[]@pts = nearestpoints(0, 8, \"k\");\n  mode 1/\"r\": all within a radius     i[]@pts = nearestpoints(0, 0.25, \"r\");\n  mode 2/\"rk\": at most k in a radius  i[]@pts = nearestpoints(0, 0.25, 8, \"rk\");"
+msgstr "近邻只有 nearestpoints(geo, k_or_r, mode)，返回 int[]。\n  mode 0/\"k\": k 近邻         i[]@pts = nearestpoints(0, 8, \"k\");\n  mode 1/\"r\": 半径内全部      i[]@pts = nearestpoints(0, 0.25, \"r\");\n  mode 2/\"rk\": 半径内最多 k 个 i[]@pts = nearestpoints(0, 0.25, 8, \"rk\");"
+
+msgid "Rays: raycast(geo, origin, dir, length, is_hit, hit_pos, hit_n, hit_dist).\n  All hits: ray hits[] = raycastall(...), then rayishit(hits[i]) / rayhitpos(hits[i]).\n  Example: int hit; vector hp, hn; float hd; raycast(0, v@P, {0,0,-1}, 10, hit, hp, hn, hd);"
+msgstr "射线用 raycast(geo, origin, dir, length, is_hit, hit_pos, hit_n, hit_dist)。\n  全部命中: ray hits[] = raycastall(...)，再用 rayishit(hits[i]) / rayhitpos(hits[i]) 读每条射线。\n  例: int hit; vector hp, hn; float hd; raycast(0, v@P, {0,0,-1}, 10, hit, hp, hn, hd);"
+
+msgid "Noise: noise(P, scale, detail, roughness, lacunarity, distortion, dim, type).\n  dim 1-4; type: fbm|multifractal|hybrid|ridged|hetero.\n  voronoi(P, ...) has feature f1|f2|smooth_f1|edge|radius.\n  Random: rand(i@index)."
+msgstr "噪声: noise(P, scale, detail, roughness, lacunarity, distortion, dim, type)。\n  dim 1-4；type: fbm|multifractal|hybrid|ridged|hetero。\n  voronoi(P, ...) 的 feature: f1|f2|smooth_f1|edge|radius。\n  随机: rand(i@index)。"
+
+msgid "Arrays: int[] xs = {1,2,3};  or  i[]@ids = array(1,2,3);  the length is len(xs)."
+msgstr "数组: int[] xs = {1,2,3};  或  i[]@ids = array(1,2,3);  长度用 len(xs)。"
+
+msgid "Function names are lower case without spaces. Press Ctrl+Space in the editor for the list of functions, or open Docs."
+msgstr "函数名全小写、没有空格。在编辑器里按 Ctrl+Space 查看可用函数，或点 Docs。"
+
+msgid "{} is not declared (it is read as attribute @{}), but argument {} of {} has to be {}\nDeclare the variable before using it, or check its spelling."
+msgstr "{} 没有声明（被当成属性 @{}），而第 {} 个参数（{}）要 {}\n先声明这个变量再使用，或者检查名字有没有拼错。"
+
+msgid "Argument {} of {} has to be {}, but this is {}\nCompare with the signature of the function and pass the type it asks for."
+msgstr "第 {} 个参数（{}）要 {}，这里是 {}\n对照函数签名，把参数换成它要的类型。"
+
+msgid "int or string"
+msgstr "int 或 string"
+
+msgid "float or vector"
+msgstr "float 或 vector"
+
+msgid "Line {}: {} is not declared and is used as attribute @{} here. Did you mean {}?"
+msgstr "第 {} 行：{} 没有声明，这里被当成属性 @{} 使用。是不是想写 {}？"
+
+msgid "Cannot assign the array {} to {}\nUse a variable with [], for example {} xs[] = ...; a single item is xs[0]"
+msgstr "不能把数组 {} 赋给 {}\n用带 [] 的变量接收，例如 {} xs[] = ...; 取单个元素写 xs[0]"
+
+msgid "Cannot assign {} to the array {}\nBuild an array with array(...) or {{a, b, c}}"
+msgstr "不能把 {} 赋给数组 {}\n用 array(...) 或 {{a, b, c}} 组成数组"
+
+msgid "Cannot assign {} to {}"
+msgstr "不能把 {} 赋给 {}"
+
+msgid "Cannot store the array {} in the single value attribute @{}"
+msgstr "不能把数组 {} 存进单值属性 @{}"
+
+msgid "Cannot store the array {} in the single value attribute @{}\nAn array attribute needs [], write {}@{}"
+msgstr "不能把数组 {} 存进单值属性 @{}\n数组属性要带 []，写成 {}@{}"
+
+msgid "Cannot store the array {} in {}: it is not declared, so it is the single value attribute @{}\nDeclare an array variable ({} {}[] = ...) or write the array attribute {}@{}"
+msgstr "不能把数组 {} 存进 {}：它没有声明，是单值属性 @{}\n声明成数组变量（{} {}[] = ...）或写成数组属性 {}@{}"
+
+msgid "vector × rotation: write q * v instead. The vector is still rotated by q."
+msgstr "向量×旋转：请改成左乘 q * v。这里仍按 q 旋转 v。"
+
+msgid "Matrix sizes do not match: {} × {}\nBoth sides need the same size."
+msgstr "矩阵乘法维度不一致：{} × {}\n两边阶数必须相同。"
+
+msgid "Matrix and vector sizes do not match: {} × {}\nThis matrix multiplies a {}D vector. To transform a point by a 4×4 matrix use transform_point(v, M)."
+msgstr "矩阵×向量维度不一致：{} × {}\n左乘要 {} 维向量。4×4 变换点请用 transform_point(v, M)。"
+
+msgid "Vector and matrix sizes do not match: {} × {}\nWrite M * v with the matrix on the left and matching sizes."
+msgstr "向量×矩阵维度不一致：{} × {}\n请写成矩阵左乘 M * v，且两边维数相同。"
+
+msgid "vector × matrix: write M * v with the matrix on the left. This is computed as vᵀ × M."
+msgstr "向量×矩阵：请改成矩阵左乘 M * v。这里按 vᵀ × M 计算。"
+
+msgid "Cannot multiply {} × {}\nA matrix multiplies a matrix or a vector of the same size, or a float (scale)."
+msgstr "不能做 {} × {}\n矩阵只能乘同阶矩阵、同维向量，或 float（缩放）。"
+
+msgid "Function {} takes {} arguments"
+msgstr "函数 {} 需要 {} 个参数"
+
+msgid "{}: the geometry input {} was changed to 0, only the current geometry (geo 0) is supported"
+msgstr "{}: geo 输入为 {}，已自动改为 0（只支持当前几何 geo 0）"
+
+msgid "map(value, from_min, from_max, to_min, to_max) takes 5 arguments"
+msgstr "map(value, from_min, from_max, to_min, to_max) 需要 5 个参数"
+
+msgid "smooth(value) or smooth(min, max, value)"
+msgstr "smooth(value) 或 smooth(min, max, value)"
+
+msgid "valuetostring(value, digits) or valuetostring(value, before, after)"
+msgstr "valuetostring(value, digits) 或 valuetostring(value, before, after)"
+
+msgid "format(fmt, ...) needs a format string"
+msgstr "format(fmt, ...) 需要一个格式字符串"
+
+msgid "svd(m, U, s, V) takes a matrix and three outputs: U, the singular values and V"
+msgstr "svd(m, U, s, V) 需要矩阵和三个输出：U、奇异值、V"
+
+msgid "pd(m, R, S) takes a matrix and two outputs: the rotation R and the stretch S"
+msgstr "pd(m, R, S) 需要矩阵和两个输出：旋转 R、缩放 S"
+
+msgid "eigen(m, evals, evecs) takes a matrix and two outputs: the eigenvalues and the eigenvectors"
+msgstr "eigen(m, evals, evecs) 需要矩阵和两个输出：特征值、特征向量"
+
+msgid "The first argument of svd / pd / eigen has to be a matrix"
+msgstr "svd / pd / eigen 的第一个参数必须是矩阵"
+
+msgid "{} takes {} arguments, got {}"
+msgstr "{} 需要 {} 个参数，这里写了 {} 个"
+
+msgid "{} takes {} to {} arguments, got {}"
+msgstr "{} 需要 {} 到 {} 个参数，这里写了 {} 个"
+
+msgid "{}(array) needs one int, float, vector or string array"
+msgstr "{}(array) 需要一个 int、float、vector 或 string 数组"
+
+msgid "{}(array) needs one int, float or vector array"
+msgstr "{}(array) 需要一个 int、float 或 vector 数组"
+
+msgid "{}(a, b) needs two arrays of the same kind: int, float, vector or string"
+msgstr "{}(a, b) 需要两个同类型的数组：int、float、vector 或 string"
+
+msgid "find(array, value) needs an int, float, vector or string array and a value"
+msgstr "find(array, value) 需要一个 int、float、vector 或 string 数组和一个值"
+
+msgid "find: a string can only be searched in a string array"
+msgstr "find: string 只能在 string 数组里查找"
+
+msgid "find: a string array needs a string to search for"
+msgstr "find: 在 string 数组里只能查找 string"
+
+msgid "slice(array, start, end, step) needs an array and a start index, end and step are optional"
+msgstr "slice(array, start, end, step) 需要一个数组和起始下标，end 和 step 可以省略"
+
+msgid "chramp(\"name\", position) needs a quoted name and a position"
+msgstr "chramp(\"name\", position) 需要带引号的名字和一个位置"
+
+msgid "chcurve(\"name\", value) needs a quoted name and a value"
+msgstr "chcurve(\"name\", value) 需要带引号的名字和一个值"
+
+msgid "chcurve: the value has to be a float, vector or color, got {}"
+msgstr "chcurve: 值必须是 float、vector 或 color，这里是 {}"
+
+msgid "{} is used as more than one kind of ramp or curve\nUse a different name for each chramp() and each float, vector or color chcurve()"
+msgstr "{} 被用作了多种色带或曲线\n每个 chramp() 以及每种 float、vector、color 的 chcurve() 要用不同的名字"
+
+msgid "An index can only be used on an array, vector, matrix or rotation"
+msgstr "下标只能用于数组、向量、矩阵或旋转"
+
+msgid "sample_nearest_surface returns {}, but the variable is {}"
+msgstr "sample_nearest_surface 返回 {}，变量是 {}"
+
+msgid "GPU: unsupported function {}"
+msgstr "GPU: 不支持函数 {}"
+
+msgid "GPU: geometry function not available in shader wrangle"
+msgstr "GPU: 着色器 Wrangle 里不能用几何函数"
+
+msgid "GPU: user function return type is not supported"
+msgstr "GPU: 不支持这种自定义函数的返回类型"
+
+msgid "GPU: user function array/string parameters"
+msgstr "GPU: 自定义函数的参数不能是数组或字符串"
+
+msgid "GPU: missing lvalue"
+msgstr "GPU: 赋值缺少左值"
+
+msgid "GPU: cannot assign to index"
+msgstr "GPU: 不能给下标赋值"
+
+msgid "GPU: unknown lvalue"
+msgstr "GPU: 不认识的赋值目标"
+
+msgid "GPU: unknown attribute"
+msgstr "GPU: 不认识的属性"
+
+msgid "GPU: unsupported lvalue"
+msgstr "GPU: 不支持这种赋值目标"
+
+msgid "GPU: i@index is not available in shader wrangle"
+msgstr "GPU: 着色器 Wrangle 里没有 i@index"
+
+msgid "GPU: npoints is not available in shader wrangle"
+msgstr "GPU: 着色器 Wrangle 里没有 npoints"
+
+msgid "GPU: user functions cannot read attributes"
+msgstr "GPU: 自定义函数里不能读属性"
+
+msgid "GPU: unknown identifier"
+msgstr "GPU: 不认识的名字"
+
+msgid "GPU: unsupported operator"
+msgstr "GPU: 不支持这个运算符"
+
+msgid "GPU: list channels are CPU-only"
+msgstr "GPU: 列表通道只能在 CPU 上运行"
+
+msgid "GPU: chf/chi/... cannot be used inside user functions"
+msgstr "GPU: 自定义函数里不能用 chf/chi/..."
+
+msgid "GPU: sampling other geometry inputs is CPU-only"
+msgstr "GPU: 采样其他几何输入只能在 CPU 上运行"
+
+msgid "GPU: min/max of an array is CPU-only"
+msgstr "GPU: 数组的 min/max 只能在 CPU 上运行"
+
+msgid "Wrangle evaluation failed"
+msgstr "Wrangle 求值失败"
+
+msgid "Wrangle compile failed"
+msgstr "Wrangle 编译失败"
+
+msgid "Failed to bind attributes"
+msgstr "绑定属性失败"
+
+msgid "Cannot write attributes on this geometry"
+msgstr "无法在这个几何体上写属性"
+
+msgid "The geometry input {} was changed to 0, addpoint / addprim / setattribute / delete_geometry only work on the current geometry"
+msgstr "geo 输入为 {}，已自动改为 0（addpoint / addprim / setattribute / delete_geometry 只支持当前几何）"
+
+msgid "Unmatched '{' in format string"
+msgstr "格式字符串里的 { 没有配对"
+
+msgid "Invalid replacement field in format string"
+msgstr "格式字符串里的替换字段写法不对"
+
+msgid "format argument index out of range"
+msgstr "format 的参数序号超出范围"
+
+msgid "Invalid format specifier"
+msgstr "格式说明符不对"
+
+msgid "Single '}' in format string"
+msgstr "格式字符串里多了一个 }"
+
+msgid "Incomplete '%' in format string"
+msgstr "格式字符串里的 % 不完整"
+
+msgid "format() first argument must be a string"
+msgstr "format() 的第一个参数必须是字符串"
+
+msgid "Matrix and vector sizes do not match"
+msgstr "矩阵×向量维度不一致"
+
+msgid "Matrix sizes do not match: both sides need the same size"
+msgstr "矩阵乘法维度不一致：两边阶数必须相同"
+
+msgid "Instruction limit exceeded (infinite loop?)"
+msgstr "超过指令上限（是不是死循环？）"
+
+msgid "Invalid function call"
+msgstr "无效的函数调用"
+
+msgid "Function recursion is too deep"
+msgstr "函数递归太深"
+
+msgid "Unterminated parameter name in {}"
+msgstr "{} 的参数名少了结束引号"
+
+msgid "{} expects exactly one quoted parameter name"
+msgstr "{} 只能有一个带引号的参数名"
+
+msgid "{} parameter name cannot be empty"
+msgstr "{} 的参数名不能为空"
+
+msgid "{} expects a quoted parameter name, for example {}(\"name\")"
+msgstr "{} 需要带引号的参数名，例如 {}(\"name\")"
+
+msgid "Missing cht parameter '{}'; click Compile to create its input"
+msgstr "缺少 cht 参数 '{}'；点击 Compile 创建它的输入"
+
+msgid "cht parameter '{}' must be a string"
+msgstr "cht 参数 '{}' 必须是字符串"
+
+msgid "cht parameter '{}' must be a single constant string"
+msgstr "cht 参数 '{}' 必须是单个常量字符串"
+
+msgid "Code parameter expansion failed: {}"
+msgstr "展开代码参数失败：{}"
+
+msgid "chs folding failed: {}"
+msgstr "折叠 chs 失败：{}"
+
+msgid "append(array, item, ...) needs an array and at least one item or array to add"
+msgstr "append(数组, 元素, ...) 需要一个数组，以及至少一个要追加的元素或数组"
+
+msgid "Cannot append the array {} to the array {}\nBoth arrays need items of the same kind."
+msgstr "不能把数组 {} 追加到数组 {}\n两个数组的元素必须是同一类。"
+
+msgid "Cannot append {} to the array {}\nThe items of this array are {}."
+msgstr "不能把 {} 追加到数组 {}\n这个数组的元素是 {}。"
+
+msgid "GPU: arrays of this type are CPU-only"
+msgstr "GPU：这种类型的数组只能在 CPU 上运行"
+
 msgid "Compile error"
 msgstr "编译错误"
 
@@ -176040,9 +176389,6 @@ msgstr "启用输出缓存"
 
 msgid "Enable input must be a constant value for this data type"
 msgstr "此数据类型的启用输入必须是常量"
-
-msgid "Enter the password so locked node groups can compute. Viewing the node graph still requires the password."
-msgstr "输入密码后，锁定的节点组才能计算。查看节点图仍然需要密码。"
 
 msgid "Eroded heightfield"
 msgstr "侵蚀后的高度场"
@@ -176313,9 +176659,6 @@ msgstr "局部光：求值位置到灯光位置的距离。\n太阳光：1.0"
 
 msgid "Local lights: Normalized direction from evaluation position to light position.\nSun lights: Sun direction * -1.0"
 msgstr "局部光：从求值位置指向灯光位置的归一化方向。\n太阳光：太阳方向 × -1.0"
-
-msgid "Locked Node Groups"
-msgstr "锁定的节点组"
 
 msgid "Macro mountain frequency"
 msgstr "宏观山体频率"
@@ -176674,9 +177017,6 @@ msgstr "设置变换"
 msgid "Set Visibility"
 msgstr "设置可见性"
 
-msgid "Set a password. The node graph is stored encrypted in the .blend file and appears empty in other Blender versions, but still computes automatically. This password is required to view or edit the internals."
-msgstr "设置密码。节点图在 .blend 文件中加密存储，在其他 Blender 版本中显示为空，但仍会自动计算。查看或编辑内部需要此密码。"
-
 msgid "Set object viewport display type, extras, bounds and object color"
 msgstr "设置物体视口显示类型、附加显示、边界和物体颜色"
 
@@ -176958,3 +177298,3948 @@ msgstr "周期"
 
 msgid "Use a periodic domain. Domain size is hidden while this is off."
 msgstr "使用周期域。未勾选时不显示周期尺寸接口。"
+
+
+# --- BIKINI translations: nodes, RNA properties and reports ---
+
+msgid "Data-Block Relations"
+msgstr "数据块关系"
+
+msgid "Visualize who references a data-block"
+msgstr "可视化谁引用了某个数据块"
+
+msgid "Wrangle Array"
+msgstr "Wrangle 数组"
+
+msgid "Packed list written by Geometry Wrangle (i[]@ / f[]@ / v[]@)"
+msgstr "由几何 Wrangle 写入的打包列表（i[]@ / f[]@ / v[]@）"
+
+msgid "Failed OpenColorIO Configuration"
+msgstr "OpenColorIO 配置失败"
+
+msgid "The requested OpenColorIO config failed to load"
+msgstr "请求的 OpenColorIO 配置加载失败"
+
+msgid "OpenColorIO Configuration"
+msgstr "OpenColorIO 配置"
+
+msgid "File path or URI of the OpenColorIO configuration currently in use"
+msgstr "当前使用的 OpenColorIO 配置的文件路径或 URI"
+
+msgid "OpenColorIO Configuration Source"
+msgstr "OpenColorIO 配置来源"
+
+msgid "Where the OpenColorIO configuration came from"
+msgstr "OpenColorIO 配置的来源"
+
+msgid "BLENDER_OCIO environment variable"
+msgstr "BLENDER_OCIO 环境变量"
+
+msgid "The BLENDER_OCIO environment variable"
+msgstr "BLENDER_OCIO 环境变量"
+
+msgid "OCIO environment variable"
+msgstr "OCIO 环境变量"
+
+msgid "The OCIO environment variable"
+msgstr "OCIO 环境变量"
+
+msgid "The active project's OpenColorIO configuration setting"
+msgstr "活动项目的 OpenColorIO 配置设置"
+
+msgid "The OpenColorIO configuration bundled with Blender"
+msgstr "Blender 自带的 OpenColorIO 配置"
+
+msgid "The built-in fallback configuration, if loading other configurations failed"
+msgstr "内置后备配置（在加载其他配置失败时使用）"
+
+msgid "OpenColorIO configuration to use for this project"
+msgstr "此项目使用的 OpenColorIO 配置"
+
+msgid "The default Blender OpenColorIO configuration. Works with both ACES workflows and Blender specific views and color spaces"
+msgstr "Blender 默认的 OpenColorIO 配置。同时适用于 ACES 工作流以及 Blender 专用的视图和色彩空间"
+
+msgid "ACES 2.0 Studio"
+msgstr "ACES 2.0 Studio"
+
+msgid "Academy Color Encoding System 2.0, Studio Config v4.0.0. Less compatible with existing assets and add-ons, but more consistent with other applications using the same configuration"
+msgstr "学院色彩编码系统 2.0，Studio 配置 v4.0.0。与现有资产和插件的兼容性较差，但与使用相同配置的其他应用程序更一致"
+
+msgid "ACES 1.3 Studio"
+msgstr "ACES 1.3 Studio"
+
+msgid "Academy Color Encoding System 1.3, Studio Config v2.2.0. Less compatible with existing assets and add-ons, but more consistent with other applications using the same configuration"
+msgstr "学院色彩编码系统 1.3，Studio 配置 v2.2.0。与现有资产和插件的兼容性较差，但与使用相同配置的其他应用程序更一致"
+
+msgid "OpenColorIO configuration from a file path or ocio:// URI"
+msgstr "来自文件路径或 ocio:// URI 的 OpenColorIO 配置"
+
+msgid "OpenColorIO Configuration Path"
+msgstr "OpenColorIO 配置路径"
+
+msgid "Path to the OpenColorIO configuration to use for this project. May be an absolute file path, project relative path with {project_root}, or an ocio:// built-in OpenColorIO config"
+msgstr "此项目使用的 OpenColorIO 配置路径。可以是绝对文件路径、使用 {project_root} 的项目相对路径，或 ocio:// 内置 OpenColorIO 配置"
+
+msgid "Create a cyclic stroke"
+msgstr "创建循环笔画"
+
+msgid "Custom sort index of the collection in the parent collection"
+msgstr "集合在父集合中的自定义排序索引"
+
+msgid "Sort Index Child"
+msgstr "子级排序索引"
+
+msgid "Custom sort index when the object is shown under a parent of another object"
+msgstr "物体显示在另一物体的父级之下时的自定义排序索引"
+
+msgid "Custom sort index of the object in the collection"
+msgstr "物体在集合中的自定义排序索引"
+
+msgid "Interop ID"
+msgstr "互操作 ID"
+
+msgid "Identifier of the color space that works across OpenColorIO configurations, as defined by the ASWF Color Interop Forum"
+msgstr "可在不同 OpenColorIO 配置间通用的色彩空间标识符，由 ASWF 色彩互操作论坛定义"
+
+msgid "The color space has no interop ID"
+msgstr "此色彩空间没有互操作 ID"
+
+msgid "Rec.709 1.961 Exponent EOTF Display, matching the interpretation of Rec.709 video on Apple devices. Use to match display of video files in e.g. QuickTime exactly. Not recommended to be used for any other purpose."
+msgstr "Rec.709 1.961 指数 EOTF 显示，与 Apple 设备上对 Rec.709 视频的解读一致。用于精确匹配视频文件（如 QuickTime）的显示效果。不建议用于其他用途。"
+
+msgid "Modal Keymap Item"
+msgstr "模态键位映射项"
+
+msgid "Default key binding for one of the events that a node tool reacts to"
+msgstr "节点工具所响应事件的默认按键绑定"
+
+msgid "Name of the event, matching the name of a Modal Event node"
+msgstr "事件名称，与模态事件节点的名称匹配"
+
+msgid "Run the tool again for every key-repeat event while the key is held"
+msgstr "按住按键期间，每个按键重复事件都再次运行该工具"
+
+msgid "Type of event that triggers this item by default"
+msgstr "默认触发此项的事件类型"
+
+msgctxt "UI_Events_KeyMaps"
+msgid "Value"
+msgstr "值"
+
+msgctxt "UI_Events_KeyMaps"
+msgid "Any"
+msgstr "任意"
+
+msgctxt "UI_Events_KeyMaps"
+msgid "Press"
+msgstr "按下"
+
+msgctxt "UI_Events_KeyMaps"
+msgid "Release"
+msgstr "释放"
+
+msgctxt "UI_Events_KeyMaps"
+msgid "Click"
+msgstr "单击"
+
+msgctxt "UI_Events_KeyMaps"
+msgid "Double Click"
+msgstr "双击"
+
+msgctxt "UI_Events_KeyMaps"
+msgid "Drag"
+msgstr "拖动"
+
+msgctxt "UI_Events_KeyMaps"
+msgid "Nothing"
+msgstr "无"
+
+msgid "Weak reference to the data-block in a library .blend file this originated from. For re-use of already appended data and linked editable assets"
+msgstr "对此数据块来源的库 .blend 文件中数据块的弱引用。用于重复使用已追加的数据和已链接的可编辑资产"
+
+msgid "Paint Layers"
+msgstr "绘制图层"
+
+msgid "Photoshop-style paint layer stack"
+msgstr "Photoshop 风格的绘制图层堆栈"
+
+msgid "Path to the library .blend file. WARNING: Typically, this value should be considered read-only, changing this path without proper processing afterwards can leave Blender data in an invalid state"
+msgstr "库 .blend 文件的路径。警告：通常应将此值视为只读，更改路径后若不经适当处理可能使 Blender 数据处于无效状态"
+
+msgid "LuxCore Node Tree"
+msgstr "LuxCore 节点树"
+
+msgid "Independent LuxCore material node tree (not the shader editor)"
+msgstr "独立的 LuxCore 材质节点树（不是着色器编辑器）"
+
+msgid "The \"split\" normal direction of each face corner, influenced by vertex normals, sharp faces, sharp edges, and custom normals. May be empty."
+msgstr "每个面角点的“拆分”法线方向，受顶点法线、锐利面、锐利边和自定义法线影响。可能为空。"
+
+msgid "Pair UVs through the mesh X/Y/Z mirror, then place them around the UV symmetry center. Falls back to UV position when that misses"
+msgstr "通过网格的 X/Y/Z 镜像配对 UV，然后将它们放置在 UV 对称中心周围。若失败则回退到按 UV 位置配对"
+
+msgid "Mirror UV editing across the U axis"
+msgstr "沿 U 轴镜像 UV 编辑"
+
+msgid "Mirror UV editing across the V axis"
+msgstr "沿 V 轴镜像 UV 编辑"
+
+msgid "Symmetry Center"
+msgstr "对称中心"
+
+msgid "UV coordinate the U/V mirror axes pass through"
+msgstr "U/V 镜像轴所经过的 UV 坐标"
+
+msgid "Allow this geometry node group to participate in recursive calls. Each call is a separate branch; use the Recursion Tree window to inspect a path"
+msgstr "允许此几何节点组参与递归调用。每次调用是独立的分支；使用递归树窗口检查某条路径"
+
+msgid "Recursion Depth"
+msgstr "递归深度"
+
+msgid "Maximum calls to this recursive group along one path, including calls through other groups"
+msgstr "沿同一路径对此递归组的最大调用次数，包括通过其他组的调用"
+
+msgid "GPU Texture Editor nodes"
+msgstr "GPU 纹理编辑器节点"
+
+msgid "Object Editor nodes"
+msgstr "物体编辑器节点"
+
+msgid "Index of the active default key binding"
+msgstr "活动默认按键绑定的索引"
+
+msgid "Default Modal Keymap"
+msgstr "默认模态键位映射"
+
+msgid "Default key bindings for the events that the node tool reacts to. The actual bindings are configured in the keymap editor"
+msgstr "节点工具所响应事件的默认按键绑定。实际绑定在键位映射编辑器中配置"
+
+msgid "GPU Texture Editor Tree"
+msgstr "GPU 纹理编辑器树"
+
+msgid "LuxCore Material Node Tree"
+msgstr "LuxCore 材质节点树"
+
+msgid "LuxCore material graph (separate from the Cycles/EEVEE shader editor)"
+msgstr "LuxCore 材质图（独立于 Cycles/EEVEE 着色器编辑器）"
+
+msgid "Object Editor Tree"
+msgstr "物体编辑器树"
+
+msgid "Node graph that edits object properties, material slots, modifiers and hierarchy"
+msgstr "用于编辑物体属性、材质槽、修改器和层级的节点图"
+
+msgid "Object visibility to raycast rays. Implicitly false for Blended materials in EEVEE."
+msgstr "物体对光线投射射线的可见性。在 EEVEE 中混合材质隐含为否。"
+
+msgid "Representation type of the pointcloud"
+msgstr "点云的表示类型"
+
+msgid "Simple point cloud represented by points with position and radius"
+msgstr "由带位置和半径的点表示的简单点云"
+
+msgid "3D Gaussian Splat"
+msgstr "3D 高斯泼溅"
+
+msgid "A point cloud that represents the original 3D Gaussian Splats technique"
+msgstr "表示原始 3D 高斯泼溅技术的点云"
+
+msgid "LuxCore"
+msgstr "LuxCore"
+
+msgid "Native LuxCore render engine settings"
+msgstr "原生 LuxCore 渲染引擎设置"
+
+msgid "Compositing node group of the active scene compositor effect. Alias of compositing_node_group"
+msgstr "活动场景合成器效果的合成节点组。是 compositing_node_group 的别名"
+
+msgid "Paint Layer"
+msgstr "绘制图层"
+
+msgid "Texture paint layer with blend mode and opacity"
+msgstr "带混合模式和不透明度的纹理绘制图层"
+
+msgid "How this layer overlays the layers below"
+msgstr "此图层如何叠加在下方图层之上"
+
+msgid "Linear Burn"
+msgstr "线性加深"
+
+msgid "Vivid Light"
+msgstr "亮光"
+
+msgid "Pin Light"
+msgstr "点光"
+
+msgid "Hide this layer"
+msgstr "隐藏此图层"
+
+msgid "Prevent painting on this layer"
+msgstr "防止在此图层上绘制"
+
+msgid "Masks controlling this layer's mix"
+msgstr "控制此图层混合的蒙版"
+
+msgid "Layer opacity"
+msgstr "图层不透明度"
+
+msgid "Paint on the active mask instead of the layer"
+msgstr "在活动蒙版而不是图层上绘制"
+
+msgid "Show Masks"
+msgstr "显示蒙版"
+
+msgid "Expand mask list under this layer"
+msgstr "展开此图层下的蒙版列表"
+
+msgid "Image used as this layer when Use Image is enabled"
+msgstr "启用“使用图像”时用作此图层的图像"
+
+msgid "Use Image"
+msgstr "使用图像"
+
+msgid "Use an image as this layer"
+msgstr "使用图像作为此图层"
+
+msgid "Collection of texture paint layers"
+msgstr "纹理绘制图层集合"
+
+msgid "Active paint layer"
+msgstr "活动绘制图层"
+
+msgid "Active paint layer index"
+msgstr "活动绘制图层索引"
+
+msgid "Grayscale mask controlling a paint layer's mix"
+msgstr "控制绘制图层混合的灰度蒙版"
+
+msgid "How this mask combines with other masks"
+msgstr "此蒙版如何与其他蒙版组合"
+
+msgid "Disable this mask"
+msgstr "停用此蒙版"
+
+msgid "Prevent painting on this mask"
+msgstr "防止在此蒙版上绘制"
+
+msgid "Mask name"
+msgstr "蒙版名称"
+
+msgid "How strongly this mask affects the layer mix"
+msgstr "此蒙版对图层混合的影响强度"
+
+msgid "Image used as this mask (grayscale luminance)"
+msgstr "用作此蒙版的图像（灰度亮度）"
+
+msgid "Use an image as this mask"
+msgstr "使用图像作为此蒙版"
+
+msgid "Paint Masks"
+msgstr "绘制蒙版"
+
+msgid "Masks belonging to a paint layer"
+msgstr "属于某个绘制图层的蒙版"
+
+msgid "Active Mask"
+msgstr "活动蒙版"
+
+msgid "Active mask"
+msgstr "活动蒙版"
+
+msgid "Active mask index"
+msgstr "活动蒙版索引"
+
+msgid "Operator Modal Keymap"
+msgstr "操作符模态键位映射"
+
+msgid "Indicates that the keymap is defined by an operator type that is registered at runtime, instead of by a key configuration"
+msgstr "表示此键位映射由运行时注册的操作符类型定义，而不是由按键配置定义"
+
+msgid "Bikini"
+msgstr "Bikini"
+
+msgid "Deformable"
+msgstr "可变形"
+
+msgid "Derive"
+msgstr "派生"
+
+msgid "Simulate"
+msgstr "模拟"
+
+msgid "Erosion"
+msgstr "侵蚀"
+
+msgctxt "MovieClip"
+msgid "Speed"
+msgstr "速度"
+
+msgctxt "MovieClip"
+msgid "Fastest"
+msgstr "最快"
+
+msgctxt "MovieClip"
+msgid "Double"
+msgstr "双倍"
+
+msgctxt "MovieClip"
+msgid "Realtime"
+msgstr "实时"
+
+msgctxt "MovieClip"
+msgid "Half"
+msgstr "一半"
+
+msgctxt "MovieClip"
+msgid "Quarter"
+msgstr "四分之一"
+
+msgid "Output Cache Entries"
+msgstr "输出缓存条目"
+
+msgid "Number of in-memory cache entries for this node"
+msgstr "此节点的内存缓存条目数"
+
+msgid "Output Cache"
+msgstr "输出缓存"
+
+msgid "Cache this node's output in memory so unchanged cooks are skipped. Uses extra RAM"
+msgstr "在内存中缓存此节点的输出，以便跳过未更改的重新计算。会占用额外内存"
+
+msgid "From Interop ID"
+msgstr "来源互操作 ID"
+
+msgid "Interop ID of the input color space"
+msgstr "输入色彩空间的互操作 ID"
+
+msgid "To Interop ID"
+msgstr "目标互操作 ID"
+
+msgid "Interop ID of the output color space"
+msgstr "输出色彩空间的互操作 ID"
+
+msgid "GPU Texture Editor node group to evaluate (must have a Color Group Output)"
+msgstr "要计算的 GPU 纹理编辑器节点组（必须有颜色组输出）"
+
+msgid "Type of data passed through this portal"
+msgstr "通过此门户传递的数据类型"
+
+msgid "Name of the Store Named Portal in this node tree"
+msgstr "此节点树中存储命名门户的名称"
+
+msgid "Max Continuity"
+msgstr "最大连续性"
+
+msgid "Highest Continuity order the node socket accepts. k pins the original k-ring at the selection/port boundary"
+msgstr "节点接口接受的最高连续性阶数。k 会在选区/端口边界固定原始的 k 环"
+
+msgid "Delaunay tetrahedra on a periodic box (CGAL Periodic_3_Delaunay_triangulation_3). Wrapping cells use offset vertices so they sit on the domain boundary. Domain 0 uses a padded bbox."
+msgstr "周期性盒子上的 Delaunay 四面体（CGAL Periodic_3_Delaunay_triangulation_3）。跨越边界的单元使用偏移顶点，使其位于域边界上。域为 0 时使用带填充的包围盒。"
+
+msgid "Type of field displayed by the debug overlay"
+msgstr "调试覆盖层所显示的场类型"
+
+msgid "Domain used to sample the field for the overlay"
+msgstr "对场采样以生成覆盖层所使用的域"
+
+msgid "Matrix Display"
+msgstr "矩阵显示"
+
+msgid "How matrix fields are drawn in the viewport"
+msgstr "矩阵场在视图中的绘制方式"
+
+msgid "Show location, rotation and scale text"
+msgstr "显示位置、旋转和缩放文字"
+
+msgid "Draw the upper-left 3x3 as XYZ-colored arrows"
+msgstr "将左上 3x3 绘制为 XYZ 着色的箭头"
+
+msgid "Show the full 4x4 numeric matrix"
+msgstr "显示完整的 4x4 数值矩阵"
+
+msgid "Color Overlay"
+msgstr "颜色覆盖层"
+
+msgid "Composite this field into the shared color overlay. Disable so later Debug nodes do not replace earlier colors. For vectors, only applies when Vector Display is Color"
+msgstr "将此场合成到共享颜色覆盖层。禁用后，后续调试节点不会替换先前的颜色。对于矢量，仅在矢量显示为颜色时适用"
+
+msgid "Text Overlay"
+msgstr "文字覆盖层"
+
+msgid "Draw attribute values as viewport text. Off by default because per-element text is expensive; enable when numbers are needed"
+msgstr "将属性值绘制为视图文字。默认关闭，因为逐元素文字开销很大；需要查看数值时启用"
+
+msgid "How vector fields are drawn in the viewport"
+msgstr "矢量场在视图中的绘制方式"
+
+msgid "Preview the vector as surface color (XYZ mapped to RGB)"
+msgstr "将矢量预览为表面颜色（XYZ 映射到 RGB）"
+
+msgid "Draw direction arrows with optional normalize and scale"
+msgstr "绘制方向箭头，可选择归一化和缩放"
+
+msgid "Advance point-cloud particles using a local-space MAC FLIP solver"
+msgstr "使用局部空间 MAC FLIP 求解器推进点云粒子"
+
+msgid "Neighbor query mode"
+msgstr "邻居查询模式"
+
+msgid "Find a fixed number of nearest target points for every context point"
+msgstr "为每个上下文点查找固定数量的最近目标点"
+
+msgid "Find all target points within a radius of every context point"
+msgstr "为每个上下文点查找半径内的所有目标点"
+
+msgid "Float or vector lists for b and x"
+msgstr "b 和 x 使用浮点或矢量列表"
+
+msgid "Scalar float lists for b/x"
+msgstr "b/x 使用标量浮点列表"
+
+msgid "Vector lists; A applied per component"
+msgstr "矢量列表；A 逐分量应用"
+
+msgid "Decompose Mode"
+msgstr "分解模式"
+
+msgid "Matrix factorization or eigen decomposition"
+msgstr "矩阵分解或特征分解"
+
+msgid "Matrix Factor"
+msgstr "矩阵分解因子"
+
+msgid "Direct factorization for later solve"
+msgstr "直接分解，供之后求解使用"
+
+msgid "Eigen"
+msgstr "特征值"
+
+msgid "Eigenvalues and eigenvectors"
+msgstr "特征值和特征向量"
+
+msgid "Direct Method"
+msgstr "直接法"
+
+msgid "Direct factorization method"
+msgstr "直接分解方法"
+
+msgid "LLT"
+msgstr "LLT"
+
+msgid "Cholesky LLT (SPD)"
+msgstr "Cholesky LLT（对称正定）"
+
+msgid "LDLT"
+msgstr "LDLT"
+
+msgid "LDLT (symmetric)"
+msgstr "LDLT（对称）"
+
+msgid "LU"
+msgstr "LU"
+
+msgid "Partial pivoting LU"
+msgstr "部分主元 LU"
+
+msgid "QR"
+msgstr "QR"
+
+msgid "Column-pivoted QR"
+msgstr "列主元 QR"
+
+msgid "Eigen Solver"
+msgstr "特征求解器"
+
+msgid "Eigenvalue solver style (Spectra-like)"
+msgstr "特征值求解器风格（类 Spectra）"
+
+msgid "GenEigsSolver"
+msgstr "GenEigsSolver"
+
+msgid "General (non-symmetric) eigenproblem"
+msgstr "一般（非对称）特征问题"
+
+msgid "SymEigsSolver"
+msgstr "SymEigsSolver"
+
+msgid "Symmetric / self-adjoint eigenproblem"
+msgstr "对称 / 自伴特征问题"
+
+msgid "GenEigsRealShiftSolver"
+msgstr "GenEigsRealShiftSolver"
+
+msgid "General eigenproblem with real shift (shift-invert)"
+msgstr "带实数位移的一般特征问题（位移-求逆）"
+
+msgid "SymEigsShiftSolver"
+msgstr "SymEigsShiftSolver"
+
+msgid "Symmetric eigenproblem with shift (shift-invert)"
+msgstr "带位移的对称特征问题（位移-求逆）"
+
+msgid "Iterative Method"
+msgstr "迭代法"
+
+msgid "Krylov iterative method"
+msgstr "克雷洛夫迭代法"
+
+msgid "GMRES"
+msgstr "GMRES"
+
+msgid "Generalized Minimal Residual"
+msgstr "广义最小残差法"
+
+msgid "DGMRES"
+msgstr "DGMRES"
+
+msgid "Deflated GMRES"
+msgstr "带收缩的 GMRES"
+
+msgid "MINRES"
+msgstr "MINRES"
+
+msgid "Minimal Residual (symmetric)"
+msgstr "最小残差法（对称）"
+
+msgid "CG"
+msgstr "CG"
+
+msgid "Conjugate Gradient (SPD)"
+msgstr "共轭梯度法（对称正定）"
+
+msgid "LSCG"
+msgstr "LSCG"
+
+msgid "Least-Squares Conjugate Gradient"
+msgstr "最小二乘共轭梯度法"
+
+msgid "BiCGSTAB"
+msgstr "BiCGSTAB"
+
+msgid "IDRS"
+msgstr "IDRS"
+
+msgid "Induced Dimension Reduction"
+msgstr "诱导维数缩减法"
+
+msgid "Linear System Solve"
+msgstr "线性方程组求解"
+
+msgid "Solve sparse Ax=b"
+msgstr "求解稀疏 Ax=b"
+
+msgid "Decompose"
+msgstr "分解"
+
+msgid "Matrix factor or eigenpairs"
+msgstr "矩阵分解或特征对"
+
+msgid "Solve with Decomposition"
+msgstr "使用分解求解"
+
+msgid "Solve Ax=b by applying a stored matrix factorization (no direct/iterative choice)"
+msgstr "通过应用已存储的矩阵分解来求解 Ax=b（无需选择直接/迭代法）"
+
+msgid "y = A*x"
+msgstr "y = A*x"
+
+msgid "Preconditioner"
+msgstr "预条件子"
+
+msgid "Preconditioner for iterative methods"
+msgstr "迭代法使用的预条件子"
+
+msgid "Identity"
+msgstr "单位"
+
+msgid "No preconditioning"
+msgstr "不使用预条件"
+
+msgid "Jacobi / diagonal"
+msgstr "雅可比 / 对角"
+
+msgid "IncompleteLUT"
+msgstr "IncompleteLUT"
+
+msgid "Incomplete LU threshold"
+msgstr "不完全 LU 阈值"
+
+msgid "IncompleteCholesky"
+msgstr "IncompleteCholesky"
+
+msgid "Incomplete Cholesky (SPD)"
+msgstr "不完全 Cholesky（对称正定）"
+
+msgid "Solver Class"
+msgstr "求解器类别"
+
+msgid "Direct or iterative linear solver"
+msgstr "直接或迭代线性求解器"
+
+msgid "Direct factorization solvers"
+msgstr "直接分解求解器"
+
+msgid "Krylov iterative solvers with preconditioner"
+msgstr "带预条件子的克雷洛夫迭代求解器"
+
+msgid "Discrete Laplacian weight formula"
+msgstr "离散拉普拉斯权重公式"
+
+msgid "Graph Laplacian with equal weight −1 on each unique edge"
+msgstr "每条唯一边权重均为 −1 的图拉普拉斯"
+
+msgid "Cotangent"
+msgstr "余切"
+
+msgid "Cotangent Laplacian using opposite-angle cot weights on triangle edges"
+msgstr "使用三角形边对角余切权重的余切拉普拉斯"
+
+msgid "Matrix from attributes, used exactly as given without changing the sign or adding a diagonal: every point or face corner writes its values to the row of its vertex and the columns stored in the column index attribute. Both attributes are either single values or Wrangle arrays"
+msgstr "由属性构建矩阵，数值原样使用，不改变符号也不添加对角线：每个点或面拐将其数值写入其顶点所在的行，列为列索引属性中存储的值。两个属性须同为单值或同为 Wrangle 数组"
+
+msgid "Weight Attribute"
+msgstr "权重属性"
+
+msgid "Column Index Attribute"
+msgstr "列索引属性"
+
+msgid "Float attribute, or float array written by a Wrangle node (f[]@), on the point or face corner domain with the values of the matrix entries. The row of an entry is the vertex of its point or face corner"
+msgstr "点域或面拐域上的浮点属性，或由 Wrangle 节点写入的浮点数组 (f[]@)，存储矩阵元素的数值。元素所在的行为该点或面拐对应的顶点"
+
+msgid "Integer attribute, or integer array written by a Wrangle node (i[]@), on the same domain as the weights with the vertex indices that are the columns of the matrix entries"
+msgstr "与权重位于同一域上的整数属性，或由 Wrangle 节点写入的整数数组 (i[]@)，存储作为矩阵元素所在列的顶点索引"
+
+msgid "The weight attribute must be on the point or face corner domain"
+msgstr "权重属性必须位于点域或面拐域上"
+
+msgid "The weight and column index attributes must be on the same domain"
+msgstr "权重属性与列索引属性必须位于同一域上"
+
+msgid "The weight and column index attributes must be convertible to float and integer"
+msgstr "权重属性与列索引属性必须可转换为浮点和整数"
+
+msgid "Entries with a column index outside of the vertex range were ignored"
+msgstr "列索引超出顶点范围的矩阵元素已被忽略"
+
+msgid "The weight and column index attributes must both be arrays or both be single values"
+msgstr "权重属性与列索引属性必须同为数组或同为单值"
+
+msgid "Array attributes must be float or integer arrays, other arrays were ignored"
+msgstr "数组属性必须为浮点或整数数组，其他数组已被忽略"
+
+msgid "The weight and column index arrays have different lengths on some elements, the extra items were ignored"
+msgstr "部分元素上的权重数组与列索引数组长度不同，多出的项已被忽略"
+
+msgid "Explanation of what the node tool does when the event is processed"
+msgstr "处理事件时节点工具所执行操作的说明"
+
+msgid "Name of the event that the node tool reacts to while it keeps running"
+msgstr "节点工具在持续运行期间所响应的事件名称"
+
+msgid "Code"
+msgstr "代码"
+
+msgid "Python source code run when the node evaluates"
+msgstr "节点计算时运行的 Python 源代码"
+
+msgid "Domain of the stored interactive selection"
+msgstr "已存储交互选区的域"
+
+msgid "Select mesh vertices or curve control points"
+msgstr "选择网格顶点或曲线控制点"
+
+msgid "Select mesh edges"
+msgstr "选择网格边"
+
+msgid "Select mesh faces"
+msgstr "选择网格面"
+
+msgid "Select whole curves/splines"
+msgstr "选择整条曲线/样条"
+
+msgid "Set the color and opacity for stroke points and fills together"
+msgstr "同时设置笔画点和填充的颜色与不透明度"
+
+msgid "Maximum number of unbaked simulation frames kept in memory"
+msgstr "内存中保留的未烘焙模拟帧的最大数量"
+
+msgid "Cache Limit Mode"
+msgstr "缓存限制模式"
+
+msgid "How the simulation cache limit is measured"
+msgstr "模拟缓存限制的计量方式"
+
+msgid "Limit the number of cached frames"
+msgstr "限制缓存的帧数"
+
+msgid "Limit approximate memory occupied by cached frames"
+msgstr "限制缓存帧占用的大致内存"
+
+msgid "Memory Limit (MB)"
+msgstr "内存限制 (MB)"
+
+msgid "Cached Frames"
+msgstr "缓存帧数"
+
+msgid "GPU Texture Editor: number of recent simulation frames kept as a full dense cache"
+msgstr "GPU 纹理编辑器：作为完整密集缓存保留的最近模拟帧数"
+
+msgid "Checkpoint Rate"
+msgstr "检查点频率"
+
+msgid "GPU Texture Editor: store a simulation checkpoint every N frames (0 disables). Scrubbing outside the dense cache seeks the nearest earlier checkpoint and recomputes forward"
+msgstr "GPU 纹理编辑器：每 N 帧存储一个模拟检查点（0 表示禁用）。在密集缓存之外拖动时间线时，会查找最近的较早检查点并向前重新计算"
+
+msgid "Sparse matrix operation to apply to the input matrices"
+msgstr "应用于输入矩阵的稀疏矩阵运算"
+
+msgid "Sparse matrix addition (A + B)"
+msgstr "稀疏矩阵加法 (A + B)"
+
+msgid "Sparse matrix subtraction (A - B)"
+msgstr "稀疏矩阵减法 (A - B)"
+
+msgid "Sparse matrix–matrix multiplication (A × B)"
+msgstr "稀疏矩阵乘法 (A × B)"
+
+msgid "Multiply every stored value of A by a float constant"
+msgstr "将 A 的每个存储值乘以一个浮点常量"
+
+msgid "Swap the rows and columns of A"
+msgstr "交换 A 的行与列"
+
+msgid "Transpose"
+msgstr "转置"
+
+msgid "Active Input Index"
+msgstr "活动输入索引"
+
+msgid "Index of the active channel parameter"
+msgstr "活动通道参数的索引"
+
+msgid "VEX-like source. Typing edits a draft (does not recook). Ctrl+Enter, click outside, or Compile commits and evaluates"
+msgstr "类 VEX 源代码。输入时编辑的是草稿（不会重新计算）。Ctrl+Enter、点击外部或编译会提交并计算"
+
+msgid "Which elements the script runs over"
+msgstr "脚本所运行的元素"
+
+msgid "Run the script once per point"
+msgstr "对每个点运行一次脚本"
+
+msgid "Run the script once per mesh edge"
+msgstr "对每条网格边运行一次脚本"
+
+msgid "Run the script once per mesh face"
+msgstr "对每个网格面运行一次脚本"
+
+msgid "Run the script once per face corner"
+msgstr "对每个面角点运行一次脚本"
+
+msgid "Run the script once per curve/spline"
+msgstr "对每条曲线/样条运行一次脚本"
+
+msgid "Run the script once per instance"
+msgstr "对每个实例运行一次脚本"
+
+msgid "Atomic Operator"
+msgstr "原子运算"
+
+msgid "Operation used when multiple elements write to the same index"
+msgstr "多个元素写入同一索引时使用的运算"
+
+msgid "Add all values targeting the same index"
+msgstr "将指向同一索引的所有值相加"
+
+msgid "Use the component-wise minimum"
+msgstr "使用逐分量最小值"
+
+msgid "Use the component-wise maximum"
+msgstr "使用逐分量最大值"
+
+msgid "Average all values targeting the same index"
+msgstr "对指向同一索引的所有值取平均"
+
+msgid "Type of value to write"
+msgstr "要写入的值的类型"
+
+msgid "Floating-point values"
+msgstr "浮点值"
+
+msgid "Integer values"
+msgstr "整数值"
+
+msgid "3D vector values"
+msgstr "3D 矢量值"
+
+msgid "Source Domain"
+msgstr "源域"
+
+msgid "Domain whose elements provide the Value and Target Index fields"
+msgstr "提供值和目标索引场的元素所在的域"
+
+msgid "Target Domain"
+msgstr "目标域"
+
+msgid "Domain whose elements receive the indexed writes"
+msgstr "接收按索引写入的元素所在的域"
+
+msgid "GPU Texture Editor Node"
+msgstr "GPU 纹理编辑器节点"
+
+msgid "Node in a GPU Texture Editor graph"
+msgstr "GPU 纹理编辑器图中的节点"
+
+msgid "Index of the active bake item"
+msgstr "活动烘焙项的索引"
+
+msgid "Color image slots to bake (item name = filename; use Prefix for a common prefix)"
+msgstr "要烘焙的彩色图像槽（项名称 = 文件名；使用前缀设置公共前缀）"
+
+msgid "Color space of the written file. Auto picks scene linear for EXR/HDR and the default byte space for other formats"
+msgstr "写入文件的色彩空间。自动模式对 EXR/HDR 使用场景线性，对其他格式使用默认字节色彩空间"
+
+msgid "Image file format written on Bake"
+msgstr "烘焙时写入的图像文件格式"
+
+msgid "Portable Network Graphics"
+msgstr "便携式网络图形"
+
+msgid "OpenEXR (float)"
+msgstr "OpenEXR（浮点）"
+
+msgid "Bitmap"
+msgstr "位图"
+
+msgid "Targa"
+msgstr "Targa"
+
+msgid "WebP"
+msgstr "WebP"
+
+msgid "Radiance HDR"
+msgstr "Radiance HDR"
+
+msgid "Radiance HDR (float)"
+msgstr "Radiance HDR（浮点）"
+
+msgid "Background alpha for the rendered view"
+msgstr "渲染视图的背景 Alpha"
+
+msgid "Use the sky/world background"
+msgstr "使用天空/世界背景"
+
+msgid "Transparent background (premultiplied alpha)"
+msgstr "透明背景（预乘 Alpha）"
+
+msgid "Camera object used for the view; empty uses scene camera"
+msgstr "用于视图的摄像机物体；为空则使用场景摄像机"
+
+msgid "Viewport shading type used for the offscreen render"
+msgstr "离屏渲染使用的视图着色类型"
+
+msgid "Wireframe viewport shading"
+msgstr "线框视图着色"
+
+msgid "Solid viewport shading"
+msgstr "实体视图着色"
+
+msgid "Material Preview viewport shading (EEVEE lookdev)"
+msgstr "材质预览视图着色（EEVEE 外观开发）"
+
+msgid "Rendered viewport shading (EEVEE/Workbench preview, not full F12 render)"
+msgstr "渲染视图着色（EEVEE/Workbench 预览，不是完整的 F12 渲染）"
+
+msgid "Include scene Annotation (grease pencil) strokes drawn in the 3D Viewport"
+msgstr "包含在 3D 视图中绘制的场景标注（蜡笔）笔画"
+
+msgid "Bottom Boundary"
+msgstr "底部边界"
+
+msgid "Boundary mode for the bottom edge"
+msgstr "底边的边界模式"
+
+msgid "Flow Out"
+msgstr "流出"
+
+msgid "Open edge: fluid and dye leave the domain"
+msgstr "开放边缘：流体和染料离开域"
+
+msgid "Periodic edge: fluid re-enters on the opposite side"
+msgstr "周期性边缘：流体从对侧重新进入"
+
+msgid "Solid wall: normal velocity is reflected"
+msgstr "固体墙：法向速度被反射"
+
+msgid "Left Boundary"
+msgstr "左侧边界"
+
+msgid "Boundary mode for the left edge"
+msgstr "左边的边界模式"
+
+msgid "Right Boundary"
+msgstr "右侧边界"
+
+msgid "Boundary mode for the right edge"
+msgstr "右边的边界模式"
+
+msgid "Top Boundary"
+msgstr "顶部边界"
+
+msgid "Boundary mode for the top edge"
+msgstr "顶边的边界模式"
+
+msgid "Number of recent fluid frames kept as a full dense cache"
+msgstr "作为完整密集缓存保留的最近流体帧数"
+
+msgid "Store a checkpoint every N frames (0 disables checkpoints)"
+msgstr "每 N 帧存储一个检查点（0 表示禁用检查点）"
+
+msgid "Index of the active color field"
+msgstr "活动颜色场的索引"
+
+msgid "Color Items"
+msgstr "颜色项"
+
+msgid "Color density fields advected by the fluid"
+msgstr "由流体平流的颜色密度场"
+
+msgid "Density Dissipation"
+msgstr "密度耗散"
+
+msgid "Simulation speed multiplier (1 = real-time). High values use substeps (max 12) so the slider keeps working past ~4x"
+msgstr "模拟速度倍数（1 = 实时）。较高的值会使用子步（最多 12 个），因此滑块在约 4 倍以上仍然有效"
+
+msgid "Dye Resolution"
+msgstr "染料分辨率"
+
+msgid "Color grid minimum edge, aspect-corrected like WebGL Fluid (default 1024)"
+msgstr "颜色网格的最短边，按宽高比校正，与 WebGL Fluid 类似（默认 1024）"
+
+msgid "Pressure Iterations"
+msgstr "压力迭代次数"
+
+msgid "Pressure Smoothing"
+msgstr "压力平滑"
+
+msgid "Pressure V-Cycles"
+msgstr "压力 V 循环"
+
+msgid "Sim Resolution"
+msgstr "模拟分辨率"
+
+msgid "Velocity grid minimum edge, aspect-corrected like WebGL Fluid (default 128)"
+msgstr "速度网格的最短边，按宽高比校正，与 WebGL Fluid 类似（默认 128）"
+
+msgid "Splat Radius"
+msgstr "泼溅半径"
+
+msgid "Velocity Dissipation"
+msgstr "速度耗散"
+
+msgid "2D Mandelbrot or Julia set"
+msgstr "2D Mandelbrot 或 Julia 集"
+
+msgid "Mandelbrot"
+msgstr "Mandelbrot"
+
+msgid "2D Mandelbrot DE (IQ complex derivative + smooth iteration color)"
+msgstr "2D Mandelbrot 距离估计（IQ 复数导数 + 平滑迭代颜色）"
+
+msgid "Julia"
+msgstr "Julia"
+
+msgid "2D Julia DE (IQ complex derivative; c from Julia C)"
+msgstr "2D Julia 距离估计（IQ 复数导数；c 来自 Julia C）"
+
+msgid "Statistical view of input color levels (updated when the node cooks)"
+msgstr "输入颜色色阶的统计视图（节点计算时更新）"
+
+msgid "Midtones (also the middle vertical handle on the histogram)"
+msgstr "中间调（也是直方图上中间的垂直控制柄）"
+
+msgid "Input white point in scene-linear units (right handle; set >1 to pull overexposure down)"
+msgstr "场景线性单位中的输入白点（右侧控制柄；设置为大于 1 可压低过曝）"
+
+msgid "Automatically stretch black/white from the input histogram each cook"
+msgstr "每次计算时根据输入直方图自动拉伸黑白点"
+
+msgid "COP Import Geo Geometry group (name COP-Import Geo[.N]). Search lists only those groups. Group Output: Geometry"
+msgstr "COP 导入几何的几何组（名称为 COP-Import Geo[.N]）。搜索仅列出这些组。组输出：几何"
+
+msgid "COP Import Points Geometry group (name COP-Import Point[.N]). Search lists only those groups. Group Output: Points, Rotation, Size, ID. Position/Size use unit square [0,1]"
+msgstr "COP 导入点的几何组（名称为 COP-Import Point[.N]）。搜索仅列出这些组。组输出：点、旋转、大小、ID。位置/大小使用单位正方形 [0,1]"
+
+msgid "Material temporarily assigned to a UV plane and rendered to Color"
+msgstr "临时指定给 UV 平面并渲染为颜色的材质"
+
+msgid "SDF primitive type (Inigo Quilez exact formulas)"
+msgstr "SDF 基本体类型（Inigo Quilez 精确公式）"
+
+msgid "Sphere (3D)"
+msgstr "球体（3D）"
+
+msgid "Exact sphere"
+msgstr "精确球体"
+
+msgid "Box (3D)"
+msgstr "立方体（3D）"
+
+msgid "Exact box half-extents"
+msgstr "精确立方体半边长"
+
+msgid "Torus (3D)"
+msgstr "圆环（3D）"
+
+msgid "Exact torus major/minor"
+msgstr "精确圆环（大/小半径）"
+
+msgid "Round Box (3D)"
+msgstr "圆角立方体（3D）"
+
+msgid "Exact rounded box"
+msgstr "精确圆角立方体"
+
+msgid "Box Frame (3D)"
+msgstr "立方体框架（3D）"
+
+msgid "Exact hollow box frame"
+msgstr "精确空心立方体框架"
+
+msgid "Capsule (3D)"
+msgstr "胶囊体（3D）"
+
+msgid "Exact vertical capsule"
+msgstr "精确垂直胶囊体"
+
+msgid "Capped Cylinder (3D)"
+msgstr "带盖圆柱（3D）"
+
+msgid "Exact vertical capped cylinder"
+msgstr "精确垂直带盖圆柱"
+
+msgid "Capped Cone (3D)"
+msgstr "带盖圆锥（3D）"
+
+msgid "Exact capped cone"
+msgstr "精确带盖圆锥"
+
+msgid "Plane (3D)"
+msgstr "平面（3D）"
+
+msgid "Exact infinite plane Y-up"
+msgstr "精确无限平面（Y 向上）"
+
+msgid "Hex Prism (3D)"
+msgstr "六棱柱（3D）"
+
+msgid "Exact hexagonal prism"
+msgstr "精确六棱柱"
+
+msgid "Octahedron (3D)"
+msgstr "八面体（3D）"
+
+msgid "Exact octahedron"
+msgstr "精确八面体"
+
+msgid "Pyramid (3D)"
+msgstr "金字塔（3D）"
+
+msgid "Exact square pyramid"
+msgstr "精确四棱锥"
+
+msgid "Capped Torus (3D)"
+msgstr "带盖圆环（3D）"
+
+msgid "Exact capped torus"
+msgstr "精确带盖圆环"
+
+msgid "Link (3D)"
+msgstr "链环（3D）"
+
+msgid "Exact chain link"
+msgstr "精确链环"
+
+msgid "Infinite Cylinder (3D)"
+msgstr "无限圆柱（3D）"
+
+msgid "Exact infinite cylinder along Y"
+msgstr "沿 Y 轴的精确无限圆柱"
+
+msgid "Cone (3D)"
+msgstr "圆锥（3D）"
+
+msgid "Exact finite cone (angle + height)"
+msgstr "精确有限圆锥（角度 + 高度）"
+
+msgid "Rounded Cylinder (3D)"
+msgstr "圆角圆柱（3D）"
+
+msgid "Exact rounded cylinder"
+msgstr "精确圆角圆柱"
+
+msgid "Solid Angle (3D)"
+msgstr "立体角（3D）"
+
+msgid "Exact solid angle"
+msgstr "精确立体角"
+
+msgid "Cut Sphere (3D)"
+msgstr "切割球体（3D）"
+
+msgid "Exact cut sphere"
+msgstr "精确切割球体"
+
+msgid "Cut Hollow Sphere (3D)"
+msgstr "切割空心球体（3D）"
+
+msgid "Exact cut hollow sphere"
+msgstr "精确切割空心球体"
+
+msgid "Death Star (3D)"
+msgstr "死星（3D）"
+
+msgid "Exact sphere minus sphere"
+msgstr "精确球体减去球体"
+
+msgid "Round Cone (3D)"
+msgstr "圆角圆锥（3D）"
+
+msgid "Exact round cone"
+msgstr "精确圆角圆锥"
+
+msgid "Rhombus (3D)"
+msgstr "菱形（3D）"
+
+msgid "Exact rhombus prism"
+msgstr "精确菱形棱柱"
+
+msgid "Ellipsoid (3D)"
+msgstr "椭球体（3D）"
+
+msgid "Ellipsoid lower-bound SDF"
+msgstr "椭球体下界 SDF"
+
+msgid "Tri Prism (3D)"
+msgstr "三棱柱（3D）"
+
+msgid "Triangular prism lower-bound"
+msgstr "三棱柱下界"
+
+msgid "Infinite Cone (3D)"
+msgstr "无限圆锥（3D）"
+
+msgid "Exact infinite cone"
+msgstr "精确无限圆锥"
+
+msgid "Circle (2D)"
+msgstr "圆（2D）"
+
+msgid "Exact circle"
+msgstr "精确圆"
+
+msgid "Box (2D)"
+msgstr "矩形（2D）"
+
+msgid "Exact box"
+msgstr "精确矩形"
+
+msgid "Rounded Box (2D)"
+msgstr "圆角矩形（2D）"
+
+msgid "Chamfer Box (2D)"
+msgstr "倒角矩形（2D）"
+
+msgid "Exact chamfer box"
+msgstr "精确倒角矩形"
+
+msgid "Segment (2D)"
+msgstr "线段（2D）"
+
+msgid "Exact line segment"
+msgstr "精确线段"
+
+msgid "Rhombus (2D)"
+msgstr "菱形（2D）"
+
+msgid "Exact rhombus"
+msgstr "精确菱形"
+
+msgid "Trapezoid (2D)"
+msgstr "梯形（2D）"
+
+msgid "Exact isosceles trapezoid"
+msgstr "精确等腰梯形"
+
+msgid "Parallelogram (2D)"
+msgstr "平行四边形（2D）"
+
+msgid "Exact parallelogram"
+msgstr "精确平行四边形"
+
+msgid "Equilateral Triangle (2D)"
+msgstr "等边三角形（2D）"
+
+msgid "Exact equilateral triangle"
+msgstr "精确等边三角形"
+
+msgid "Isosceles Triangle (2D)"
+msgstr "等腰三角形（2D）"
+
+msgid "Exact isosceles triangle"
+msgstr "精确等腰三角形"
+
+msgid "Triangle (2D)"
+msgstr "三角形（2D）"
+
+msgid "Exact arbitrary triangle"
+msgstr "精确任意三角形"
+
+msgid "Uneven Capsule (2D)"
+msgstr "不等端胶囊（2D）"
+
+msgid "Exact uneven capsule"
+msgstr "精确不等端胶囊"
+
+msgid "Pentagon (2D)"
+msgstr "五边形（2D）"
+
+msgid "Exact regular pentagon"
+msgstr "精确正五边形"
+
+msgid "Hexagon (2D)"
+msgstr "六边形（2D）"
+
+msgid "Exact regular hexagon"
+msgstr "精确正六边形"
+
+msgid "Octogon (2D)"
+msgstr "八边形（2D）"
+
+msgid "Exact regular octogon"
+msgstr "精确正八边形"
+
+msgid "Hexagram (2D)"
+msgstr "六芒星（2D）"
+
+msgid "Exact hexagram / Star of David"
+msgstr "精确六芒星 / 大卫之星"
+
+msgid "Star (2D)"
+msgstr "星形（2D）"
+
+msgid "Exact regular star (n, m)"
+msgstr "精确正星形 (n, m)"
+
+msgid "Pie (2D)"
+msgstr "扇形（2D）"
+
+msgid "Exact pie / circular sector"
+msgstr "精确扇形 / 圆扇区"
+
+msgid "Cut Disk (2D)"
+msgstr "切割圆盘（2D）"
+
+msgid "Exact cut disk"
+msgstr "精确切割圆盘"
+
+msgid "Arc (2D)"
+msgstr "弧（2D）"
+
+msgid "Exact annular arc"
+msgstr "精确环形弧"
+
+msgid "Ring (2D)"
+msgstr "环（2D）"
+
+msgid "Exact ring sector"
+msgstr "精确环扇区"
+
+msgid "Horseshoe (2D)"
+msgstr "马蹄形（2D）"
+
+msgid "Exact horseshoe"
+msgstr "精确马蹄形"
+
+msgid "Vesica (2D)"
+msgstr "鱼形（2D）"
+
+msgid "Exact vesica piscis"
+msgstr "精确鱼形（vesica piscis）"
+
+msgid "Moon (2D)"
+msgstr "月牙（2D）"
+
+msgid "Exact moon (circle minus circle)"
+msgstr "精确月牙（圆减圆）"
+
+msgid "Heart (2D)"
+msgstr "心形（2D）"
+
+msgid "Exact heart"
+msgstr "精确心形"
+
+msgid "Cross (2D)"
+msgstr "十字（2D）"
+
+msgid "Cross (exact exterior)"
+msgstr "十字（精确外部）"
+
+msgid "Rounded X (2D)"
+msgstr "圆角 X（2D）"
+
+msgid "Exact rounded X"
+msgstr "精确圆角 X"
+
+msgid "Ellipse (2D)"
+msgstr "椭圆（2D）"
+
+msgid "Exact ellipse"
+msgstr "精确椭圆"
+
+msgid "Oriented Box (2D)"
+msgstr "有向矩形（2D）"
+
+msgid "Exact oriented box between two points"
+msgstr "精确的两点间有向矩形"
+
+msgid "Tunnel (2D)"
+msgstr "隧道（2D）"
+
+msgid "Exact tunnel"
+msgstr "精确隧道"
+
+msgid "Stairs (2D)"
+msgstr "楼梯（2D）"
+
+msgid "Exact stairs"
+msgstr "精确楼梯"
+
+msgid "Rounded Cross (2D)"
+msgstr "圆角十字（2D）"
+
+msgid "Exact rounded cross"
+msgstr "精确圆角十字"
+
+msgid "API Key"
+msgstr "API 密钥"
+
+msgid "Optional ShaderToy API key (shadertoy.com/howto). Falls back to SHADERTOY_KEY env, then unofficial POST"
+msgstr "可选的 ShaderToy API 密钥（shadertoy.com/howto）。回退到 SHADERTOY_KEY 环境变量，再回退到非官方 POST"
+
+msgid "ShaderToy username"
+msgstr "ShaderToy 用户名"
+
+msgid "Camera Rotation"
+msgstr "摄像机旋转"
+
+msgid "Deprecated; use Mouse"
+msgstr "已弃用；请使用鼠标"
+
+msgid "Channel Map"
+msgstr "通道映射"
+
+msgid "Deprecated compact map"
+msgstr "已弃用的紧凑映射"
+
+msgid "Buffer A iChannel0–3 (A–D / T / K / U cubemap / V volume), pad with T"
+msgstr "缓冲 A 的 iChannel0–3（A–D / T / K / U 立方体贴图 / V 体积），用 T 补齐"
+
+msgid "Buffer B iChannel0–3 (A–D / T / K / U cubemap / V volume), pad with T"
+msgstr "缓冲 B 的 iChannel0–3（A–D / T / K / U 立方体贴图 / V 体积），用 T 补齐"
+
+msgid "Buffer C iChannel0–3 (A–D / T / K / U cubemap / V volume), pad with T"
+msgstr "缓冲 C 的 iChannel0–3（A–D / T / K / U 立方体贴图 / V 体积），用 T 补齐"
+
+msgid "Buffer D iChannel0–3 (A–D / T / K / U cubemap / V volume), pad with T"
+msgstr "缓冲 D 的 iChannel0–3（A–D / T / K / U 立方体贴图 / V 体积），用 T 补齐"
+
+msgid "Image iChannel0–3. A–D = Buffer, T = texture, K = black, U = cubemap, V = volume. Example: A,B,D,U. Short lists pad with T"
+msgstr "图像 iChannel0–3。A–D = 缓冲，T = 纹理，K = 黑色，U = 立方体贴图，V = 体积。示例：A,B,D,U。较短的列表用 T 补齐"
+
+msgid "Buffer A GLSL (mainImage)"
+msgstr "缓冲 A GLSL（mainImage）"
+
+msgid "Buffer B GLSL (mainImage)"
+msgstr "缓冲 B GLSL（mainImage）"
+
+msgid "Buffer C GLSL (mainImage)"
+msgstr "缓冲 C GLSL（mainImage）"
+
+msgid "Buffer D GLSL (mainImage)"
+msgstr "缓冲 D GLSL（mainImage）"
+
+msgid "Shared GLSL prepended to every pass"
+msgstr "添加到每个通道之前的共享 GLSL"
+
+msgid "Image pass GLSL (mainImage) — final Color"
+msgstr "图像通道 GLSL（mainImage）— 最终颜色"
+
+msgid "Error Log"
+msgstr "错误日志"
+
+msgid "Last GPU compile / runtime error"
+msgstr "最近一次 GPU 编译 / 运行时错误"
+
+msgid "Mouse Down"
+msgstr "鼠标按下"
+
+msgid "Deprecated; Mouse non-zero is treated as held"
+msgstr "已弃用；非零的鼠标值视为按住"
+
+msgid "Normalized pointer (0–1), same as ShaderToy iMouse.xy / iResolution.xy. (0,0) is the site default (iMouse = 0). Any other value is a held click at that point"
+msgstr "归一化指针（0–1），与 ShaderToy 的 iMouse.xy / iResolution.xy 相同。(0,0) 是站点默认值（iMouse = 0）。其他任何值都表示在该点按住点击"
+
+msgid "Parameter Count"
+msgstr "参数数量"
+
+msgid "Number of scanned #define parameters"
+msgstr "扫描到的 #define 参数数量"
+
+msgid "Parameter"
+msgstr "参数"
+
+msgid "Shader #define / const value"
+msgstr "着色器 #define / const 值"
+
+msgid "Which pass to edit"
+msgstr "要编辑的通道"
+
+msgid "Main Image pass (mainImage)"
+msgstr "主图像通道（mainImage）"
+
+msgid "Shared code prepended to every pass"
+msgstr "添加到每个通道之前的共享代码"
+
+msgid "Multipass Buffer A"
+msgstr "多通道缓冲 A"
+
+msgid "Multipass Buffer B"
+msgstr "多通道缓冲 B"
+
+msgid "Multipass Buffer C"
+msgstr "多通道缓冲 C"
+
+msgid "Multipass Buffer D"
+msgstr "多通道缓冲 D"
+
+msgid "Reset Buffers"
+msgstr "重置缓冲"
+
+msgid "Clear Buffer A–D ping-pong textures on next cook"
+msgstr "下次计算时清除缓冲 A–D 的乒乓纹理"
+
+msgid "ShaderToy shader ID extracted from the URL"
+msgstr "从 URL 中提取的 ShaderToy 着色器 ID"
+
+msgid "Shader title from ShaderToy"
+msgstr "来自 ShaderToy 的着色器标题"
+
+msgid "Last fetch / compile status"
+msgstr "最近一次获取 / 编译状态"
+
+msgid "ShaderToy page URL or shader ID (https://www.shadertoy.com/view/XXXXXX)"
+msgstr "ShaderToy 页面 URL 或着色器 ID（https://www.shadertoy.com/view/XXXXXX）"
+
+msgid "Skipped passes or unsupported inputs"
+msgstr "被跳过的通道或不支持的输入"
+
+msgid "How to colorize the terrain"
+msgstr "地形的着色方式"
+
+msgid "Satellite-style height + slope coloring"
+msgstr "卫星图风格的高度 + 坡度着色"
+
+msgid "Weathering"
+msgstr "风化"
+
+msgid "Dirt and wear in low slopes"
+msgstr "低坡度区域的污垢和磨损"
+
+msgid "Flow and peak variation"
+msgstr "流向和山峰变化"
+
+msgid "Water Color"
+msgstr "水体颜色"
+
+msgid "Colorize water bodies"
+msgstr "为水体着色"
+
+msgid "Heightfield blend mode"
+msgstr "高度场混合模式"
+
+msgid "Linear blend"
+msgstr "线性混合"
+
+msgid "Add B onto A"
+msgstr "将 B 叠加到 A 上"
+
+msgid "Multiply heights"
+msgstr "高度相乘"
+
+msgid "Keep the higher surface"
+msgstr "保留较高的表面"
+
+msgid "Keep the lower surface"
+msgstr "保留较低的表面"
+
+msgid "Screen blend"
+msgstr "滤色混合"
+
+msgid "Overlay blend"
+msgstr "叠加混合"
+
+msgid "Hypot"
+msgstr "Hypot"
+
+msgid "Hypotenuse combine"
+msgstr "斜边组合"
+
+msgid "Mask derived from the heightfield"
+msgstr "由高度场派生的蒙版"
+
+msgid "Slope mask"
+msgstr "坡度蒙版"
+
+msgid "Convex peaks and ridges"
+msgstr "凸起的山峰和山脊"
+
+msgid "Local downhill flow"
+msgstr "局部下坡流向"
+
+msgid "Height range mask"
+msgstr "高度范围蒙版"
+
+msgid "Peaks"
+msgstr "山峰"
+
+msgid "Peak isolation"
+msgstr "山峰分离"
+
+msgid "Cavity / sedimentary occlusion"
+msgstr "凹陷 / 沉积遮蔽"
+
+msgid "Aspect / facing mask"
+msgstr "朝向 / 面向蒙版"
+
+msgid "Soil"
+msgstr "土壤"
+
+msgid "Soil that settles in concavities"
+msgstr "沉积在凹陷处的土壤"
+
+msgid "Hydraulic / thermal / hydro-fix variant"
+msgstr "水力 / 热力 / 水力修复 变体"
+
+msgid "Hydraulic plus thermal (Gaea Erosion)"
+msgstr "水力加热力（Gaea 侵蚀）"
+
+msgid "Hydraulic"
+msgstr "水力"
+
+msgid "Pipe-model hydraulic erosion"
+msgstr "管道模型水力侵蚀"
+
+msgid "Erosion2"
+msgstr "Erosion2"
+
+msgid "Stronger downcutting and orographic rain"
+msgstr "更强的下切和地形雨"
+
+msgid "Thermal"
+msgstr "热力"
+
+msgid "Talus / debris thermal erosion"
+msgstr "岩屑 / 碎屑热力侵蚀"
+
+msgid "Thermal2"
+msgstr "Thermal2"
+
+msgid "Thermal with diagonal neighbors"
+msgstr "包含对角邻居的热力侵蚀"
+
+msgid "Prep: fill pits for continuous drainage (not an erosion algorithm)"
+msgstr "预处理：填平坑洼以保证连续排水（不是侵蚀算法）"
+
+msgid "Fewer controls, curated defaults"
+msgstr "控制项更少，使用精选默认值"
+
+msgid "Wizard"
+msgstr "向导"
+
+msgid "Duration-driven wrapper with extra thermal"
+msgstr "以持续时间驱动并附加热力的封装"
+
+msgid "Terrace, warp, fold and other modifiers"
+msgstr "梯田、扭曲、折叠及其他修改器"
+
+msgid "Terrace"
+msgstr "梯田"
+
+msgid "Stepped terraces"
+msgstr "阶梯状梯田"
+
+msgid "Stratify"
+msgstr "分层"
+
+msgid "Broken rock strata"
+msgstr "断裂的岩层"
+
+msgid "Domain warp"
+msgstr "域扭曲"
+
+msgid "Warp along slope"
+msgstr "沿坡度扭曲"
+
+msgid "Fold"
+msgstr "折叠"
+
+msgid "Tectonic-style folding"
+msgstr "构造运动式折叠"
+
+msgid "Fast convexity/concavity"
+msgstr "快速凸凹度"
+
+msgid "Hard steps"
+msgstr "硬阶梯"
+
+msgid "Sandstone"
+msgstr "砂岩"
+
+msgid "Layered sandstone"
+msgstr "层状砂岩"
+
+msgid "Clamp height range"
+msgstr "限制高度范围"
+
+msgid "Recurve"
+msgstr "重塑曲线"
+
+msgid "Inflate / deflate by curvature"
+msgstr "按曲率膨胀 / 收缩"
+
+msgid "Terrain generator"
+msgstr "地形生成器"
+
+msgid "Mountain"
+msgstr "山脉"
+
+msgid "Ridged mountain ready for erosion"
+msgstr "可供侵蚀的山脊状山脉"
+
+msgid "Heterogeneous highland with light ridging"
+msgstr "带轻微山脊的非均质高地"
+
+msgid "Parallel ridges optimized for large-scale erosion"
+msgstr "针对大尺度侵蚀优化的平行山脊"
+
+msgid "Crest axis with gaussian falloff"
+msgstr "带高斯衰减的山脊轴线"
+
+msgid "Canyon"
+msgstr "峡谷"
+
+msgid "Highland cut by directional incision"
+msgstr "被定向切割的高地"
+
+msgid "Crater"
+msgstr "陨石坑"
+
+msgid "Impact crater with rim and floor"
+msgstr "带边缘和坑底的撞击坑"
+
+msgid "Dunes"
+msgstr "沙丘"
+
+msgid "Asymmetric wind-shaped dune sea"
+msgstr "受风塑造的不对称沙丘海"
+
+msgid "Landmass falloff from Offset"
+msgstr "从偏移处衰减的陆地"
+
+msgid "Volcano"
+msgstr "火山"
+
+msgid "Cone with caldera and rim"
+msgstr "带火山口和边缘的锥体"
+
+msgid "Slump"
+msgstr "滑坡"
+
+msgid "Soft slumped hills"
+msgstr "柔和滑塌的丘陵"
+
+msgid "Plates"
+msgstr "板块"
+
+msgid "Terraces with cliff edges"
+msgstr "带悬崖边缘的梯田"
+
+msgid "Cracks"
+msgstr "裂缝"
+
+msgid "Cracks carved from a plateau"
+msgstr "从高原上刻出的裂缝"
+
+msgid "Rugged"
+msgstr "崎岖"
+
+msgid "Slope-aware rocky breakup"
+msgstr "考虑坡度的岩石破碎"
+
+msgid "Snow, water, debris or vegetation-style simulation"
+msgstr "雪、水、碎屑或植被风格的模拟"
+
+msgid "Snow"
+msgstr "雪"
+
+msgid "Snow fall, melt and slope adhesion"
+msgstr "降雪、融化和坡面附着"
+
+msgid "Broad settled snow"
+msgstr "大范围沉降的积雪"
+
+msgid "Thin dusting of snow or sediment"
+msgstr "薄薄一层雪或沉积物"
+
+msgid "Rivers"
+msgstr "河流"
+
+msgid "Carve a drainage / river network"
+msgstr "刻出排水 / 河网"
+
+msgid "Sea"
+msgstr "海洋"
+
+msgid "Water plane and coastal erosion"
+msgstr "水面和海岸侵蚀"
+
+msgid "Lake"
+msgstr "湖泊"
+
+msgid "Fill basins into lakes"
+msgstr "将盆地填充成湖泊"
+
+msgid "Sediments"
+msgstr "沉积物"
+
+msgid "Deposit in concavities"
+msgstr "沉积在凹陷处"
+
+msgid "Crumble"
+msgstr "崩落"
+
+msgid "Collapse from edges and convexity"
+msgstr "从边缘和凸起处塌落"
+
+msgid "Glacier"
+msgstr "冰川"
+
+msgid "High-altitude glacial flow"
+msgstr "高海拔冰川流动"
+
+msgid "Anastomosis"
+msgstr "网状分流"
+
+msgid "Branching flow-style extraction"
+msgstr "分支流式提取"
+
+msgid "Text to show in the node"
+msgstr "要显示在节点中的文字"
+
+msgid "Active Expression Index"
+msgstr "活动表达式索引"
+
+msgid "Index of the active expression item"
+msgstr "活动表达式项的索引"
+
+msgid "Index of the active input item"
+msgstr "活动输入项的索引"
+
+msgid "Object Node"
+msgstr "物体节点"
+
+msgid "Node in an Object Editor graph"
+msgstr "物体编辑器图中的节点"
+
+msgid "Name of the created object"
+msgstr "所创建物体的名称"
+
+msgid "Type of object to create"
+msgstr "要创建的物体类型"
+
+msgid "Use the view-layer active object instead of the Object socket"
+msgstr "使用视图层的活动物体，而不是物体接口"
+
+msgid "Index of the active material slot"
+msgstr "活动材质槽的索引"
+
+msgid "Material slots driven by this node"
+msgstr "由此节点驱动的材质槽"
+
+msgid "Index of the active modifier item"
+msgstr "活动修改器项的索引"
+
+msgid "Modifier stack driven by this node"
+msgstr "由此节点驱动的修改器堆栈"
+
+msgid "Bind Type"
+msgstr "绑定类型"
+
+msgid "How the object is parented"
+msgstr "物体的父级设置方式"
+
+msgid "Parent to the object and compute the parent inverse"
+msgstr "设为该物体的子级并计算父级逆矩阵"
+
+msgid "Parent to the object without a parent inverse matrix"
+msgstr "设为该物体的子级，不使用父级逆矩阵"
+
+msgid "How the parent is removed"
+msgstr "父级的移除方式"
+
+msgid "Completely clear the parenting relationship"
+msgstr "完全清除父子关系"
+
+msgid "Clear parenting and keep the current visual transform"
+msgstr "清除父子关系并保留当前视觉变换"
+
+msgid "Reset the parent inverse, keep the parent"
+msgstr "重置父级逆矩阵，保留父级"
+
+msgid "Preserve the child's world transform when binding"
+msgstr "绑定时保留子级的世界变换"
+
+msgid "Bind a parent or clear the current parent"
+msgstr "绑定父级或清除当前父级"
+
+msgid "Set the incoming object as a child of Parent"
+msgstr "将传入物体设为父级的子级"
+
+msgid "Remove the parenting relationship"
+msgstr "移除父子关系"
+
+msgid "Write the object's location"
+msgstr "写入物体的位置"
+
+msgid "Write the object's Euler rotation"
+msgstr "写入物体的欧拉旋转"
+
+msgid "Write the object's scale"
+msgstr "写入物体的缩放"
+
+msgid "Bounds Type"
+msgstr "边界类型"
+
+msgid "How to display the object in the viewport"
+msgstr "物体在视图中的显示方式"
+
+msgid "Display the object as a solid"
+msgstr "将物体显示为实体"
+
+msgid "Display the object with textures"
+msgstr "将物体显示为带纹理"
+
+msgid "Type of the attribute output"
+msgstr "属性输出的类型"
+
+msgid "Legacy"
+msgstr "旧版"
+
+msgid "Color, Vector, Fac, and Alpha outputs (older files)"
+msgstr "颜色、矢量、系数和 Alpha 输出（旧文件）"
+
+msgid "Object-local axis that should face the viewer"
+msgstr "应朝向观察者的物体局部轴"
+
+msgid "Object +X faces the viewer; +Z stays camera-up"
+msgstr "物体 +X 朝向观察者；+Z 保持为摄像机向上"
+
+msgid "Object +Y faces the view direction; object +X matches view +X, +Z matches view +Y"
+msgstr "物体 +Y 朝向视线方向；物体 +X 对应视图 +X，+Z 对应视图 +Y"
+
+msgid "Object +Z faces the viewer (default plane); +Y stays camera-up"
+msgstr "物体 +Z 朝向观察者（默认平面）；+Y 保持为摄像机向上"
+
+msgid "How the object is rotated to face the view"
+msgstr "物体朝向视图的旋转方式"
+
+msgid "Screen-aligned including camera roll. Axis chooses which object axis faces the viewer"
+msgstr "与屏幕对齐，包括摄像机翻滚。轴决定物体哪个轴朝向观察者"
+
+msgid "Look at the camera; keep Up as close to world up as possible"
+msgstr "注视摄像机；尽量让向上方向接近世界向上"
+
+msgid "Cylindrical"
+msgstr "圆柱形"
+
+msgid "Yaw only around Up (typical for trees)"
+msgstr "仅绕向上轴偏航（常用于树木）"
+
+msgid "Index of the active input parameter"
+msgstr "活动输入参数的索引"
+
+msgid "Active Output Index"
+msgstr "活动输出索引"
+
+msgid "Index of the active output parameter"
+msgstr "活动输出参数的索引"
+
+msgid "GLSL source code"
+msgstr "GLSL 源代码"
+
+msgid "User-defined input parameters"
+msgstr "用户定义的输入参数"
+
+msgid "User-defined output parameters"
+msgstr "用户定义的输出参数"
+
+msgid "Defines parametrization of the light evaluation"
+msgstr "定义光照计算的参数化方式"
+
+msgid "Lux Architectural Glass"
+msgstr "Lux 建筑玻璃"
+
+msgid "LuxCore architectural glass"
+msgstr "LuxCore 建筑玻璃"
+
+msgid "Lux Carpaint"
+msgstr "Lux 车漆"
+
+msgid "LuxCore carpaint"
+msgstr "LuxCore 车漆"
+
+msgid "Lux Cloth"
+msgstr "Lux 布料"
+
+msgid "LuxCore cloth"
+msgstr "LuxCore 布料"
+
+msgid "Lux Disney"
+msgstr "Lux Disney"
+
+msgid "LuxCore Disney principled material"
+msgstr "LuxCore Disney 原理化材质"
+
+msgid "Lux Emission"
+msgstr "Lux 发光"
+
+msgid "LuxCore mesh light emission"
+msgstr "LuxCore 网格灯光发光"
+
+msgid "Lux Front/Back Opacity"
+msgstr "Lux 正反面不透明度"
+
+msgid "LuxCore front/back opacity"
+msgstr "LuxCore 正反面不透明度"
+
+msgid "Lux Glass"
+msgstr "Lux 玻璃"
+
+msgid "LuxCore glass"
+msgstr "LuxCore 玻璃"
+
+msgid "Lux Glossy"
+msgstr "Lux 光泽"
+
+msgid "LuxCore glossy2"
+msgstr "LuxCore glossy2"
+
+msgid "Lux Glossy Coating"
+msgstr "Lux 光泽涂层"
+
+msgid "LuxCore glossy coating"
+msgstr "LuxCore 光泽涂层"
+
+msgid "Lux Glossy Translucent"
+msgstr "Lux 光泽半透明"
+
+msgid "LuxCore glossy translucent"
+msgstr "LuxCore 光泽半透明"
+
+msgid "Lux Matte"
+msgstr "Lux 哑光"
+
+msgid "LuxCore matte"
+msgstr "LuxCore 哑光"
+
+msgid "Lux Matte Translucent"
+msgstr "Lux 哑光半透明"
+
+msgid "LuxCore matte translucent"
+msgstr "LuxCore 哑光半透明"
+
+msgid "Lux Metal"
+msgstr "Lux 金属"
+
+msgid "LuxCore metal2"
+msgstr "LuxCore metal2"
+
+msgid "Lux Mirror"
+msgstr "Lux 镜面"
+
+msgid "LuxCore mirror"
+msgstr "LuxCore 镜面"
+
+msgid "Lux Mix"
+msgstr "Lux 混合"
+
+msgid "LuxCore mix material"
+msgstr "LuxCore 混合材质"
+
+msgid "Lux Null"
+msgstr "Lux 空"
+
+msgid "LuxCore transparent null"
+msgstr "LuxCore 透明空材质"
+
+msgid "Lux Material Output"
+msgstr "Lux 材质输出"
+
+msgid "LuxCore material output"
+msgstr "LuxCore 材质输出"
+
+msgid "Lux Rough Glass"
+msgstr "Lux 粗糙玻璃"
+
+msgid "LuxCore rough glass"
+msgstr "LuxCore 粗糙玻璃"
+
+msgid "Lux Two Sided"
+msgstr "Lux 双面"
+
+msgid "LuxCore two-sided material"
+msgstr "LuxCore 双面材质"
+
+msgid "Lux Velvet"
+msgstr "Lux 天鹅绒"
+
+msgid "LuxCore velvet"
+msgstr "LuxCore 天鹅绒"
+
+msgid "Lux Clear Volume"
+msgstr "Lux 清澈体积"
+
+msgid "LuxCore clear volume"
+msgstr "LuxCore 清澈体积"
+
+msgid "Lux Heterogeneous Volume"
+msgstr "Lux 非均匀体积"
+
+msgid "LuxCore heterogeneous volume"
+msgstr "LuxCore 非均匀体积"
+
+msgid "Lux Homogeneous Volume"
+msgstr "Lux 均匀体积"
+
+msgid "LuxCore homogeneous volume"
+msgstr "LuxCore 均匀体积"
+
+msgid "Use the red channel as height"
+msgstr "使用红色通道作为高度"
+
+msgid "Use the green channel as height"
+msgstr "使用绿色通道作为高度"
+
+msgid "Use the blue channel as height"
+msgstr "使用蓝色通道作为高度"
+
+msgid "Use the alpha channel as height"
+msgstr "使用 Alpha 通道作为高度"
+
+msgid "Average of RGB"
+msgstr "RGB 的平均值"
+
+msgid "Rec. 709 luminance of RGB"
+msgstr "RGB 的 Rec. 709 亮度"
+
+msgid "Steep"
+msgstr "陡峭"
+
+msgid "POM"
+msgstr "POM"
+
+msgid "Make the noise repeat seamlessly. Size is the integer wrap period of the already-scaled coordinate (input × Scale), minimum 2. Size 5 wraps a 5×5×5 cell lattice. Each octave's wrap is scaled by Lacunarity. Use integer Lacunarity for exact seams"
+msgstr "使噪波无缝重复。大小是已缩放坐标（输入 × 缩放）的整数环绕周期，最小为 2。大小 5 会环绕 5×5×5 的单元格晶格。每个倍频的环绕会按空隙度缩放。使用整数空隙度可获得精确的无缝拼接"
+
+msgid "Make Voronoi repeat seamlessly. Size is the integer wrap period of the already-scaled coordinate (input × Scale), minimum 2. Size 5 wraps a 5×5×5 cell lattice. Each octave's wrap is scaled by Lacunarity. Use integer Lacunarity for exact seams"
+msgstr "使 Voronoi 无缝重复。大小是已缩放坐标（输入 × 缩放）的整数环绕周期，最小为 2。大小 5 会环绕 5×5×5 的单元格晶格。每个倍频的环绕会按空隙度缩放。使用整数空隙度可获得精确的无缝拼接"
+
+msgid "Index of the active output"
+msgstr "活动输出的索引"
+
+msgid "VEX source compiled to an EEVEE material function. Typing edits a draft (does not recook). Ctrl+Enter, click outside, or Compile commits and evaluates"
+msgstr "编译为 EEVEE 材质函数的 VEX 源代码。输入时编辑的是草稿（不会重新计算）。Ctrl+Enter、点击外部或编译会提交并计算"
+
+msgid "Named outputs written in VEX (`Output = …`)"
+msgstr "用 VEX 编写的命名输出（`Output = …`）"
+
+msgid "Expression Input Item"
+msgstr "表达式输入项"
+
+msgid "Expression Output Item"
+msgstr "表达式输出项"
+
+msgid "Collection of expression items"
+msgstr "表达式项集合"
+
+msgid "Wrangle Input Item"
+msgstr "Wrangle 输入项"
+
+msgid "Wrangle inputs: extra geometry and compiled constants"
+msgstr "Wrangle 输入：额外几何和编译得到的常量"
+
+msgid "Bake Image Item"
+msgstr "烘焙图像项"
+
+msgid "Named Color image slot written on Bake (name = filename)"
+msgstr "烘焙时写入的命名颜色图像槽（名称 = 文件名）"
+
+msgid "Collection of bake image slots"
+msgstr "烘焙图像槽集合"
+
+msgid "Fluid Color Item"
+msgstr "流体颜色项"
+
+msgid "Color field simulated in the fluid zone"
+msgstr "在流体区域中模拟的颜色场"
+
+msgid "Collection of fluid color fields"
+msgstr "流体颜色场集合"
+
+msgid "Internal link used by muted nodes to connect input to output sockets"
+msgstr "被静音节点用于连接输入与输出接口的内部连线"
+
+msgid "One material slot on the Object Editor node"
+msgstr "物体编辑器节点上的一个材质槽"
+
+msgid "Material assigned to this slot"
+msgstr "指定给此槽的材质"
+
+msgid "Slot label"
+msgstr "槽标签"
+
+msgid "Modifier Item"
+msgstr "修改器项"
+
+msgid "One modifier on the Object Editor node"
+msgstr "物体编辑器节点上的一个修改器"
+
+msgid "Display modifier in edit mode"
+msgstr "在编辑模式中显示修改器"
+
+msgid "Modifier type"
+msgstr "修改器类型"
+
+msgid "GLSL Input Parameter"
+msgstr "GLSL 输入参数"
+
+msgid "GLSL Output Parameter"
+msgstr "GLSL 输出参数"
+
+msgid "Wrangle inputs: compiled constants and fields"
+msgstr "Wrangle 输入：编译得到的常量和场"
+
+msgid "Wrangle Output Item"
+msgstr "Wrangle 输出项"
+
+msgid "Wrangle outputs: assign the socket name in VEX"
+msgstr "Wrangle 输出：在 VEX 中赋值接口名称"
+
+msgid "Socket is currently visible after dynamic visibility inference"
+msgstr "动态可见性推断后，接口当前是否可见"
+
+msgid "Color Ramp Node Socket"
+msgstr "色彩渐变节点接口"
+
+msgid "Color ramp socket of a node"
+msgstr "节点的色彩渐变接口"
+
+msgid "Color ramp used for an unconnected socket"
+msgstr "未连接接口所使用的色彩渐变"
+
+msgid "Curve Node Socket"
+msgstr "曲线节点接口"
+
+msgid "Curve mapping socket of a node"
+msgstr "节点的曲线映射接口"
+
+msgid "Curve used for an unconnected socket"
+msgstr "未连接接口所使用的曲线"
+
+msgid "Node Tree Interface Message"
+msgstr "节点树接口信息"
+
+msgid "Informational text in a node group interface"
+msgstr "节点组接口中的说明文字"
+
+msgid "Informational text displayed in the interface"
+msgstr "显示在接口中的说明文字"
+
+msgid "Message is selected in the interface"
+msgstr "信息在接口中被选中"
+
+msgid "Node Tree Interface Separator"
+msgstr "节点树接口分隔符"
+
+msgid "Visual separator in a node group interface"
+msgstr "节点组接口中的视觉分隔符"
+
+msgid "Separator is selected in the interface"
+msgstr "分隔符在接口中被选中"
+
+msgid "Normalized Image Coordinates"
+msgstr "归一化图像坐标"
+
+msgid "Pixel UV coordinates in the [0, 1] range of the compositing space"
+msgstr "位于合成空间 [0, 1] 范围内的像素 UV 坐标"
+
+msgid "Display this parameter side by side with the next interface parameter. Can be chained so multiple consecutive parameters share one row. Unavailable for the last parameter, separators, and messages"
+msgstr "将此参数与下一个接口参数并排显示。可以链式连接，使多个连续参数共享一行。对最后一个参数、分隔符和信息不可用"
+
+msgid "Allow selecting multiple menu items at once. Outside the group the menu becomes a checklist multi-select; Menu Switch returns a list of selected inputs and matching booleans"
+msgstr "允许同时选择多个菜单项。在组外部，菜单会变为复选清单式多选；菜单切换会返回所选输入的列表和对应的布尔值"
+
+msgid "Color Ramp Node Socket Interface"
+msgstr "色彩渐变节点接口项"
+
+msgid "Curve Node Socket Interface"
+msgstr "曲线节点接口项"
+
+msgid "Kind of curve data accepted by this interface"
+msgstr "此接口接受的曲线数据类型"
+
+msgid "A single curve for scalar values"
+msgstr "标量值的单条曲线"
+
+msgid "Vector Curve"
+msgstr "矢量曲线"
+
+msgid "Three curves for vector components"
+msgstr "矢量分量的三条曲线"
+
+msgid "Color Curve"
+msgstr "颜色曲线"
+
+msgid "RGB curves plus a combined curve"
+msgstr "RGB 曲线加一条组合曲线"
+
+msgid "Selected menu items used for the unconnected multi-selection menu"
+msgstr "未连接多选菜单所使用的选中菜单项"
+
+msgctxt "Operator"
+msgid "New LuxCore Node Tree"
+msgstr "新建 LuxCore 节点树"
+
+msgctxt "Operator"
+msgid "Fetch ShaderToy"
+msgstr "获取 ShaderToy"
+
+msgctxt "Operator"
+msgid "Open ShaderToy JSON"
+msgstr "打开 ShaderToy JSON"
+
+msgctxt "Operator"
+msgid "Paste ShaderToy"
+msgstr "粘贴 ShaderToy"
+
+msgid "Draw in the viewport first, then project onto the texture when the view is rotated. Off (default) uses Blender's original 3D projection. Smear, soften and clone always use the original method"
+msgstr "先在视图中绘制，旋转视图时再投射到纹理上。关闭（默认）使用 Blender 原有的 3D 投射。涂抹、柔化和克隆始终使用原有方法"
+
+msgid "LuxCore Material Nodes"
+msgstr "LuxCore 材质节点"
+
+msgid "PhotonGI Cache"
+msgstr "PhotonGI 缓存"
+
+msgid "World Space Transform"
+msgstr "世界空间变换"
+
+msgid "World Space Animation"
+msgstr "世界空间动画"
+
+msgctxt "Operator"
+msgid "Carver"
+msgstr "切割刀"
+
+msgid "Collection Definition"
+msgstr "集合定义"
+
+msgid "RNA collection property to define lists, arrays and mappings"
+msgstr "用于定义列表、数组和映射的 RNA 集合属性"
+
+msgid "Pointer Type"
+msgstr "指针类型"
+
+msgid "Fixed pointer type, empty if variable type"
+msgstr "固定指针类型，若为可变类型则为空"
+
+msgid "String Definition"
+msgstr "字符串定义"
+
+msgid "RNA text string property definition"
+msgstr "RNA 文本字符串属性定义"
+
+msgid "String default value"
+msgstr "字符串默认值"
+
+msgid "Maximum Length"
+msgstr "最大长度"
+
+msgid "Maximum length of the string, 0 means unlimited"
+msgstr "字符串的最大长度，0 表示无限制"
+
+msgid "Combine distance and equiangular sampling for volumes where neither method is ideal"
+msgstr "为距离采样和等角采样都不理想的体积，将二者结合使用"
+
+msgid "Denoising Upscale Quality"
+msgstr "降噪放大质量"
+
+msgid "Overall upscale factor and denoising quality when using DLSS. Other render passes keep the internal resolution, so prefer None for compositing"
+msgstr "使用 DLSS 时的整体放大系数和降噪质量。其他渲染通道保持内部分辨率，因此合成时建议选择“无”"
+
+msgid "Highest quality without upscaling"
+msgstr "不放大时的最高质量"
+
+msgid "Offers higher image quality than balanced mode"
+msgstr "比平衡模式提供更高的图像质量"
+
+msgid "Offers both optimized performance and image quality"
+msgstr "同时提供优化的性能和图像质量"
+
+msgid "Offers a higher performance boost than balanced mode"
+msgstr "比平衡模式提供更高的性能提升"
+
+msgid "Offers the highest performance boost"
+msgstr "提供最高的性能提升"
+
+msgid "Viewport Denoising Upscale Quality"
+msgstr "视图降噪放大质量"
+
+msgid "Scene Effect Empty Properties"
+msgstr "场景效果空属性"
+
+msgid "Scene LuxCore"
+msgstr "场景 LuxCore"
+
+msgid "Eye Depth"
+msgstr "视线深度"
+
+msgid "Bidirectional eye-path depth"
+msgstr "双向视线路径深度"
+
+msgid "Light Depth"
+msgstr "光线深度"
+
+msgid "Bidirectional light-path depth"
+msgstr "双向光线路径深度"
+
+msgid "Clamp direct samples (0 disables)"
+msgstr "限制直接光样本（0 表示禁用）"
+
+msgid "Clamp indirect samples (0 disables)"
+msgstr "限制间接光样本（0 表示禁用）"
+
+msgid "LuxCore render engine"
+msgstr "LuxCore 渲染引擎"
+
+msgid "Path CPU"
+msgstr "Path CPU"
+
+msgid "Unidirectional path tracer on CPU"
+msgstr "CPU 上的单向路径追踪器"
+
+msgid "Path OpenCL"
+msgstr "Path OpenCL"
+
+msgid "Unidirectional path tracer on GPU/OpenCL"
+msgstr "GPU/OpenCL 上的单向路径追踪器"
+
+msgid "Bidirectional CPU"
+msgstr "双向 CPU"
+
+msgid "Bidirectional path tracer on CPU"
+msgstr "CPU 上的双向路径追踪器"
+
+msgid "Tile Path CPU"
+msgstr "分块路径 CPU"
+
+msgid "Tiled path tracer on CPU"
+msgstr "CPU 上的分块路径追踪器"
+
+msgid "Tile Path OpenCL"
+msgstr "分块路径 OpenCL"
+
+msgid "Tiled path tracer on GPU/OpenCL"
+msgstr "GPU/OpenCL 上的分块路径追踪器"
+
+msgid "Pixel reconstruction filter"
+msgstr "像素重建滤镜"
+
+msgid "No pixel filter"
+msgstr "无像素滤镜"
+
+msgid "Default reconstruction filter"
+msgstr "默认重建滤镜"
+
+msgid "Mitchell"
+msgstr "Mitchell"
+
+msgid "Sharper, can ring around highlights"
+msgstr "更锐利，高光周围可能出现振铃"
+
+msgid "Softer reconstruction filter"
+msgstr "更柔和的重建滤镜"
+
+msgid "Filter width in pixels"
+msgstr "滤镜宽度（像素）"
+
+msgid "Preview Samples"
+msgstr "预览采样"
+
+msgid "Samples used for material preview renders"
+msgstr "材质预览渲染使用的采样数"
+
+msgid "Halt after this many samples per pixel (0 uses the default of 64)"
+msgstr "每像素达到此采样数后停止（0 使用默认值 64）"
+
+msgid "Halt after this many seconds (0 disables)"
+msgstr "达到此秒数后停止（0 表示禁用）"
+
+msgid "Glossiness Threshold"
+msgstr "光泽度阈值"
+
+msgid "Materials rougher than this are not light-traced"
+msgstr "比此值更粗糙的材质不进行光线追踪"
+
+msgid "Light Rays"
+msgstr "光线"
+
+msgid "Fraction of samples spent on light tracing when hybrid is on"
+msgstr "启用混合时用于光线追踪的采样比例"
+
+msgid "Light Strategy"
+msgstr "光源策略"
+
+msgid "How lights are sampled"
+msgstr "光源的采样方式"
+
+msgid "Log Power"
+msgstr "对数功率"
+
+msgid "Sample lights by brightness, without letting a few huge lights dominate"
+msgstr "按亮度对光源采样，同时避免少数极亮光源占主导"
+
+msgid "Sample lights strictly by brightness"
+msgstr "严格按亮度对光源采样"
+
+msgid "Sample all lights equally"
+msgstr "对所有光源均等采样"
+
+msgid "Large Mutation"
+msgstr "大幅突变"
+
+msgid "Metropolis large-step probability (higher = more like random)"
+msgstr "Metropolis 大步长概率（越高越接近随机）"
+
+msgid "Maximum total path depth"
+msgstr "最大总路径深度"
+
+msgid "Maximum diffuse bounce depth"
+msgstr "最大漫反射反弹深度"
+
+msgid "Maximum glossy bounce depth"
+msgstr "最大光泽反弹深度"
+
+msgid "Maximum specular bounce depth (glass SDS needs 8+)"
+msgstr "最大镜面反弹深度（玻璃 SDS 需要 8 以上）"
+
+msgid "Caustic Size (Millions)"
+msgstr "焦散大小（百万）"
+
+msgid "Max photons stored in the caustic cache"
+msgstr "焦散缓存中存储的最大光子数"
+
+msgid "Lookup Radius"
+msgstr "查找半径"
+
+msgid "Caustic cache lookup radius (scene units)"
+msgstr "焦散缓存查找半径（场景单位）"
+
+msgid "Update Samples"
+msgstr "更新采样"
+
+msgid "Rebuild caustic cache every N samples (0 = once at start)"
+msgstr "每 N 个采样重建一次焦散缓存（0 = 仅在开始时）"
+
+msgid "Materials rougher than this go to the indirect cache"
+msgstr "比此值更粗糙的材质使用间接缓存"
+
+msgid "Photon Depth"
+msgstr "光子深度"
+
+msgid "Max bounce depth while tracing photons"
+msgstr "追踪光子时的最大反弹深度"
+
+msgid "Photon Count (Millions)"
+msgstr "光子数量（百万）"
+
+msgid "Max photons traced for PhotonGI"
+msgstr "PhotonGI 追踪的最大光子数"
+
+msgid "Sampler"
+msgstr "采样器"
+
+msgid "Sample generator"
+msgstr "采样生成器"
+
+msgid "Sobol"
+msgstr "Sobol"
+
+msgid "Progressive Sobol sampler"
+msgstr "渐进式 Sobol 采样器"
+
+msgid "Metropolis"
+msgstr "Metropolis"
+
+msgid "Metropolis sampler, useful for difficult caustics"
+msgstr "Metropolis 采样器，适用于困难的焦散"
+
+msgid "Independent random sampler"
+msgstr "独立随机采样器"
+
+msgid "Sampler seed"
+msgstr "采样器种子"
+
+msgid "Adaptive Strength"
+msgstr "自适应强度"
+
+msgid "0 samples every pixel equally; higher focuses on noisy areas"
+msgstr "0 表示对每个像素均等采样；越高越集中于噪点区域"
+
+msgid "CPU threads (0 = auto, leaves cores for the UI)"
+msgstr "CPU 线程数（0 = 自动，为界面保留核心）"
+
+msgid "AA Samples"
+msgstr "AA 采样"
+
+msgid "Tile Path AA samples per pass (squared)"
+msgstr "分块路径每遍的 AA 采样（平方）"
+
+msgid "Tile Path engine tile size"
+msgstr "分块路径引擎的分块大小"
+
+msgid "Linear Tonemap"
+msgstr "线性色调映射"
+
+msgid "Linear imagepipeline scale"
+msgstr "线性图像管线缩放"
+
+msgid "Clamp Output"
+msgstr "限制输出"
+
+msgid "Enable sample clamping to reduce fireflies"
+msgstr "启用采样限制以减少萤火虫噪点"
+
+msgid "OpenCL CPU"
+msgstr "OpenCL CPU"
+
+msgid "Also use CPU devices when the OpenCL engines are selected"
+msgstr "选择 OpenCL 引擎时也使用 CPU 设备"
+
+msgid "Enable film pixel reconstruction filter"
+msgstr "启用胶片像素重建滤镜"
+
+msgid "Add Light Tracing"
+msgstr "添加光线追踪"
+
+msgid "Trace rays from lights as well as the camera (caustics). Conflicts with PhotonGI caustic cache at camera-hit surfaces — enable one or the other"
+msgstr "除了从摄像机发射射线外，也从光源追踪射线（焦散）。在摄像机命中的表面上与 PhotonGI 焦散缓存冲突——只能启用其中之一"
+
+msgid "PhotonGI"
+msgstr "PhotonGI"
+
+msgid "Build PhotonGI caches during final render (PATHCPU / PATHOCL)"
+msgstr "在最终渲染期间构建 PhotonGI 缓存（PATHCPU / PATHOCL）"
+
+msgid "Caustic Cache"
+msgstr "焦散缓存"
+
+msgid "Cache SDS caustics (glass, metal)"
+msgstr "缓存 SDS 焦散（玻璃、金属）"
+
+msgid "Indirect Cache"
+msgstr "间接缓存"
+
+msgid "Cache indirect lighting"
+msgstr "缓存间接光照"
+
+msgid "Viewport Light Tracing"
+msgstr "视图光线追踪"
+
+msgid "Use hybrid light tracing in the viewport (needed for caustics)"
+msgstr "在视图中使用混合光线追踪（焦散所需）"
+
+msgid "Show single thumbnail in the middle of each strip"
+msgstr "在每个片段中间显示单个缩略图"
+
+msgid "Space Data-Block Relations"
+msgstr "空间数据块关系"
+
+msgid "Editor for who references a data-block"
+msgstr "查看谁引用了数据块的编辑器"
+
+msgid "Type Filter"
+msgstr "类型过滤"
+
+msgid "Only show this data-block type in the browser"
+msgstr "在浏览器中仅显示此数据块类型"
+
+msgid "Show all data-block types"
+msgstr "显示所有数据块类型"
+
+msgid "Hide Embedded"
+msgstr "隐藏嵌入项"
+
+msgid "Hide embedded data-blocks such as master collections"
+msgstr "隐藏主集合等嵌入数据块"
+
+msgid "Hide Loopback"
+msgstr "隐藏回环"
+
+msgid "Hide reverse/loopback pointer relations"
+msgstr "隐藏反向/回环指针关系"
+
+msgid "How many levels of indirect users to show when Recursive is disabled"
+msgstr "禁用“递归”时显示多少层间接使用者"
+
+msgid "Filter data-blocks by name in the browser"
+msgstr "在浏览器中按名称过滤数据块"
+
+msgid "Walk users to the top of the chain (cycles stop that branch only)"
+msgstr "向上遍历使用者直到链的顶端（循环只会停止对应分支）"
+
+msgid "Snap nodes to grid while moving (Ctrl temporarily disables)"
+msgstr "移动时将节点吸附到网格（Ctrl 可临时禁用）"
+
+msgid "User Edges Only"
+msgstr "仅用户边"
+
+msgid "Only follow fully refcounted user edges"
+msgstr "仅沿完整引用计数的用户边"
+
+msgid "Paint Layers Window"
+msgstr "绘制图层窗口"
+
+msgid "This editor is the floating paint-layer stack, not an image view"
+msgstr "此编辑器是浮动的绘制图层堆栈，而不是图像视图"
+
+msgid "Output evaluation size in pixels (W × H). Changing this force-evaluates every node connected to Viewer / Image Output. Point Stamp sizes use a fixed 1024 reference so layout stays stable; only pixel density increases"
+msgstr "输出计算大小（像素，宽 × 高）。更改此项会强制计算所有连接到查看器 / 图像输出的节点。点标记大小使用固定的 1024 参考值以保持布局稳定；只会提高像素密度"
+
+msgid "LuxCore Node Editor"
+msgstr "LuxCore 节点编辑器"
+
+msgid "Edit LuxCore materials in a dedicated node tree"
+msgstr "在专用节点树中编辑 LuxCore 材质"
+
+msgid "Uncollapse the active item when scrolling it into view"
+msgstr "将活动项滚动到视图内时展开它"
+
+msgid "Scroll the active item into view when it changes outside of the outliner"
+msgstr "当活动项在大纲视图之外发生变化时，将其滚动到视图内"
+
+msgid "Show Users Column"
+msgstr "显示用户数列"
+
+msgid "Display a column showing the number of users for each data-block"
+msgstr "显示一列，列出每个数据块的用户数"
+
+msgid "Sort Method"
+msgstr "排序方式"
+
+msgid "Sorting method for Outliner elements"
+msgstr "大纲视图元素的排序方式"
+
+msgid "Alphabetical"
+msgstr "按字母顺序"
+
+msgid "Order items alphabetically"
+msgstr "按字母顺序排列项目"
+
+msgid "Order items manually"
+msgstr "手动排列项目"
+
+msgid "No Sorting"
+msgstr "不排序"
+
+msgid "Order items according to the actual internal data (matches the order in which operators will typically process them when working on collections/objects hierarchies)"
+msgstr "按实际内部数据排列项目（与操作符处理集合/物体层级时通常的顺序一致）"
+
+msgid "Attribute Filter Mode"
+msgstr "属性过滤模式"
+
+msgid "Deprecated: include/exclude is now written in the attribute filter with ^ and !"
+msgstr "已弃用：包含/排除现在通过属性过滤器中的 ^ 和 ! 书写"
+
+msgid "Show only attributes whose names match the pattern"
+msgstr "仅显示名称匹配该模式的属性"
+
+msgid "Hide attributes whose names match the pattern"
+msgstr "隐藏名称匹配该模式的属性"
+
+msgid "Show only these attributes (space/comma separated, * and ? wildcards). Prefix with ^ or ! to hide matching names from that set. Empty shows all"
+msgstr "仅显示这些属性（以空格/逗号分隔，支持 * 和 ? 通配符）。加 ^ 或 ! 前缀可从该集合中隐藏匹配的名称。为空则显示全部"
+
+msgid "Digits after the decimal point for float, vector, matrix and array preview"
+msgstr "浮点、矢量、矩阵和数组预览的小数点后位数"
+
+msgid "Show rows matching any of these (space/comma separated): index patterns (0-10 20 30-40:2), boolean groups (@select), expressions (@position.y>0). Prefix with ^ or ! to exclude from that set. Empty shows all rows"
+msgstr "显示匹配以下任一条件的行（以空格/逗号分隔）：索引模式（0-10 20 30-40:2）、布尔组（@select）、表达式（@position.y>0）。加 ^ 或 ! 前缀可从该集合中排除。为空则显示所有行"
+
+msgid "Highlight Mirror Counterparts"
+msgstr "高亮镜像对应项"
+
+msgid "Draw the mirrored side of the UV selection in a separate color"
+msgstr "用单独的颜色绘制 UV 选择的镜像一侧"
+
+msgid "Highlight Color"
+msgstr "高亮颜色"
+
+msgid "Color used for the mirrored UV side. Not the selection color"
+msgstr "用于 UV 镜像一侧的颜色。不是选择颜色"
+
+msgid "Coordinate Alpha"
+msgstr "坐标透明度"
+
+msgid "Opacity of the background coordinate system overlay"
+msgstr "背景坐标系覆盖层的不透明度"
+
+msgid "Link Style"
+msgstr "连线样式"
+
+msgid "Shape of the wires connecting nodes"
+msgstr "连接节点的连线形状"
+
+msgid "Bezier"
+msgstr "贝塞尔"
+
+msgid "Smooth cubic Bezier noodles"
+msgstr "平滑的三次贝塞尔连线"
+
+msgid "Angled"
+msgstr "折线"
+
+msgid "Orthogonal Houdini-style links; Noodle Curving sets the corner radius"
+msgstr "Houdini 风格的正交连线；连线弯曲度决定拐角半径"
+
+msgid "Show Coordinates"
+msgstr "显示坐标"
+
+msgid "Display a 3D-view-style coordinate system in the background, with zoom-adaptive integer labels"
+msgstr "在背景中显示 3D 视图风格的坐标系，带有随缩放自适应的整数标签"
+
+msgid "Show Original Labels"
+msgstr "显示原始标签"
+
+msgid "Show the node's original type name when a custom label is used"
+msgstr "使用自定义标签时，显示节点的原始类型名称"
+
+msgid "Show Thumbnail"
+msgstr "显示缩略图"
+
+msgid "Display a minimap of the node tree in the corner of the editor"
+msgstr "在编辑器角落显示节点树的缩略图"
+
+msgid "Fluid Zone"
+msgstr "流体区域"
+
+msgid "Light blue tint for GPU Texture Editor Fluid Simulation zones"
+msgstr "GPU 纹理编辑器流体模拟区域的浅蓝色调"
+
+msgid "Mirror Pair Distance"
+msgstr "镜像配对距离"
+
+msgid "How far a vertex may be from its mirrored position and still count as a pair. Used by the mirror highlight and by mirrored topology operators"
+msgstr "顶点距离其镜像位置多远仍算作一对。用于镜像高亮和镜像拓扑操作符"
+
+msgid "UV Mirror Pair Distance"
+msgstr "UV 镜像配对距离"
+
+msgid "How far a UV may be from its mirrored position and still count as a pair, in UV coordinates. 0 uses 0.001"
+msgstr "UV 距离其镜像位置多远仍算作一对（以 UV 坐标计）。0 使用 0.001"
+
+msgid "Preferences Asset Library"
+msgstr "偏好设置资产库"
+
+msgid "An asset library defined in the Preferences, available whatever project or blend file is open"
+msgstr "在偏好设置中定义的资产库，无论打开哪个项目或 blend 文件都可用"
+
+msgid "Color used for the mirrored side. Not the orange selection color"
+msgstr "用于镜像一侧的颜色。不是橙色的选择颜色"
+
+msgid "Draw the mirrored side of the edit-mesh selection in a separate color"
+msgstr "用单独的颜色绘制编辑网格选择的镜像一侧"
+
+msgid "Hide Viewer attribute text when the position is occluded by the mesh"
+msgstr "当位置被网格遮挡时，隐藏查看器属性文字"
+
+msgid "Viewer Attribute Text Size"
+msgstr "查看器属性文字大小"
+
+msgid "Font size of Viewer attribute values in the viewport"
+msgstr "视图中查看器属性值的字体大小"
+
+msgid "Stay On Top"
+msgstr "保持置顶"
+
+msgid "Keep this window above the others so it can be adjusted while painting"
+msgstr "让此窗口位于其他窗口之上，以便在绘制时调整"
+
+msgctxt "WindowManager"
+msgid "Data-Block Relations"
+msgstr "数据块关系"
+
+msgctxt "WindowManager"
+msgid "Data-Block Graph Generic"
+msgstr "数据块图 通用"
+
+msgctxt "WindowManager"
+msgid "Data-Block Graph Tool: Tweak"
+msgstr "数据块图工具：拖动"
+
+msgctxt "WindowManager"
+msgid "Data-Block Graph Tool: Select Box"
+msgstr "数据块图工具：框选"
+
+msgctxt "WindowManager"
+msgid "Data-Block Graph Tool: Select Circle"
+msgstr "数据块图工具：圆选"
+
+msgctxt "WindowManager"
+msgid "Data-Block Graph Tool: Select Lasso"
+msgstr "数据块图工具：套索选择"
+
+msgctxt "WindowManager"
+msgid "Data-Block Graph Tool: Tweak (fallback)"
+msgstr "数据块图工具：拖动（后备）"
+
+msgctxt "WindowManager"
+msgid "Data-Block Graph Tool: Select Box (fallback)"
+msgstr "数据块图工具：框选（后备）"
+
+msgctxt "WindowManager"
+msgid "Data-Block Graph Tool: Select Circle (fallback)"
+msgstr "数据块图工具：圆选（后备）"
+
+msgctxt "WindowManager"
+msgid "Data-Block Graph Tool: Select Lasso (fallback)"
+msgstr "数据块图工具：套索选择（后备）"
+
+msgctxt "WindowManager"
+msgid "3D View Tool: Paint Grease Pencil, Carver"
+msgstr "3D 视图工具：绘制蜡笔，切割刀"
+
+msgctxt "WindowManager"
+msgid "3D View Tool: Paint Grease Pencil, Carver (fallback)"
+msgstr "3D 视图工具：绘制蜡笔，切割刀（后备）"
+
+msgctxt "WindowManager"
+msgid "Node Align"
+msgstr "节点对齐"
+
+msgctxt "WindowManager"
+msgid "Node Align (Off)"
+msgstr "节点对齐（关）"
+
+msgid "Black-box 2D fluid simulation (Stable Fluids + Multigrid pressure) across frames"
+msgstr "跨帧的黑盒 2D 流体模拟（Stable Fluids + 多重网格压力）"
+
+msgid "Select a ShaderToy node"
+msgstr "选择一个 ShaderToy 节点"
+
+msgid "Paste a shadertoy.com/view/… URL or shader ID"
+msgstr "粘贴 shadertoy.com/view/… URL 或着色器 ID"
+
+msgid "Clipboard is not JSON or GLSL. On shadertoy.com: Image tab, Ctrl+A, Ctrl+C"
+msgstr "剪贴板不是 JSON 或 GLSL。在 shadertoy.com：图像标签页，Ctrl+A，Ctrl+C"
+
+msgid "File is not ShaderToy JSON"
+msgstr "文件不是 ShaderToy JSON"
+
+msgid "Timeline Marker(s)"
+msgstr "时间线标记"
+
+msgid "SPZ (.spz)"
+msgstr "SPZ (.spz)"
+
+msgctxt "Operator"
+msgid "Fluid Simulation"
+msgstr "流体模拟"
+
+msgid "Edit in the LuxCore Node Editor"
+msgstr "在 LuxCore 节点编辑器中编辑"
+
+msgid "OpenColorIO Config"
+msgstr "OpenColorIO 配置"
+
+msgid "Metropolis is forced to Sobol while PhotonGI is on"
+msgstr "启用 PhotonGI 时，Metropolis 被强制为 Sobol"
+
+msgid "PhotonGI caustics override light tracing on final render"
+msgstr "PhotonGI 焦散在最终渲染中会覆盖光线追踪"
+
+msgctxt "Operator"
+msgid "Layout"
+msgstr "布局"
+
+msgid "Browser"
+msgstr "浏览器"
+
+msgctxt "Operator"
+msgid "Frame All / Layout"
+msgstr "框显全部 / 布局"
+
+msgctxt "Operator"
+msgid "Refresh Graph"
+msgstr "刷新图"
+
+msgctxt "Operator"
+msgid "Move (G)"
+msgstr "移动 (G)"
+
+msgctxt "Operator"
+msgid "Rotate (R)"
+msgstr "旋转 (R)"
+
+msgctxt "Operator"
+msgid "Scale (S)"
+msgstr "缩放 (S)"
+
+msgctxt "Operator"
+msgid "Align Selection (Hold U)"
+msgstr "对齐所选项（按住 U）"
+
+msgctxt "Operator"
+msgid "Replace Action..."
+msgstr "替换动作..."
+
+msgid "Highlight Counterparts"
+msgstr "高亮对应项"
+
+msgctxt "Operator"
+msgid "Selection Center"
+msgstr "选择中心"
+
+msgid "Pair Distance"
+msgstr "配对距离"
+
+msgid "Topology uses mesh X/Y/Z"
+msgstr "拓扑使用网格 X/Y/Z"
+
+msgid "No UV mirror axis is enabled"
+msgstr "未启用 UV 镜像轴"
+
+msgid "Original Labels"
+msgstr "原始标签"
+
+msgid "Coordinate"
+msgstr "坐标"
+
+msgid "Thumbnail"
+msgstr "缩略图"
+
+msgctxt "Operator"
+msgid "Input"
+msgstr "输入"
+
+msgctxt "Operator"
+msgid "Output"
+msgstr "输出"
+
+msgctxt "Operator"
+msgid "Panel"
+msgstr "面板"
+
+msgctxt "Operator"
+msgid "Separator"
+msgstr "分隔符"
+
+msgctxt "Operator"
+msgid "Message"
+msgstr "信息"
+
+msgctxt "Operator"
+msgid "Recursion Tree"
+msgstr "递归树"
+
+msgctxt "Operator"
+msgid "Reload to Apply Changes"
+msgstr "重新加载以应用更改"
+
+msgctxt "Operator"
+msgid "Settings..."
+msgstr "设置..."
+
+msgid "Opening blend files from the internet and other untrusted sources is unsafe with Auto-Run. Use with caution."
+msgstr "在启用自动运行的情况下，打开来自互联网和其他不受信任来源的 blend 文件是不安全的。请谨慎使用。"
+
+msgid "enabled on startup, overriding the preference"
+msgstr "启动时已启用，覆盖偏好设置"
+
+msgid "disabled on startup, overriding the preference"
+msgstr "启动时已禁用，覆盖偏好设置"
+
+msgctxt "Operator"
+msgid "Curve Edge Loops Between Selected"
+msgstr "选定项之间的曲线边环"
+
+msgctxt "Operator"
+msgid "Copy Playback Range"
+msgstr "复制播放范围"
+
+msgctxt "Operator"
+msgid "At Playhead"
+msgstr "在播放头处"
+
+msgctxt "Operator"
+msgid "Flatten Layers"
+msgstr "拼合图层"
+
+msgid "Rebuild Blender (paint layers RNA missing)"
+msgstr "重新构建 Blender（缺少绘制图层 RNA）"
+
+msgctxt "Operator"
+msgid "Quick Edit..."
+msgstr "快速编辑..."
+
+msgid "No mirror axis is enabled"
+msgstr "未启用镜像轴"
+
+msgid "\"%s\" is using Action \"%s\", which does not have a slot with identifier \"%s\" or \"%s\". Manually assign the right action slot to \"%s\".\n"
+msgstr "“%s”正在使用动作“%s”，该动作没有标识符为“%s”或“%s”的槽。请手动为“%s”指定正确的动作槽。"
+
+msgid "Paint layers are not supported on this image type"
+msgstr "此图像类型不支持绘制图层"
+
+msgid "Image has no pixel buffer"
+msgstr "图像没有像素缓冲区"
+
+msgid "Cannot remove the last paint layer"
+msgstr "无法移除最后一个绘制图层"
+
+msgid "No active paint layer"
+msgstr "没有活动的绘制图层"
+
+msgid "No active mask"
+msgstr "没有活动的蒙版"
+
+msgid "No layer below to merge into"
+msgstr "下方没有可合并的图层"
+
+msgid "Cannot replace Action with itself ('%s')"
+msgstr "无法用动作自身替换动作（“%s”）"
+
+msgid "Found duplicate names in selection. Not all selected were saved into clipboard."
+msgstr "在选择中发现重复的名称。并非所有选中项都已保存到剪贴板。"
+
+msgid "Clipboard data has no animation"
+msgstr "剪贴板数据没有动画"
+
+msgid "Clipboard contains incomplete animation data"
+msgstr "剪贴板包含不完整的动画数据"
+
+msgid "Cannot match selection to clipboard data"
+msgstr "无法将选择与剪贴板数据匹配"
+
+msgid "Failed to figure out pasting order. Potential dependency cycle"
+msgstr "无法确定粘贴顺序。可能存在依赖循环"
+
+msgid "Nothing selected to copy"
+msgstr "没有选中项可复制"
+
+msgid "Nothing selected to paste to"
+msgstr "没有选中项可粘贴到"
+
+msgid "Selection contains constraints. Perfect world space match cannot be guaranteed"
+msgstr "选择包含约束。无法保证完美的世界空间匹配"
+
+msgid "No clipboard to read from"
+msgstr "没有可读取的剪贴板"
+
+msgid "Copied %d %s across %d frames to the clipboard"
+msgstr "已将 %d 个%s跨 %d 帧复制到剪贴板"
+
+msgid "Pasted all %d %s over %d frames"
+msgstr "已将全部 %d 个%s粘贴到 %d 帧上"
+
+msgid "Pasted the same animation to %d %s over %d frames"
+msgstr "已将同一动画粘贴到 %d 个%s的 %d 帧上"
+
+msgid "Pasted %d/%d %s over %d frames"
+msgstr "已将 %d/%d 个%s粘贴到 %d 帧上"
+
+msgid "Invalid frame range %d-%d"
+msgstr "无效的帧范围 %d-%d"
+
+msgid "No assets in this catalog."
+msgstr "此目录中没有资产。"
+
+msgid "No assets found."
+msgstr "未找到资产。"
+
+msgid "No search results in this catalog."
+msgstr "此目录中没有搜索结果。"
+
+msgid "No results found."
+msgstr "未找到结果。"
+
+msgid "\"Online Only\" filter is enabled."
+msgstr "已启用“仅在线”过滤器。"
+
+msgid "\"Offline Only\" filter is enabled."
+msgstr "已启用“仅离线”过滤器。"
+
+msgid "Geometry Edit session already active"
+msgstr "几何编辑会话已处于活动状态"
+
+msgid "Select Elements requires Point, Edge, or Face domain"
+msgstr "选择元素需要点、边或面域"
+
+msgid "Empty mesh from node Geometry input"
+msgstr "来自节点几何输入的网格为空"
+
+msgid "Failed to copy input mesh"
+msgstr "复制输入网格失败"
+
+msgid "Failed to create temp object"
+msgstr "创建临时物体失败"
+
+msgid "Failed to enter Edit Mode"
+msgstr "进入编辑模式失败"
+
+msgid "No edit mesh"
+msgstr "没有编辑网格"
+
+msgid "Select Elements: selection only (%d verts). Esc/Enter/Tab confirm"
+msgstr "选择元素：仅选择（%d 个顶点）。Esc/Enter/Tab 确认"
+
+msgid "Edit Elements: free Mesh Edit Mode (%d verts). All edit tools allowed · Esc/Enter/Tab save full mesh to node"
+msgstr "编辑元素：自由网格编辑模式（%d 个顶点）。允许所有编辑工具 · Esc/Enter/Tab 将完整网格保存到节点"
+
+msgid "Select Elements: selection only — transform was restored"
+msgstr "选择元素：仅选择 — 变换已还原"
+
+msgid "Geometry Edit session lost after undo — re-enter with Enter"
+msgstr "撤销后几何编辑会话丢失 — 按 Enter 重新进入"
+
+msgid "Select Elements: selection only — edit was undone"
+msgstr "选择元素：仅选择 — 编辑已被撤销"
+
+msgid "Geometry Edit session invalid — cancel and re-enter"
+msgstr "几何编辑会话无效 — 请取消并重新进入"
+
+msgid "Some curves were converted to Poly"
+msgstr "部分曲线已转换为多段线"
+
+msgid "Cannot edit source in popup regions that does not support refresh."
+msgstr "无法在不支持刷新的弹出区域中编辑源"
+
+msgctxt "Operator"
+msgid "Color Ramp Preset"
+msgstr "色彩渐变预设"
+
+msgid "OpenColorIO configuration failed to load"
+msgstr "OpenColorIO 配置加载失败"
+
+msgid "No vertices selected"
+msgstr "未选择顶点"
+
+msgid "Move Inside"
+msgstr "移到其中"
+
+msgid "Link Inside"
+msgstr "链接到其中"
+
+msgid "Data-block not found"
+msgstr "未找到数据块"
+
+msgid "Select at least two nodes to align"
+msgstr "至少选择两个节点才能对齐"
+
+msgid "Removed %d reference graph(s) from the editor (data-blocks kept)"
+msgstr "已从编辑器中移除 %d 个引用图（数据块已保留）"
+
+msgid "Flatten paint layers first"
+msgstr "请先拼合绘制图层"
+
+msgid "Failed to open the paint layer window"
+msgstr "打开绘制图层窗口失败"
+
+msgid "Cannot load image '%s'"
+msgstr "无法加载图像“%s”"
+
+msgctxt "Operator"
+msgid "Remove Paint Layer"
+msgstr "移除绘制图层"
+
+msgctxt "Operator"
+msgid "Merge Paint Layer"
+msgstr "合并绘制图层"
+
+msgctxt "Operator"
+msgid "Flatten Paint Layers"
+msgstr "拼合绘制图层"
+
+msgid "No nodes selected to copy"
+msgstr "没有选中的节点可复制"
+
+msgid "Not an expression node"
+msgstr "不是表达式节点"
+
+msgid "Linked expression strings can't be converted to a node group"
+msgstr "已链接的表达式字符串无法转换为节点组"
+
+msgid "Edit Elements Enter needs a mesh (one geometry type). Connect a mesh-producing previous node"
+msgstr "进入编辑元素需要网格（一种几何类型）。请连接产生网格的上一个节点"
+
+msgid "Already in a Geometry Edit session"
+msgstr "已处于几何编辑会话中"
+
+msgid "Edit Elements input has no mesh"
+msgstr "编辑元素的输入没有网格"
+
+msgid "Edit Elements: failed to copy input mesh"
+msgstr "编辑元素：复制输入网格失败"
+
+msgid "Select an Edit Elements node"
+msgstr "请选择一个编辑元素节点"
+
+msgid "Edit Elements: continue from stored mesh (%d verts)"
+msgstr "编辑元素：从已存储的网格继续（%d 个顶点）"
+
+msgid "Edit Elements: free Mesh Edit Mode — all tools allowed. Esc / Enter / Tab saves the full mesh into the node"
+msgstr "编辑元素：自由网格编辑模式 — 允许所有工具。Esc / Enter / Tab 将完整网格保存到节点"
+
+msgid "Already inside this recursive group. Change depth in the Recursion Tree window"
+msgstr "已处于此递归组内。请在递归树窗口中更改深度"
+
+msgid "Failed to bake Color input into paint canvas"
+msgstr "将颜色输入烘焙到绘制画布失败"
+
+msgid "Paint: Color input empty after force evaluate — blank canvas"
+msgstr "绘制：强制计算后颜色输入为空 — 空白画布"
+
+msgid "Paint bake: invalid pixel buffer"
+msgstr "绘制烘焙：像素缓冲区无效"
+
+msgid "Already in Paint edit session — press Esc to finish"
+msgstr "已处于绘制编辑会话中 — 按 Esc 结束"
+
+msgid "Select a Paint node"
+msgstr "请选择一个绘制节点"
+
+msgid "Failed to open Image Editor for Paint"
+msgstr "为绘制打开图像编辑器失败"
+
+msgid "Depth "
+msgstr "深度 "
+
+msgid "Open this geometry node group in the node editor."
+msgstr "在节点编辑器中打开此几何节点组。"
+
+msgid "Evaluate the node group to list calls."
+msgstr "计算节点组以列出调用。"
+
+msgid "Recursion Tree"
+msgstr "递归树"
+
+msgid "Failed to open the recursion tree window"
+msgstr "打开递归树窗口失败"
+
+msgid "No object with a Geometry Nodes modifier using this tree (select the object / open the tree from the modifier)"
+msgstr "没有使用此树的带有几何节点修改器的物体（请选择物体 / 从修改器打开树）"
+
+msgid "No root node tree on modifier"
+msgstr "修改器上没有根节点树"
+
+msgid "Enable Geometry Nodes modifier viewport visibility"
+msgstr "请启用几何节点修改器的视图可见性"
+
+msgid "Node has no Geometry input"
+msgstr "节点没有几何输入"
+
+msgid "Geometry input is not connected — connect the previous node's Geometry output"
+msgstr "几何输入未连接 — 请连接上一个节点的几何输出"
+
+msgid "Using previous-node geometry (node input cache)"
+msgstr "使用上一个节点的几何（节点输入缓存）"
+
+msgid "Using original object mesh (no evaluated geometry yet)"
+msgstr "使用原始物体网格（尚无已计算的几何）"
+
+msgid "Could not get visual geometry. Ensure the Geometry Nodes modifier is enabled, the previous node outputs a mesh, and the object is visible in the viewport"
+msgstr "无法获取可视几何。请确保几何节点修改器已启用、上一个节点输出网格，并且物体在视图中可见"
+
+msgid "Geometry has no usable mesh (or single curve). Connect one mesh-producing node"
+msgstr "几何没有可用网格（或单条曲线）。请连接一个产生网格的节点"
+
+msgid "Visual geometry: %d verts, %d edges, %d faces"
+msgstr "可视几何：%d 个顶点，%d 条边，%d 个面"
+
+msgid "Visual geometry: curves (%d points)"
+msgstr "可视几何：曲线（%d 个点）"
+
+msgid "Select Elements Enter needs a mesh (one geometry type). Connect a mesh-producing previous node"
+msgstr "进入选择元素需要网格（一种几何类型）。请连接产生网格的上一个节点"
+
+msgid "Already in Select Elements session"
+msgstr "已处于选择元素会话中"
+
+msgid "Select Elements input has no mesh (connect Geometry from previous node's cook output)"
+msgstr "选择元素的输入没有网格（请连接上一个节点计算输出的几何）"
+
+msgid "Select a single Select Elements node"
+msgstr "请选择单个选择元素节点"
+
+msgid "Select a Select Elements node"
+msgstr "请选择一个选择元素节点"
+
+msgid "Select Elements: selection only (gizmos off). Mesh select tools · 1/2/3 domain · Esc/Enter/Tab confirm"
+msgstr "选择元素：仅选择（关闭 Gizmo）。网格选择工具 · 1/2/3 切换域 · Esc/Enter/Tab 确认"
+
+msgid "Select Elements: selection only"
+msgstr "选择元素：仅选择"
+
+msgid "Cannot change socket to this type"
+msgstr "无法将接口更改为此类型"
+
+msgid "Cannot change socket to this structure type"
+msgstr "无法将接口更改为此结构类型"
+
+msgid "Size of the selection, editing scales it about the transform pivot point"
+msgstr "选择项的大小，编辑会围绕变换轴心点进行缩放"
+
+msgid "No selected UVs"
+msgstr "没有选中的 UV"
+
+msgid "PLY Importer: Spherical harmonics degree above the supported %d, spherical harmonics are not imported"
+msgstr "PLY 导入器：球谐函数阶数超过支持的 %d，不导入球谐函数"
+
+msgid "PLY Importer: Unexpected number of f_rest properties %d, spherical harmonics are not imported"
+msgstr "PLY 导入器：f_rest 属性数量 %d 异常，不导入球谐函数"
+
+msgid "PLY Importer: Incomplete spherical harmonics band, importing %d of %d coefficients"
+msgstr "PLY 导入器：球谐函数频带不完整，导入了 %d/%d 个系数"
+
+msgid "SPZ Read: Big endian machines are not supported"
+msgstr "SPZ 读取：不支持大端序机器"
+
+msgid "SPZ Read: Error opening file for read"
+msgstr "SPZ 读取：打开文件读取时出错"
+
+msgid "SPZ Read: Error reading magic value from file"
+msgstr "SPZ 读取：从文件读取魔数时出错"
+
+msgid "SPZ Read: Unrecognized file format"
+msgstr "SPZ 读取：无法识别的文件格式"
+
+msgid "SPZ Read: Error initializing Zlib decompression"
+msgstr "SPZ 读取：初始化 Zlib 解压缩时出错"
+
+msgid "SPZ Read: Error reading header from GZip stream"
+msgstr "SPZ 读取：从 GZip 流读取头部时出错"
+
+msgid "SPZ Read: %s"
+msgstr "SPZ 读取：%s"
+
+msgid "SPZ Read: Error initializing positions reader"
+msgstr "SPZ 读取：初始化位置读取器时出错"
+
+msgid "SPZ Read: Error reading positions"
+msgstr "SPZ 读取：读取位置时出错"
+
+msgid "SPZ Read: Error initializing alphas reader"
+msgstr "SPZ 读取：初始化 Alpha 读取器时出错"
+
+msgid "SPZ Read: Error reading alphas"
+msgstr "SPZ 读取：读取 Alpha 时出错"
+
+msgid "SPZ Read: Error initializing colors reader"
+msgstr "SPZ 读取：初始化颜色读取器时出错"
+
+msgid "SPZ Read: Error reading colors"
+msgstr "SPZ 读取：读取颜色时出错"
+
+msgid "SPZ Read: Error initializing scales reader"
+msgstr "SPZ 读取：初始化缩放读取器时出错"
+
+msgid "SPZ Read: Error reading scales"
+msgstr "SPZ 读取：读取缩放时出错"
+
+msgid "SPZ Read: Error initializing rotations reader"
+msgstr "SPZ 读取：初始化旋转读取器时出错"
+
+msgid "SPZ Read: Error reading rotations"
+msgstr "SPZ 读取：读取旋转时出错"
+
+msgid "SPZ Read: Error initializing SH reader"
+msgstr "SPZ 读取：初始化 SH 读取器时出错"
+
+msgid "SPZ Read: Error reading spherical harmonics"
+msgstr "SPZ 读取：读取球谐函数时出错"
+
+msgid "SPZ Read: Error reading NGSP header"
+msgstr "SPZ 读取：读取 NGSP 头部时出错"
+
+msgid "Attempted to set slot identifier to \"%s\", but the type prefix does not match the slot's 'target_id_type' \"%s\". Setting to \"%s\" instead.\n"
+msgstr "尝试将槽标识符设置为“%s”，但类型前缀与槽的 'target_id_type'“%s”不匹配。改为设置为“%s”。"
+
+msgid "Not an ImageNodeTree"
+msgstr "不是 ImageNodeTree"
+
+msgid "Missing context main/scene for image node evaluation"
+msgstr "图像节点计算缺少 main/scene 上下文"
+
+msgid "Image node tree evaluation failed"
+msgstr "图像节点树计算失败"
+
+msgid "GPU Texture Editor group has cyclic links."
+msgstr "GPU 纹理编辑器组存在循环连接。"
+
+msgid "CGAL ARAP UV Field"
+msgstr "CGAL ARAP UV 场"
+
+msgid "CGAL Exact Geodesic Distance Field"
+msgstr "CGAL 精确测地距离场"
+
+msgid "CGAL LSCM UV Field"
+msgstr "CGAL LSCM UV 场"
+
+msgid "Sites on the XY plane. Sites are wrapped into the periodic domain."
+msgstr "XY 平面上的站点。站点会被环绕到周期域内。"
+
+msgid "Delaunay triangulation inside one period of the XY torus."
+msgstr "XY 环面一个周期内的 Delaunay 三角剖分。"
+
+msgid "Periodic width. 0 = 1.05 x the XY span."
+msgstr "周期宽度。0 = XY 范围的 1.05 倍。"
+
+msgid "Periodic height. 0 = 1.05 x the XY span."
+msgstr "周期高度。0 = XY 范围的 1.05 倍。"
+
+msgid "3D sites. Sites are wrapped into the periodic box."
+msgstr "3D 站点。站点会被环绕到周期盒内。"
+
+msgid "Delaunay tetrahedra inside one period of the periodic box."
+msgstr "周期盒一个周期内的 Delaunay 四面体。"
+
+msgid "Number of tetrahedra produced."
+msgstr "生成的四面体数量。"
+
+msgid "Keep each tetrahedron as an isolated element instead of a welded mesh."
+msgstr "将每个四面体保留为独立元素，而不是焊接的网格。"
+
+msgid "XY sites. Sites are wrapped into the periodic domain."
+msgstr "XY 站点。站点会被环绕到周期域内。"
+
+msgid "Isolated n-gon Voronoi cells. Face attribute cell_id."
+msgstr "独立的 n 边形 Voronoi 单元。面属性 cell_id。"
+
+msgid "Closed Voronoi cell volumes. Face attribute cell_id."
+msgstr "封闭的 Voronoi 单元体积。面属性 cell_id。"
+
+msgid "Fitted Shape"
+msgstr "拟合形状"
+
+msgid "CGAL Principal Curvature Scalar"
+msgstr "CGAL 主曲率标量"
+
+msgid "CGAL Principal Curvature Direction"
+msgstr "CGAL 主曲率方向"
+
+msgid "CGAL Shape Diameter Field"
+msgstr "CGAL 形状直径场"
+
+msgid "Faces to measure (Face domain). The global area normalization only uses these faces."
+msgstr "要测量的面（面域）。全局面积归一化只使用这些面。"
+
+msgid "How much the texture is stretched on each face (L2 stretch of Sander et al.), compared to the average of the whole mesh.\n1 = no distortion. The higher the value, the more the face is stretched or sheared (fewer texels per surface unit than on average). Below 1 the face is compressed (more texels per surface unit than on average).\n0 for faces that are not selected."
+msgstr "每个面上纹理被拉伸的程度（Sander 等人的 L2 拉伸），与整个网格的平均值相比。\n1 = 无畸变。值越高，面被拉伸或剪切得越多（每单位表面积的纹素少于平均值）。低于 1 表示面被压缩（每单位表面积的纹素多于平均值）。\n未选中的面为 0。"
+
+msgid "How much each face is sheared, as the ratio between the largest and the smallest stretch of the UV mapping. Independent of the UV size.\n1 = no distortion (angles are preserved). The higher the value, the more the face is stretched in one direction.\n0 for faces that are not selected or whose UV triangle has collapsed to a line."
+msgstr "每个面被剪切的程度，即 UV 映射中最大拉伸与最小拉伸之比。与 UV 大小无关。\n1 = 无畸变（保持角度）。值越高，面在某一方向上被拉伸得越多。\n未选中的面或 UV 三角形已塌缩成线的面为 0。"
+
+msgid "How much UV area each face covers compared to its share of the surface area on average over the mesh.\n1 = no distortion (the UV area is proportional to the surface area). The further the value is from 1, the more the area is distorted: above 1 the face is enlarged in UV (more texels per surface unit), below 1 it is shrunk in UV (fewer texels).\n0 for faces that are not selected."
+msgstr "每个面所占 UV 面积，与其在整个网格平均表面积中所占份额之比。\n1 = 无畸变（UV 面积与表面积成正比）。数值离 1 越远，面积畸变越大：高于 1 时面在 UV 中被放大（每单位表面积的纹素更多），低于 1 时在 UV 中被缩小（纹素更少）。\n未选中的面为 0。"
+
+msgid "Pair Data"
+msgstr "配对数据"
+
+msgid "Use Multigrid Preconditioner"
+msgstr "使用多重网格预条件子"
+
+msgid "Collision Mode"
+msgstr "碰撞模式"
+
+msgid "Colliders"
+msgstr "碰撞体"
+
+msgid "Motion Source"
+msgstr "运动来源"
+
+msgid "Previous Colliders"
+msgstr "上一帧碰撞体"
+
+msgid "Collider Thickness"
+msgstr "碰撞体厚度"
+
+msgid "Experimental CUDA FLIP path with fixed-budget reseeding; colliders and multigrid use the CPU fallback"
+msgstr "实验性 CUDA FLIP 路径，使用固定预算的重新播种；碰撞体和多重网格使用 CPU 后备"
+
+msgid "Time Stepping"
+msgstr "时间步进"
+
+msgid "Free Surface"
+msgstr "自由表面"
+
+msgid "Threshold Mode"
+msgstr "阈值模式"
+
+msgid "Boundary Value"
+msgstr "边界值"
+
+msgid "Boundary Gradient"
+msgstr "边界梯度"
+
+msgid "Boundary Factor"
+msgstr "边界系数"
+
+msgid "Solution"
+msgstr "解"
+
+msgid "Absolute Error"
+msgstr "绝对误差"
+
+msgid "Relative Error"
+msgstr "相对误差"
+
+msgid "Debug Boundary Value"
+msgstr "调试边界值"
+
+msgid "Debug Boundary Gradient"
+msgstr "调试边界梯度"
+
+msgid "Debug Boundary Factor"
+msgstr "调试边界系数"
+
+msgid "Heat Geodesic Distance"
+msgstr "热方法测地距离"
+
+msgctxt "Volume"
+msgid "Tile"
+msgstr "图块"
+
+msgctxt "NodeTree"
+msgid "Modal Event"
+msgstr "模态事件"
+
+msgid "Is Timer Event"
+msgstr "是计时器事件"
+
+msgid "No active simulation node"
+msgstr "没有活动的模拟节点"
+
+msgid "Simulation zone is not paired"
+msgstr "模拟区域未配对"
+
+msgid "Simulation zone feedback cleared"
+msgstr "已清除模拟区域反馈"
+
+msgid "Find Next"
+msgstr "查找下一个"
+
+msgid "Wrangle geometry input only accepts Geometry"
+msgstr "Wrangle 几何输入只接受几何"
+
+msgid "Single values from chf/chi/..., lists from channels inside array() and code text from cht, created by Compile"
+msgstr "chf/chi/... 的单个值，array() 内通道产生的列表，以及 cht 的代码文本，均由编译创建"
+
+msgid "No active GPU Texture Editor tree"
+msgstr "没有活动的 GPU 纹理编辑器树"
+
+msgid "Active tree is not a GPU Texture Editor tree"
+msgstr "活动树不是 GPU 纹理编辑器树"
+
+msgid "Bake Image Path is empty — set an absolute folder or // relative path"
+msgstr "烘焙图像路径为空 — 请设置绝对文件夹或 // 相对路径"
+
+msgid "No Bake Image node in the tree"
+msgstr "树中没有烘焙图像节点"
+
+msgid "Save the blend file first. Relative Path (//) is based on the .blend location and will not write next to the Blender executable. Or set Path to an absolute directory (e.g. E:/export/)"
+msgstr "请先保存 blend 文件。相对路径（//）基于 .blend 位置，不会写入 Blender 可执行文件旁边。或者将路径设置为绝对目录（例如 E:/export/）"
+
+msgid "GPU Texture Editor evaluation failed"
+msgstr "GPU 纹理编辑器计算失败"
+
+msgid "Bake complete"
+msgstr "烘焙完成"
+
+msgid "Camera View: nested evaluation skipped"
+msgstr "摄像机视图：已跳过嵌套计算"
+
+msgid "Camera View: no depsgraph"
+msgstr "摄像机视图：没有依赖图"
+
+msgid "Camera View: offscreen render unavailable"
+msgstr "摄像机视图：离屏渲染不可用"
+
+msgid "Camera View: cannot draw during viewport draw"
+msgstr "摄像机视图：视图绘制期间无法绘制"
+
+msgid "Camera View: no valid camera"
+msgstr "摄像机视图：没有有效的摄像机"
+
+msgid "Camera View: camera not evaluated"
+msgstr "摄像机视图：摄像机尚未计算"
+
+msgid "Camera View: preview failed"
+msgstr "摄像机视图：预览失败"
+
+msgid "Camera View: no float buffer"
+msgstr "摄像机视图：没有浮点缓冲区"
+
+msgid "Center Spectrum"
+msgstr "居中频谱"
+
+msgctxt "NodeTree"
+msgid "Fluid"
+msgstr "流体"
+
+msgid "No active fluid simulation node"
+msgstr "没有活动的流体模拟节点"
+
+msgid "Fluid zone is not paired"
+msgstr "流体区域未配对"
+
+msgid "Fluid simulation cache cleared"
+msgstr "已清除流体模拟缓存"
+
+msgid "Collision Mask"
+msgstr "碰撞蒙版"
+
+msgid "Collider Velocity"
+msgstr "碰撞体速度"
+
+msgid "Air Mask"
+msgstr "空气蒙版"
+
+msgid "Bailout"
+msgstr "逃逸半径"
+
+msgid "Julia C"
+msgstr "Julia C"
+
+msgid "Output Black"
+msgstr "输出黑点"
+
+msgid "Output White"
+msgstr "输出白点"
+
+msgid "Paint canvas cannot be Viewer or Render Result"
+msgstr "绘制画布不能是查看器或渲染结果"
+
+msgid "Paint canvas is not editable"
+msgstr "绘制画布不可编辑"
+
+msgid "Failed to create Paint canvas"
+msgstr "创建绘制画布失败"
+
+msgid "Stamp"
+msgstr "图章"
+
+msgctxt "Operator"
+msgid "Select Rasterize Attributes"
+msgstr "选择光栅化属性"
+
+msgctxt "Operator"
+msgid "Assign UV Attribute"
+msgstr "指定 UV 属性"
+
+msgid "Ray Origin"
+msgstr "射线原点"
+
+msgid "Render Material: nested evaluation skipped"
+msgstr "渲染材质：已跳过嵌套计算"
+
+msgid "Render Material: no material"
+msgstr "渲染材质：没有材质"
+
+msgid "Render Material: offscreen render unavailable"
+msgstr "渲染材质：离屏渲染不可用"
+
+msgid "Render Material: cannot draw during viewport draw"
+msgstr "渲染材质：视图绘制期间无法绘制"
+
+msgid "Render Material: preview failed"
+msgstr "渲染材质：预览失败"
+
+msgid "Render Material: no float buffer"
+msgstr "渲染材质：没有浮点缓冲区"
+
+msgid "Top Radius"
+msgstr "顶部半径"
+
+msgid "Point A"
+msgstr "点 A"
+
+msgid "Point B"
+msgstr "点 B"
+
+msgid "Point C"
+msgstr "点 C"
+
+msgid "ShaderToy buffers cleared"
+msgstr "ShaderToy 缓冲已清除"
+
+msgid "Compiled (%d parameter%s)"
+msgstr "已编译（%d 个参数%s）"
+
+msgid "Channel 0"
+msgstr "通道 0"
+
+msgid "Channel 1"
+msgstr "通道 1"
+
+msgid "Channel 2"
+msgstr "通道 2"
+
+msgid "Channel 3"
+msgstr "通道 3"
+
+msgid "Sea Level"
+msgstr "海平面"
+
+msgid "Snow Level"
+msgstr "雪线"
+
+msgid "Sand"
+msgstr "沙"
+
+msgid "Grass"
+msgstr "草"
+
+msgid "Rock"
+msgstr "岩石"
+
+msgid "Azimuth"
+msgstr "方位角"
+
+msgid "Rock Softness"
+msgstr "岩石柔软度"
+
+msgid "Talus"
+msgstr "岩屑堆"
+
+msgid "Capacity"
+msgstr "容量"
+
+msgid "Evaporation"
+msgstr "蒸发"
+
+msgid "Downcutting"
+msgstr "下切"
+
+msgid "Orographic"
+msgstr "地形抬升"
+
+msgid "Rain Direction"
+msgstr "降雨方向"
+
+msgid "Sediment"
+msgstr "沉积物"
+
+msgid "Wear"
+msgstr "磨损"
+
+msgid "Melt"
+msgstr "融化"
+
+msgid "Height Max"
+msgstr "最大高度"
+
+msgid "Slope Max"
+msgstr "最大坡度"
+
+msgid "Recursion depth reached. Group node is ignored."
+msgstr "已达到递归深度。组节点被忽略。"
+
+msgid "Recursive group '{}' ({})"
+msgstr "递归组“{}”（{}）"
+
+msgid "Nesting a node group inside of itself is not allowed. Enable Recursive in the group properties."
+msgstr "不允许在节点组内部嵌套其自身。请在组属性中启用递归。"
+
+msgid "Hide Viewport"
+msgstr "在视图中隐藏"
+
+msgid "Hide Render"
+msgstr "在渲染中隐藏"
+
+msgid "Show Axis"
+msgstr "显示坐标轴"
+
+msgid "Show Bounds"
+msgstr "显示边界"
+
+msgid "LightIndex"
+msgstr "LightIndex"
+
+msgid "Color ramp to sample. When unconnected, the ramp on this node is used. Connect a Color Ramp node or a node group Color Ramp interface to drive it"
+msgstr "要采样的色彩渐变。未连接时使用此节点上的渐变。连接色彩渐变节点或节点组的色彩渐变接口来驱动它"
+
+msgid "Curve to sample. When unconnected, the curve on this node is used. Connect a Curve node or a node group Curve interface to drive it"
+msgstr "要采样的曲线。未连接时使用此节点上的曲线。连接曲线节点或节点组的曲线接口来驱动它"
+
+msgid "Wrangle output accepts float, int, boolean, vector, or color"
+msgstr "Wrangle 输出接受浮点、整数、布尔、矢量或颜色"
+
+msgid "Wrangle field input only accepts float, int, vector, color, rotation, or matrix"
+msgstr "Wrangle 场输入只接受浮点、整数、矢量、颜色、旋转或矩阵"
+
+msgid "OpenColorIO configuration failed to load."
+msgstr "OpenColorIO 配置加载失败。"
+
+msgctxt "WindowManager"
+msgid "Graphics card:\n"
+msgstr "显卡："
+
+msgid "How fast the color/dye fades during advection. 0 = never, 1.0 = the WebGL Fluid default. Higher = dye disappears quickly"
+msgstr "平流过程中颜色/染料衰减的速度。0 = 永不衰减，1.0 = WebGL Fluid 默认值。越高，染料消失得越快"
+
+msgid "How fast velocity decays during self-advection. 0 = inviscid, 0.2 = WebGL Fluid default. Higher = more damping"
+msgstr "速度在自平流过程中衰减的速度。0 = 无粘性，0.2 = WebGL Fluid 默认值。越高，阻尼越大"
+
+msgid "Warm-start decay factor for the pressure field. 0 = cold start, 0.8 = WebGL Fluid default, 1 = fully retain last pressure"
+msgstr "压力场的热启动衰减系数。0 = 冷启动，0.8 = WebGL Fluid 默认值，1 = 完全保留上一次的压力"
+
+msgid "Curl confinement strength. 0 = none, 30 = WebGL Fluid default. Adds small-scale swirl to the velocity field"
+msgstr "涡度约束强度。0 = 无，30 = WebGL Fluid 默认值。为速度场增加小尺度漩涡"
+
+msgid "Multigrid V-cycles per projection (3 default). Few cycles = hundreds of Jacobi iterations"
+msgstr "每次投影的多重网格 V 循环数（默认 3）。少量循环 = 数百次雅可比迭代"
+
+msgid "Jacobi iterations on the coarsest multigrid level. 20 = default"
+msgstr "最粗多重网格层级上的雅可比迭代次数。默认 20"
+
+msgid "Jacobi pre/post smoothing per multigrid level (2 default)"
+msgstr "每个多重网格层级的雅可比前/后平滑（默认 2）"
+
+msgid "[Hidden: vestigial WebGL demo param]"
+msgstr "[隐藏：遗留的 WebGL 演示参数]"
+
+msgid "Approximate maximum memory for unbaked simulation frames in megabytes (MB, 1024×1024 bytes); older frames are freed first"
+msgstr "未烘焙模拟帧的大致最大内存，单位兆字节（MB，1024×1024 字节）；较早的帧会先被释放"
+
+msgid "Input black point in scene-linear units (left handle; may be outside 0–1 for HDR)"
+msgstr "场景线性单位的输入黑点（左侧控制柄；HDR 时可超出 0–1）"

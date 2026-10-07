@@ -48,12 +48,27 @@ static void add_entry(Map<int64_t, float> &entries,
 static Map<int64_t, float> build_laplacian_L(const Span<float3> positions,
                                              const Span<int> corner_verts,
                                              const int faces_num,
-                                             const MeshLaplacianWeightMode mode)
+                                             const MeshLaplacianOptions &options)
 {
+  const MeshLaplacianWeightMode mode = options.mode;
   const int n = positions.size();
   const int64_t n64 = n;
   Map<int64_t, float> entries;
 
+  if (mode == MeshLaplacianWeightMode::Custom) {
+    /* Caller-provided entries are the matrix: no sign change and no derived diagonal. */
+    BLI_assert(options.custom_rows.size() == options.custom_weights.size());
+    BLI_assert(options.custom_cols.size() == options.custom_weights.size());
+    for (const int i : options.custom_weights.index_range()) {
+      const int row = options.custom_rows[i];
+      const int col = options.custom_cols[i];
+      if (row < 0 || row >= n || col < 0 || col >= n) {
+        continue;
+      }
+      add_entry(entries, row, col, n64, options.custom_weights[i]);
+    }
+    return entries;
+  }
   if (mode == MeshLaplacianWeightMode::Uniform) {
     /* Graph Laplacian over unique undirected edges from triangle connectivity. */
     Set<OrderedEdge> edges;
@@ -185,12 +200,15 @@ MeshLaplacianCOO mesh_laplacian_build(const Span<float3> positions,
 {
   const int n = positions.size();
   MeshLaplacianCOO empty;
-  if (n == 0 || faces_num <= 0 || corner_verts.size() < int64_t(faces_num) * 3) {
+  if (n == 0 || corner_verts.size() < int64_t(faces_num) * 3) {
+    return empty;
+  }
+  if (faces_num <= 0 && options.mode != MeshLaplacianWeightMode::Custom) {
     return empty;
   }
 
   const int64_t n64 = n;
-  Map<int64_t, float> L = build_laplacian_L(positions, corner_verts, faces_num, options.mode);
+  Map<int64_t, float> L = build_laplacian_L(positions, corner_verts, faces_num, options);
 
   const bool use_mass = options.use_mass;
   const bool diffuse = options.build_diffusion;

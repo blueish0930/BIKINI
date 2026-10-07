@@ -157,6 +157,35 @@ TEST(SparseMatrixMath, ScaleElements)
   EXPECT_TRUE(zero.empty());
 }
 
+TEST(SparseMatrixMath, TransposeSwapsRowsAndCols)
+{
+  /* 2x3 matrix [[1, 0, 2], [0, 3, 0]] with an explicit zero that must be dropped. */
+  const std::vector<float> a_w = {2.0f, 1.0f, 3.0f, 0.0f};
+  const std::vector<int> a_r = {0, 0, 1, 1};
+  const std::vector<int> a_c = {2, 0, 1, 0};
+
+  const COOMatrix out = sparse_matrix_transpose(a_w, a_r, a_c);
+  ASSERT_EQ(out.size(), 3);
+  /* Result is the 3x2 matrix [[1, 0], [0, 3], [2, 0]] sorted by (row, col). */
+  EXPECT_EQ(out.row[0], 0);
+  EXPECT_EQ(out.col[0], 0);
+  EXPECT_FLOAT_EQ(out.weight[0], 1.0f);
+  EXPECT_EQ(out.row[1], 1);
+  EXPECT_EQ(out.col[1], 1);
+  EXPECT_FLOAT_EQ(out.weight[1], 3.0f);
+  EXPECT_EQ(out.row[2], 2);
+  EXPECT_EQ(out.col[2], 0);
+  EXPECT_FLOAT_EQ(out.weight[2], 2.0f);
+
+  const COOMatrix back = sparse_matrix_transpose(out.weight, out.row, out.col);
+  ASSERT_EQ(back.size(), 3);
+  EXPECT_EQ(back.row[1], 0);
+  EXPECT_EQ(back.col[1], 2);
+  EXPECT_FLOAT_EQ(back.weight[1], 2.0f);
+
+  EXPECT_TRUE(sparse_matrix_transpose({}, {}, {}).empty());
+}
+
 TEST(SparseMatrixMath, DuplicateKeysWithinMatrixAreSummed)
 {
   /* Two entries at (0,0) in A: 1 and 2 → treated as 3 when adding empty B. */

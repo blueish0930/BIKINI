@@ -235,6 +235,7 @@ set(SRC
   nodes/node_geo_deform_curves_on_surface.cc
   nodes/node_geo_debug.cc
   nodes/node_geo_delete_geometry.cc
+  nodes/node_geo_dissolve_edges.cc
   nodes/node_geo_distribute_points_in_grid.cc
   nodes/node_geo_distribute_points_in_volume.cc
   nodes/node_geo_distribute_points_on_faces.cc
@@ -330,6 +331,7 @@ set(SRC
   nodes/node_geo_input_material_index.cc
   nodes/node_geo_input_mesh_edge_angle.cc
   nodes/node_geo_input_mesh_edge_neighbors.cc
+  nodes/node_geo_input_mesh_edge_rings.cc
   nodes/node_geo_input_mesh_edge_vertices.cc
   nodes/node_geo_input_mesh_face_area.cc
   nodes/node_geo_input_mesh_face_is_planar.cc

@@ -353,14 +353,6 @@ struct SpaceNode_Runtime {
   Map<int, bool> node_can_sync_states;
 
   /**
-   * Node groups that have been password-unlocked in this editor session.
-   * A tree is removed when leaving it so re-entry requires the password again.
-   */
-  VectorSet<unsigned int> unlocked_tree_session_uids;
-  /** Avoid repeatedly opening the password dialog for a locked edit tree. */
-  bool password_prompt_shown = false;
-
-  /**
    * Selected recursive invocation to inspect. The hash is the compute context of that call,
    * so a Fibonacci split (two group nodes at the same depth) can be told apart.
    * Cleared when it does not belong to #recursive_inspection_tree_uid.
@@ -605,8 +597,6 @@ void NODE_OT_add_group_input_node(wmOperatorType *ot);
 /* `node_group.cc` */
 
 UString node_group_idname(const bContext *C);
-/** True when this editor has already authenticated \a ntree (or an ancestor with the same lock). */
-bool node_tree_session_is_unlocked(const SpaceNode &snode, const bNodeTree &ntree);
 void NODE_OT_group_make(wmOperatorType *ot);
 void NODE_OT_group_insert(wmOperatorType *ot);
 void NODE_OT_group_ungroup(wmOperatorType *ot);
@@ -614,9 +604,6 @@ void NODE_OT_group_separate(wmOperatorType *ot);
 void NODE_OT_group_edit(wmOperatorType *ot);
 void NODE_OT_recursion_tree(wmOperatorType *ot);
 void NODE_OT_group_enter_exit(wmOperatorType *ot);
-void NODE_OT_group_lock_toggle(wmOperatorType *ot);
-void NODE_OT_group_password_enter(wmOperatorType *ot);
-void NODE_OT_unlock_locked_groups(wmOperatorType *ot);
 
 void NODE_OT_default_group_width_set(wmOperatorType *ot);
 

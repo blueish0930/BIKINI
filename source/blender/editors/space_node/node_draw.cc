@@ -6233,39 +6233,28 @@ void node_draw_space(const bContext &C, ARegion &region)
         GPU_matrix_pop_projection();
       }
 
-      if (ED_node_edit_tree_is_lock_blocked(&snode)) {
-        const char *lines[] = {
-            IFACE_("Node Group Locked"),
-            IFACE_("Enter the password to view and edit this node group."),
-            nullptr,
-        };
-        const float fill_color[4] = {0.0f, 0.0f, 0.0f, 0.55f};
-        ED_region_info_draw_multiline(&region, lines, fill_color, true);
+      {
+        float original_proj[4][4];
+        GPU_matrix_projection_get(original_proj);
+
+        GPU_matrix_push();
+        GPU_matrix_identity_set();
+
+        wmOrtho2_pixelspace(region.winx, region.winy);
+
+        WM_gizmomap_draw(region.runtime->gizmo_map, &C, WM_GIZMOMAP_DRAWSTEP_2D);
+
+        GPU_matrix_pop();
+        GPU_matrix_projection_set(original_proj);
       }
-      else {
-        {
-          float original_proj[4][4];
-          GPU_matrix_projection_get(original_proj);
 
-          GPU_matrix_push();
-          GPU_matrix_identity_set();
-
-          wmOrtho2_pixelspace(region.winx, region.winy);
-
-          WM_gizmomap_draw(region.runtime->gizmo_map, &C, WM_GIZMOMAP_DRAWSTEP_2D);
-
-          GPU_matrix_pop();
-          GPU_matrix_projection_set(original_proj);
-        }
-
-        draw_nodetree(C, region, *ntree);
-      }
+      draw_nodetree(C, region, *ntree);
     }
 
     /* Temporary links. */
     GPU_blend(GPU_BLEND_ALPHA);
     GPU_line_smooth(true);
-    if (snode.runtime->linkdrag && !ED_node_edit_tree_is_lock_blocked(&snode)) {
+    if (snode.runtime->linkdrag) {
       for (const bNodeLink &link : snode.runtime->linkdrag->links) {
         node_draw_link_dragged(C, v2d, snode, link);
       }

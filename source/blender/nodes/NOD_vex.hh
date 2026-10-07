@@ -8,6 +8,7 @@
 #include <string>
 
 #include "BLI_index_mask.hh"
+#include "BLI_math_matrix_types.hh"
 #include "BLI_math_vector_types.hh"
 #include "BLI_string_ref.hh"
 #include "BLI_vector.hh"
@@ -16,6 +17,9 @@
 
 #include "NOD_expression_complete.hh"
 
+struct ColorBand;
+struct CurveMapping;
+
 namespace blender::bke {
 struct GeometrySet;
 }
@@ -23,6 +27,9 @@ struct GeometrySet;
 namespace blender::nodes::vex {
 
 struct Program;
+
+/** Online function reference, opened by the Docs button of the wrangle nodes. */
+inline constexpr const char *docs_url = "https://blueish0930.github.io/BIKINI/vex-functions.html";
 
 enum class Domain : int8_t {
   Point = 0,
@@ -64,16 +71,45 @@ struct ChField {
 };
 
 /**
+ * Values of a list channel (`array(chi("name"))`), already converted to the element type of the
+ * array the script receives: booleans are integers, colors are RGB vectors and rotations are
+ * matrices.
+ */
+struct ChList {
+  enum class Kind : int8_t { Int, Float, Vector, String, Matrix };
+  std::string name;
+  Kind kind = Kind::Int;
+  Vector<int> ints;
+  Vector<float> floats;
+  Vector<float3> vectors;
+  Vector<std::string> strings;
+  Vector<float4x4> matrices;
+};
+
+/**
+ * A color ramp (`chramp("name", pos)`) or curve (`chcurve("name", value)`) channel. The curve
+ * tables have to be initialized already, they are read from many threads.
+ */
+struct ChRamp {
+  std::string name;
+  const ColorBand *color_ramp = nullptr;
+  const CurveMapping *curve = nullptr;
+};
+
+/**
  * Run the program on \a geometry.
  * Extra geometry inputs are addressed as `point(1, ...)`, `point(2, ...)`.
- * Channel parameters (`chf("name")`, …) are looked up in \a parms.
+ * Channel parameters (`chf("name")`, …) are looked up in \a parms, list channels in \a lists,
+ * ramps and curves in \a ramps.
  */
 ExecOutput execute(const Program &program,
                    bke::GeometrySet &geometry,
                    Span<const bke::GeometrySet *> extra_geometry,
                    Domain domain,
                    const fn::Field<bool> &selection,
-                   Span<ChField> parms = {});
+                   Span<ChField> parms = {},
+                   Span<ChList> lists = {},
+                   Span<ChRamp> ramps = {});
 
 /** Evaluate a script once with no geometry (for tests). Optional `return` value as int/float/string. */
 struct PureEvalOutput {

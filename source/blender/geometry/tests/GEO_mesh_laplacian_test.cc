@@ -259,6 +259,53 @@ TEST_F(MeshLaplacianTest, MassOnly_ScalesRowsByM)
   }
 }
 
+TEST_F(MeshLaplacianTest, Custom_WeightsRowsCols)
+{
+  Vector<float3> positions;
+  Vector<int> corners;
+  equilateral_triangle(positions, corners);
+
+  /* The values are used as they are. (0,1) is given twice and accumulates, the diagonal entry is
+   * kept and out of range entries are skipped. */
+  const Vector<float> weights = {2.0f, 3.0f, 0.5f, 4.0f, 7.0f, 7.0f, 7.0f};
+  const Vector<int> rows = {0, 0, 1, 2, 1, 2, -1};
+  const Vector<int> cols = {1, 1, 2, 0, 1, 3, 0};
+
+  MeshLaplacianOptions opt;
+  opt.mode = MeshLaplacianWeightMode::Custom;
+  opt.custom_weights = weights;
+  opt.custom_rows = rows;
+  opt.custom_cols = cols;
+
+  /* No triangles are needed without mass. */
+  const MeshLaplacianCOO coo = mesh_laplacian_build(positions, {}, 0, opt);
+  const int n = positions.size();
+  const Array<float> dense = dense_from_coo(coo, n);
+
+  const Array<float> expected = {0.0f, 5.0f, 0.0f, 0.0f, 7.0f, 0.5f, 4.0f, 0.0f, 0.0f};
+  for (const int i : expected.index_range()) {
+    EXPECT_NEAR(dense[i], expected[i], 1e-6f) << "entry " << i;
+  }
+  EXPECT_EQ(coo.weights.size(), 4);
+
+  /* Mass and diffusion are applied on top like in the other modes. */
+  MeshLaplacianOptions mass_opt = opt;
+  mass_opt.build_diffusion = true;
+  mass_opt.diffusion_t = 0.5f;
+  mass_opt.use_mass = true;
+  const MeshLaplacianCOO mass_coo = mesh_laplacian_build(positions, corners, 1, mass_opt);
+  const Array<float> mass_dense = dense_from_coo(mass_coo, n);
+  const float m_ii = math::area_tri(positions[0], positions[1], positions[2]) / 3.0f;
+  for (const int i : IndexRange(n)) {
+    for (const int j : IndexRange(n)) {
+      const float identity = (i == j) ? 1.0f : 0.0f;
+      EXPECT_NEAR(mass_dense[int64_t(i) * n + j],
+                  m_ii * (identity + 0.5f * expected[int64_t(i) * n + j]),
+                  1e-5f);
+    }
+  }
+}
+
 TEST_F(MeshLaplacianTest, EmptyMesh_ReturnsEmpty)
 {
   MeshLaplacianOptions opt;

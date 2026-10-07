@@ -3056,7 +3056,6 @@ static bool rna_SpaceNodeEditor_node_tree_poll(PointerRNA *ptr, const PointerRNA
 static void rna_SpaceNodeEditor_node_tree_update(const bContext *C, PointerRNA * /*ptr*/)
 {
   ed::space_node::tree_update(C);
-  ED_node_tree_password_prompt_if_needed(const_cast<bContext *>(C));
 }
 
 static const EnumPropertyItem *rna_SpaceNodeEditor_node_tree_sub_type_itemf(
@@ -9085,10 +9084,6 @@ static void rna_def_space_node(BlenderRNA *brna)
   prop = RNA_def_property(srna, "image_resolution", PROP_INT, PROP_PIXEL);
   RNA_def_property_int_sdna(prop, nullptr, "image_resolution");
   RNA_def_property_array(prop, 2);
-  {
-    static const int image_resolution_default[2] = {1280, 720};
-    RNA_def_property_int_array_default(prop, image_resolution_default);
-  }
   RNA_def_property_range(prop, 1, 16384);
   RNA_def_property_ui_range(prop, 1, 8192, 1, 0);
   RNA_def_property_ui_text(

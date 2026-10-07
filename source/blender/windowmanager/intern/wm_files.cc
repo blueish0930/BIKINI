@@ -789,11 +789,6 @@ static void wm_file_read_post(bContext *C,
   if (use_data) {
     WM_operatortype_last_properties_clear_all();
 
-    /* Black-box locked node groups: transparently decrypt with the embedded key so the
-     * depsgraph below evaluates the real contents. Must run before the first
-     * depsgraph evaluation. Viewing/editing internals stays password-gated. */
-    blender::bke::node_tree_lock_auto_decrypt_all(*bmain);
-
     /* After load post, so for example the driver namespace can be filled
      * before evaluating the depsgraph. */
     if (!G.background || (G.fileflags & G_BACKGROUND_NO_DEPSGRAPH) == 0) {
@@ -801,10 +796,6 @@ static void wm_file_read_post(bContext *C,
     }
 
     ED_editors_init(C);
-
-    /* Legacy hook: prompt for still-sealed groups (none after the auto-decrypt above,
-     * unless decryption failed). */
-    ED_node_lock_prompt_after_file_load(C);
 
     /* Add-ons are disabled when loading the startup file, so the Render Layer node in compositor
      * node trees might be wrong due to missing render engines that are available as add-ons, like

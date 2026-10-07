@@ -3534,6 +3534,38 @@ static bool but_is_code_editor(const Button *but)
   return but->type == ButtonType::TextBox && (but->flag & BUT_CODE_EDITOR);
 }
 
+/**
+ * Typing in a code editor that sits in an editor (a node) must not lock the view: the wheel
+ * scrolls the code while the pointer is over it, everywhere else the wheel, the trackpad and the
+ * middle mouse button keep navigating the editor underneath, like they do when nothing is being
+ * typed. Text editing stays active meanwhile.
+ */
+static bool code_editor_event_navigates_view(const Button *but,
+                                             const HandleButtonData *data,
+                                             const wmEvent *event)
+{
+  if (data == nullptr || data->state != BUTTON_STATE_TEXT_EDITING || !but_is_code_editor(but)) {
+    return false;
+  }
+  /* Popups have no view below them to navigate. */
+  if (block_is_popup_any(but->block)) {
+    return false;
+  }
+  switch (event->type) {
+    case MIDDLEMOUSE:
+      return true;
+    case WHEELUPMOUSE:
+    case WHEELDOWNMOUSE:
+    case WHEELLEFTMOUSE:
+    case WHEELRIGHTMOUSE:
+    case MOUSEPAN:
+    case MOUSEZOOM:
+      return !button_contains_point_px(but, data->region, event->xy);
+    default:
+      return false;
+  }
+}
+
 static void code_editor_refresh_suggest(Button *but,
                                         const char *str,
                                         const int cursor,
@@ -3764,7 +3796,14 @@ static bool code_editor_apply_suggest(Button *but, TextEdit &text_edit)
     return false;
   }
   const int sel = std::clamp(tb->code_suggest_sel, 0, tb->code_suggest_num - 1);
-  const char *display = tb->code_suggest[sel];
+  /* Only the text before the first separator is the completion, the parameter types and the
+   * category follow it. */
+  const StringRef packed = tb->code_suggest[sel];
+  const int64_t separator = packed.find('\x1f');
+  const std::string display_text = (separator == StringRef::not_found) ?
+                                       std::string(packed) :
+                                       std::string(packed.substr(0, separator));
+  const char *display = display_text.c_str();
   std::string insert = display;
   {
     const char *cut = strstr(display, " — ");
@@ -4588,6 +4627,14 @@ static void textedit_begin(bContext *C, Button *but, HandleButtonData *data)
 
   if (but->autocomplete_func || data->searchbox) {
     status.item(IFACE_("Autocomplete"), ICON_EVENT_TAB);
+  }
+
+  if (but_is_code_editor(but)) {
+    status.item(IFACE_("Comment"), ctrl_icon, ICON_EVENT_SLASH);
+    status.item(IFACE_("Text Size"), ctrl_icon, ICON_MOUSE_MMB_SCROLL);
+    if (!block_is_popup_any(but->block)) {
+      status.item(IFACE_("Pan View"), ICON_MOUSE_MMB_DRAG);
+    }
   }
 
 #ifdef USE_DRAG_MULTINUM
@@ -11876,6 +11923,11 @@ static int handle_button_event(bContext *C, const wmEvent *event, Button *but)
 
   int retval = WM_UI_HANDLER_CONTINUE;
 
+  if (code_editor_event_navigates_view(but, data, event)) {
+    button_tooltip_timer_remove(C, but);
+    return WM_UI_HANDLER_CONTINUE;
+  }
+
   if (data->state == BUTTON_STATE_HIGHLIGHT) {
     switch (event->type) {
       case WINDEACTIVATE:
@@ -14445,6 +14497,8 @@ static int handler_region_menu(bContext *C, const wmEvent *event, void * /*userd
   int retval = WM_UI_HANDLER_CONTINUE;
 
   Button *but = region_find_active_but(region);
+  /* Checked before the event is handled, handling can free the button. */
+  const bool navigates_view = but && code_editor_event_navigates_view(but, but->active, event);
 
   if (but) {
     bScreen *screen = CTX_wm_screen(C);
@@ -14523,6 +14577,11 @@ static int handler_region_menu(bContext *C, const wmEvent *event, void * /*userd
     if (event->val == KM_DBL_CLICK) {
       return WM_UI_HANDLER_CONTINUE;
     }
+  }
+
+  /* View navigation while typing in a code editor goes on to the editor below. */
+  if (navigates_view) {
+    return WM_UI_HANDLER_CONTINUE;
   }
 
   /* we block all events, this is modal interaction */
