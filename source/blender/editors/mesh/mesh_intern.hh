@@ -14,8 +14,10 @@
 
 #include "BLI_array.hh"
 #include "BLI_math_vector_types.hh"
+#include "BLI_set.hh"
 #include "BLI_span.hh"
 #include "BLI_sys_types.hh"
+#include "BLI_vector.hh"
 
 namespace blender {
 
@@ -277,6 +279,7 @@ void MESH_OT_face_make_planar(wmOperatorType *ot);
 void MESH_OT_edge_split(wmOperatorType *ot);
 void MESH_OT_bridge_edge_loops(wmOperatorType *ot);
 void MESH_OT_offset_edge_loops(wmOperatorType *ot);
+void MESH_OT_mirror_user_side_restore(wmOperatorType *ot);
 void MESH_OT_wireframe(wmOperatorType *ot);
 void MESH_OT_convex_hull(wmOperatorType *ot);
 void MESH_OT_symmetrize(wmOperatorType *ot);
@@ -353,5 +356,48 @@ void MESH_OT_customdata_skin_clear(wmOperatorType *ot);
 void MESH_OT_customdata_custom_splitnormals_add(wmOperatorType *ot);
 void MESH_OT_customdata_custom_splitnormals_clear(wmOperatorType *ot);
 void MESH_OT_reorder_vertices_spatial(wmOperatorType *ot);
+
+/* *** mesh_mirror.cc *** */
+
+/**
+ * BIKINI: limits a mirror lookup to the verts that can be a counterpart of the current
+ * selection, so its KD-tree is not built over a whole dense mesh for a small selection.
+ *
+ * A vert passes when it lies within \a radius of a selected vert flipped by one of the
+ * requested axis combinations (cells make this slightly generous, never stricter).
+ */
+class MirrorSelectionFilter {
+ public:
+  /**
+   * \param axis_masks: bit N set means selected verts flipped by axis mask N (0..7 with
+   * 1 = X, 2 = Y, 4 = Z) are lookup locations. Mask 0 is the selection where it is.
+   */
+  MirrorSelectionFilter(BMesh *bm, uint axis_masks, float radius, bool respecthide);
+  /** The same around \a locations instead of the selected verts. */
+  MirrorSelectionFilter(Span<float3> locations, int verts_num, uint axis_masks, float radius);
+
+  /** False when the selection is too large for filtering to pay off, test nothing then. */
+  bool is_active() const
+  {
+    return active_;
+  }
+  bool test(const float co[3]) const;
+
+ private:
+  struct Box {
+    float3 min, max;
+  };
+  void init(Span<float3> locations, int verts_num, uint axis_masks, float radius);
+  uint64_t cell_key(const int cell[3]) const
+  {
+    return uint64_t(cell[0]) | (uint64_t(cell[1]) << 21) | (uint64_t(cell[2]) << 42);
+  }
+
+  bool active_ = false;
+  float3 origin_ = float3(0.0f);
+  float cell_inv_ = 0.0f;
+  Vector<Box, 8> boxes_;
+  Set<uint64_t> cells_;
+};
 
 }  // namespace blender

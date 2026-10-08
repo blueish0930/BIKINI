@@ -1328,6 +1328,34 @@ static BMVert *cache_mirr_intptr_as_bmvert(const intptr_t *index_lookup, int ind
 #define BM_SEARCH_MAXDIST_MIRR 0.00002f
 #define BM_CD_LAYER_ID "__mirror_index"
 
+/**
+ * BIKINI: how well the surroundings of \a v_test mirror those of \a v: the number of edges
+ * of \a v that have an edge of \a v_test at the flipped location of their other end.
+ */
+static int edbm_mirror_cache_neighbors_match(BMVert *v,
+                                             BMVert *v_test,
+                                             const int axis,
+                                             const float maxdist_sq)
+{
+  int matches = 0;
+  BMIter iter;
+  BMEdge *e;
+  BM_ITER_ELEM (e, &iter, v, BM_EDGES_OF_VERT) {
+    float co[3];
+    copy_v3_v3(co, BM_edge_other_vert(e, v)->co);
+    co[axis] *= -1.0f;
+    BMIter iter_test;
+    BMEdge *e_test;
+    BM_ITER_ELEM (e_test, &iter_test, v_test, BM_EDGES_OF_VERT) {
+      if (len_squared_v3v3(co, BM_edge_other_vert(e_test, v_test)->co) < maxdist_sq) {
+        matches++;
+        break;
+      }
+    }
+  }
+  return matches;
+}
+
 void EDBM_verts_mirror_cache_begin_ex(BMEditMesh *em,
                                       BMesh *bm,
                                       const int axis,
@@ -1378,13 +1406,35 @@ void EDBM_verts_mirror_cache_begin_ex(BMEditMesh *em,
     ED_mesh_mirrtopo_init(bm, nullptr, &mesh_topo_store, true);
   }
   else {
-    tree = kdtree_new<float3>(bm->totvert);
-    BM_ITER_MESH_INDEX (v, &iter, bm, BM_VERTS_OF_MESH, i) {
-      if (respecthide && BM_elem_flag_test(v, BM_ELEM_HIDDEN)) {
-        continue;
+    /* BIKINI: with #use_select only selected verts are looked up, and a lookup only ever
+     * returns verts within #maxdist of the flipped location. Leave everything else out of
+     * the tree: on a dense mesh building it costs far more than the lookups. */
+    const MirrorSelectionFilter filter(
+        bm, use_select ? (1u << (1 << axis)) : 0, 2.0f * maxdist + 1e-6f, respecthide);
+    if (filter.is_active()) {
+      Vector<int> candidates;
+      BM_ITER_MESH_INDEX (v, &iter, bm, BM_VERTS_OF_MESH, i) {
+        if (respecthide && BM_elem_flag_test(v, BM_ELEM_HIDDEN)) {
+          continue;
+        }
+        if (filter.test(v->co)) {
+          candidates.append(i);
+        }
       }
+      tree = kdtree_new<float3>(max_ii(1, int(candidates.size())));
+      for (const int index : candidates) {
+        kdtree_insert<float3>(tree, index, BM_vert_at_index(bm, index)->co);
+      }
+    }
+    else {
+      tree = kdtree_new<float3>(bm->totvert);
+      BM_ITER_MESH_INDEX (v, &iter, bm, BM_VERTS_OF_MESH, i) {
+        if (respecthide && BM_elem_flag_test(v, BM_ELEM_HIDDEN)) {
+          continue;
+        }
 
-      kdtree_insert<float3>(tree, i, v->co);
+        kdtree_insert<float3>(tree, i, v->co);
+      }
     }
     kdtree_balance<float3>(tree);
     paired = MEM_new_array_zeroed<bool>(bm->totvert, __func__);
@@ -1481,6 +1531,8 @@ void EDBM_verts_mirror_cache_begin_ex(BMEditMesh *em,
         const int v_edge_tot = BM_vert_edge_count(v);
         int best_score = -1;
         int best_ties = 0;
+        /* Candidates sharing the best score, as many as `nearest` can hold. */
+        BMVert *v_tied[16];
         for (int n = 0; n < nearest_len; n++) {
           if (square_f(nearest[n].dist) >= maxdist_sq) {
             break;
@@ -1526,11 +1578,37 @@ void EDBM_verts_mirror_cache_begin_ex(BMEditMesh *em,
             best_score = score;
             best_ties = 1;
             v_mirr = v_test;
+            v_tied[0] = v_test;
           }
           else if (score == best_score) {
-            best_ties++;
+            v_tied[best_ties++] = v_test;
             /* Same score as the current best: not unique. */
             v_mirr = nullptr;
+          }
+        }
+        if (best_ties > 1 && v->e != nullptr) {
+          /* BIKINI: coincident candidates that look alike. The counterpart is the one whose
+           * surroundings mirror this vert's. An in-place extrude of a closed face loop has
+           * no vert that differs in valence, so the neighbor pass below had nothing to
+           * start from: the new verts stayed unpaired and the mirrored side did not follow
+           * the transform. An exact copy of an island still ties here and stays unpaired. */
+          int match_best = -1;
+          int match_ties = 0;
+          BMVert *v_match = nullptr;
+          for (int t = 0; t < best_ties; t++) {
+            const int matches = edbm_mirror_cache_neighbors_match(v, v_tied[t], axis, maxdist_sq);
+            if (matches > match_best) {
+              match_best = matches;
+              match_ties = 1;
+              v_match = v_tied[t];
+            }
+            else if (matches == match_best) {
+              match_ties++;
+            }
+          }
+          if (match_ties == 1) {
+            v_mirr = v_match;
+            best_ties = 1;
           }
         }
         const int effective_cluster = have_sel_match ? sel_cluster_count : cluster_count;

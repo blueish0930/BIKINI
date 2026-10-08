@@ -96,11 +96,26 @@ class EditMeshMirrorLookup {
   /**
    * \param maxdist: Spatial pair distance. <= 0 uses 2e-5 (same as #BM_SEARCH_MAXDIST_MIRR).
    * Ignored for topology-mirror on X, which pairs by connectivity.
+   * \param selection_symmetry: Mesh symmetry axes (1 = X, 2 = Y, 4 = Z) when the lookups
+   * start from the current selection and follow its counterparts. The KD-tree is then
+   * built only around the flipped copies of the selection instead of the whole mesh.
+   * A lookup from any other vert still works, it rebuilds the full tree first.
    */
   EditMeshMirrorLookup(BMEditMesh *em,
                        bool use_topology,
                        bool respecthide,
-                       float maxdist = 0.00002f);
+                       float maxdist = 0.00002f,
+                       int selection_symmetry = 0);
+  /**
+   * The lookups start from \a sources and follow their counterparts, for elements that
+   * are not the selection (a hovered edge). \a symmetry as `selection_symmetry` above.
+   */
+  EditMeshMirrorLookup(BMEditMesh *em,
+                       bool use_topology,
+                       bool respecthide,
+                       float maxdist,
+                       int symmetry,
+                       Span<BMVert *> sources);
   ~EditMeshMirrorLookup();
 
   EditMeshMirrorLookup(const EditMeshMirrorLookup &) = delete;
@@ -192,6 +207,40 @@ void EDBM_mirror_active_side_restore(Object *ob,
                                      BMEditMesh *em,
                                      const float3 &ref_co,
                                      bool deselect_other = false);
+
+/**
+ * BIKINI: side of the mirror plane(s) the user's own selection is on, as a reference point
+ * for #EDBM_mirror_user_side_restore. Call before #EDBM_select_expand_mirrored.
+ *
+ * An axis the selection already spans, or only touches on the plane, stays zero (don't
+ * care), so nothing the user selected themselves is dropped afterwards.
+ */
+float3 EDBM_mirror_user_side_capture(Object *ob, BMEditMesh *em, bool &r_has_side);
+/**
+ * BIKINI: deselect what lies on the other side of \a side_co and put the active element
+ * back on the user's side. Elements that straddle the plane stay selected.
+ */
+void EDBM_mirror_user_side_restore(Object *ob, BMEditMesh *em, const float3 &side_co);
+
+/**
+ * BIKINI: mirrored topology operators edit both sides but leave only the user's side
+ * selected, so the other side draws as the mirror counterpart. Construct before
+ * #EDBM_select_expand_mirrored. The other side is deselected when the scope ends,
+ * including on early exits that would otherwise keep the expanded selection.
+ */
+class EditMeshMirrorUserSideScope {
+ public:
+  EditMeshMirrorUserSideScope(Object *ob, BMEditMesh *em);
+  ~EditMeshMirrorUserSideScope();
+  EditMeshMirrorUserSideScope(const EditMeshMirrorUserSideScope &) = delete;
+  EditMeshMirrorUserSideScope &operator=(const EditMeshMirrorUserSideScope &) = delete;
+
+ private:
+  Object *ob_;
+  BMEditMesh *em_;
+  float3 side_co_;
+  bool has_side_ = false;
+};
 
 void EDBM_mesh_normals_update_ex(BMesh *bm, const BMeshNormalsUpdate_Params *params);
 void EDBM_mesh_normals_update(BMesh *bm);

@@ -181243,3 +181243,39 @@ msgstr "未烘焙模拟帧的大致最大内存，单位兆字节（MB，1024×1
 
 msgid "Input black point in scene-linear units (left handle; may be outside 0–1 for HDR)"
 msgstr "场景线性单位的输入黑点（左侧控制柄；HDR 时可超出 0–1）"
+
+msgid "Edge Rings"
+msgstr "并排边"
+
+msgid "Edge Ring ID"
+msgstr "并排边 ID"
+
+msgid "Edge Loop ID"
+msgstr "循环边 ID"
+
+msgid "Retrieve an identifier of the edge ring and of the edge loop that each edge is part of"
+msgstr "检索各边所属的并排边和循环边的标识符"
+
+msgid "Identifier of the edge ring that contains the edge, edges of the same ring have the same value. A ring connects the edges on opposite sides of faces with an even number of sides"
+msgstr "包含该边的并排边的标识符，同一并排边上的边具有相同的值。并排边连接偶数边面上彼此相对的边"
+
+msgid "Identifier of the edge loop that contains the edge, edges of the same loop have the same value. A loop continues through the opposite edge of vertices with an even number of edges, and along mesh boundaries"
+msgstr "包含该边的循环边的标识符，同一循环边上的边具有相同的值。循环边在连接偶数条边的顶点处经由对侧的边延续，并沿网格边界延续"
+
+msgid "Dissolve Edges"
+msgstr "融并边"
+
+msgid "Remove edges and join the faces at both of their sides into one face"
+msgstr "移除边，并将其两侧的面合并为一个面"
+
+msgid "Mesh whose edges to dissolve"
+msgstr "要融并边的网格"
+
+msgid "Edges to remove, the faces at both of their sides are joined. Only edges that are used by exactly two faces can be dissolved"
+msgstr "要移除的边，其两侧的面会被合并。只有恰好被两个面使用的边才能被融并"
+
+msgid "Also remove the vertices of the dissolved edges that are only connected to two edges afterwards"
+msgstr "同时移除被融并边上之后仅连接两条边的顶点"
+
+msgid "Vertices are kept if the direction changes by more than this angle from one of their two edges to the other, which preserves the corners of the joined faces"
+msgstr "如果从顶点的一条边到另一条边的方向变化超过此角度，则保留该顶点，以保留合并后的面的拐角"

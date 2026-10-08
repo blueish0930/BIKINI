@@ -311,8 +311,8 @@ static wmOperatorStatus mesh_bisect_exec(bContext *C, wmOperator *op)
       continue;
     }
 
-    bool bisect_has_ref = false;
-    float3 bisect_ref_co = EDBM_mirror_active_center_capture(obedit, em, bisect_has_ref);
+    bool has_user_side = false;
+    const float3 user_side_co = EDBM_mirror_user_side_capture(obedit, em, has_user_side);
 
     if (opdata != nullptr) {
       if (opdata->backup[ob_index].is_valid) {
@@ -329,45 +329,92 @@ static wmOperatorStatus mesh_bisect_exec(bContext *C, wmOperator *op)
     mul_m4_v3(imat, plane_co_local);
     mul_transposed_mat3_m4_v3(obedit->object_to_world().ptr(), plane_no_local);
 
-    /* BIKINI: mesh symmetry. Bisect the user's selection, then each unselected
-     * counterpart island with the plane flipped on that axis. Do not keep BMElem
-     * pointers across a pass — bisect (and clear inner/outer) frees geometry and
-     * the previous pointer lists crashed the cutting-plane gizmo. Tag counterparts
-     * on a temporary CD layer and re-select by iterating the mesh after each cut. */
+    /* BIKINI: mesh symmetry. Bisect the user's selection, then its counterpart for every
+     * combination of mirror axes, with the plane flipped on those axes. Counterparts are
+     * taken whether or not they are selected: a selection that is already symmetric (or
+     * select-all) is its own counterpart and still needs the flipped cut.
+     *
+     * Do not keep BMElem pointers across a pass — bisect (and clear inner/outer) frees
+     * geometry and the previous pointer lists crashed the cutting-plane gizmo. Tag
+     * counterparts on a temporary CD layer and re-select by iterating the mesh after each
+     * cut. */
     Mesh *mesh = id_cast<Mesh *>(obedit->data);
-    const bool use_symm = mesh->symmetry != 0;
-    constexpr int BISECT_FLAG_AXIS0 = 1 << 0;
-    constexpr int BISECT_FLAG_CUT = 1 << 3;
+    const int symmetry = int(mesh->symmetry) & (ME_SYMMETRY_X | ME_SYMMETRY_Y | ME_SYMMETRY_Z);
+    const bool use_symm = symmetry != 0;
+    /* Axis combination `mask` (1 = X, 2 = Y, 4 = Z) is stored in bit `mask - 1`. */
+    constexpr int BISECT_FLAG_CUT = 1 << 7;
     const char *bisect_layer = "__bikini_bisect_mirr";
     int cd_v = -1, cd_e = -1, cd_f = -1;
     bool has_mirror_pass = false;
-    BMOperator bmop;
-    EDBM_op_init(
-        bm,
-        &bmop,
-        op,
-        "bisect_plane geom=%hvef plane_co=%v plane_no=%v dist=%f clear_inner=%b clear_outer=%b",
-        BM_ELEM_SELECT,
-        plane_co_local,
-        plane_no_local,
-        thresh,
-        clear_inner,
-        clear_outer);
-    BMO_op_exec(bm, &bmop);
+    bool changed = false;
+    Vector<BMVert *> mir_v[8];
+    Vector<BMEdge *> mir_e[8];
+    Vector<BMFace *> mir_f[8];
 
     if (use_symm) {
+      BMIter iter;
+      BMVert *v;
+      BMEdge *e;
+      BMFace *f;
+      {
+        /* Gather counterparts while the mesh is intact and the selection is the user's. */
+        const bool use_topology = (mesh->editflag & ME_EDIT_MIRROR_TOPO) != 0;
+        EditMeshMirrorLookup lookup(em, use_topology, true, 0.00002f, symmetry);
+        for (int mask = 1; mask < 8; mask++) {
+          if ((mask & symmetry) != mask) {
+            continue;
+          }
+          BM_ITER_MESH (v, &iter, bm, BM_VERTS_OF_MESH) {
+            if (!BM_elem_flag_test(v, BM_ELEM_SELECT) || BM_elem_flag_test(v, BM_ELEM_HIDDEN)) {
+              continue;
+            }
+            BMVert *v_mirr = lookup.vert_axes(v, mask);
+            if (v_mirr && !BM_elem_flag_test(v_mirr, BM_ELEM_HIDDEN)) {
+              mir_v[mask].append(v_mirr);
+            }
+          }
+          BM_ITER_MESH (e, &iter, bm, BM_EDGES_OF_MESH) {
+            if (!BM_elem_flag_test(e, BM_ELEM_SELECT) || BM_elem_flag_test(e, BM_ELEM_HIDDEN)) {
+              continue;
+            }
+            BMEdge *e_mirr = lookup.edge_axes(e, mask);
+            if (e_mirr && !BM_elem_flag_test(e_mirr, BM_ELEM_HIDDEN)) {
+              mir_e[mask].append(e_mirr);
+            }
+          }
+          BM_ITER_MESH (f, &iter, bm, BM_FACES_OF_MESH) {
+            if (!BM_elem_flag_test(f, BM_ELEM_SELECT) || BM_elem_flag_test(f, BM_ELEM_HIDDEN)) {
+              continue;
+            }
+            BMFace *f_mirr = lookup.face_axes(f, mask);
+            if (f_mirr && !BM_elem_flag_test(f_mirr, BM_ELEM_HIDDEN)) {
+              mir_f[mask].append(f_mirr);
+            }
+          }
+        }
+      }
+
+      for (int mask = 1; mask < 8; mask++) {
+        if (!mir_v[mask].is_empty() || !mir_e[mask].is_empty() || !mir_f[mask].is_empty()) {
+          has_mirror_pass = true;
+        }
+      }
+    }
+    /* The temporary layers are only worth their cost when there is a counterpart to cut. */
+    if (has_mirror_pass) {
+      BMIter iter;
+      BMVert *v;
+      BMEdge *e;
+      BMFace *f;
+
+      /* Add the layers once the lookup is gone, so the offsets stay valid. */
       BM_data_layer_add_named(bm, &bm->vdata, CD_PROP_INT32, bisect_layer);
       BM_data_layer_add_named(bm, &bm->edata, CD_PROP_INT32, bisect_layer);
       BM_data_layer_add_named(bm, &bm->pdata, CD_PROP_INT32, bisect_layer);
       cd_v = CustomData_get_offset_named(&bm->vdata, CD_PROP_INT32, bisect_layer);
       cd_e = CustomData_get_offset_named(&bm->edata, CD_PROP_INT32, bisect_layer);
       cd_f = CustomData_get_offset_named(&bm->pdata, CD_PROP_INT32, bisect_layer);
-    EDBM_flag_disable_all(bm, BM_ELEM_SELECT);
 
-      BMIter iter;
-      BMVert *v;
-      BMEdge *e;
-      BMFace *f;
       BM_ITER_MESH (v, &iter, bm, BM_VERTS_OF_MESH) {
         BM_ELEM_CD_SET_INT(v, cd_v, 0);
       }
@@ -378,132 +425,66 @@ static wmOperatorStatus mesh_bisect_exec(bContext *C, wmOperator *op)
         BM_ELEM_CD_SET_INT(f, cd_f, 0);
       }
 
-      /* Gather counterparts while the mesh is intact, then tag *after* the
-       * mirror-cache layer is gone. Writing CD while that extra layer exists
-       * stored flags at the wrong offset, so the second pass selected nothing. */
-      Vector<BMVert *> mir_v[3];
-      Vector<BMEdge *> mir_e[3];
-      Vector<BMFace *> mir_f[3];
-      const bool use_topology = (mesh->editflag & ME_EDIT_MIRROR_TOPO) != 0;
-      EditMeshMirrorLookup lookup(em, use_topology, true);
-      for (int axis = 0; axis < 3; axis++) {
-        if (!(mesh->symmetry & (ME_SYMMETRY_X << axis))) {
-          continue;
+      for (int mask = 1; mask < 8; mask++) {
+        const int mask_flag = 1 << (mask - 1);
+        for (BMVert *v_mirr : mir_v[mask]) {
+          BM_ELEM_CD_SET_INT(v_mirr, cd_v, BM_ELEM_CD_GET_INT(v_mirr, cd_v) | mask_flag);
         }
-
-        BM_ITER_MESH (v, &iter, bm, BM_VERTS_OF_MESH) {
-          if (!BM_elem_flag_test(v, BM_ELEM_SELECT) || BM_elem_flag_test(v, BM_ELEM_HIDDEN)) {
-            continue;
-          }
-          BMVert *v_mirr = lookup.vert(v, axis);
-          if (v_mirr && v_mirr != v && !BM_elem_flag_test(v_mirr, BM_ELEM_HIDDEN) &&
-              !BM_elem_flag_test(v_mirr, BM_ELEM_SELECT))
-          {
-            mir_v[axis].append(v_mirr);
-          }
+        for (BMEdge *e_mirr : mir_e[mask]) {
+          BM_ELEM_CD_SET_INT(e_mirr, cd_e, BM_ELEM_CD_GET_INT(e_mirr, cd_e) | mask_flag);
         }
-        BM_ITER_MESH (e, &iter, bm, BM_EDGES_OF_MESH) {
-          if (!BM_elem_flag_test(e, BM_ELEM_SELECT) || BM_elem_flag_test(e, BM_ELEM_HIDDEN)) {
-            continue;
-          }
-          BMEdge *e_mirr = lookup.edge(e, axis);
-          if (e_mirr && e_mirr != e && !BM_elem_flag_test(e_mirr, BM_ELEM_HIDDEN) &&
-              !BM_elem_flag_test(e_mirr, BM_ELEM_SELECT))
-          {
-            mir_e[axis].append(e_mirr);
-          }
-        }
-        BM_ITER_MESH (f, &iter, bm, BM_FACES_OF_MESH) {
-          if (!BM_elem_flag_test(f, BM_ELEM_SELECT) || BM_elem_flag_test(f, BM_ELEM_HIDDEN)) {
-            continue;
-          }
-          BMFace *f_mirr = lookup.face(f, axis);
-          if (f_mirr && f_mirr != f && !BM_elem_flag_test(f_mirr, BM_ELEM_HIDDEN) &&
-              !BM_elem_flag_test(f_mirr, BM_ELEM_SELECT))
-          {
-            mir_f[axis].append(f_mirr);
-          }
-        }
-      }
-
-      cd_v = CustomData_get_offset_named(&bm->vdata, CD_PROP_INT32, bisect_layer);
-      cd_e = CustomData_get_offset_named(&bm->edata, CD_PROP_INT32, bisect_layer);
-      cd_f = CustomData_get_offset_named(&bm->pdata, CD_PROP_INT32, bisect_layer);
-      for (int axis = 0; axis < 3; axis++) {
-        const int axis_flag = BISECT_FLAG_AXIS0 << axis;
-        for (BMVert *v_mirr : mir_v[axis]) {
-          BM_ELEM_CD_SET_INT(v_mirr, cd_v, BM_ELEM_CD_GET_INT(v_mirr, cd_v) | axis_flag);
-          has_mirror_pass = true;
-        }
-        for (BMEdge *e_mirr : mir_e[axis]) {
-          BM_ELEM_CD_SET_INT(e_mirr, cd_e, BM_ELEM_CD_GET_INT(e_mirr, cd_e) | axis_flag);
-          has_mirror_pass = true;
-        }
-        for (BMFace *f_mirr : mir_f[axis]) {
-          BM_ELEM_CD_SET_INT(f_mirr, cd_f, BM_ELEM_CD_GET_INT(f_mirr, cd_f) | axis_flag);
-          has_mirror_pass = true;
+        for (BMFace *f_mirr : mir_f[mask]) {
+          BM_ELEM_CD_SET_INT(f_mirr, cd_f, BM_ELEM_CD_GET_INT(f_mirr, cd_f) | mask_flag);
         }
       }
     }
 
-    /* Always run extra axis passes when symmetry is on: select-all has no
-     * unselected counterparts, but the flipped plane still has to cut. */
-    const int pass_last = use_symm ? 2 : -1;
-    for (int pass = -1; pass <= pass_last; pass++) {
-      if (pass >= 0) {
-        if (!(mesh->symmetry & (ME_SYMMETRY_X << pass))) {
+    /* Mask 0 is the user's selection, the others its counterpart for that axis combination. */
+    const int mask_last = has_mirror_pass ? 7 : 0;
+    for (int mask = 0; mask <= mask_last; mask++) {
+      if (mask != 0) {
+        if ((mask & symmetry) != mask) {
           continue;
         }
-        const int axis_flag = BISECT_FLAG_AXIS0 << pass;
-        EDBM_flag_disable_all(em->bm, BM_ELEM_SELECT);
+        const int mask_flag = 1 << (mask - 1);
+        EDBM_flag_disable_all(bm, BM_ELEM_SELECT);
         BMIter iter;
         BMVert *v;
         BMEdge *e;
         BMFace *f;
         int tagged = 0;
-        if (cd_v != -1) {
-          BM_ITER_MESH (v, &iter, bm, BM_VERTS_OF_MESH) {
-            if (BM_ELEM_CD_GET_INT(v, cd_v) & axis_flag) {
-              BM_vert_select_set(bm, v, true);
-              tagged++;
-            }
-          }
-          BM_ITER_MESH (e, &iter, bm, BM_EDGES_OF_MESH) {
-            if (BM_ELEM_CD_GET_INT(e, cd_e) & axis_flag) {
-              BM_edge_select_set(bm, e, true);
-              tagged++;
-            }
-          }
-          BM_ITER_MESH (f, &iter, bm, BM_FACES_OF_MESH) {
-            if (BM_ELEM_CD_GET_INT(f, cd_f) & axis_flag) {
-              BM_face_select_set(bm, f, true);
-              tagged++;
-            }
+        BM_ITER_MESH (v, &iter, bm, BM_VERTS_OF_MESH) {
+          if (BM_ELEM_CD_GET_INT(v, cd_v) & mask_flag) {
+            BM_vert_select_set(bm, v, true);
+            tagged++;
           }
         }
-        if (tagged == 0) {
-          /* Select-all (or already-symmetric selection): cut remaining geom
-           * with the flipped plane. */
-          BM_ITER_MESH (v, &iter, bm, BM_VERTS_OF_MESH) {
-            if (!BM_elem_flag_test(v, BM_ELEM_HIDDEN)) {
-              BM_vert_select_set(bm, v, true);
-              tagged++;
-            }
+        BM_ITER_MESH (e, &iter, bm, BM_EDGES_OF_MESH) {
+          if (BM_ELEM_CD_GET_INT(e, cd_e) & mask_flag) {
+            BM_edge_select_set(bm, e, true);
+            tagged++;
+          }
+        }
+        BM_ITER_MESH (f, &iter, bm, BM_FACES_OF_MESH) {
+          if (BM_ELEM_CD_GET_INT(f, cd_f) & mask_flag) {
+            BM_face_select_set(bm, f, true);
+            tagged++;
           }
         }
         if (tagged == 0) {
           continue;
         }
-        EDBM_selectmode_flush(em->bm, em->selectmode);
       }
 
       float plane_co_pass[3];
       float plane_no_pass[3];
       copy_v3_v3(plane_co_pass, plane_co_local);
       copy_v3_v3(plane_no_pass, plane_no_local);
-      if (pass >= 0) {
-        plane_co_pass[pass] = -plane_co_pass[pass];
-        plane_no_pass[pass] = -plane_no_pass[pass];
+      for (int axis = 0; axis < 3; axis++) {
+        if (mask & (1 << axis)) {
+          plane_co_pass[axis] = -plane_co_pass[axis];
+          plane_no_pass[axis] = -plane_no_pass[axis];
+        }
       }
 
       BMOperator bmop;
@@ -520,7 +501,7 @@ static wmOperatorStatus mesh_bisect_exec(bContext *C, wmOperator *op)
           clear_outer);
       BMO_op_exec(bm, &bmop);
 
-      EDBM_flag_disable_all(em->bm, BM_ELEM_SELECT);
+      EDBM_flag_disable_all(bm, BM_ELEM_SELECT);
 
       if (use_fill) {
         float normal_fill[3];
@@ -562,10 +543,10 @@ static wmOperatorStatus mesh_bisect_exec(bContext *C, wmOperator *op)
           bm, bmop.slots_out, "geom_cut.out", BM_VERT | BM_EDGE, BM_ELEM_SELECT, true);
 
       if (EDBM_op_finish(bm, &bmop, op, true)) {
-        ret = OPERATOR_FINISHED;
+        changed = true;
       }
 
-      if (use_symm && cd_v != -1) {
+      if (has_mirror_pass) {
         /* Remember this pass's cut without storing pointers. */
         BMIter iter;
         BMVert *v;
@@ -589,27 +570,26 @@ static wmOperatorStatus mesh_bisect_exec(bContext *C, wmOperator *op)
       }
     }
 
-    if (use_symm && cd_v != -1) {
-      if (has_mirror_pass) {
-        EDBM_flag_disable_all(em->bm, BM_ELEM_SELECT);
-        BMIter iter;
-        BMVert *v;
-        BMEdge *e;
-        BMFace *f;
-        BM_ITER_MESH (v, &iter, bm, BM_VERTS_OF_MESH) {
-          if (BM_ELEM_CD_GET_INT(v, cd_v) & BISECT_FLAG_CUT) {
-            BM_vert_select_set(bm, v, true);
-          }
+    if (has_mirror_pass) {
+      /* Every pass's cut, the other side is dropped again below. */
+      EDBM_flag_disable_all(bm, BM_ELEM_SELECT);
+      BMIter iter;
+      BMVert *v;
+      BMEdge *e;
+      BMFace *f;
+      BM_ITER_MESH (v, &iter, bm, BM_VERTS_OF_MESH) {
+        if (BM_ELEM_CD_GET_INT(v, cd_v) & BISECT_FLAG_CUT) {
+          BM_vert_select_set(bm, v, true);
         }
-        BM_ITER_MESH (e, &iter, bm, BM_EDGES_OF_MESH) {
-          if (BM_ELEM_CD_GET_INT(e, cd_e) & BISECT_FLAG_CUT) {
-            BM_edge_select_set(bm, e, true);
-          }
+      }
+      BM_ITER_MESH (e, &iter, bm, BM_EDGES_OF_MESH) {
+        if (BM_ELEM_CD_GET_INT(e, cd_e) & BISECT_FLAG_CUT) {
+          BM_edge_select_set(bm, e, true);
         }
-        BM_ITER_MESH (f, &iter, bm, BM_FACES_OF_MESH) {
-          if (BM_ELEM_CD_GET_INT(f, cd_f) & BISECT_FLAG_CUT) {
-            BM_face_select_set(bm, f, true);
-          }
+      }
+      BM_ITER_MESH (f, &iter, bm, BM_FACES_OF_MESH) {
+        if (BM_ELEM_CD_GET_INT(f, cd_f) & BISECT_FLAG_CUT) {
+          BM_face_select_set(bm, f, true);
         }
       }
       BM_data_layer_free_named(bm, &bm->vdata, bisect_layer);
@@ -617,23 +597,21 @@ static wmOperatorStatus mesh_bisect_exec(bContext *C, wmOperator *op)
       BM_data_layer_free_named(bm, &bm->pdata, bisect_layer);
     }
 
-    if (bisect_has_ref) {
-      EDBM_mirror_active_side_restore(obedit, em, bisect_ref_co, true);
+    if (changed) {
+      EDBMUpdate_Params params{};
+      params.calc_looptris = true;
+      params.calc_normals = false;
+      params.is_destructive = true;
+      EDBM_update(id_cast<Mesh *>(obedit->data), &params);
+
+      EDBM_selectmode_flush(bm, em->selectmode);
+      EDBM_uvselect_clear(bm);
+
+      ret = OPERATOR_FINISHED;
     }
 
-    if (ret == OPERATOR_FINISHED) {
-      if (EDBM_op_finish(bm, &bmop, op, true)) {
-        EDBMUpdate_Params params{};
-        params.calc_looptris = true;
-        params.calc_normals = false;
-        params.is_destructive = true;
-        EDBM_update(id_cast<Mesh *>(obedit->data), &params);
-
-        EDBM_selectmode_flush(bm, em->selectmode);
-        EDBM_uvselect_clear(bm);
-
-        ret = OPERATOR_FINISHED;
-      }
+    if (has_user_side) {
+      EDBM_mirror_user_side_restore(obedit, em, user_side_co);
     }
   }
   return ret;

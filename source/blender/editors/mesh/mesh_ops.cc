@@ -169,6 +169,7 @@ void ED_operatortypes_mesh()
   WM_operatortype_append(MESH_OT_bridge_edge_loops);
   WM_operatortype_append(MESH_OT_inset);
   WM_operatortype_append(MESH_OT_offset_edge_loops);
+  WM_operatortype_append(MESH_OT_mirror_user_side_restore);
   WM_operatortype_append(MESH_OT_intersect);
   WM_operatortype_append(MESH_OT_intersect_boolean);
   WM_operatortype_append(MESH_OT_face_split_by_edges);
@@ -235,6 +236,7 @@ void ED_operatormacros_mesh()
   WM_operatortype_macro_define(ot, "MESH_OT_offset_edge_loops");
   otmacro = WM_operatortype_macro_define(ot, "TRANSFORM_OT_edge_slide");
   RNA_boolean_set(otmacro->ptr, "single_side", true);
+  WM_operatortype_macro_define(ot, "MESH_OT_mirror_user_side_restore");
 
   ot = WM_operatortype_append_macro("MESH_OT_duplicate_move",
                                     "Add Duplicate",

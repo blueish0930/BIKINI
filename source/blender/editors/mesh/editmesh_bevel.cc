@@ -76,6 +76,9 @@ struct BevelObjectStore {
   /** Every object must have a valid #BMEditMesh. */
   Object *ob;
   BMBackup mesh_backup;
+  /** BIKINI: the user's side before the selection was mirror-expanded. */
+  float3 mirror_side_co;
+  bool has_mirror_side;
 };
 
 struct BevelData {
@@ -276,10 +279,12 @@ static bool edbm_bevel_init(bContext *C, wmOperator *op, const bool is_modal)
       float scale = mat4_to_scale(obedit->object_to_world().ptr());
       opdata->max_obj_scale = max_ff(opdata->max_obj_scale, scale);
       BMEditMesh *em = BKE_editmesh_from_object(obedit);
+      bool has_mirror_side = false;
+      const float3 mirror_side_co = EDBM_mirror_user_side_capture(obedit, em, has_mirror_side);
       EDBM_select_expand_mirrored(obedit, em, EDBM_mirror_pair_threshold(scene));
       const BMesh *bm = BKE_editmesh_bmesh_get(obedit);
       if (bm->totvertsel > 0) {
-        opdata->ob_store.append(BevelObjectStore{obedit, {}});
+        opdata->ob_store.append(BevelObjectStore{obedit, {}, mirror_side_co, has_mirror_side});
       }
     }
   }
@@ -447,6 +452,10 @@ static void edbm_bevel_exit(bContext *C, wmOperator *op)
   for (BevelObjectStore &ob_store : opdata->ob_store) {
     BMEditMesh *em = BKE_editmesh_from_object(ob_store.ob);
     BMesh *bm = BKE_editmesh_bmesh_get_for_write(ob_store.ob);
+    /* BIKINI: the bevel ran on both sides, only the user's side stays selected. */
+    if (ob_store.has_mirror_side) {
+      EDBM_mirror_user_side_restore(ob_store.ob, em, ob_store.mirror_side_co);
+    }
     /* Without this, faces surrounded by selected edges/verts will be unselected. */
     if ((em->selectmode & SCE_SELECT_FACE) == 0) {
       EDBM_selectmode_flush(bm, em->selectmode);

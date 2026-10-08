@@ -343,6 +343,92 @@ static Vector<Vector<BMEdge *>> bm_selected_edge_islands(BMesh *bm,
   return islands;
 }
 
+/** Give the faces around \a e to \a island, false when another island already has one. */
+static bool bm_island_claim_edge_faces(Map<BMFace *, int> &face_owner, BMEdge *e, const int island)
+{
+  BMIter fiter;
+  BMFace *f;
+  BM_ITER_ELEM (f, &fiter, e, BM_FACES_OF_EDGE) {
+    if (face_owner.lookup_or_add(f, island) != island) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * True when no face has edges of two different islands. The subdivide patterns are picked
+ * per face, so such islands give the same result subdivided together as one at a time.
+ */
+static bool bm_face_islands_are_independent(const Span<Vector<BMFace *>> islands)
+{
+  if (islands.size() <= 1) {
+    return true;
+  }
+  Map<BMFace *, int> face_owner;
+  for (const int i : islands.index_range()) {
+    for (BMFace *f : islands[i]) {
+      BMLoop *l_iter = f->l_first;
+      do {
+        if (!bm_island_claim_edge_faces(face_owner, l_iter->e, i)) {
+          return false;
+        }
+      } while ((l_iter = l_iter->next) != f->l_first);
+    }
+  }
+  return true;
+}
+
+static bool bm_edge_islands_are_independent(const Span<Vector<BMEdge *>> islands)
+{
+  if (islands.size() <= 1) {
+    return true;
+  }
+  Map<BMFace *, int> face_owner;
+  for (const int i : islands.index_range()) {
+    for (BMEdge *e : islands[i]) {
+      if (!bm_island_claim_edge_faces(face_owner, e, i)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+/** True when the islands are all that is selected, nothing loose next to them. */
+static bool bm_selection_is_face_islands(const BMesh *bm, const Span<Vector<BMFace *>> islands)
+{
+  Set<BMEdge *> edges;
+  Set<BMVert *> verts;
+  int faces_num = 0;
+  for (const Vector<BMFace *> &island : islands) {
+    faces_num += int(island.size());
+    for (BMFace *f : island) {
+      BMLoop *l_iter = f->l_first;
+      do {
+        edges.add(l_iter->e);
+        verts.add(l_iter->v);
+      } while ((l_iter = l_iter->next) != f->l_first);
+    }
+  }
+  return (faces_num == bm->totfacesel) && (edges.size() == bm->totedgesel) &&
+         (verts.size() == bm->totvertsel);
+}
+
+static bool bm_selection_is_edge_islands(const BMesh *bm, const Span<Vector<BMEdge *>> islands)
+{
+  Set<BMVert *> verts;
+  int edges_num = 0;
+  for (const Vector<BMEdge *> &island : islands) {
+    edges_num += int(island.size());
+    for (BMEdge *e : island) {
+      verts.add(e->v1);
+      verts.add(e->v2);
+    }
+  }
+  return (bm->totfacesel == 0) && (edges_num == bm->totedgesel) &&
+         (verts.size() == bm->totvertsel);
+}
 
 /* -------------------------------------------------------------------- */
 /** \name Subdivide Operator
@@ -427,27 +513,49 @@ static wmOperatorStatus edbm_subdivide_exec(bContext *C, wmOperator *op)
                          seed);
     };
 
-    BM_mesh_elem_hflag_disable_all(bm, BM_VERT | BM_EDGE | BM_FACE, BM_ELEM_TAG, false);
-
     const short symmetry = mesh->symmetry;
     Vector<Vector<BMFace *>> face_islands = bm_selected_face_islands(bm, symmetry);
-    if (!face_islands.is_empty()) {
-      for (Vector<BMFace *> &island : face_islands) {
-        bm_select_only_faces(bm, island);
-        if (bm->totedgesel || bm->totfacesel) {
-          do_esubdivide();
-          bm_tag_selected(bm);
-        }
+    Vector<Vector<BMEdge *>> edge_islands;
+    if (face_islands.is_empty()) {
+      edge_islands = bm_selected_edge_islands(bm, symmetry, &orig_verts);
+    }
+
+    /* Islands that share no face are subdivided together: one subdivide instead of one
+     * per island, and no selection round trip between them, which is most of the cost
+     * on a dense mesh. Fractal displacement is seeded per call, so it keeps a call per
+     * island. */
+    bool is_joint = false;
+    if (fractal == 0.0f) {
+      if (!face_islands.is_empty()) {
+        is_joint = bm_selection_is_face_islands(bm, face_islands) &&
+                   bm_face_islands_are_independent(face_islands);
+      }
+      else if (!edge_islands.is_empty()) {
+        is_joint = bm_selection_is_edge_islands(bm, edge_islands) &&
+                   bm_edge_islands_are_independent(edge_islands);
       }
     }
+
+    if (is_joint) {
+      do_esubdivide();
+    }
     else {
-      Vector<Vector<BMEdge *>> islands = bm_selected_edge_islands(bm, symmetry, &orig_verts);
-      if (islands.is_empty()) {
+      BM_mesh_elem_hflag_disable_all(bm, BM_VERT | BM_EDGE | BM_FACE, BM_ELEM_TAG, false);
+      if (!face_islands.is_empty()) {
+        for (Vector<BMFace *> &island : face_islands) {
+          bm_select_only_faces(bm, island);
+          if (bm->totedgesel || bm->totfacesel) {
+            do_esubdivide();
+            bm_tag_selected(bm);
+          }
+        }
+      }
+      else if (edge_islands.is_empty()) {
         do_esubdivide();
         bm_tag_selected(bm);
       }
       else {
-        for (Vector<BMEdge *> &island : islands) {
+        for (Vector<BMEdge *> &island : edge_islands) {
           bm_select_only_edges(bm, island);
           if (bm->totedgesel) {
             do_esubdivide();
@@ -455,9 +563,8 @@ static wmOperatorStatus edbm_subdivide_exec(bContext *C, wmOperator *op)
           }
         }
       }
+      bm_select_tagged(bm);
     }
-
-    bm_select_tagged(bm);
     EDBM_selectmode_flush(bm, em->selectmode);
 
     if (has_ref && mesh->symmetry != 0) {
@@ -639,6 +746,7 @@ static wmOperatorStatus edbm_subdivide_edge_ring_exec(bContext *C, wmOperator *o
 
   for (Object *obedit : objects) {
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
+    EditMeshMirrorUserSideScope mirror_side_scope(obedit, em);
     EDBM_select_expand_mirrored(obedit, em, EDBM_mirror_pair_threshold(scene));
     BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
 
@@ -723,6 +831,7 @@ static wmOperatorStatus edbm_unsubdivide_exec(bContext *C, wmOperator *op)
       *bmain, scene, view_layer, CTX_wm_view3d(C));
   for (Object *obedit : objects) {
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
+    EditMeshMirrorUserSideScope mirror_side_scope(obedit, em);
     EDBM_select_expand_mirrored(obedit, em, EDBM_mirror_pair_threshold(scene));
     BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
 
@@ -1054,6 +1163,7 @@ static wmOperatorStatus edbm_collapse_edge_exec(bContext *C, wmOperator *op)
       *bmain, scene, view_layer, CTX_wm_view3d(C));
   for (Object *obedit : objects) {
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
+    EditMeshMirrorUserSideScope mirror_side_scope(obedit, em);
     EDBM_select_expand_mirrored(obedit, em, EDBM_mirror_pair_threshold(scene));
     BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
 
@@ -1289,6 +1399,7 @@ static wmOperatorStatus edbm_add_edge_face_exec(bContext *C, wmOperator *op)
       *bmain, scene, view_layer, CTX_wm_view3d(C));
   for (Object *obedit : objects) {
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
+    EditMeshMirrorUserSideScope mirror_side_scope(obedit, em);
     EDBM_select_expand_mirrored(obedit, em, EDBM_mirror_pair_threshold(scene));
     BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
 
@@ -1626,8 +1737,9 @@ static int edbm_connect_pairs_mirrored(BMEditMesh *em,
   }
 
   const bool use_topology = (mesh->editflag & ME_EDIT_MIRROR_TOPO) != 0;
-  EditMeshMirrorLookup lookup(em, use_topology, true, pair_dist);
   const int enabled = int(mesh->symmetry) & (ME_SYMMETRY_X | ME_SYMMETRY_Y | ME_SYMMETRY_Z);
+  /* The pairs are selected verts. */
+  EditMeshMirrorLookup lookup(em, use_topology, true, pair_dist, enabled);
 
   Vector<MirrorVertPair> all;
   Set<uint64_t> seen;
@@ -1818,6 +1930,7 @@ static wmOperatorStatus edbm_vert_connect_exec(bContext *C, wmOperator *op)
     Mesh *mesh = id_cast<Mesh *>(obedit->data);
     const BMesh *bm = BKE_editmesh_bmesh_get(obedit);
     const float pair_dist = EDBM_mirror_pair_threshold(scene);
+    EditMeshMirrorUserSideScope mirror_side_scope(obedit, em);
     /* Two verts: connect each side on its own. Expanding first joins them across the plane. */
     if (mesh->symmetry != 0 && bm->totvertsel == 2 &&
         edbm_connect_pairs_mirrored(em, mesh, op, pair_dist) > 0)
@@ -2120,6 +2233,7 @@ static wmOperatorStatus edbm_vert_connect_path_exec(bContext *C, wmOperator *op)
     BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
     const bool is_pair = (bm->totvertsel == 2);
     ListBaseT<BMEditSelection> selected_orig = {nullptr, nullptr};
+    EditMeshMirrorUserSideScope mirror_side_scope(obedit, em);
 
     if (bm->totvertsel == 0) {
       continue;
@@ -2531,6 +2645,7 @@ static wmOperatorStatus edbm_edge_split_exec(bContext *C, wmOperator *op)
       *bmain, scene, view_layer, CTX_wm_view3d(C));
   for (Object *obedit : objects) {
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
+    EditMeshMirrorUserSideScope mirror_side_scope(obedit, em);
     EDBM_select_expand_mirrored(obedit, em, EDBM_mirror_pair_threshold(scene));
 
     switch (type) {
@@ -2587,6 +2702,104 @@ void MESH_OT_edge_split(wmOperatorType *ot)
 /** \name Duplicate Operator
  * \{ */
 
+/**
+ * BIKINI: after a mirrored duplicate only the user's copy stays selected. The other copy
+ * draws as the mirror counterpart and mesh symmetry moves it with the following transform.
+ *
+ * That relies on the transform pairing each selected vert with the deselected copy, not
+ * with the source it sits on. A copy of a whole loose island has the same connectivity as
+ * its source, so the pairing cannot tell the two apart, and Topology Mirror cannot pair
+ * loose identical islands at all. Run the query the transform will run and keep both
+ * copies selected when any vert would be left behind.
+ */
+static void edbm_duplicate_mirror_side_restore(Object *obedit,
+                                               BMEditMesh *em,
+                                               const float3 &ref_co)
+{
+  const Mesh *mesh = id_cast<const Mesh *>(obedit->data);
+  BMesh *bm = em->bm;
+
+  int axis = -1;
+  int axis_num = 0;
+  for (int a = 0; a < 3; a++) {
+    if (mesh->symmetry & (ME_SYMMETRY_X << a)) {
+      axis = a;
+      axis_num++;
+    }
+  }
+  if (axis_num != 1) {
+    /* Same rule as extrude: with two or more axes every copy stays selected. */
+    EDBM_mirror_active_side_restore(obedit, em, ref_co, false);
+    return;
+  }
+
+  BMIter iter;
+  BMVert *v;
+  BMEdge *e;
+  BMFace *f;
+  Vector<BMVert *> copy_verts;
+  Vector<BMEdge *> copy_edges;
+  Vector<BMFace *> copy_faces;
+  BM_ITER_MESH (v, &iter, bm, BM_VERTS_OF_MESH) {
+    if (BM_elem_flag_test(v, BM_ELEM_SELECT)) {
+      copy_verts.append(v);
+    }
+  }
+  BM_ITER_MESH (e, &iter, bm, BM_EDGES_OF_MESH) {
+    if (BM_elem_flag_test(e, BM_ELEM_SELECT)) {
+      copy_edges.append(e);
+    }
+  }
+  BM_ITER_MESH (f, &iter, bm, BM_FACES_OF_MESH) {
+    if (BM_elem_flag_test(f, BM_ELEM_SELECT)) {
+      copy_faces.append(f);
+    }
+  }
+
+  EDBM_mirror_user_side_restore(obedit, em, ref_co);
+
+  /* Same arguments as #transform_convert_mesh_mirrordata_calc with a single axis. */
+  const float maxdist = 0.00002f;
+  const bool use_topology = (mesh->editflag & ME_EDIT_MIRROR_TOPO) != 0;
+  Array<int> index(bm->totvert);
+  EDBM_verts_mirror_cache_begin_ex(
+      em, bm, axis, false, true, true, use_topology, maxdist, index.data());
+
+  Array<bool> is_copy(bm->totvert, false);
+  for (BMVert *v_copy : copy_verts) {
+    is_copy[BM_elem_index_get(v_copy)] = true;
+  }
+
+  bool all_paired = true;
+  int i;
+  BM_ITER_MESH_INDEX (v, &iter, bm, BM_VERTS_OF_MESH, i) {
+    if (!BM_elem_flag_test(v, BM_ELEM_SELECT)) {
+      continue;
+    }
+    if (fabsf(v->co[axis]) < maxdist) {
+      /* On the mirror plane, its own counterpart. */
+      continue;
+    }
+    const int i_mirr = index[i];
+    if (i_mirr < 0 || !is_copy[i_mirr]) {
+      all_paired = false;
+      break;
+    }
+  }
+
+  if (!all_paired) {
+    for (BMFace *f_copy : copy_faces) {
+      BM_face_select_set(bm, f_copy, true);
+    }
+    for (BMEdge *e_copy : copy_edges) {
+      BM_edge_select_set(bm, e_copy, true);
+    }
+    for (BMVert *v_copy : copy_verts) {
+      BM_vert_select_set(bm, v_copy, true);
+    }
+  }
+}
+
 static wmOperatorStatus edbm_duplicate_exec(bContext *C, wmOperator *op)
 {
   const Main *bmain = CTX_data_main(C);
@@ -2598,6 +2811,8 @@ static wmOperatorStatus edbm_duplicate_exec(bContext *C, wmOperator *op)
 
   for (Object *obedit : objects) {
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
+    bool has_user_side = false;
+    const float3 user_side_co = EDBM_mirror_user_side_capture(obedit, em, has_user_side);
     EDBM_select_expand_mirrored(obedit, em, EDBM_mirror_pair_threshold(scene));
     BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
     if (bm->totvertsel == 0) {
@@ -2630,6 +2845,9 @@ static wmOperatorStatus edbm_duplicate_exec(bContext *C, wmOperator *op)
 
     if (!EDBM_op_finish(bm, &bmop, op, true)) {
       continue;
+    }
+    if (has_user_side) {
+      edbm_duplicate_mirror_side_restore(obedit, em, user_side_co);
     }
     EDBMUpdate_Params params{};
     params.calc_looptris = true;
@@ -2929,6 +3147,7 @@ static wmOperatorStatus edbm_edge_rotate_selected_exec(bContext *C, wmOperator *
       *bmain, scene, view_layer, CTX_wm_view3d(C));
   for (Object *obedit : objects) {
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
+    EditMeshMirrorUserSideScope mirror_side_scope(obedit, em);
     EDBM_select_expand_mirrored(obedit, em, EDBM_mirror_pair_threshold(scene));
     BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
     int tot = 0;
@@ -3969,6 +4188,7 @@ static bool merge_target_per_mirror_side(BMEditMesh *em,
   float cent_a[3] = {0.0f, 0.0f, 0.0f};
   float cent_b[3] = {0.0f, 0.0f, 0.0f};
   int num_a = 0, num_b = 0;
+  Vector<BMVert *> side_a;
   Vector<BMVert *> side_b;
   BM_ITER_MESH (v, &iter, bm, BM_VERTS_OF_MESH) {
     if (!BM_elem_flag_test(v, BM_ELEM_SELECT)) {
@@ -3977,6 +4197,7 @@ static bool merge_target_per_mirror_side(BMEditMesh *em,
     if (BM_elem_flag_test(v, BM_ELEM_TAG)) {
       add_v3_v3(cent_a, v->co);
       num_a++;
+      side_a.append(v);
     }
     else {
       add_v3_v3(cent_b, v->co);
@@ -4024,6 +4245,45 @@ static bool merge_target_per_mirror_side(BMEditMesh *em,
     mul_v3_fl(cent_b, 1.0f / float(num_b));
     copy_v3_v3(co_a, cent_a);
     copy_v3_v3(co_b, cent_b);
+  }
+
+  if (mergevert == nullptr && !side_a.is_empty()) {
+    /* Center and cursor: both sides in one weld. On a dense mesh the weld is the slow
+     * part, and one per side doubled it. Same as two `pointmerge` calls otherwise: the
+     * first vert of a side stays and moves to its target, the face data is averaged per
+     * side. */
+    auto side_select_set = [&](const Vector<BMVert *> &side, const bool select) {
+      for (BMVert *v_side : side) {
+        BM_vert_select_set(bm, v_side, select);
+      }
+    };
+    if (use_uvmerge) {
+      side_select_set(side_b, false);
+      EDBM_op_callf(bm, wmop, "average_vert_facedata verts=%hv", BM_ELEM_SELECT);
+      side_select_set(side_b, true);
+      side_select_set(side_a, false);
+      EDBM_op_callf(bm, wmop, "average_vert_facedata verts=%hv", BM_ELEM_SELECT);
+      side_select_set(side_a, true);
+    }
+
+    BMOperator weldop;
+    if (!EDBM_op_init(bm, &weldop, wmop, "weld_verts")) {
+      return false;
+    }
+    BMOpSlot *slot_targetmap = BMO_slot_get(weldop.slots_in, "targetmap");
+    BMVert *target_a = side_a.first();
+    BMVert *target_b = side_b.first();
+    copy_v3_v3(target_a->co, co_a);
+    copy_v3_v3(target_b->co, co_b);
+    for (BMVert *v_a : side_a.as_span().drop_front(1)) {
+      BMO_slot_map_elem_insert(&weldop, slot_targetmap, v_a, target_a);
+    }
+    for (BMVert *v_b : side_b.as_span().drop_front(1)) {
+      BMO_slot_map_elem_insert(&weldop, slot_targetmap, v_b, target_b);
+    }
+    BMO_slot_bool_set(weldop.slots_in, "average_vert_data", true);
+    BMO_op_exec(bm, &weldop);
+    return EDBM_op_finish(bm, &weldop, wmop, true);
   }
 
   /* Pass A: the user's side (tagged). Mirror-added verts are deselected so pointmerge
@@ -4177,6 +4437,7 @@ static wmOperatorStatus edbm_merge_exec(bContext *C, wmOperator *op)
       }
     }
 
+    EditMeshMirrorUserSideScope mirror_side_scope(obedit, em);
     EDBM_select_expand_mirrored(obedit, em, EDBM_mirror_pair_threshold(scene));
 
     if (bm->totvertsel == 0) {
@@ -4354,6 +4615,7 @@ static wmOperatorStatus edbm_remove_doubles_exec(bContext *C, wmOperator *op)
 
   for (Object *obedit : objects) {
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
+    EditMeshMirrorUserSideScope mirror_side_scope(obedit, em);
     EDBM_select_expand_mirrored(obedit, em, EDBM_mirror_pair_threshold(scene));
     BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
 
@@ -4816,6 +5078,7 @@ static wmOperatorStatus edbm_solidify_exec(bContext *C, wmOperator *op)
       *bmain, scene, view_layer, CTX_wm_view3d(C));
   for (Object *obedit : objects) {
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
+    EditMeshMirrorUserSideScope mirror_side_scope(obedit, em);
     EDBM_select_expand_mirrored(obedit, em, EDBM_mirror_pair_threshold(scene));
     BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
 
@@ -5444,6 +5707,7 @@ static void edbm_apply_island_sel(BMEditMesh *em, const MirrorIslandSel &sel)
 template<typename Fn>
 static bool edbm_exec_mirror_islands(Object *ob, BMEditMesh *em, Fn &&fn)
 {
+  EditMeshMirrorUserSideScope mirror_side_scope(ob, em);
   edbm_tag_selected_verts(em->bm);
   EDBM_select_expand_mirrored(ob, em);
   const MirrorIslandSel user = edbm_island_from_vert_tag(em, true);
@@ -6089,6 +6353,7 @@ static wmOperatorStatus edbm_fill_holes_exec(bContext *C, wmOperator *op)
 
   for (Object *obedit : objects) {
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
+    EditMeshMirrorUserSideScope mirror_side_scope(obedit, em);
     EDBM_select_expand_mirrored(obedit, em, EDBM_mirror_pair_threshold(scene));
     BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
 
@@ -6157,6 +6422,7 @@ static wmOperatorStatus edbm_beautify_fill_exec(bContext *C, wmOperator *op)
 
   for (Object *obedit : objects) {
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
+    EditMeshMirrorUserSideScope mirror_side_scope(obedit, em);
     EDBM_select_expand_mirrored(obedit, em, EDBM_mirror_pair_threshold(scene));
     BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
 
@@ -6245,6 +6511,7 @@ static wmOperatorStatus edbm_poke_face_exec(bContext *C, wmOperator *op)
       *bmain, scene, view_layer, CTX_wm_view3d(C));
   for (Object *obedit : objects) {
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
+    EditMeshMirrorUserSideScope mirror_side_scope(obedit, em);
     EDBM_select_expand_mirrored(obedit, em, EDBM_mirror_pair_threshold(scene));
     BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
 
@@ -6340,6 +6607,7 @@ static wmOperatorStatus edbm_quads_convert_to_tris_exec(bContext *C, wmOperator 
       *bmain, scene, view_layer, CTX_wm_view3d(C));
   for (Object *obedit : objects) {
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
+    EditMeshMirrorUserSideScope mirror_side_scope(obedit, em);
     EDBM_select_expand_mirrored(obedit, em, EDBM_mirror_pair_threshold(scene));
     BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
 
@@ -6480,6 +6748,7 @@ static wmOperatorStatus edbm_tris_convert_to_quads_exec(bContext *C, wmOperator 
 
   for (Object *obedit : objects) {
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
+    EditMeshMirrorUserSideScope mirror_side_scope(obedit, em);
     EDBM_select_expand_mirrored(obedit, em, EDBM_mirror_pair_threshold(scene));
     BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
     if (bm->totfacesel == 0) {
@@ -6994,6 +7263,7 @@ static wmOperatorStatus edbm_dissolve_edges_exec(bContext *C, wmOperator *op)
 
   for (Object *obedit : objects) {
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
+    EditMeshMirrorUserSideScope mirror_side_scope(obedit, em);
     EDBM_select_expand_mirrored(obedit, em, EDBM_mirror_pair_threshold(scene));
     BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
     const int totvert_orig = bm->totvert;
@@ -7078,6 +7348,7 @@ static wmOperatorStatus edbm_dissolve_faces_exec(bContext *C, wmOperator *op)
       *bmain, scene, view_layer, CTX_wm_view3d(C));
   for (Object *obedit : objects) {
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
+    EditMeshMirrorUserSideScope mirror_side_scope(obedit, em);
     EDBM_select_expand_mirrored(obedit, em, EDBM_mirror_pair_threshold(scene));
     BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
     if (bm->totfacesel == 0) {
@@ -7137,6 +7408,7 @@ static wmOperatorStatus edbm_dissolve_mode_exec(bContext *C, wmOperator *op)
   const Scene *scene = CTX_data_scene(C);
   Object *obedit = CTX_data_edit_object(C);
   BMEditMesh *em = BKE_editmesh_from_object(obedit);
+  EditMeshMirrorUserSideScope mirror_side_scope(obedit, em);
   EDBM_select_expand_mirrored(obedit, em, EDBM_mirror_pair_threshold(scene));
   PropertyRNA *prop;
 
@@ -7229,6 +7501,7 @@ static wmOperatorStatus edbm_dissolve_limited_exec(bContext *C, wmOperator *op)
       *bmain, scene, view_layer, CTX_wm_view3d(C));
   for (Object *obedit : objects) {
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
+    EditMeshMirrorUserSideScope mirror_side_scope(obedit, em);
     EDBM_select_expand_mirrored(obedit, em, EDBM_mirror_pair_threshold(scene));
     BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
 
@@ -7441,6 +7714,7 @@ static wmOperatorStatus edbm_delete_edgeloop_exec(bContext *C, wmOperator *op)
       *bmain, scene, view_layer, CTX_wm_view3d(C));
   for (Object *obedit : objects) {
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
+    EditMeshMirrorUserSideScope mirror_side_scope(obedit, em);
     EDBM_select_expand_mirrored(obedit, em, EDBM_mirror_pair_threshold(scene));
     BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
     if (bm->totedgesel == 0) {
@@ -7527,6 +7801,7 @@ static wmOperatorStatus edbm_split_exec(bContext *C, wmOperator *op)
       *bmain, scene, view_layer, CTX_wm_view3d(C));
   for (Object *obedit : objects) {
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
+    EditMeshMirrorUserSideScope mirror_side_scope(obedit, em);
     EDBM_select_expand_mirrored(obedit, em, EDBM_mirror_pair_threshold(scene));
     BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
     if ((bm->totvertsel == 0) && (bm->totedgesel == 0) && (bm->totfacesel == 0)) {
@@ -8528,6 +8803,7 @@ static wmOperatorStatus edbm_wireframe_exec(bContext *C, wmOperator *op)
       *bmain, scene, view_layer, CTX_wm_view3d(C));
   for (Object *obedit : objects) {
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
+    EditMeshMirrorUserSideScope mirror_side_scope(obedit, em);
     EDBM_select_expand_mirrored(obedit, em, EDBM_mirror_pair_threshold(scene));
     BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
 
@@ -8631,9 +8907,17 @@ static wmOperatorStatus edbm_offset_edgeloop_exec(bContext *C, wmOperator *op)
   ViewLayer *view_layer = CTX_data_view_layer(C);
   Vector<Base *> bases = BKE_view_layer_array_from_bases_in_edit_mode_unique_data(
       *bmain, scene, view_layer, CTX_wm_view3d(C));
+  /* BIKINI: the new loops sit exactly on their source loop, so the edge slide that follows
+   * cannot pair them across the mirror plane. Both sides stay selected for the slide and
+   * #MESH_OT_mirror_user_side_restore drops the other side when the macro is done. */
+  bool has_user_side = false;
+  float3 user_side_co(0.0f);
   for (Base *base : bases) {
     Object *obedit = base->object;
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
+    if (!has_user_side) {
+      user_side_co = EDBM_mirror_user_side_capture(obedit, em, has_user_side);
+    }
     EDBM_select_expand_mirrored(obedit, em, EDBM_mirror_pair_threshold(scene));
     BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
     if (bm->totedgesel == 0) {
@@ -8675,7 +8959,52 @@ static wmOperatorStatus edbm_offset_edgeloop_exec(bContext *C, wmOperator *op)
     }
   }
 
+  if (op->opm) {
+    for (wmOperator *opm = op->opm->macro.first(); opm; opm = opm->next) {
+      if (STREQ(opm->type->idname, "MESH_OT_mirror_user_side_restore")) {
+        RNA_float_set_array(opm->ptr, "side", user_side_co);
+      }
+    }
+  }
+
   return changed_multi ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
+}
+
+static wmOperatorStatus edbm_mirror_user_side_restore_exec(bContext *C, wmOperator *op)
+{
+  float3 side_co;
+  RNA_float_get_array(op->ptr, "side", side_co);
+
+  const Main *bmain = CTX_data_main(C);
+  const Scene *scene = CTX_data_scene(C);
+  ViewLayer *view_layer = CTX_data_view_layer(C);
+  const Vector<Object *> objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(
+      *bmain, scene, view_layer, CTX_wm_view3d(C));
+  for (Object *obedit : objects) {
+    EDBM_mirror_user_side_restore(obedit, BKE_editmesh_from_object(obedit), side_co);
+  }
+  return OPERATOR_FINISHED;
+}
+
+void MESH_OT_mirror_user_side_restore(wmOperatorType *ot)
+{
+  /* identifiers */
+  ot->name = "Mirror User Side Restore";
+  ot->idname = "MESH_OT_mirror_user_side_restore";
+  ot->description = "Deselect the mirrored side once a mirrored operation is done";
+
+  /* API callbacks. */
+  ot->exec = edbm_mirror_user_side_restore_exec;
+  ot->poll = ED_operator_editmesh;
+
+  /* Last step of macros whose transform needs both sides selected. */
+
+  /* flags */
+  ot->flag = OPTYPE_INTERNAL;
+
+  PropertyRNA *prop = RNA_def_float_vector(
+      ot->srna, "side", 3, nullptr, -1.0f, 1.0f, "Side", "", -1.0f, 1.0f);
+  RNA_def_property_flag(prop, PROP_HIDDEN);
 }
 
 void MESH_OT_offset_edge_loops(wmOperatorType *ot)

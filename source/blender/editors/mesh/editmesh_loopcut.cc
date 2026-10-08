@@ -71,7 +71,10 @@ static Vector<BMEdge *> loopcut_mirrored_ring_edges(BMEditMesh *em, const Mesh *
   }
 
   const bool use_topology = (mesh->editflag & ME_EDIT_MIRROR_TOPO) != 0;
-  EditMeshMirrorLookup lookup(em, use_topology, true);
+  /* Only this edge is looked up, not worth a tree over a whole dense mesh. */
+  BMVert *sources[2] = {eed->v1, eed->v2};
+  EditMeshMirrorLookup lookup(
+      em, use_topology, true, 0.00002f, mesh->symmetry, Span<BMVert *>(sources, 2));
 
   int axes[3];
   int naxes = 0;

@@ -20,13 +20,23 @@
 
 #include "BLI_array.hh"
 #include "BLI_kdtree.hh"
+#include "BLI_listbase.hh"
 #include "BLI_map.hh"
+#include "BLI_math_bits.hh"
+#include "BLI_math_vector.hh"
 #include "BLI_math_vector_c.hh"
 #include "BLI_math_vector_types.hh"
 #include "BLI_set.hh"
 #include "BLI_vector.hh"
 
+#include "DEG_depsgraph.hh"
+
 #include "ED_mesh.hh"
+
+#include "WM_api.hh"
+#include "WM_types.hh"
+
+#include "mesh_intern.hh"
 
 #include <array>
 
@@ -379,16 +389,234 @@ struct EditMeshMirrorLookup::Impl {
   float maxdist = 0.00002f;
   KDTree<float3> *tree = nullptr;
   MirrTopoStore_t topo{nullptr, -1, -1, false};
-  /* Per axis-mask 1..7: -2 unknown, -1 none, >=0 partner index (self if on plane). */
+  /* Per axis-mask 1..7: -2 unknown, -1 none, >=0 partner index (self if on plane).
+   * Allocated on first use, most lookups only ever touch one mask. */
   std::array<Array<int>, 7> cache;
 
+  /* The tree only holds verts around the flipped copies of the selection. A vert may be
+   * looked up from as long as it is at most #hop_max counterparts away from a selected
+   * vert: each hop can drift by `maxdist`, and the tree was gathered with that margin. */
+  static constexpr int8_t hop_max = 8;
+  bool sparse = false;
+  Array<int8_t> hops;
+
+  void tree_build_full();
+  void tree_build(const MirrorSelectionFilter &filter, Span<BMVert *> sources);
   BMVert *compute(BMVert *v, int axis_mask);
 };
+
+/** Bit N for each axis mask N (0..7) that only flips axes of \a symmetry. */
+static uint mirror_symmetry_axis_masks(const int symmetry)
+{
+  uint axis_masks = 0;
+  if (symmetry & 7) {
+    for (int mask = 0; mask < 8; mask++) {
+      if ((mask & symmetry) == mask) {
+        axis_masks |= 1u << mask;
+      }
+    }
+  }
+  return axis_masks;
+}
+
+/* -------------------------------------------------------------------- */
+
+MirrorSelectionFilter::MirrorSelectionFilter(BMesh *bm,
+                                             const uint axis_masks,
+                                             const float radius,
+                                             const bool respecthide)
+{
+  const int masks_num = count_bits_i(axis_masks & 0xff);
+  if (masks_num == 0) {
+    return;
+  }
+  /* Gathering and a tree over the candidates have to beat a tree over everything. */
+  if (int64_t(bm->totvertsel) * masks_num * 4 > int64_t(bm->totvert)) {
+    return;
+  }
+
+  Vector<float3> selected;
+  selected.reserve(bm->totvertsel);
+  BMIter iter;
+  BMVert *v;
+  BM_ITER_MESH (v, &iter, bm, BM_VERTS_OF_MESH) {
+    if (!BM_elem_flag_test(v, BM_ELEM_SELECT)) {
+      continue;
+    }
+    if (respecthide && BM_elem_flag_test(v, BM_ELEM_HIDDEN)) {
+      continue;
+    }
+    selected.append(float3(v->co));
+  }
+  this->init(selected, bm->totvert, axis_masks, radius);
+}
+
+MirrorSelectionFilter::MirrorSelectionFilter(const Span<float3> locations,
+                                             const int verts_num,
+                                             const uint axis_masks,
+                                             const float radius)
+{
+  this->init(locations, verts_num, axis_masks, radius);
+}
+
+void MirrorSelectionFilter::init(const Span<float3> selected,
+                                 const int verts_num,
+                                 const uint axis_masks,
+                                 const float radius)
+{
+  const int masks_num = count_bits_i(axis_masks & 0xff);
+  if (masks_num == 0) {
+    return;
+  }
+  if (int64_t(selected.size()) * masks_num * 4 > int64_t(verts_num)) {
+    return;
+  }
+  active_ = true;
+  if (selected.is_empty()) {
+    /* Nothing to look up, nothing passes. */
+    return;
+  }
+
+  float3 sel_min(FLT_MAX);
+  float3 sel_max(-FLT_MAX);
+  for (const float3 &co : selected) {
+    sel_min = math::min(sel_min, co);
+    sel_max = math::max(sel_max, co);
+  }
+
+  /* One box per flipped copy of the selection, a cheap first rejection. */
+  float3 all_min(FLT_MAX);
+  float3 all_max(-FLT_MAX);
+  Vector<int, 8> masks;
+  for (int mask = 0; mask < 8; mask++) {
+    if ((axis_masks & (1u << mask)) == 0) {
+      continue;
+    }
+    masks.append(mask);
+    Box box;
+    for (int a = 0; a < 3; a++) {
+      if (mask & (1 << a)) {
+        box.min[a] = -sel_max[a] - radius;
+        box.max[a] = -sel_min[a] + radius;
+      }
+      else {
+        box.min[a] = sel_min[a] - radius;
+        box.max[a] = sel_max[a] + radius;
+      }
+    }
+    boxes_.append(box);
+    all_min = math::min(all_min, box.min);
+    all_max = math::max(all_max, box.max);
+  }
+
+  /* Cells two radii wide, so a location touches at most two per axis. Wider when the
+   * keys would not fit their 21 bits per axis. */
+  origin_ = all_min;
+  const float extent = math::reduce_max(all_max - all_min);
+  const float cell_size = max_ff(2.0f * radius, extent / float((1 << 21) - 2));
+  cell_inv_ = 1.0f / cell_size;
+
+  cells_.reserve(int64_t(selected.size()) * masks.size());
+  for (const float3 &co : selected) {
+    for (const int mask : masks) {
+      int lo[3], hi[3];
+      for (int a = 0; a < 3; a++) {
+        const float c = (mask & (1 << a)) ? -co[a] : co[a];
+        lo[a] = max_ii(0, int(((c - radius) - origin_[a]) * cell_inv_));
+        hi[a] = max_ii(0, int(((c + radius) - origin_[a]) * cell_inv_));
+      }
+      int cell[3];
+      for (cell[0] = lo[0]; cell[0] <= hi[0]; cell[0]++) {
+        for (cell[1] = lo[1]; cell[1] <= hi[1]; cell[1]++) {
+          for (cell[2] = lo[2]; cell[2] <= hi[2]; cell[2]++) {
+            cells_.add(this->cell_key(cell));
+          }
+        }
+      }
+    }
+  }
+}
+
+bool MirrorSelectionFilter::test(const float co[3]) const
+{
+  for (const Box &box : boxes_) {
+    if (co[0] < box.min[0] || co[0] > box.max[0] || co[1] < box.min[1] || co[1] > box.max[1] ||
+        co[2] < box.min[2] || co[2] > box.max[2])
+    {
+      continue;
+    }
+    const int cell[3] = {
+        int((co[0] - origin_[0]) * cell_inv_),
+        int((co[1] - origin_[1]) * cell_inv_),
+        int((co[2] - origin_[2]) * cell_inv_),
+    };
+    return cells_.contains(this->cell_key(cell));
+  }
+  return false;
+}
+
+/**
+ * \param sources: The verts lookups start from, the selected verts when empty.
+ */
+void EditMeshMirrorLookup::Impl::tree_build(const MirrorSelectionFilter &filter,
+                                            const Span<BMVert *> sources)
+{
+  if (!filter.is_active()) {
+    this->tree_build_full();
+    return;
+  }
+  this->sparse = true;
+  this->hops = Array<int8_t>(this->bm->totvert, int8_t(-1));
+  for (const BMVert *v_source : sources) {
+    this->hops[BM_elem_index_get(v_source)] = 0;
+  }
+  Vector<int> candidates;
+  BMIter iter;
+  BMVert *v;
+  int i;
+  BM_ITER_MESH_INDEX (v, &iter, this->bm, BM_VERTS_OF_MESH, i) {
+    if (this->respecthide && BM_elem_flag_test(v, BM_ELEM_HIDDEN)) {
+      continue;
+    }
+    if (sources.is_empty() && BM_elem_flag_test(v, BM_ELEM_SELECT)) {
+      this->hops[i] = 0;
+    }
+    if (filter.test(v->co)) {
+      candidates.append(i);
+    }
+  }
+  this->tree = kdtree_new<float3>(max_ii(1, int(candidates.size())));
+  for (const int index : candidates) {
+    kdtree_insert<float3>(this->tree, index, BM_vert_at_index(this->bm, index)->co);
+  }
+  kdtree_balance<float3>(this->tree);
+}
+
+void EditMeshMirrorLookup::Impl::tree_build_full()
+{
+  if (this->tree) {
+    kdtree_free<float3>(this->tree);
+  }
+  this->sparse = false;
+  this->hops = {};
+  this->tree = kdtree_new<float3>(this->bm->totvert);
+  BMIter iter;
+  BMVert *v;
+  int i;
+  BM_ITER_MESH_INDEX (v, &iter, this->bm, BM_VERTS_OF_MESH, i) {
+    if (this->respecthide && BM_elem_flag_test(v, BM_ELEM_HIDDEN)) {
+      continue;
+    }
+    kdtree_insert<float3>(this->tree, i, v->co);
+  }
+  kdtree_balance<float3>(this->tree);
+}
 
 EditMeshMirrorLookup::EditMeshMirrorLookup(BMEditMesh *em,
                                            const bool use_topology,
                                            const bool respecthide,
-                                           const float maxdist)
+                                           const float maxdist,
+                                           const int selection_symmetry)
     : impl_(MEM_new<Impl>(__func__))
 {
   impl_->bm = em->bm;
@@ -400,25 +628,45 @@ EditMeshMirrorLookup::EditMeshMirrorLookup(BMEditMesh *em,
   BM_mesh_elem_table_ensure(bm, BM_VERT);
   BM_mesh_elem_index_ensure(bm, BM_VERT);
 
-  for (int m = 0; m < 7; m++) {
-    impl_->cache[m] = Array<int>(bm->totvert, -2);
-  }
-
   /* Topology hash is X-only. Spatial tree is required for Y/Z and for XY/XZ/YZ
    * combos (the diagonal octants). Always build it. */
-  impl_->tree = kdtree_new<float3>(bm->totvert);
-  {
-    BMIter iter;
-    BMVert *v;
-    int i;
-    BM_ITER_MESH_INDEX (v, &iter, bm, BM_VERTS_OF_MESH, i) {
-      if (respecthide && BM_elem_flag_test(v, BM_ELEM_HIDDEN)) {
-        continue;
-      }
-      kdtree_insert<float3>(impl_->tree, i, v->co);
-    }
-    kdtree_balance<float3>(impl_->tree);
+  const MirrorSelectionFilter filter(bm,
+                                     mirror_symmetry_axis_masks(selection_symmetry),
+                                     float(Impl::hop_max + 2) * impl_->maxdist + 1e-4f,
+                                     respecthide);
+  impl_->tree_build(filter, {});
+  if (use_topology) {
+    ED_mesh_mirrtopo_init(bm, nullptr, &impl_->topo, true);
   }
+}
+
+EditMeshMirrorLookup::EditMeshMirrorLookup(BMEditMesh *em,
+                                           const bool use_topology,
+                                           const bool respecthide,
+                                           const float maxdist,
+                                           const int symmetry,
+                                           const Span<BMVert *> sources)
+    : impl_(MEM_new<Impl>(__func__))
+{
+  impl_->bm = em->bm;
+  impl_->use_topology = use_topology;
+  impl_->respecthide = respecthide;
+  impl_->maxdist = (maxdist > 0.0f) ? maxdist : 0.00002f;
+
+  BMesh *bm = em->bm;
+  BM_mesh_elem_table_ensure(bm, BM_VERT);
+  BM_mesh_elem_index_ensure(bm, BM_VERT);
+
+  Vector<float3, 8> locations;
+  for (const BMVert *v : sources) {
+    locations.append(float3(v->co));
+  }
+  /* No sources means no lookups to prepare for, keep the full tree then. */
+  const MirrorSelectionFilter filter(locations,
+                                     bm->totvert,
+                                     sources.is_empty() ? 0 : mirror_symmetry_axis_masks(symmetry),
+                                     float(Impl::hop_max + 2) * impl_->maxdist + 1e-4f);
+  impl_->tree_build(filter, sources);
   if (use_topology) {
     ED_mesh_mirrtopo_init(bm, nullptr, &impl_->topo, true);
   }
@@ -455,6 +703,15 @@ BMVert *EditMeshMirrorLookup::Impl::compute(BMVert *v, const int axis_mask)
 
   if (this->tree == nullptr) {
     return nullptr;
+  }
+
+  int8_t hop = 0;
+  if (this->sparse) {
+    hop = this->hops[BM_elem_index_get(v)];
+    if (hop < 0 || hop >= hop_max) {
+      /* Not something the sparse tree was gathered for. */
+      this->tree_build_full();
+    }
   }
 
   const float maxdist_sq = square_f(this->maxdist);
@@ -551,6 +808,12 @@ BMVert *EditMeshMirrorLookup::Impl::compute(BMVert *v, const int axis_mask)
   if (back != v || back_ties != 1) {
     return nullptr;
   }
+  if (this->sparse) {
+    int8_t &hop_best = this->hops[BM_elem_index_get(best)];
+    if (hop_best < 0 || hop_best > hop + 1) {
+      hop_best = hop + 1;
+    }
+  }
   return best;
 }
 
@@ -562,14 +825,18 @@ BMVert *EditMeshMirrorLookup::vert_axes(BMVert *v, int axis_mask)
   }
   const int i = BM_elem_index_get(v);
   BLI_assert(i >= 0 && i < impl_->bm->totvert);
-  int &slot = impl_->cache[axis_mask - 1][i];
+  Array<int> &cache = impl_->cache[axis_mask - 1];
+  if (cache.is_empty()) {
+    cache = Array<int>(impl_->bm->totvert, -2);
+  }
+  int &slot = cache[i];
   if (slot >= -1) {
     return (slot < 0) ? nullptr : BM_vert_at_index(impl_->bm, slot);
   }
   BMVert *found = impl_->compute(v, axis_mask);
   slot = found ? BM_elem_index_get(found) : -1;
   if (found && found != v) {
-    impl_->cache[axis_mask - 1][BM_elem_index_get(found)] = i;
+    cache[BM_elem_index_get(found)] = i;
   }
   return found;
 }
@@ -793,7 +1060,7 @@ EditMeshSymmetryHelper::EditMeshSymmetryHelper(Object *ob, uchar htype)
     axis_count += (enabled & (1 << axis)) != 0;
   }
   if (axis_count > 1) {
-    EditMeshMirrorLookup lookup(em_, use_topology_mirror_, true);
+    EditMeshMirrorLookup lookup(em_, use_topology_mirror_, true, 0.00002f, enabled);
     Vector<int> masks;
     for (int bits = 1; bits < 8; bits++) {
       if ((bits & enabled) == bits) {
@@ -803,12 +1070,7 @@ EditMeshSymmetryHelper::EditMeshSymmetryHelper(Object *ob, uchar htype)
     if (htype_ & BM_VERT) {
       Vector<BMVert *> work;
       Set<BMVert *> seen;
-      for (const auto &item : vert_to_mirror_map_.items()) {
-        if (seen.add(item.key)) {
-          work.append(item.key);
-        }
-      }
-      /* Also start from currently selected verts not yet in the map. */
+      /* Selected verts first: the lookup reaches their counterparts from them. */
       BMIter iter;
       BMVert *v_curr;
       BM_ITER_MESH (v_curr, &iter, bm_, BM_VERTS_OF_MESH) {
@@ -819,6 +1081,12 @@ EditMeshSymmetryHelper::EditMeshSymmetryHelper(Object *ob, uchar htype)
         }
         if (seen.add(v_curr)) {
           work.append(v_curr);
+        }
+      }
+      /* Also start from the per-axis partners not reached that way. */
+      for (const auto &item : vert_to_mirror_map_.items()) {
+        if (seen.add(item.key)) {
+          work.append(item.key);
         }
       }
       for (int i = 0; i < work.size(); i++) {
@@ -1057,9 +1325,9 @@ static void expand_flood_mirror_lookup(BMEditMesh *em,
 {
   BMesh *bm = em->bm;
   const bool use_topology = (mesh->editflag & ME_EDIT_MIRROR_TOPO) != 0;
-  EditMeshMirrorLookup lookup(em, use_topology, true, pair_dist);
   const int enabled = int(mesh->symmetry) &
                       (ME_SYMMETRY_X | ME_SYMMETRY_Y | ME_SYMMETRY_Z);
+  EditMeshMirrorLookup lookup(em, use_topology, true, pair_dist, enabled);
   BMIter iter;
 
   auto enabled_masks = [enabled]() {
@@ -1163,6 +1431,298 @@ static void expand_flood_mirror_lookup(BMEditMesh *em,
   }
 }
 
+/* -------------------------------------------------------------------- */
+/* Expansion from the selected elements.
+ *
+ * The expansion below walks every edge and face of the mesh several times (tagging, the
+ * selection flush, the cleanup after it). On a dense mesh those passes cost far more than
+ * finding the counterparts of a handful of selected elements, so a small selection is
+ * expanded from the selected elements themselves and only touches what is next to them. */
+
+struct MirrorSelection {
+  Vector<BMVert *> verts;
+  Vector<BMEdge *> edges;
+  Vector<BMFace *> faces;
+};
+
+static bool mirror_elem_is_selected(const BMHeader *head)
+{
+  return (head->hflag & (BM_ELEM_SELECT | BM_ELEM_HIDDEN)) == BM_ELEM_SELECT;
+}
+
+/**
+ * Gather the selection with one pass over the verts: a selected edge or face hangs off
+ * selected verts. Returns false when the selection is too large for this to pay off, or
+ * when the counts show that something selected was not found this way.
+ */
+static bool mirror_selection_gather(BMesh *bm, MirrorSelection &r_selection)
+{
+  if (int64_t(bm->totvertsel) * 8 > int64_t(bm->totvert)) {
+    return false;
+  }
+  r_selection.verts.reserve(bm->totvertsel);
+  r_selection.edges.reserve(bm->totedgesel);
+  r_selection.faces.reserve(bm->totfacesel);
+
+  BMIter iter;
+  BMVert *v;
+  BM_ITER_MESH (v, &iter, bm, BM_VERTS_OF_MESH) {
+    if (mirror_elem_is_selected(&v->head)) {
+      r_selection.verts.append(v);
+    }
+  }
+  for (BMVert *v_sel : r_selection.verts) {
+    BMIter eiter;
+    BMEdge *e;
+    BM_ITER_ELEM (e, &eiter, v_sel, BM_EDGES_OF_VERT) {
+      if (!mirror_elem_is_selected(&e->head)) {
+        continue;
+      }
+      /* Each edge once, from its first selected vert. */
+      const BMVert *v_owner = mirror_elem_is_selected(&e->v1->head) ? e->v1 : e->v2;
+      if (v_owner == v_sel) {
+        r_selection.edges.append(e);
+      }
+    }
+    BMIter fiter;
+    BMFace *f;
+    BM_ITER_ELEM (f, &fiter, v_sel, BM_FACES_OF_VERT) {
+      if (!mirror_elem_is_selected(&f->head)) {
+        continue;
+      }
+      /* Each face once, from its first selected vert. */
+      const BMLoop *l_iter = f->l_first;
+      do {
+        if (mirror_elem_is_selected(&l_iter->v->head)) {
+          break;
+        }
+      } while ((l_iter = l_iter->next) != f->l_first);
+      if (l_iter->v == v_sel) {
+        r_selection.faces.append(f);
+      }
+    }
+  }
+
+  return (r_selection.verts.size() == bm->totvertsel) &&
+         (r_selection.edges.size() == bm->totedgesel) &&
+         (r_selection.faces.size() == bm->totfacesel);
+}
+
+static void expand_mirrored_from_selection(BMEditMesh *em,
+                                           const Mesh *mesh,
+                                           const MirrorSelection &selection,
+                                           const uchar htype,
+                                           const float pair_dist)
+{
+  BMesh *bm = em->bm;
+  const short symmetry = mesh->symmetry;
+  const bool use_topology = (mesh->editflag & ME_EDIT_MIRROR_TOPO) != 0;
+  const int enabled = int(symmetry) & (ME_SYMMETRY_X | ME_SYMMETRY_Y | ME_SYMMETRY_Z);
+  Vector<int, 7> masks;
+  for (int bits = 1; bits < 8; bits++) {
+    if ((bits & enabled) == bits) {
+      masks.append(bits);
+    }
+  }
+  if (masks.is_empty()) {
+    return;
+  }
+  EditMeshMirrorLookup lookup(em, use_topology, true, pair_dist, enabled);
+
+  /* Everything that becomes selected, to finish the selection around it afterwards. */
+  Vector<BMVert *> new_verts;
+  Vector<BMEdge *> new_edges;
+  Vector<BMFace *> new_faces;
+  auto vert_select = [&](BMVert *v) {
+    if ((v->head.hflag & (BM_ELEM_SELECT | BM_ELEM_HIDDEN)) == 0) {
+      BM_vert_select_set(bm, v, true);
+      new_verts.append(v);
+    }
+  };
+  auto edge_select = [&](BMEdge *e) {
+    if (BM_elem_flag_test(e, BM_ELEM_HIDDEN)) {
+      return;
+    }
+    if (!BM_elem_flag_test(e, BM_ELEM_SELECT)) {
+      BM_edge_select_set_noflush(bm, e, true);
+      new_edges.append(e);
+    }
+    vert_select(e->v1);
+    vert_select(e->v2);
+  };
+  auto face_select = [&](BMFace *f) {
+    if (BM_elem_flag_test(f, BM_ELEM_HIDDEN)) {
+      return;
+    }
+    if (!BM_elem_flag_test(f, BM_ELEM_SELECT)) {
+      BM_face_select_set_noflush(bm, f, true);
+      new_faces.append(f);
+    }
+    BMLoop *l_iter = f->l_first;
+    do {
+      vert_select(l_iter->v);
+      edge_select(l_iter->e);
+    } while ((l_iter = l_iter->next) != f->l_first);
+  };
+
+  /* Flood through the lookup so X+Y (and XYZ) reach the diagonal octants, same as
+   * #expand_flood_mirror_lookup. */
+  if (htype & BM_VERT) {
+    Vector<BMVert *> work = selection.verts;
+    Set<BMVert *> seen;
+    seen.add_multiple(work);
+    for (int i = 0; i < work.size(); i++) {
+      BMVert *curr = work[i];
+      for (const int bits : masks) {
+        BMVert *mirr = lookup.vert_axes(curr, bits);
+        if (mirr == nullptr || mirr == curr || BM_elem_flag_test(mirr, BM_ELEM_HIDDEN)) {
+          continue;
+        }
+        vert_select(mirr);
+        if (seen.add(mirr)) {
+          work.append(mirr);
+        }
+      }
+    }
+  }
+  if (htype & BM_EDGE) {
+    Vector<BMEdge *> work = selection.edges;
+    Set<BMEdge *> seen;
+    seen.add_multiple(work);
+    for (int i = 0; i < work.size(); i++) {
+      BMEdge *curr = work[i];
+      for (const int bits : masks) {
+        BMEdge *mirr = lookup.edge_axes(curr, bits);
+        if (mirr == nullptr || mirr == curr || BM_elem_flag_test(mirr, BM_ELEM_HIDDEN)) {
+          continue;
+        }
+        edge_select(mirr);
+        if (seen.add(mirr)) {
+          work.append(mirr);
+        }
+      }
+    }
+  }
+  if (htype & BM_FACE) {
+    Vector<BMFace *> work = selection.faces;
+    Set<BMFace *> seen;
+    seen.add_multiple(work);
+    for (int i = 0; i < work.size(); i++) {
+      BMFace *curr = work[i];
+      for (const int bits : masks) {
+        BMFace *mirr = lookup.face_axes(curr, bits);
+        if (mirr == nullptr || mirr == curr || BM_elem_flag_test(mirr, BM_ELEM_HIDDEN)) {
+          continue;
+        }
+        face_select(mirr);
+        if (seen.add(mirr)) {
+          work.append(mirr);
+        }
+      }
+    }
+  }
+
+  /* What the selection flush adds around the new elements: in vertex mode an edge or face
+   * whose verts are all selected, in edge mode a face whose edges are all selected.
+   * Bridges across a mirror plane are left out. They are their own counterpart, and if
+   * both sides' selections combine to select them, topology operators build geometry
+   * across the plane. Elements lying on the plane do not span it and are promoted. */
+  Vector<BMEdge *> promoted_edges;
+  Vector<BMFace *> promoted_faces;
+  if (em->selectmode & SCE_SELECT_VERTEX) {
+    for (BMVert *v : new_verts) {
+      BMIter eiter;
+      BMEdge *e;
+      BM_ITER_ELEM (e, &eiter, v, BM_EDGES_OF_VERT) {
+        if (e->head.hflag & (BM_ELEM_SELECT | BM_ELEM_HIDDEN)) {
+          continue;
+        }
+        if (!BM_elem_flag_test(BM_edge_other_vert(e, v), BM_ELEM_SELECT)) {
+          continue;
+        }
+        if (edge_spans_mirror_plane(e, symmetry)) {
+          continue;
+        }
+        BM_edge_select_set_noflush(bm, e, true);
+        promoted_edges.append(e);
+      }
+    }
+    for (BMVert *v : new_verts) {
+      BMIter fiter;
+      BMFace *f;
+      BM_ITER_ELEM (f, &fiter, v, BM_FACES_OF_VERT) {
+        if (f->head.hflag & (BM_ELEM_SELECT | BM_ELEM_HIDDEN)) {
+          continue;
+        }
+        bool all_selected = true;
+        const BMLoop *l_iter = f->l_first;
+        do {
+          if (!BM_elem_flag_test(l_iter->v, BM_ELEM_SELECT)) {
+            all_selected = false;
+            break;
+          }
+        } while ((l_iter = l_iter->next) != f->l_first);
+        if (!all_selected || face_spans_mirror_plane(f, symmetry)) {
+          continue;
+        }
+        BM_face_select_set_noflush(bm, f, true);
+        promoted_faces.append(f);
+      }
+    }
+  }
+  else if (em->selectmode & SCE_SELECT_EDGE) {
+    for (BMEdge *e : new_edges) {
+      BMIter fiter;
+      BMFace *f;
+      BM_ITER_ELEM (f, &fiter, e, BM_FACES_OF_EDGE) {
+        if (f->head.hflag & (BM_ELEM_SELECT | BM_ELEM_HIDDEN)) {
+          continue;
+        }
+        bool all_selected = true;
+        const BMLoop *l_iter = f->l_first;
+        do {
+          if (!BM_elem_flag_test(l_iter->e, BM_ELEM_SELECT)) {
+            all_selected = false;
+            break;
+          }
+        } while ((l_iter = l_iter->next) != f->l_first);
+        if (!all_selected || face_spans_mirror_plane(f, symmetry)) {
+          continue;
+        }
+        BM_face_select_set_noflush(bm, f, true);
+        promoted_faces.append(f);
+      }
+    }
+  }
+
+  /* Guarantee down-consistency in every select mode (selected faces flag their edges and
+   * verts, selected edges flag their verts): region detection in the BMOs relies on the
+   * shared edges of multi-face regions being flagged. */
+  auto face_flush_down = [&](BMFace *f) {
+    BMLoop *l_iter = f->l_first;
+    do {
+      BM_edge_select_set_noflush(bm, l_iter->e, true);
+      BM_vert_select_set(bm, l_iter->v, true);
+    } while ((l_iter = l_iter->next) != f->l_first);
+  };
+  auto edge_flush_down = [&](BMEdge *e) {
+    BM_vert_select_set(bm, e->v1, true);
+    BM_vert_select_set(bm, e->v2, true);
+  };
+  for (BMFace *f : selection.faces) {
+    face_flush_down(f);
+  }
+  for (BMFace *f : promoted_faces) {
+    face_flush_down(f);
+  }
+  for (BMEdge *e : selection.edges) {
+    edge_flush_down(e);
+  }
+  for (BMEdge *e : promoted_edges) {
+    edge_flush_down(e);
+  }
+}
+
 float EDBM_mirror_pair_threshold(const Scene *scene)
 {
   constexpr float fallback = 0.00002f;
@@ -1191,13 +1751,22 @@ void EDBM_select_expand_mirrored(Object *ob, BMEditMesh *em, const float pair_di
     return;
   }
 
+  Mesh *mesh = id_cast<Mesh *>(ob->data);
+  if (mesh->symmetry != 0) {
+    /* A small selection only touches what is next to it. */
+    MirrorSelection selection;
+    if (mirror_selection_gather(bm, selection)) {
+      expand_mirrored_from_selection(em, mesh, selection, htype, maxdist);
+      return;
+    }
+  }
+
   std::optional<EditMeshSymmetryHelper> symmetry = EditMeshSymmetryHelper::create_if_needed(
       ob, htype);
   if (!symmetry) {
     return;
   }
 
-  Mesh *mesh = id_cast<Mesh *>(ob->data);
   BMIter iter;
   BMEdge *e;
   BMFace *f;
@@ -1491,6 +2060,185 @@ void EDBM_mirror_active_side_restore(Object *ob,
   if (active_ele) {
     BM_select_history_remove(bm, active_ele);
     BM_select_history_store(bm, active_ele);
+  }
+}
+
+float3 EDBM_mirror_user_side_capture(Object *ob, BMEditMesh *em, bool &r_has_side)
+{
+  float3 co(0.0f);
+  r_has_side = false;
+  const Mesh *mesh = id_cast<Mesh *>(ob->data);
+  BMesh *bm = em->bm;
+  if (mesh->symmetry == 0 || bm->totvertsel == 0) {
+    return co;
+  }
+
+  bool pos[3] = {false, false, false};
+  bool neg[3] = {false, false, false};
+  BMIter iter;
+  BMVert *v;
+  BM_ITER_MESH (v, &iter, bm, BM_VERTS_OF_MESH) {
+    if (!BM_elem_flag_test(v, BM_ELEM_SELECT) || BM_elem_flag_test(v, BM_ELEM_HIDDEN)) {
+      continue;
+    }
+    for (int a = 0; a < 3; a++) {
+      if (v->co[a] > 1e-4f) {
+        pos[a] = true;
+      }
+      else if (v->co[a] < -1e-4f) {
+        neg[a] = true;
+      }
+    }
+  }
+  for (int a = 0; a < 3; a++) {
+    if ((mesh->symmetry & (ME_SYMMETRY_X << a)) && (pos[a] != neg[a])) {
+      co[a] = pos[a] ? 1.0f : -1.0f;
+      r_has_side = true;
+    }
+  }
+  return co;
+}
+
+void EDBM_mirror_user_side_restore(Object *ob, BMEditMesh *em, const float3 &side_co)
+{
+  Mesh *mesh = id_cast<Mesh *>(ob->data);
+  if (mesh->symmetry == 0) {
+    return;
+  }
+  BMesh *bm = em->bm;
+
+  int want[3] = {0, 0, 0};
+  bool any = false;
+  for (int a = 0; a < 3; a++) {
+    if (mesh->symmetry & (ME_SYMMETRY_X << a)) {
+      if (side_co[a] > 1e-4f) {
+        want[a] = 1;
+        any = true;
+      }
+      else if (side_co[a] < -1e-4f) {
+        want[a] = -1;
+        any = true;
+      }
+    }
+  }
+  if (!any) {
+    return;
+  }
+
+  /* The select mode decides which element type carries the selection. In vertex mode a
+   * selected edge across the plane must not hold on to its vert on the other side. In
+   * edge/face mode an element whose center is on the plane straddles it and is kept whole. */
+  const bool use_edges = (em->selectmode & SCE_SELECT_VERTEX) == 0;
+  const bool use_faces = use_edges && (em->selectmode & SCE_SELECT_EDGE) == 0;
+
+  /* Whatever has to go has a selected vert on the other side, so only those verts and
+   * what they connect to need a look. Nothing else is touched, which keeps this cheap on
+   * a dense mesh. */
+  Vector<BMVert *> other_verts;
+  BMIter iter;
+  BMVert *v;
+  BM_ITER_MESH (v, &iter, bm, BM_VERTS_OF_MESH) {
+    if (BM_elem_flag_test(v, BM_ELEM_SELECT) && !co_on_user_side(v->co, want)) {
+      other_verts.append(v);
+    }
+  }
+
+  if (!other_verts.is_empty()) {
+    Set<BMVert *> keep_verts;
+    Set<BMEdge *> keep_edges;
+    Set<BMFace *> keep_faces;
+    BMIter eiter;
+    BMIter fiter;
+    BMEdge *e;
+    BMFace *f;
+    float co[3];
+    if (use_edges) {
+      for (BMVert *v_other : other_verts) {
+        BM_ITER_ELEM (e, &eiter, v_other, BM_EDGES_OF_VERT) {
+          if (BM_elem_flag_test(e, BM_ELEM_SELECT) &&
+              (!mirror_ele_center(reinterpret_cast<BMElem *>(e), BM_EDGE, co) ||
+               co_on_user_side(co, want)))
+          {
+            keep_edges.add(e);
+            keep_verts.add(e->v1);
+            keep_verts.add(e->v2);
+          }
+        }
+        if (!use_faces) {
+          continue;
+        }
+        BM_ITER_ELEM (f, &fiter, v_other, BM_FACES_OF_VERT) {
+          if (BM_elem_flag_test(f, BM_ELEM_SELECT) &&
+              (!mirror_ele_center(reinterpret_cast<BMElem *>(f), BM_FACE, co) ||
+               co_on_user_side(co, want)))
+          {
+            if (keep_faces.add(f)) {
+              BMLoop *l_iter = f->l_first;
+              do {
+                keep_edges.add(l_iter->e);
+                keep_verts.add(l_iter->v);
+              } while ((l_iter = l_iter->next) != f->l_first);
+            }
+          }
+        }
+      }
+    }
+
+    for (BMVert *v_other : other_verts) {
+      if (use_faces) {
+        BM_ITER_ELEM (f, &fiter, v_other, BM_FACES_OF_VERT) {
+          if (!keep_faces.contains(f)) {
+            BM_face_select_set_noflush(bm, f, false);
+          }
+        }
+      }
+      BM_ITER_ELEM (e, &eiter, v_other, BM_EDGES_OF_VERT) {
+        if (!keep_edges.contains(e)) {
+          BM_edge_select_set_noflush(bm, e, false);
+        }
+      }
+      if (!keep_verts.contains(v_other)) {
+        BM_vert_select_set(bm, v_other, false);
+      }
+    }
+    if (!use_faces) {
+      /* Faces follow their edges here. */
+      for (BMVert *v_other : other_verts) {
+        BM_ITER_ELEM (f, &fiter, v_other, BM_FACES_OF_VERT) {
+          if (!BM_elem_flag_test(f, BM_ELEM_SELECT)) {
+            continue;
+          }
+          BMLoop *l_iter = f->l_first;
+          do {
+            if (!BM_elem_flag_test(l_iter->e, BM_ELEM_SELECT)) {
+              BM_face_select_set_noflush(bm, f, false);
+              break;
+            }
+          } while ((l_iter = l_iter->next) != f->l_first);
+        }
+      }
+    }
+    BM_select_history_validate(bm);
+  }
+
+  EDBM_mirror_active_side_restore(ob, em, side_co, false);
+
+  if (!other_verts.is_empty()) {
+    DEG_id_tag_update(&mesh->id, ID_RECALC_SELECT);
+    WM_main_add_notifier(NC_GEOM | ND_SELECT, mesh);
+  }
+}
+
+EditMeshMirrorUserSideScope::EditMeshMirrorUserSideScope(Object *ob, BMEditMesh *em)
+    : ob_(ob), em_(em)
+{
+  side_co_ = EDBM_mirror_user_side_capture(ob, em, has_side_);
+}
+
+EditMeshMirrorUserSideScope::~EditMeshMirrorUserSideScope()
+{
+  if (has_side_) {
+    EDBM_mirror_user_side_restore(ob_, em_, side_co_);
   }
 }
 
