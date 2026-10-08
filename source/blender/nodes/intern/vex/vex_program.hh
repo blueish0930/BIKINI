@@ -4,9 +4,12 @@
 
 #pragma once
 
+#include <atomic>
+#include <mutex>
 #include <string>
 
 #include "BLI_index_mask_fwd.hh"
+#include "BLI_map.hh"
 #include "BLI_math_matrix_types.hh"
 #include "BLI_math_quaternion_types.hh"
 #include "BLI_math_vector_types.hh"
@@ -58,6 +61,16 @@ enum class Type : uint8_t {
   Mat2Array,
   Mat3Array,
 };
+
+/**
+ * `N` and `normal` are ordinary attribute names. When the geometry has no attribute of that name,
+ * reading it gives the normals Blender computes for the domain, like the Normal node. Writing it
+ * creates the attribute with exactly that name.
+ */
+inline bool attr_name_is_normal(const StringRef name)
+{
+  return name == "N" || name == "normal";
+}
 
 /** Arrays whose items are 4D vectors. */
 inline bool type_is_vec4_array(const Type type)
@@ -599,6 +612,12 @@ enum class Builtin : uint16_t {
   ArrayVec4,
   ArrayColor,
   ArrayRot,
+  /**
+   * `@ptnum`, `@edgenum`, `@facenum`, `@cornernum`, `@curvenum`: the element of that kind which the
+   * current element belongs to. The argument is the kind: 0 point, 1 edge, 2 face, 3 corner,
+   * 4 curve.
+   */
+  ElemNum,
 };
 
 /** Widget behind a `chramp()` / `chcurve()` parameter. */
@@ -752,6 +771,8 @@ struct AttrInfo {
   Type type = Type::Float;
   bool read = false;
   bool write = false;
+  /** Only known from `point(0, "name", i)` in the GLSL, its type is a guess until it is used. */
+  bool gpu_sampled_only = false;
 };
 
 struct WhileCmpAddSpec {
@@ -873,6 +894,23 @@ struct Program {
   int knn_geo = 0;
   bool gpu_neighbors = false;
   /**
+   * Element numbers the GLSL reads (`@ptnum`, `@edgenum`, `@facenum`, `@cornernum`, `@curvenum`),
+   * one bit per kind. The executor uploads one number per element for each of them.
+   */
+  uint8_t gpu_elem_nums = 0;
+  /**
+   * Attributes the GLSL samples with `point()` / `edge()` / `face()` / `corner()` / `curve()` /
+   * `instance()`. `sample` is an index into #element_samples. When that is another geometry input
+   * or another domain than the one the node runs over, the executor uploads the attribute as the
+   * buffer `gs<sample>`; on the node's own domain the shader reads the working attribute `attr`.
+   */
+  struct GpuSample {
+    int sample = 0;
+    int attr = -1;
+    Type type = Type::Float;
+  };
+  Vector<GpuSample> gpu_samples;
+  /**
    * Attributes sampled from geometry 0 through point()/edge()/face()/corner()/curve()/instance().
    * The executor only needs a Jacobi snapshot when one of these attributes is also written by the
    * same program. Dynamic geometry or attribute arguments conservatively request snapshots of all
@@ -950,7 +988,34 @@ struct AttrRT {
   bke::WrangleArrayValue *warr = nullptr;
   const MStringProperty *rs = nullptr;
   MStringProperty *ws = nullptr;
+  /** Array attributes: the chunk attributes that exist, see #bke::WrangleArrayValue::continued. */
+  Span<const bke::WrangleArrayValue *> array_chunks;
+  /** Array attributes that are written: where arrays that do not fit in the head are kept. */
+  struct ArrayOverflow *array_overflow = nullptr;
 };
+
+/**
+ * Arrays written in this evaluation that are longer than their attribute value. The executor
+ * writes them to the chunk attributes when the program has run: attributes cannot be added from
+ * the threads that run it.
+ */
+struct ArrayOverflow {
+  std::mutex mutex;
+  std::atomic<bool> any = false;
+  /** Element index to every word of its array, the ones of the head included. */
+  Map<int, Vector<int>> words;
+};
+
+/**
+ * Every word of the array of element \a index when it continues outside of \a head. False when
+ * the head is the whole array.
+ */
+bool array_attr_words(const AttrRT &a,
+                      int index,
+                      const bke::WrangleArrayValue &head,
+                      Vector<int> &r_words);
+/** The array made of \a words. \a type is the declared type, #Type::Void for the stored one. */
+Value array_words_to_value(bke::WrangleArrayKind kind, Span<int> words, Type type);
 
 using LoadElemFn = Value (*)(void *user,
                              int geo_index,
@@ -1010,6 +1075,8 @@ struct VMEnv {
   int array_passes = 1;
   Span<int> gpu_nbr_off;
   Span<int> gpu_nbr_idx;
+  /** Per element, indexed by the kind of element number. See #Program::gpu_elem_nums. */
+  Span<int> gpu_elem_nums[5];
   struct ChSrc {
     Type type = Type::Float;
     const int *i = nullptr;

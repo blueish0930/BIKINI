@@ -15,6 +15,7 @@
 
 #include "BLI_hash.hh"
 #include "BLI_map.hh"
+#include "BLI_set.hh"
 #include "BLI_math_vector.hh"
 #include "BLI_string_ref.hh"
 #include "BLI_utildefines.hh"
@@ -268,16 +269,42 @@ static bool type_fits_tag(const StringRef tag, const Type got)
   return true;
 }
 
-/** Array types the GLSL emitter has no representation for, they run on the CPU. */
-static bool gpu_array_type_unsupported(const Type type)
+/**
+ * How the GLSL `WrangleArr` (120 ints) holds the items of an array type: the kind that is stored
+ * in it (the values of #bke::WrangleArrayKind), how many items fit, and the accessors.
+ */
+struct GpuArrayKind {
+  int kind;
+  int capacity;
+  const char *get;
+  const char *set;
+  Type elem;
+};
+
+static GpuArrayKind gpu_array_kind(const Type array_type)
 {
-  return ELEM(type,
-              Type::Vec2Array,
-              Type::Vec4Array,
-              Type::ColorArray,
-              Type::RotArray,
-              Type::Mat2Array,
-              Type::Mat3Array);
+  switch (array_type) {
+    case Type::IntArray:
+      return {0, 120, "wr_arr_i", "wr_arr_set_i", Type::Int};
+    case Type::VecArray:
+      return {2, 40, "wr_arr_v", "wr_arr_set_v", Type::Vector};
+    case Type::Vec2Array:
+      return {8, 60, "wr_arr_v2", "wr_arr_set_v2", Type::Vector2};
+    case Type::Vec4Array:
+      return {9, 30, "wr_arr_v4", "wr_arr_set_v4", Type::Vector4};
+    case Type::ColorArray:
+      return {9, 30, "wr_arr_v4", "wr_arr_set_v4", Type::Color};
+    case Type::RotArray:
+      return {9, 30, "wr_arr_v4", "wr_arr_set_v4", Type::Rotation};
+    case Type::Mat2Array:
+      return {5, 30, "wr_arr_m2", "wr_arr_set_m2", Type::Matrix2};
+    case Type::Mat3Array:
+      return {6, 13, "wr_arr_m3", "wr_arr_set_m3", Type::Matrix3};
+    case Type::MatArray:
+      return {4, 7, "wr_arr_m4", "wr_arr_set_m4", Type::Matrix};
+    default:
+      return {1, 120, "wr_arr_f", "wr_arr_set_f", Type::Float};
+  }
 }
 
 Type array_type_of(const Type elem)
@@ -751,9 +778,34 @@ static Diagnostic make_diag(const int64_t off,
   return d;
 }
 
+/**
+ * `@ptnum`, `@edgenum`, `@facenum`, `@cornernum`, `@curvenum` (and Houdini's `@primnum`,
+ * `@vtxnum`): the kind of element that is asked for, -1 for any other name.
+ */
+static int element_number_kind(const StringRef name)
+{
+  if (name == "ptnum") {
+    return 0;
+  }
+  if (name == "edgenum") {
+    return 1;
+  }
+  if (name == "facenum" || name == "primnum") {
+    return 2;
+  }
+  if (name == "cornernum" || name == "vtxnum") {
+    return 3;
+  }
+  if (name == "curvenum") {
+    return 4;
+  }
+  return -1;
+}
+
+/** Names that are a number of the current element instead of an attribute. Read-only. */
 static bool is_element_index_name(const StringRef name)
 {
-  return name == "index" || name == "ptnum" || name == "elemnum";
+  return name == "index" || name == "elemnum" || element_number_kind(name) >= 0;
 }
 
 static std::string canonical_attr_name(const StringRef name)
@@ -772,7 +824,8 @@ static std::string canonical_attr_name(const StringRef name)
   if (name == "P" || eq_ci(name, "position")) {
     return "position";
   }
-  if (name == "N" || eq_ci(name, "normal")) {
+  /* `N` stays `N`: it is its own attribute, see #attr_name_is_normal. */
+  if (eq_ci(name, "normal")) {
     return "normal";
   }
   if (eq_ci(name, "output")) {
@@ -2808,7 +2861,7 @@ struct Compiler {
         return a.type;
       }
     }
-    if (aname == "position" || aname == "normal" || aname == "Output") {
+    if (aname == "position" || attr_name_is_normal(aname) || aname == "Output") {
       return Type::Vector;
     }
     if (shader_material) {
@@ -2895,6 +2948,36 @@ struct Compiler {
     }
     attr_local.remove(prog.attrs[slot].name);
   }
+
+  /**
+   * Code that may not run (a branch, a loop body). A store in there caches the attribute in a
+   * local, but after it the cache is only filled on the path that ran the store. So caches that
+   * were created inside are forgotten at the end, later reads load the attribute itself, which
+   * the store has written as well. Caches that already existed stay: every store updates them.
+   */
+  struct AttrLocalScope {
+    Compiler &compiler;
+    Set<std::string> before;
+
+    AttrLocalScope(Compiler &compiler) : compiler(compiler)
+    {
+      for (const std::string &name : compiler.attr_local.keys()) {
+        before.add(name);
+      }
+    }
+    ~AttrLocalScope()
+    {
+      Vector<std::string> created;
+      for (const std::string &name : compiler.attr_local.keys()) {
+        if (!before.contains(name)) {
+          created.append(name);
+        }
+      }
+      for (const std::string &name : created) {
+        compiler.attr_local.remove(name);
+      }
+    }
+  };
 
   int builtin_from_name(const StringRef name)
   {
@@ -3206,6 +3289,14 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
       e->type = Type::String;
       return Type::String;
     case ExprKind::Ident: {
+      if (const int kind = element_number_kind(e->name); kind >= 0) {
+        /* Which point / edge / face / corner / curve depends on the domain the node runs over. */
+        emit(Op::PushI, add_const_i(kind));
+        emit(Op::Call, int(Builtin::ElemNum));
+        prog.code.last().a = 1;
+        e->type = Type::Int;
+        return Type::Int;
+      }
       if (is_element_index_name(e->name)) {
         emit(Op::PushIndex);
         e->type = Type::Int;
@@ -3243,6 +3334,13 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
       return t;
     }
     case ExprKind::Attr: {
+      if (const int kind = element_number_kind(e->name); kind >= 0) {
+        emit(Op::PushI, add_const_i(kind));
+        emit(Op::Call, int(Builtin::ElemNum));
+        prog.code.last().a = 1;
+        e->type = Type::Int;
+        return Type::Int;
+      }
       if (is_element_index_name(e->name)) {
         emit(Op::PushIndex);
         e->type = Type::Int;
@@ -3256,7 +3354,7 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
       std::string aname = canonical_attr_name(e->name);
       Type t = e->attr_type;
       if (t == Type::Void) {
-        t = (aname == "position" || aname == "normal") ? Type::Vector : Type::Float;
+        t = (aname == "position" || attr_name_is_normal(aname)) ? Type::Vector : Type::Float;
       }
       emit_push_attr(aname, t);
       e->type = t;
@@ -3506,6 +3604,8 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
           compile_expr(e->args[i], false, fn.param_types[i]);
         }
         emit(Op::CallUser, ufi);
+        /* The function may write attributes, the cached values are not known to be current. */
+        attr_local.clear();
         prog.code.last().a = uint8_t(e->args.size());
         e->type = fn.ret;
         return e->type;
@@ -4938,7 +5038,7 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
             {
               nm = canonical_attr_name(na->name);
             }
-            if (nm == "position" || nm == "normal") {
+            if (nm == "position" || attr_name_is_normal(nm)) {
               st = Type::Vector;
             }
             else if (nm == "id" || nm == "material_index") {
@@ -5214,10 +5314,17 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
     case ExprKind::Cond: {
       compile_expr(e->a);
       const int jmp_false = emit_jmp(Op::JmpIfFalse);
-      const Type tt = compile_expr(e->b);
+      Type tt = Type::Void;
+      {
+        AttrLocalScope branch(*this);
+        tt = compile_expr(e->b);
+      }
       const int jmp_end = emit_jmp(Op::Jmp);
       patch(jmp_false, int(prog.code.size()));
-      compile_expr(e->c);
+      {
+        AttrLocalScope branch(*this);
+        compile_expr(e->c);
+      }
       patch(jmp_end, int(prog.code.size()));
       e->type = tt;
       return tt;
@@ -5434,7 +5541,7 @@ bool Compiler::try_emit_while_cmp_add(Stmt *s)
     return false;
   }
   Type ty = Type::Float;
-  if (cmember >= 0 || cname == "position" || cname == "normal") {
+  if (cmember >= 0 || cname == "position" || attr_name_is_normal(cname)) {
     ty = Type::Vector;
   }
   WhileCmpAddSpec spec;
@@ -5506,7 +5613,7 @@ void Compiler::compile_lvalue_store(Expr *lval, const Type value_type)
              value_type != Type::Vector)
     {
       const std::string aname = canonical_attr_name(lval->name);
-      if (aname != "position" && aname != "normal" && aname != "Output") {
+      if (aname != "position" && !attr_name_is_normal(aname) && aname != "Output") {
         bool have = false;
         for (const AttrInfo &a : prog.attrs) {
           if (a.name == aname) {
@@ -5533,7 +5640,7 @@ void Compiler::compile_lvalue_store(Expr *lval, const Type value_type)
     std::string aname = canonical_attr_name(lval->name);
     Type t = lval->attr_type;
     if (t == Type::Void) {
-      t = (aname == "position" || aname == "normal") ? Type::Vector : Type::Float;
+      t = (aname == "position" || attr_name_is_normal(aname)) ? Type::Vector : Type::Float;
     }
     if (type_is_array(value_type) && !type_is_array(t)) {
       t = value_type;
@@ -5568,7 +5675,7 @@ int Compiler::attr_slot_of_lvalue(Expr *lval, const bool write)
     std::string aname = canonical_attr_name(lval->name);
     Type t = lval->attr_type;
     if (t == Type::Void) {
-      t = (aname == "position" || aname == "normal") ? Type::Vector : Type::Float;
+      t = (aname == "position" || attr_name_is_normal(aname)) ? Type::Vector : Type::Float;
     }
     return attr_slot(aname, t, write);
   }
@@ -5974,10 +6081,14 @@ void Compiler::compile_stmt(Stmt *s)
     case StmtKind::If: {
       compile_expr(s->expr);
       const int jmp_else = emit_jmp(Op::JmpIfFalse);
-      compile_stmt(s->s0);
+      {
+        AttrLocalScope branch(*this);
+        compile_stmt(s->s0);
+      }
       if (s->s1) {
         const int jmp_end = emit_jmp(Op::Jmp);
         patch(jmp_else, int(prog.code.size()));
+        AttrLocalScope branch(*this);
         compile_stmt(s->s1);
         patch(jmp_end, int(prog.code.size()));
       }
@@ -5987,6 +6098,7 @@ void Compiler::compile_stmt(Stmt *s)
       return;
     }
     case StmtKind::While: {
+      AttrLocalScope loop(*this);
       if (try_emit_while_cmp_add(s)) {
         return;
       }
@@ -6013,6 +6125,7 @@ void Compiler::compile_stmt(Stmt *s)
       return;
     }
     case StmtKind::For: {
+      AttrLocalScope loop(*this);
       push_scope();
       if (s->s0) {
         compile_stmt(s->s0);
@@ -6174,6 +6287,8 @@ static bool gpu_builtin_ok(const StringRef name)
       "matrix",  "ident",
       "identity","invert",     "invert_matrix", "transpose", "determinant", "det",
       "transform_point", "transform_direction", "project_point", "array", "len",
+      "append",  "insert",     "removeindex", "removevalue", "slice", "find", "unique",
+      "sum",     "sort",       "union",    "subtract", "intersect",
       "npoints", "nedges",     "nfaces",   "ncorners", "numpt",    "point",    "edge",
       "face",    "prim",       "corner",   "vertex",   "curve",    "instance", "instances",
       "color",   "quaternion", "quat",     "combine_transform", "translation", "rotation",
@@ -6288,6 +6403,8 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
   prog.gpu_typedef.clear();
   prog.gpu_pack.clear();
   prog.gpu_stride = 0;
+  prog.gpu_elem_nums = 0;
+  prog.gpu_samples.clear();
 
   std::string fail;
   bool has_loop = false;
@@ -6351,7 +6468,7 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
           }
           const std::string nm = canonical_attr_name(raw);
           Type t = Type::Float;
-          if (nm == "position" || nm == "normal") {
+          if (nm == "position" || attr_name_is_normal(nm)) {
             t = Type::Vector;
           }
           else if (nm == "id" || nm == "material_index") {
@@ -6371,6 +6488,7 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
           info.type = t;
           info.read = true;
           info.write = false;
+          info.gpu_sampled_only = true;
           prog.attrs.append(info);
         };
         const int n = int(e->args.size());
@@ -6500,9 +6618,7 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
       return;
     }
     for (const AttrInfo &a : prog.attrs) {
-      if (ELEM(a.type, Type::String, Type::StringArray) || type_is_array(a.type) ||
-          type_is_matrix(a.type))
-      {
+      if (ELEM(a.type, Type::String, Type::StringArray) || type_is_array(a.type)) {
         return;
       }
     }
@@ -6529,6 +6645,15 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
         case Type::Color:
         case Type::Rotation:
           pk.bytes = 16;
+          break;
+        case Type::Matrix2:
+          pk.bytes = 16;
+          break;
+        case Type::Matrix3:
+          pk.bytes = 36;
+          break;
+        case Type::Matrix:
+          pk.bytes = 64;
           break;
         default:
           return;
@@ -6602,7 +6727,12 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
       case Type::FloatArray:
       case Type::VecArray:
       case Type::Vec2Array:
+      case Type::Vec4Array:
+      case Type::ColorArray:
+      case Type::RotArray:
       case Type::MatArray:
+      case Type::Mat2Array:
+      case Type::Mat3Array:
       case Type::RayArray:
         return "WrangleArr";
       default:
@@ -6623,6 +6753,20 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
       case Type::Rotation:
         return "vec4(" + b + "[" + ix + "*4], " + b + "[" + ix + "*4+1], " + b + "[" + ix +
                "*4+2], " + b + "[" + ix + "*4+3])";
+      case Type::Matrix2:
+      case Type::Matrix3:
+      case Type::Matrix: {
+        /* By columns, the layout of the attribute. */
+        const int floats = (prog.attrs[i].type == Type::Matrix2) ? 4 :
+                           (prog.attrs[i].type == Type::Matrix3) ? 9 :
+                                                                   16;
+        std::string s = (floats == 4) ? "mat2(" : (floats == 9) ? "mat3(" : "mat4(";
+        for (int k = 0; k < floats; k++) {
+          s += (k ? ", " : "") + b + "[" + ix + "*" + std::to_string(floats) + "+" +
+               std::to_string(k) + "]";
+        }
+        return s + ")";
+      }
       default:
         return b + "[" + ix + "]";
     }
@@ -6641,6 +6785,18 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
     if (ELEM(prog.attrs[i].type, Type::Vector4, Type::Color, Type::Rotation)) {
       return b + "[" + ix + "*4] = (" + v + ").x; " + b + "[" + ix + "*4+1] = (" + v + ").y; " +
              b + "[" + ix + "*4+2] = (" + v + ").z; " + b + "[" + ix + "*4+3] = (" + v + ").w";
+    }
+    if (type_is_matrix(prog.attrs[i].type)) {
+      const int dim = type_linear_dim(prog.attrs[i].type);
+      std::string s;
+      for (int col = 0; col < dim; col++) {
+        for (int row = 0; row < dim; row++) {
+          s += (s.empty() ? "" : "; ") + b + "[" + ix + "*" + std::to_string(dim * dim) + "+" +
+               std::to_string(col * dim + row) + "] = (" + v + ")[" + std::to_string(col) + "][" +
+               std::to_string(row) + "]";
+        }
+      }
+      return s;
     }
     return b + "[" + ix + "] = " + v;
   };
@@ -6987,6 +7143,16 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
           if (shader_material) {
             bad("GPU: i@index is not available in shader wrangle");
           }
+          if (const int kind = element_number_kind(e->name); kind >= 0 && !shader_material) {
+            /* Which point / face / ... that is depends on the mesh, the executor uploads it. */
+            if (in_user_fn) {
+              bad("GPU: user functions cannot read attributes");
+            }
+            prog.gpu_elem_nums |= uint8_t(1 << kind);
+            r.s = "en" + std::to_string(kind) + "[elem_i]";
+            r.type = Type::Int;
+            return r;
+          }
           r.s = "elem_i";
           r.type = Type::Int;
           return r;
@@ -7031,6 +7197,16 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
         if (is_element_index_name(e->name)) {
           if (shader_material) {
             bad("GPU: i@index is not available in shader wrangle");
+          }
+          if (const int kind = element_number_kind(e->name); kind >= 0 && !shader_material) {
+            /* Which point / face / ... that is depends on the mesh, the executor uploads it. */
+            if (in_user_fn) {
+              bad("GPU: user functions cannot read attributes");
+            }
+            prog.gpu_elem_nums |= uint8_t(1 << kind);
+            r.s = "en" + std::to_string(kind) + "[elem_i]";
+            r.type = Type::Int;
+            return r;
           }
           r.s = "elem_i";
           r.type = Type::Int;
@@ -7098,19 +7274,34 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
         if (e->op == "*" && type_is_matrix(a.type) &&
             ELEM(b.type, Type::Float, Type::Int, Type::Bool))
         {
-          r.s = "((" + a.s + ")*(" + cast_to(b, Type::Float) + "))";
+          if (a.type == Type::Matrix && !shader_material) {
+            /* Like the interpreter: a uniform scale of X, Y and Z, not of all sixteen entries. */
+            r.s = "((" + a.s + ")*wr_scale4(" + cast_to(b, Type::Float) + "))";
+          }
+          else {
+            r.s = "((" + a.s + ")*(" + cast_to(b, Type::Float) + "))";
+          }
           r.type = a.type;
           return r;
         }
         if (e->op == "*" && type_is_matrix(b.type) &&
             ELEM(a.type, Type::Float, Type::Int, Type::Bool))
         {
-          r.s = "((" + cast_to(a, Type::Float) + ")*(" + b.s + "))";
+          if (b.type == Type::Matrix && !shader_material) {
+            r.s = "(wr_scale4(" + cast_to(a, Type::Float) + ")*(" + b.s + "))";
+          }
+          else {
+            r.s = "((" + cast_to(a, Type::Float) + ")*(" + b.s + "))";
+          }
           r.type = b.type;
           return r;
         }
         Type rt = a.type;
-        if (a.type == Type::Vector4 || b.type == Type::Vector4) {
+        if (a.type == Type::Color || b.type == Type::Color) {
+          /* `0.5 * c@Cd` is a color, not a float. */
+          rt = Type::Color;
+        }
+        else if (a.type == Type::Vector4 || b.type == Type::Vector4) {
           rt = Type::Vector4;
         }
         else if (a.type == Type::Vector || b.type == Type::Vector) {
@@ -7253,20 +7444,10 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
       case ExprKind::Index: {
         GpuVal a = em(e->a, Type::Void);
         GpuVal i = em(e->b, Type::Int);
-        if (gpu_array_type_unsupported(a.type)) {
-          bad("GPU: arrays of this type are CPU-only");
-        }
-        if (a.type == Type::VecArray) {
-          r.s = "wr_arr_v(" + a.s + ", " + cast_to(i, Type::Int) + ")";
-          r.type = Type::Vector;
-        }
-        else if (a.type == Type::IntArray) {
-          r.s = "wr_arr_i(" + a.s + ", " + cast_to(i, Type::Int) + ")";
-          r.type = Type::Int;
-        }
-        else if (type_is_array(a.type)) {
-          r.s = "wr_arr_f(" + a.s + ", " + cast_to(i, Type::Int) + ")";
-          r.type = Type::Float;
+        if (type_is_array(a.type)) {
+          const GpuArrayKind array_kind = gpu_array_kind(a.type);
+          r.s = std::string(array_kind.get) + "(" + a.s + ", " + cast_to(i, Type::Int) + ")";
+          r.type = array_kind.elem;
         }
         else {
           r.s = "((" + a.s + ")[" + cast_to(i, Type::Int) + "])";
@@ -7386,17 +7567,12 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
         if (e->a && e->a->kind == ExprKind::Index && e->a->a && type_is_array(e->a->a->type)) {
           GpuVal arr = em(e->a->a, Type::Void);
           GpuVal ix = em(e->a->b, Type::Int);
-          GpuVal v = em(e->b, array_elem_type(arr.type));
-          std::string fn = "wr_arr_set_f";
-          if (arr.type == Type::IntArray) {
-            fn = "wr_arr_set_i";
-          }
-          else if (arr.type == Type::VecArray) {
-            fn = "wr_arr_set_v";
-          }
+          const GpuArrayKind array_kind = gpu_array_kind(arr.type);
+          GpuVal v = em(e->b, array_kind.elem);
+          const std::string fn = array_kind.set;
           const std::string lv = lvalue(e->a->a);
-          r.s = "(" + lv + " = " + fn + "(" + arr.s + ", " + cast_to(ix, Type::Int) + ", " + v.s +
-                "))";
+          r.s = "(" + lv + " = " + fn + "(" + arr.s + ", " + cast_to(ix, Type::Int) + ", " +
+                cast_to(v, array_kind.elem) + "))";
           r.type = arr.type;
           return r;
         }
@@ -7542,6 +7718,212 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
         if (fn == "len") {
           r.s = "(" + arg(0).s + ").count";
           r.type = Type::Int;
+          return r;
+        }
+        const bool array_reduce = ELEM(fn, "min", "max", "sum") && e->args.size() == 1 &&
+                                  type_is_array(expr_arg_type(e, 0));
+        if (array_reduce ||
+            ELEM(fn, "append", "insert", "removeindex", "removevalue", "slice", "find", "unique") ||
+            ELEM(fn, "sort", "union", "subtract", "intersect"))
+        {
+          /* Array functions. The words of an array are compared and moved by the generic helpers
+           * of the shader, `stride` words per item. */
+          const GpuVal a0 = arg(0);
+          const Type array_type = a0.type;
+          const GpuArrayKind kind = gpu_array_kind(array_type);
+          const std::string stride = std::to_string(
+              (kind.kind == 2) ? 3 :
+              (kind.kind == 8) ? 2 :
+              ELEM(kind.kind, 9, 5) ? 4 :
+              (kind.kind == 6) ? 9 :
+              (kind.kind == 4) ? 16 :
+                                 1);
+          const std::string kind_id = std::to_string(kind.kind);
+          /* Ints compare as ints, everything else as floats. */
+          const std::string mode = (array_type == Type::IntArray) ? "0" : "1";
+          if (!type_is_array(array_type) || ELEM(array_type, Type::StringArray, Type::RayArray)) {
+            bad(trf("GPU: unsupported function {}", e->name));
+            r.s = "wr_arr_new(0)";
+            r.type = Type::IntArray;
+            return r;
+          }
+          /* The value of the call, stored back into the array for the functions that change it. */
+          auto in_place = [&](const std::string &value) {
+            const Expr *target = e->args[0];
+            if (target && target->kind == ExprKind::Ident && is_local(target->name)) {
+              return "(" + lvalue(e->args[0]) + " = " + value + ")";
+            }
+            return value;
+          };
+          /* One value as the first item of a temporary array, for the comparing helpers. */
+          auto probe = [&](const GpuVal &value) {
+            return std::string(kind.set) + "(wr_arr_new(" + kind_id + "), 0, " +
+                   cast_to(value, kind.elem) + ")";
+          };
+          if (array_reduce) {
+            const char *suffix = (array_type == Type::IntArray) ? "i" :
+                                 (array_type == Type::FloatArray) ? "f" :
+                                 (array_type == Type::VecArray) ? "v" :
+                                 (array_type == Type::Vec2Array) ? "v2" :
+                                                                   nullptr;
+            if (suffix == nullptr) {
+              bad(trf("GPU: unsupported function {}", e->name));
+              r.s = "0.0";
+              return r;
+            }
+            if (fn == "sum") {
+              r.s = std::string("wr_arr_sum_") + suffix + "(" + a0.s + ")";
+            }
+            else {
+              r.s = std::string("wr_arr_min_") + suffix + "(" + a0.s + ", " +
+                    (fn == "min" ? "true" : "false") + ")";
+            }
+            r.type = kind.elem;
+            return r;
+          }
+          if (fn == "append") {
+            const Expr *target = e->args[0];
+            const bool target_is_local = target && target->kind == ExprKind::Ident &&
+                                         is_local(target->name);
+            std::string s = a0.s;
+            /* For a variable every step is stored: `(xs = step, xs = step, ...)`. */
+            std::string steps;
+            for (int i = 1; i < int(e->args.size()); i++) {
+              /* A brace list is a list of items for number arrays, like in the interpreter. */
+              const bool list = ELEM(kind.elem, Type::Int, Type::Float, Type::Bool);
+              const GpuVal item = arg(i, list ? array_type : kind.elem);
+              if (type_is_array(item.type)) {
+                const GpuArrayKind item_kind = gpu_array_kind(item.type);
+                std::string conv = "0";
+                if (item_kind.kind != kind.kind) {
+                  if (array_type == Type::FloatArray && item.type == Type::IntArray) {
+                    conv = "1";
+                  }
+                  else if (array_type == Type::IntArray && item.type == Type::FloatArray) {
+                    conv = "2";
+                  }
+                  else {
+                    bad(trf("GPU: unsupported function {}", e->name));
+                  }
+                }
+                s = "wr_arr_extend(" + s + ", " + item.s + ", " + stride + ", " + kind_id + ", " +
+                    conv + ")";
+              }
+              else {
+                /* Writing at the end grows the array. */
+                s = std::string(kind.set) + "(" + s + ", (" + s + ").count, " +
+                    cast_to(item, kind.elem) + ")";
+              }
+              if (target_is_local) {
+                steps += (steps.empty() ? "" : ", ") + a0.s + " = " + s;
+                s = a0.s;
+              }
+            }
+            r.s = target_is_local ? ("(" + (steps.empty() ? a0.s : steps) + ")") : s;
+            r.type = array_type;
+            return r;
+          }
+          if (fn == "insert") {
+            const std::string index = cast_to(arg(1, Type::Int), Type::Int);
+            const GpuVal item = arg(2, kind.elem);
+            r.s = in_place(std::string(kind.set) + "(wr_arr_insert_gap(" + a0.s + ", " + index +
+                           ", " + stride + ", " + kind_id + "), wr_arr_insert_index(" + index +
+                           ", (" + a0.s + ").count), " + cast_to(item, kind.elem) + ")");
+            r.type = array_type;
+            return r;
+          }
+          if (fn == "removeindex") {
+            r.s = in_place("wr_arr_remove_at(" + a0.s + ", " +
+                           cast_to(arg(1, Type::Int), Type::Int) + ", " + stride + ")");
+            r.type = array_type;
+            return r;
+          }
+          if (fn == "removevalue") {
+            /* The interpreter removes from int, float and vector arrays. */
+            if (ELEM(array_type, Type::IntArray, Type::FloatArray, Type::VecArray) ||
+                type_is_vec4_array(array_type))
+            {
+              r.s = in_place("wr_arr_remove_value(" + a0.s + ", " + probe(arg(1, kind.elem)) +
+                             ", " + stride + ", " + mode + ")");
+            }
+            else {
+              r.s = a0.s;
+            }
+            r.type = array_type;
+            return r;
+          }
+          if (fn == "find") {
+            const GpuVal value = arg(1, kind.elem);
+            if (array_type == Type::IntArray && value.type == Type::Float) {
+              /* `find(ints, 7.0)` compares as floats. */
+              r.s = "wr_arr_find(" + a0.s + ", wr_arr_set_f(wr_arr_new(1), 0, " + value.s +
+                    "), 1, 2)";
+            }
+            else {
+              r.s = "wr_arr_find(" + a0.s + ", " + probe(value) + ", " + stride + ", " + mode + ")";
+            }
+            r.type = Type::IntArray;
+            return r;
+          }
+          if (fn == "slice") {
+            const int n = int(e->args.size());
+            r.s = "wr_arr_slice(" + a0.s + ", " + cast_to(arg(1, Type::Int), Type::Int) + ", " +
+                  (n > 2 ? cast_to(arg(2, Type::Int), Type::Int) : std::string("0")) + ", " +
+                  (n > 2 ? "true" : "false") + ", " +
+                  (n > 3 ? cast_to(arg(3, Type::Int), Type::Int) : std::string("1")) + ", " +
+                  stride + ")";
+            r.type = array_type;
+            return r;
+          }
+          if (fn == "unique") {
+            r.s = "wr_arr_unique(" + a0.s + ", " + stride + ", " + mode + ")";
+            r.type = array_type;
+            return r;
+          }
+          if (fn == "sort") {
+            if (e->args.size() == 1 &&
+                ELEM(array_type, Type::IntArray, Type::FloatArray, Type::VecArray))
+            {
+              r.s = in_place("wr_arr_sort(" + a0.s + ", " + kind_id + ")");
+            }
+            else if (e->args.size() == 1) {
+              /* Other arrays are left as they are. */
+              r.s = a0.s;
+            }
+            else {
+              bad(trf("GPU: unsupported function {}", e->name));
+              r.s = a0.s;
+            }
+            r.type = array_type;
+            return r;
+          }
+          /* union / subtract / intersect. An int array with a float array works on floats. */
+          const GpuVal b0 = arg(1);
+          std::string as = a0.s;
+          std::string bs = b0.s;
+          Type result_type = array_type;
+          std::string set_mode = mode;
+          if (array_type != b0.type) {
+            if (ELEM(array_type, Type::IntArray, Type::FloatArray) &&
+                ELEM(b0.type, Type::IntArray, Type::FloatArray))
+            {
+              if (array_type == Type::IntArray) {
+                as = "wr_arr_i2f(" + as + ")";
+              }
+              else {
+                bs = "wr_arr_i2f(" + bs + ")";
+              }
+              result_type = Type::FloatArray;
+              set_mode = "1";
+            }
+            else {
+              bad(trf("GPU: unsupported function {}", e->name));
+            }
+          }
+          r.s = "wr_arr_setop(" + as + ", " + bs + ", " +
+                (fn == "union" ? "0" : fn == "subtract" ? "1" : "2") + ", " + stride + ", " +
+                set_mode + ")";
+          r.type = result_type;
           return r;
         }
         if (fn == "ident" || fn == "identity") {
@@ -7771,45 +8153,33 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
               bad("GPU: list channels are CPU-only");
             }
           }
-          if (!e->args.is_empty()) {
+          if (type_is_array(hint)) {
+            /* `vector2 xs[] = array(...)`: the declared type decides how the items are stored. */
+            at = hint;
+          }
+          else if (!e->args.is_empty()) {
             GpuVal a0 = arg(0);
             at = type_is_array(a0.type) ? a0.type : array_type_of(a0.type);
-            if (gpu_array_type_unsupported(at)) {
-              bad("GPU: arrays of this type are CPU-only");
-            }
             for (int i = 0; i < int(e->args.size()); i++) {
               GpuVal ai = arg(i);
-              if (ai.type == Type::Vector) {
+              if (ai.type == Type::Vector && ELEM(at, Type::IntArray, Type::FloatArray)) {
                 at = Type::VecArray;
                 break;
               }
-              if (ai.type == Type::Float) {
+              if (ai.type == Type::Float && at == Type::IntArray) {
                 at = Type::FloatArray;
               }
             }
           }
-          int kind = 1;
-          if (at == Type::IntArray) {
-            kind = 0;
+          const GpuArrayKind array_kind = gpu_array_kind(at);
+          if (int(e->args.size()) > array_kind.capacity) {
+            bad("GPU: the array is longer than the GPU arrays");
           }
-          if (at == Type::VecArray) {
-            kind = 2;
-          }
-          std::string s = "wr_arr_new(" + std::to_string(kind) + ")";
-          for (int i = 0; i < int(e->args.size()) && i < 40; i++) {
+          std::string s = "wr_arr_new(" + std::to_string(array_kind.kind) + ")";
+          for (int i = 0; i < int(e->args.size()) && i < array_kind.capacity; i++) {
             GpuVal ai = arg(i);
-            if (kind == 2) {
-              s = "wr_arr_set_v(" + s + ", " + std::to_string(i) + ", " +
-                  cast_to(ai, Type::Vector) + ")";
-            }
-            else if (kind == 0) {
-              s = "wr_arr_set_i(" + s + ", " + std::to_string(i) + ", " +
-                  cast_to(ai, Type::Int) + ")";
-            }
-            else {
-              s = "wr_arr_set_f(" + s + ", " + std::to_string(i) + ", " +
-                  cast_to(ai, Type::Float) + ")";
-            }
+            s = std::string(array_kind.set) + "(" + s + ", " + std::to_string(i) + ", " +
+                cast_to(ai, array_kind.elem) + ")";
           }
           r.s = s;
           r.type = at;
@@ -7927,30 +8297,93 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
               idx_i = 0;
             }
           }
-          if (geo_i >= 0 && e->args[geo_i] && e->args[geo_i]->kind == ExprKind::LitInt &&
-              e->args[geo_i]->i != 0)
-          {
-            bad("GPU: sampling other geometry inputs is CPU-only");
-            r.s = "0.0";
-            return r;
+          int sample_geo = 0;
+          if (geo_i >= 0 && e->args[geo_i]) {
+            if (e->args[geo_i]->kind != ExprKind::LitInt) {
+              /* Which input is only known when the node runs. */
+              bad("GPU: sampling other geometry inputs is CPU-only");
+              r.s = "0.0";
+              return r;
+            }
+            sample_geo = std::max(e->args[geo_i]->i, 0);
           }
+          const int sample_domain = (fn == "point") ? 0 :
+                                    (fn == "edge") ? 1 :
+                                    (fn == "face" || fn == "prim") ? 2 :
+                                    (fn == "corner" || fn == "vertex") ? 3 :
+                                    (fn == "curve") ? 5 :
+                                                      4;
           std::string nm = "position";
           if (name_i >= 0 && e->args[name_i]) {
             nm = canonical_attr_name(e->args[name_i]->name);
           }
           const int ai = attr_i(nm);
           GpuVal ix = idx_i >= 0 ? arg(idx_i, Type::Int) : GpuVal{"elem_i", Type::Int};
-          const std::string ixs = "wr_clampi(" + cast_to(ix, Type::Int) + ", n_elem)";
           if (ai < 0) {
             r.s = "0.0";
             r.type = Type::Float;
             return r;
           }
-          /* Indexed sample is always the working array from the previous Jacobi pass
-           * (`elems_in`), never the in-register value this thread may have already
-           * written this pass. */
-          r.s = load_field(ai, ixs);
-          r.type = prog.attrs[ai].type;
+          if (prog.attrs[ai].gpu_sampled_only &&
+              ELEM(hint,
+                   Type::Float,
+                   Type::Int,
+                   Type::Vector2,
+                   Type::Vector,
+                   Type::Vector4,
+                   Type::Color) &&
+              !(nm == "position" || attr_name_is_normal(nm)))
+          {
+            /* The attribute is only known by name. What the value is assigned to says more about
+             * its type than the name does; the executor checks it against the real attribute. */
+            prog.attrs[ai].type = hint;
+            prog.attrs[ai].gpu_sampled_only = false;
+            if (ai < prog.gpu_pack.size()) {
+              prog.gpu_pack[ai].type = hint;
+            }
+          }
+          const Type sample_type = prog.attrs[ai].type;
+          /* The same sample the interpreter uses, so that the executor has it prepared. */
+          int sample_i = -1;
+          for (const int i : prog.element_samples.index_range()) {
+            const Program::ElementSample &sample = prog.element_samples[i];
+            if (sample.geo == sample_geo && sample.domain == sample_domain && sample.name == nm) {
+              sample_i = i;
+              break;
+            }
+          }
+          if (sample_i < 0) {
+            Program::ElementSample sample;
+            sample.geo = sample_geo;
+            sample.domain = sample_domain;
+            sample.name = nm;
+            prog.element_samples.append(std::move(sample));
+            sample_i = int(prog.element_samples.size()) - 1;
+          }
+          bool known = false;
+          for (const Program::GpuSample &gs : prog.gpu_samples) {
+            known |= gs.sample == sample_i;
+          }
+          if (!known) {
+            Program::GpuSample gs;
+            gs.sample = sample_i;
+            gs.attr = ai;
+            gs.type = sample_type;
+            prog.gpu_samples.append(gs);
+          }
+          const std::string index = cast_to(ix, Type::Int);
+          const std::string buffer_read = "wr_gs" + std::to_string(sample_i) + "(" + index + ")";
+          if (sample_geo > 0) {
+            r.s = buffer_read;
+          }
+          else {
+            /* On the node's own domain the sample is the working array of the previous pass
+             * (`a<i>_in`), never the in-register value this thread may have written already.
+             * Another domain comes from the uploaded buffer; `gs_n` is 0 when there is none. */
+            r.s = "((gs_n[" + std::to_string(sample_i) + "] > 0) ? " + buffer_read + " : " +
+                  load_field(ai, "wr_clampi(" + index + ", n_elem)") + ")";
+          }
+          r.type = sample_type;
           return r;
         }
         if (fn == "noise" || fn == "hash") {
@@ -7980,11 +8413,6 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
           return r;
         }
         if (fn == "min" || fn == "max") {
-          if (e->args.size() == 1 && type_is_array(expr_arg_type(e, 0))) {
-            bad("GPU: min/max of an array is CPU-only");
-            r.s = "0.0";
-            return r;
-          }
           const GpuVal a0 = arg(0);
           const GpuVal a1 = arg(1);
           Type rt = dominant_vec_type(a0.type, a1.type);
@@ -8160,8 +8588,27 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
           else if (e->args.size() == 1) {
             r.s = cast_to(arg(0), Type::Matrix3);
           }
+          else if (e->args.size() == 3 &&
+                   ELEM(arg(0).type, Type::Vector, Type::Vector4, Type::Color) &&
+                   ELEM(arg(1).type, Type::Vector, Type::Vector4, Type::Color) &&
+                   ELEM(arg(2).type, Type::Vector, Type::Vector4, Type::Color))
+          {
+            r.s = "mat3(" + cast_to(arg(0), Type::Vector) + ", " + cast_to(arg(1), Type::Vector) +
+                  ", " + cast_to(arg(2), Type::Vector) + ")";
+          }
+          else if (e->args.size() == 3) {
+            r.s = "mat3(vec3(" + cast_to(arg(0), Type::Float) + ", 0.0, 0.0), vec3(0.0, " +
+                  cast_to(arg(1), Type::Float) + ", 0.0), vec3(0.0, 0.0, " +
+                  cast_to(arg(2), Type::Float) + "))";
+          }
           else {
-            r.s = "mat3(" + arg(0).s + ")";
+            std::string s = "mat3(";
+            for (int i = 0; i < 9; i++) {
+              s += (i ? ", " : "");
+              s += (i < int(e->args.size())) ? cast_to(arg(i), Type::Float) :
+                                               std::string((i % 4 == 0) ? "1.0" : "0.0");
+            }
+            r.s = s + ")";
           }
           r.type = Type::Matrix3;
           return r;
@@ -8237,17 +8684,7 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
           line += " = mat3(1.0)";
         }
         else if (type_is_array(t)) {
-          if (gpu_array_type_unsupported(t)) {
-            bad("GPU: arrays of this type are CPU-only");
-          }
-          int kind = 1;
-          if (t == Type::IntArray) {
-            kind = 0;
-          }
-          if (t == Type::VecArray) {
-            kind = 2;
-          }
-          line += " = wr_arr_new(" + std::to_string(kind) + ")";
+          line += " = wr_arr_new(" + std::to_string(gpu_array_kind(t).kind) + ")";
         }
         else if (t == Type::Vector2) {
           line += " = vec2(0.0)";
@@ -8507,7 +8944,7 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
            "  int e = nbr_off[v + 1];\n"
            "  int n = e - s;\n"
            "  if (n < 0) { n = 0; }\n"
-           "  if (n > 120) { n = 120; }\n"
+           "  if (n > 120) { n = 120; wr_ovf[0] = 1; }\n"
            "  a.count = n;\n"
            "  a.total = n;\n"
            "  a.kind = 0;\n"
@@ -8525,6 +8962,39 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
          "  vec3 t = 2.0 * cross(q.xyz, v);\n"
          "  return v + q.w * t + cross(q.xyz, t);\n"
          "}\n";
+  for (Program::GpuSample &gs : prog.gpu_samples) {
+    /* The type may have been refined by a later use. */
+    gs.type = prog.attrs[gs.attr].type;
+    const std::string k = std::to_string(gs.sample);
+    const std::string b = "gs" + k;
+    const std::string head = std::string(gl_type(gs.type)) + " wr_gs" + k + "(int i)\n{\n" +
+                             "  if (i < 0 || i >= gs_n[" + k + "]) { return ";
+    switch (gs.type) {
+      case Type::Vector2:
+        src += head + "vec2(0.0); }\n  return vec2(" + b + "[i*2], " + b + "[i*2+1]);\n}\n";
+        break;
+      case Type::Vector:
+        src += head + "vec3(0.0); }\n  return vec3(" + b + "[i*3], " + b + "[i*3+1], " + b +
+               "[i*3+2]);\n}\n";
+        break;
+      case Type::Vector4:
+      case Type::Color:
+      case Type::Rotation:
+        src += head + (gs.type == Type::Rotation ? "vec4(0.0, 0.0, 0.0, 1.0)" : "vec4(0.0)") +
+               "; }\n  return vec4(" + b + "[i*4], " + b + "[i*4+1], " + b + "[i*4+2], " + b +
+               "[i*4+3]);\n}\n";
+        break;
+      case Type::Bool:
+        src += head + "false; }\n  return " + b + "[i] != 0;\n}\n";
+        break;
+      case Type::Int:
+        src += head + "0; }\n  return " + b + "[i];\n}\n";
+        break;
+      default:
+        src += head + "0.0; }\n  return " + b + "[i];\n}\n";
+        break;
+    }
+  }
   src += "void main()\n{\n";
   src += "  uint tid = gl_GlobalInvocationID.x + gl_GlobalInvocationID.y * "
          "(gl_NumWorkGroups.x * gl_WorkGroupSize.x);\n";
@@ -8537,19 +9007,34 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
     }
     const std::string in = "a" + std::to_string(i) + "_in";
     const std::string out = "a" + std::to_string(i) + "_out";
-    if (prog.attrs[i].type == Type::Vector) {
-      src += "    " + out + "[elem_i*3] = " + in + "[elem_i*3];\n";
-      src += "    " + out + "[elem_i*3+1] = " + in + "[elem_i*3+1];\n";
-      src += "    " + out + "[elem_i*3+2] = " + in + "[elem_i*3+2];\n";
+    int floats = 1;
+    switch (prog.attrs[i].type) {
+      case Type::Vector2:
+        floats = 2;
+        break;
+      case Type::Vector:
+        floats = 3;
+        break;
+      case Type::Vector4:
+      case Type::Color:
+      case Type::Rotation:
+      case Type::Matrix2:
+        floats = 4;
+        break;
+      case Type::Matrix3:
+        floats = 9;
+        break;
+      case Type::Matrix:
+        floats = 16;
+        break;
+      default:
+        break;
     }
-    else if (ELEM(prog.attrs[i].type, Type::Color, Type::Rotation)) {
-      src += "    " + out + "[elem_i*4] = " + in + "[elem_i*4];\n";
-      src += "    " + out + "[elem_i*4+1] = " + in + "[elem_i*4+1];\n";
-      src += "    " + out + "[elem_i*4+2] = " + in + "[elem_i*4+2];\n";
-      src += "    " + out + "[elem_i*4+3] = " + in + "[elem_i*4+3];\n";
-    }
-    else {
-      src += "    " + out + "[elem_i] = " + in + "[elem_i];\n";
+    for (int k = 0; k < floats; k++) {
+      const std::string at = (floats == 1) ? "[elem_i]" :
+                                             "[elem_i*" + std::to_string(floats) + "+" +
+                                                 std::to_string(k) + "]";
+      src += "    " + out + at + " = " + in + at + ";\n";
     }
   }
   src += "    return;\n";
@@ -9228,10 +9713,15 @@ static CompileOutput compile_impl(const StringRef source, const bool shader_mate
       case StmtKind::If: {
         c.compile_expr(s->expr);
         const int jmp_else = c.emit_jmp(Op::JmpIfFalse);
-        cs(s->s0);
+        {
+          /* See #AttrLocalScope: what a branch stores is not known to have run after it. */
+          Compiler::AttrLocalScope branch(c);
+          cs(s->s0);
+        }
         if (s->s1) {
           const int jmp_end = c.emit_jmp(Op::Jmp);
           c.patch(jmp_else, int(c.prog.code.size()));
+          Compiler::AttrLocalScope branch(c);
           cs(s->s1);
           c.patch(jmp_end, int(c.prog.code.size()));
         }
@@ -9241,6 +9731,7 @@ static CompileOutput compile_impl(const StringRef source, const bool shader_mate
         return;
       }
       case StmtKind::While: {
+        Compiler::AttrLocalScope loop(c);
         if (c.try_emit_while_cmp_add(s)) {
           return;
         }
@@ -9274,6 +9765,7 @@ static CompileOutput compile_impl(const StringRef source, const bool shader_mate
           c.pop_scope();
           return;
         }
+        Compiler::AttrLocalScope loop(c);
         c.push_scope();
         if (s->s0) {
           cs(s->s0);

@@ -291,8 +291,12 @@ void gather_completions(Vector<std::string> &r_owned_names,
   add("quat", "Keyword", C::Rotation, K::Keyword, "quat", "quat q = {0, 0, 0, 1};", false);
 
   add("P", "Attribute", C::Vector, K::Variable, "v@P", "v@P — position", false);
-  add("N", "Attribute", C::Vector, K::Variable, "v@N", "v@N — normal", false);
-  add("ptnum", "Attribute", C::Variable, K::Variable, "i@index", "i@index — element index", false);
+  add("N", "Attribute", C::Vector, K::Variable, "v@N", "v@N — attribute N, or the normal when there is none", false);
+  add("ptnum", "Attribute", C::Variable, K::Variable, "@ptnum", "@ptnum — point of this element", false);
+  add("edgenum", "Attribute", C::Variable, K::Variable, "@edgenum", "@edgenum — edge of this element", false);
+  add("facenum", "Attribute", C::Variable, K::Variable, "@facenum", "@facenum — face of this element", false);
+  add("cornernum", "Attribute", C::Variable, K::Variable, "@cornernum", "@cornernum — corner of this element", false);
+  add("curvenum", "Attribute", C::Variable, K::Variable, "@curvenum", "@curvenum — curve of this point", false);
   add("index", "Attribute", C::Variable, K::Variable, "i@index", "i@index — run-over element index", false);
   add("id", "Attribute", C::Variable, K::Variable, "i@id", "i@id — id attribute", false);
   add("f@", "Attribute", C::Float, K::Variable, "f@", "f@name — float attribute", false);

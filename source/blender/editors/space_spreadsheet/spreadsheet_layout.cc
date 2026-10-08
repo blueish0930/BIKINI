@@ -163,7 +163,11 @@ static std::string format_wrangle_array_cell(const bke::WrangleArrayValue &arr,
       comma(i);
     }
   }
-  if (arr.truncated || arr.total > arr.count) {
+  if (arr.truncated == bke::WrangleArrayValue::continued) {
+    /* The rest is in the chunk attributes, show how long the array is. */
+    s += fmt::format(", … ({})", arr.total_items());
+  }
+  else if (arr.truncated || arr.total > arr.count) {
     s += ", …";
   }
   s += "]";

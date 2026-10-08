@@ -176210,9 +176210,6 @@ msgstr "GPU: 自定义函数里不能用 chf/chi/..."
 msgid "GPU: sampling other geometry inputs is CPU-only"
 msgstr "GPU: 采样其他几何输入只能在 CPU 上运行"
 
-msgid "GPU: min/max of an array is CPU-only"
-msgstr "GPU: 数组的 min/max 只能在 CPU 上运行"
-
 msgid "Wrangle evaluation failed"
 msgstr "Wrangle 求值失败"
 
@@ -176300,8 +176297,11 @@ msgstr "不能把数组 {} 追加到数组 {}\n两个数组的元素必须是同
 msgid "Cannot append {} to the array {}\nThe items of this array are {}."
 msgstr "不能把 {} 追加到数组 {}\n这个数组的元素是 {}。"
 
-msgid "GPU: arrays of this type are CPU-only"
-msgstr "GPU：这种类型的数组只能在 CPU 上运行"
+msgid "GPU: the array is longer than the GPU arrays"
+msgstr "GPU：数组超过了 GPU 数组的容量"
+
+msgid "The array attribute @{} holds at most {} items per element, longer arrays were cut off\nKeep long arrays in a local variable, or split them over several attributes."
+msgstr "数组属性 @{} 每个元素最多存 {} 项，超出的部分被截掉了\n长数组请放在局部变量里，或拆成几个属性。"
 
 msgid "Compile error"
 msgstr "编译错误"

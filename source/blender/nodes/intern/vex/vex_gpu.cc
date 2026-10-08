@@ -18,6 +18,7 @@
 #include "BLI_threads.hh"
 #include "BLI_vector.hh"
 
+#include "BKE_global.hh"
 #include "BKE_wrangle_array.hh"
 
 #include "DNA_meshdata_types.h"
@@ -56,7 +57,8 @@ struct WrangleArr {
 
 const char *gpu_preamble()
 {
-  return R"(
+  /* In two pieces: a single string literal this long is more than MSVC accepts. */
+  static const std::string source = std::string(R"(
 uint wr_rot(uint x, uint k)
 {
   return (x << k) | (x >> (32u - k));
@@ -150,8 +152,15 @@ WrangleArr wr_arr_new(int kind)
   return a;
 }
 
+/* Negative indices count from the end, like in the interpreter. */
+int wr_arr_wrap(int i, int n)
+{
+  return (i < 0) ? i + n : i;
+}
+
 float wr_arr_f(WrangleArr a, int i)
 {
+  i = wr_arr_wrap(i, a.count);
   if (i < 0 || i >= a.count) {
     return 0.0;
   }
@@ -163,6 +172,7 @@ float wr_arr_f(WrangleArr a, int i)
 
 int wr_arr_i(WrangleArr a, int i)
 {
+  i = wr_arr_wrap(i, a.count);
   if (i < 0 || i >= a.count) {
     return 0;
   }
@@ -171,6 +181,7 @@ int wr_arr_i(WrangleArr a, int i)
 
 vec3 wr_arr_v(WrangleArr a, int i)
 {
+  i = wr_arr_wrap(i, a.count);
   if (i < 0 || i >= a.count) {
     return vec3(0.0);
   }
@@ -182,7 +193,12 @@ vec3 wr_arr_v(WrangleArr a, int i)
 
 WrangleArr wr_arr_set_f(WrangleArr a, int i, float v)
 {
-  if (i < 0 || i >= 120) {
+  i = wr_arr_wrap(i, a.count);
+  if (i < 0) {
+    return a;
+  }
+  if (i >= 120) {
+    wr_ovf[0] = 1;
     return a;
   }
   if (i >= a.count) {
@@ -203,7 +219,12 @@ WrangleArr wr_arr_set_f(WrangleArr a, int i, float v)
 
 WrangleArr wr_arr_set_i(WrangleArr a, int i, int v)
 {
-  if (i < 0 || i >= 120) {
+  i = wr_arr_wrap(i, a.count);
+  if (i < 0) {
+    return a;
+  }
+  if (i >= 120) {
+    wr_ovf[0] = 1;
     return a;
   }
   if (i >= a.count) {
@@ -224,7 +245,12 @@ WrangleArr wr_arr_set_i(WrangleArr a, int i, int v)
 
 WrangleArr wr_arr_set_v(WrangleArr a, int i, vec3 v)
 {
-  if (i < 0 || i >= 40) {
+  i = wr_arr_wrap(i, a.count);
+  if (i < 0) {
+    return a;
+  }
+  if (i >= 40) {
+    wr_ovf[0] = 1;
     return a;
   }
   if (i >= a.count) {
@@ -249,12 +275,552 @@ WrangleArr wr_arr_set_v(WrangleArr a, int i, vec3 v)
   return a;
 }
 
+/* `matrix * number`: a uniform scale of X, Y and Z. */
+mat4 wr_scale4(float s)
+{
+  return mat4(vec4(s, 0.0, 0.0, 0.0),
+              vec4(0.0, s, 0.0, 0.0),
+              vec4(0.0, 0.0, s, 0.0),
+              vec4(0.0, 0.0, 0.0, 1.0));
+}
+
+/* Items of other sizes: 2D and 4D vectors, 2x2 / 3x3 / 4x4 matrices (by columns). */
+
+float wr_arr_at(WrangleArr a, int o)
+{
+  return intBitsToFloat(a.data[o]);
+}
+
+/* Past-the-end writes grow the array. The gap is zero, or identity matrices of size `dim`. */
+WrangleArr wr_arr_grow(WrangleArr a, int i, int stride, int kind, int dim)
+{
+  if (i >= a.count) {
+    int n = a.count;
+    if (n < 0) {
+      n = 0;
+    }
+    for (int k = n; k < i; k++) {
+      for (int c = 0; c < stride; c++) {
+        int d = (dim > 0) ? dim : 1;
+        bool diagonal = (dim > 0) && (c / d == c % d);
+        a.data[k * stride + c] = diagonal ? floatBitsToInt(1.0) : 0;
+      }
+    }
+    a.count = i + 1;
+    a.total = a.count;
+  }
+  a.kind = kind;
+  return a;
+}
+
+vec2 wr_arr_v2(WrangleArr a, int i)
+{
+  i = wr_arr_wrap(i, a.count);
+  if (i < 0 || i >= a.count) {
+    return vec2(0.0);
+  }
+  int o = i * 2;
+  return vec2(wr_arr_at(a, o), wr_arr_at(a, o + 1));
+}
+
+vec4 wr_arr_v4(WrangleArr a, int i)
+{
+  i = wr_arr_wrap(i, a.count);
+  if (i < 0 || i >= a.count) {
+    return vec4(0.0);
+  }
+  int o = i * 4;
+  return vec4(wr_arr_at(a, o), wr_arr_at(a, o + 1), wr_arr_at(a, o + 2), wr_arr_at(a, o + 3));
+}
+
+mat2 wr_arr_m2(WrangleArr a, int i)
+{
+  i = wr_arr_wrap(i, a.count);
+  if (i < 0 || i >= a.count) {
+    return mat2(1.0);
+  }
+  int o = i * 4;
+  return mat2(wr_arr_at(a, o), wr_arr_at(a, o + 1), wr_arr_at(a, o + 2), wr_arr_at(a, o + 3));
+}
+
+mat3 wr_arr_m3(WrangleArr a, int i)
+{
+  i = wr_arr_wrap(i, a.count);
+  if (i < 0 || i >= a.count) {
+    return mat3(1.0);
+  }
+  int o = i * 9;
+  return mat3(wr_arr_at(a, o), wr_arr_at(a, o + 1), wr_arr_at(a, o + 2),
+              wr_arr_at(a, o + 3), wr_arr_at(a, o + 4), wr_arr_at(a, o + 5),
+              wr_arr_at(a, o + 6), wr_arr_at(a, o + 7), wr_arr_at(a, o + 8));
+}
+
+mat4 wr_arr_m4(WrangleArr a, int i)
+{
+  i = wr_arr_wrap(i, a.count);
+  if (i < 0 || i >= a.count) {
+    return mat4(1.0);
+  }
+  int o = i * 16;
+  return mat4(wr_arr_at(a, o), wr_arr_at(a, o + 1), wr_arr_at(a, o + 2), wr_arr_at(a, o + 3),
+              wr_arr_at(a, o + 4), wr_arr_at(a, o + 5), wr_arr_at(a, o + 6), wr_arr_at(a, o + 7),
+              wr_arr_at(a, o + 8), wr_arr_at(a, o + 9), wr_arr_at(a, o + 10), wr_arr_at(a, o + 11),
+              wr_arr_at(a, o + 12), wr_arr_at(a, o + 13), wr_arr_at(a, o + 14),
+              wr_arr_at(a, o + 15));
+}
+
+WrangleArr wr_arr_set_v2(WrangleArr a, int i, vec2 v)
+{
+  i = wr_arr_wrap(i, a.count);
+  if (i < 0) {
+    return a;
+  }
+  if (i >= 60) {
+    wr_ovf[0] = 1;
+    return a;
+  }
+  a = wr_arr_grow(a, i, 2, 8, 0);
+  int o = i * 2;
+  a.data[o] = floatBitsToInt(v.x);
+  a.data[o + 1] = floatBitsToInt(v.y);
+  return a;
+}
+
+WrangleArr wr_arr_set_v4(WrangleArr a, int i, vec4 v)
+{
+  i = wr_arr_wrap(i, a.count);
+  if (i < 0) {
+    return a;
+  }
+  if (i >= 30) {
+    wr_ovf[0] = 1;
+    return a;
+  }
+  a = wr_arr_grow(a, i, 4, 9, 0);
+  int o = i * 4;
+  a.data[o] = floatBitsToInt(v.x);
+  a.data[o + 1] = floatBitsToInt(v.y);
+  a.data[o + 2] = floatBitsToInt(v.z);
+  a.data[o + 3] = floatBitsToInt(v.w);
+  return a;
+}
+
+WrangleArr wr_arr_set_m2(WrangleArr a, int i, mat2 m)
+{
+  i = wr_arr_wrap(i, a.count);
+  if (i < 0) {
+    return a;
+  }
+  if (i >= 30) {
+    wr_ovf[0] = 1;
+    return a;
+  }
+  a = wr_arr_grow(a, i, 4, 5, 2);
+  int o = i * 4;
+  for (int c = 0; c < 2; c++) {
+    for (int r = 0; r < 2; r++) {
+      a.data[o + c * 2 + r] = floatBitsToInt(m[c][r]);
+    }
+  }
+  return a;
+}
+
+WrangleArr wr_arr_set_m3(WrangleArr a, int i, mat3 m)
+{
+  i = wr_arr_wrap(i, a.count);
+  if (i < 0) {
+    return a;
+  }
+  if (i >= 13) {
+    wr_ovf[0] = 1;
+    return a;
+  }
+  a = wr_arr_grow(a, i, 9, 6, 3);
+  int o = i * 9;
+  for (int c = 0; c < 3; c++) {
+    for (int r = 0; r < 3; r++) {
+      a.data[o + c * 3 + r] = floatBitsToInt(m[c][r]);
+    }
+  }
+  return a;
+}
+
+WrangleArr wr_arr_set_m4(WrangleArr a, int i, mat4 m)
+{
+  i = wr_arr_wrap(i, a.count);
+  if (i < 0) {
+    return a;
+  }
+  if (i >= 7) {
+    wr_ovf[0] = 1;
+    return a;
+  }
+  a = wr_arr_grow(a, i, 16, 4, 4);
+  int o = i * 16;
+  for (int c = 0; c < 4; c++) {
+    for (int r = 0; r < 4; r++) {
+      a.data[o + c * 4 + r] = floatBitsToInt(m[c][r]);
+    }
+  }
+  return a;
+}
+
+)") + R"(
+/* ---- Array functions. An item is `stride` words. `mode` is how two words compare: 0 as ints,
+ * 1 as floats, 2 an int item against a float value. An array that needs more than the 120 words
+ * sets `wr_ovf`, the interpreter then runs the program instead. */
+
+bool wr_word_eq(int a, int b, int mode)
+{
+  if (mode == 0) {
+    return a == b;
+  }
+  if (mode == 2) {
+    return float(a) == intBitsToFloat(b);
+  }
+  return intBitsToFloat(a) == intBitsToFloat(b);
+}
+
+bool wr_arr_item_eq(WrangleArr a, int ia, WrangleArr b, int ib, int stride, int mode)
+{
+  for (int c = 0; c < stride; c++) {
+    if (!wr_word_eq(a.data[ia * stride + c], b.data[ib * stride + c], mode)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/* Does `a` contain item `ib` of `b`? */
+bool wr_arr_has(WrangleArr a, WrangleArr b, int ib, int stride, int mode)
+{
+  for (int i = 0; i < a.count; i++) {
+    if (wr_arr_item_eq(a, i, b, ib, stride, mode)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+WrangleArr wr_arr_i2f(WrangleArr a)
+{
+  for (int i = 0; i < a.count; i++) {
+    a.data[i] = floatBitsToInt(float(a.data[i]));
+  }
+  a.kind = 1;
+  return a;
+}
+
+/* `append(a, b)` with a whole array. `conv` 1 turns int items into floats, 2 floats into ints. */
+WrangleArr wr_arr_extend(WrangleArr a, WrangleArr b, int stride, int kind, int conv)
+{
+  a.kind = kind;
+  for (int i = 0; i < b.count; i++) {
+    if ((a.count + 1) * stride > 120) {
+      wr_ovf[0] = 1;
+      break;
+    }
+    for (int c = 0; c < stride; c++) {
+      int w = b.data[i * stride + c];
+      if (conv == 1) {
+        w = floatBitsToInt(float(w));
+      }
+      else if (conv == 2) {
+        w = int(intBitsToFloat(w));
+      }
+      a.data[a.count * stride + c] = w;
+    }
+    a.count += 1;
+  }
+  a.total = a.count;
+  return a;
+}
+
+int wr_arr_insert_index(int i, int n)
+{
+  if (n <= 0) {
+    return 0;
+  }
+  if (i < 0) {
+    i += n;
+  }
+  return clamp(i, 0, n);
+}
+
+/* Makes room for one item at `i`, the caller writes it. */
+WrangleArr wr_arr_insert_gap(WrangleArr a, int i, int stride, int kind)
+{
+  i = wr_arr_insert_index(i, a.count);
+  a.kind = kind;
+  if ((a.count + 1) * stride > 120) {
+    wr_ovf[0] = 1;
+    return a;
+  }
+  for (int k = a.count * stride - 1; k >= i * stride; k--) {
+    a.data[k + stride] = a.data[k];
+  }
+  a.count += 1;
+  a.total = a.count;
+  return a;
+}
+
+WrangleArr wr_arr_remove_at(WrangleArr a, int i, int stride)
+{
+  i = wr_arr_wrap(i, a.count);
+  if (i < 0 || i >= a.count) {
+    return a;
+  }
+  for (int k = i * stride; k < (a.count - 1) * stride; k++) {
+    a.data[k] = a.data[k + stride];
+  }
+  a.count -= 1;
+  a.total = a.count;
+  return a;
+}
+
+/* `probe` holds the value as its first item. */
+WrangleArr wr_arr_remove_value(WrangleArr a, WrangleArr probe, int stride, int mode)
+{
+  int n = 0;
+  for (int i = 0; i < a.count; i++) {
+    if (!wr_arr_item_eq(a, i, probe, 0, stride, mode)) {
+      for (int c = 0; c < stride; c++) {
+        a.data[n * stride + c] = a.data[i * stride + c];
+      }
+      n += 1;
+    }
+  }
+  a.count = n;
+  a.total = n;
+  return a;
+}
+
+WrangleArr wr_arr_find(WrangleArr a, WrangleArr probe, int stride, int mode)
+{
+  WrangleArr r = wr_arr_new(0);
+  for (int i = 0; i < a.count; i++) {
+    if (wr_arr_item_eq(a, i, probe, 0, stride, mode)) {
+      r.data[r.count] = i;
+      r.count += 1;
+    }
+  }
+  r.total = r.count;
+  return r;
+}
+
+WrangleArr wr_arr_slice(
+    WrangleArr a, int start_arg, int end_arg, bool has_end, int step, int stride)
+{
+  WrangleArr r = a;
+  r.count = 0;
+  r.total = 0;
+  int size = a.count;
+  if (size <= 0 || step == 0) {
+    return r;
+  }
+  if (step > 0) {
+    int start = (start_arg < 0) ? max(start_arg + size, 0) : min(start_arg, size);
+    int end = !has_end ? size : ((end_arg < 0) ? max(end_arg + size, 0) : min(end_arg, size));
+    for (int i = start; i < end; i += step) {
+      for (int c = 0; c < stride; c++) {
+        r.data[r.count * stride + c] = a.data[i * stride + c];
+      }
+      r.count += 1;
+    }
+  }
+  else {
+    int start = (start_arg < 0) ? max(start_arg + size, -1) : min(start_arg, size - 1);
+    int end = !has_end ? -1 : ((end_arg < 0) ? max(end_arg + size, -1) : min(end_arg, size - 1));
+    for (int i = start; i > end; i += step) {
+      for (int c = 0; c < stride; c++) {
+        r.data[r.count * stride + c] = a.data[i * stride + c];
+      }
+      r.count += 1;
+    }
+  }
+  r.total = r.count;
+  return r;
+}
+
+/* The first occurrence of every value, in the original order. */
+WrangleArr wr_arr_unique(WrangleArr a, int stride, int mode)
+{
+  int n = 0;
+  for (int i = 0; i < a.count; i++) {
+    bool seen = false;
+    for (int j = 0; j < n; j++) {
+      if (wr_arr_item_eq(a, i, a, j, stride, mode)) {
+        seen = true;
+        break;
+      }
+    }
+    if (!seen) {
+      for (int c = 0; c < stride; c++) {
+        a.data[n * stride + c] = a.data[i * stride + c];
+      }
+      n += 1;
+    }
+  }
+  a.count = n;
+  a.total = n;
+  return a;
+}
+
+/* `op` 0 union, 1 subtract, 2 intersect. Every value once, in the order of `a` (then `b`). */
+WrangleArr wr_arr_setop(WrangleArr a, WrangleArr b, int op, int stride, int mode)
+{
+  WrangleArr r = a;
+  r.count = 0;
+  for (int i = 0; i < a.count; i++) {
+    bool in_b = wr_arr_has(b, a, i, stride, mode);
+    bool keep = (op == 0) || (in_b == (op == 2));
+    if (keep && !wr_arr_has(r, a, i, stride, mode)) {
+      for (int c = 0; c < stride; c++) {
+        r.data[r.count * stride + c] = a.data[i * stride + c];
+      }
+      r.count += 1;
+    }
+  }
+  if (op == 0) {
+    for (int i = 0; i < b.count; i++) {
+      if (wr_arr_has(r, b, i, stride, mode)) {
+        continue;
+      }
+      if ((r.count + 1) * stride > 120) {
+        wr_ovf[0] = 1;
+        break;
+      }
+      for (int c = 0; c < stride; c++) {
+        r.data[r.count * stride + c] = b.data[i * stride + c];
+      }
+      r.count += 1;
+    }
+  }
+  r.total = r.count;
+  return r;
+}
+
+/* An empty array gives zero. Vectors are compared per component. */
+int wr_arr_min_i(WrangleArr a, bool is_min)
+{
+  if (a.count <= 0) {
+    return 0;
+  }
+  int r = a.data[0];
+  for (int i = 1; i < a.count; i++) {
+    r = is_min ? min(r, a.data[i]) : max(r, a.data[i]);
+  }
+  return r;
+}
+
+float wr_arr_min_f(WrangleArr a, bool is_min)
+{
+  if (a.count <= 0) {
+    return 0.0;
+  }
+  float r = wr_arr_at(a, 0);
+  for (int i = 1; i < a.count; i++) {
+    r = is_min ? min(r, wr_arr_at(a, i)) : max(r, wr_arr_at(a, i));
+  }
+  return r;
+}
+
+vec3 wr_arr_min_v(WrangleArr a, bool is_min)
+{
+  if (a.count <= 0) {
+    return vec3(0.0);
+  }
+  vec3 r = wr_arr_v(a, 0);
+  for (int i = 1; i < a.count; i++) {
+    r = is_min ? min(r, wr_arr_v(a, i)) : max(r, wr_arr_v(a, i));
+  }
+  return r;
+}
+
+vec2 wr_arr_min_v2(WrangleArr a, bool is_min)
+{
+  if (a.count <= 0) {
+    return vec2(0.0);
+  }
+  vec2 r = wr_arr_v2(a, 0);
+  for (int i = 1; i < a.count; i++) {
+    r = is_min ? min(r, wr_arr_v2(a, i)) : max(r, wr_arr_v2(a, i));
+  }
+  return r;
+}
+
+int wr_arr_sum_i(WrangleArr a)
+{
+  int r = 0;
+  for (int i = 0; i < a.count; i++) {
+    r += a.data[i];
+  }
+  return r;
+}
+
+float wr_arr_sum_f(WrangleArr a)
+{
+  float r = 0.0;
+  for (int i = 0; i < a.count; i++) {
+    r += wr_arr_at(a, i);
+  }
+  return r;
+}
+
+vec3 wr_arr_sum_v(WrangleArr a)
+{
+  vec3 r = vec3(0.0);
+  for (int i = 0; i < a.count; i++) {
+    r += wr_arr_v(a, i);
+  }
+  return r;
+}
+
+vec2 wr_arr_sum_v2(WrangleArr a)
+{
+  vec2 r = vec2(0.0);
+  for (int i = 0; i < a.count; i++) {
+    r += wr_arr_v2(a, i);
+  }
+  return r;
+}
+
+/* Ascending. `kind` 0 ints, 1 floats, 2 vectors (by x, then y, then z). */
+bool wr_arr_less(WrangleArr a, int i, int j, int kind)
+{
+  if (kind == 0) {
+    return a.data[i] < a.data[j];
+  }
+  if (kind == 1) {
+    return wr_arr_at(a, i) < wr_arr_at(a, j);
+  }
+  vec3 p = wr_arr_v(a, i);
+  vec3 q = wr_arr_v(a, j);
+  return (p.x != q.x) ? (p.x < q.x) : ((p.y != q.y) ? (p.y < q.y) : (p.z < q.z));
+}
+
+WrangleArr wr_arr_sort(WrangleArr a, int kind)
+{
+  int stride = (kind == 2) ? 3 : 1;
+  for (int i = 1; i < a.count; i++) {
+    for (int j = i; j > 0 && wr_arr_less(a, j, j - 1, kind); j--) {
+      for (int c = 0; c < stride; c++) {
+        int w = a.data[j * stride + c];
+        a.data[j * stride + c] = a.data[(j - 1) * stride + c];
+        a.data[(j - 1) * stride + c] = w;
+      }
+    }
+  }
+  return a;
+}
+
 int wr_clampi(int i, int n)
 {
   return (n <= 0) ? 0 : clamp(i, 0, n - 1);
 }
 
 )";
+  return source.c_str();
 }
 
 struct GpuCtxGuard {
@@ -266,6 +832,13 @@ struct GpuCtxGuard {
   {
     if (GPU_context_active_get() != nullptr) {
       ok = true;
+      return;
+    }
+    if (G.background && !BLI_thread_is_main()) {
+      /* A background session has a single GPU context, and it stays with the main thread.
+       * Enabling it from an evaluation thread as well corrupts it: the Vulkan backend then
+       * throws "Bad optional access" for every later use and when Blender exits. The caller
+       * falls back to the interpreter, which gives the same result. */
       return;
     }
     if (!BLI_thread_is_main()) {
@@ -336,9 +909,28 @@ gpu::Shader *shader_for_source(const Program &program, std::string &r_error)
   };
   int slot = 0;
   info.storage_buf(slot++, Qualifier::read, "int", "sel[]");
+  /* Set by the shader when an array needs more items than a `WrangleArr` holds. */
+  info.storage_buf(slot++, Qualifier::read_write, "int", "wr_ovf[]");
   if (program.gpu_neighbors) {
     info.storage_buf(slot++, Qualifier::read, "int", "nbr_off[]");
     info.storage_buf(slot++, Qualifier::read, "int", "nbr_idx[]");
+  }
+  if (!program.gpu_samples.is_empty()) {
+    /* Attributes of other domains and of other geometry inputs, and how many elements each has. */
+    info.storage_buf(slot++, Qualifier::read, "int", "gs_n[]");
+    for (const Program::GpuSample &gs : program.gpu_samples) {
+      info.storage_buf(slot++,
+                       Qualifier::read,
+                       soa_ssbo_type(gs.type),
+                       intern("gs" + std::to_string(gs.sample) + "[]"));
+    }
+  }
+  for (int kind = 0; kind < 5; kind++) {
+    /* `@ptnum`, `@edgenum`, `@facenum`, `@cornernum`, `@curvenum`: one number per element. */
+    if (program.gpu_elem_nums & (1 << kind)) {
+      info.storage_buf(
+          slot++, Qualifier::read, "int", intern("en" + std::to_string(kind) + "[]"));
+    }
   }
   for (const int i : program.attrs.index_range()) {
     const char *ty = soa_ssbo_type(program.attrs[i].type);
@@ -632,8 +1224,14 @@ int soa_floats(const Type t)
   if (t == Type::Vector) {
     return 3;
   }
-  if (ELEM(t, Type::Vector4, Type::Color, Type::Rotation)) {
+  if (ELEM(t, Type::Vector4, Type::Color, Type::Rotation, Type::Matrix2)) {
     return 4;
+  }
+  if (t == Type::Matrix3) {
+    return 9;
+  }
+  if (t == Type::Matrix) {
+    return 16;
   }
   return 1;
 }
@@ -641,6 +1239,30 @@ int soa_floats(const Type t)
 void soa_pack_floats(const AttrRT &a, const int n, MutableSpan<float> dst)
 {
   dst.fill(0.0f);
+  if (a.type == Type::Matrix) {
+    const float4x4 *p = a.wm ? a.wm : a.rm;
+    for (int i = 0; i < n; i++) {
+      const float4x4 m = p ? p[i] : float4x4::identity();
+      memcpy(dst.data() + i * 16, &m[0][0], sizeof(float) * 16);
+    }
+    return;
+  }
+  if (ELEM(a.type, Type::Matrix2, Type::Matrix3)) {
+    /* `2@` / `3@` are stored in the array attribute type, by columns. */
+    const bke::WrangleArrayValue *p = a.warr ? a.warr : a.rarr;
+    const int floats = (a.type == Type::Matrix2) ? 4 : 9;
+    for (int i = 0; i < n; i++) {
+      if (a.type == Type::Matrix2) {
+        const float2x2 m = p ? p[i].as_matrix2() : float2x2::identity();
+        memcpy(dst.data() + i * floats, &m[0][0], sizeof(float) * floats);
+      }
+      else {
+        const float3x3 m = p ? p[i].as_matrix3() : float3x3::identity();
+        memcpy(dst.data() + i * floats, &m[0][0], sizeof(float) * floats);
+      }
+    }
+    return;
+  }
   if (a.type == Type::Vector2) {
     const float2 *p = a.w2 ? a.w2 : a.r2;
     if (p && n > 0) {
@@ -682,6 +1304,30 @@ void soa_pack_floats(const AttrRT &a, const int n, MutableSpan<float> dst)
 
 void soa_unpack_floats(AttrRT &a, const int n, const Span<float> src)
 {
+  if (a.type == Type::Matrix) {
+    if (a.wm) {
+      for (int i = 0; i < n; i++) {
+        a.wm[i] = float4x4(src.data() + i * 16);
+      }
+    }
+    return;
+  }
+  if (a.type == Type::Matrix2) {
+    if (a.warr) {
+      for (int i = 0; i < n; i++) {
+        a.warr[i].set_matrix2(float2x2(src.data() + i * 4));
+      }
+    }
+    return;
+  }
+  if (a.type == Type::Matrix3) {
+    if (a.warr) {
+      for (int i = 0; i < n; i++) {
+        a.warr[i].set_matrix3(float3x3(src.data() + i * 9));
+      }
+    }
+    return;
+  }
   if (!a.wv && !a.w2 && !a.wf && !a.w4 && !a.wq) {
     return;
   }
@@ -818,6 +1464,8 @@ bool gpu_try_run(const Program &program,
 
   gpu::StorageBuf *sel_ssbo = make_ssbo(
       size_t(n) * sizeof(int), sel_mask.data(), "wrangle_sel");
+  int overflow = 0;
+  gpu::StorageBuf *overflow_ssbo = make_ssbo(sizeof(int), &overflow, "wrangle_overflow");
   gpu::StorageBuf *nbr_off_ssbo = nullptr;
   gpu::StorageBuf *nbr_idx_ssbo = nullptr;
   if (program.gpu_neighbors) {
@@ -835,6 +1483,53 @@ bool gpu_try_run(const Program &program,
         size_t(off_copy.size()) * sizeof(int), off_copy.data(), "wrangle_nbr_off");
     nbr_idx_ssbo = make_ssbo(
         size_t(idx_copy.size()) * sizeof(int), idx_copy.data(), "wrangle_nbr_idx");
+  }
+
+  /* Sampled attributes of other domains / geometry inputs. A sample the executor has no data for
+   * is an empty buffer, the shader then reads the node's own attribute. */
+  Vector<int> sample_sizes(std::max<int64_t>(program.element_samples.size(), 1), 0);
+  Vector<gpu::StorageBuf *> sample_ssbo(program.gpu_samples.size(), nullptr);
+  for (const int si : program.gpu_samples.index_range()) {
+    const Program::GpuSample &gs = program.gpu_samples[si];
+    const AttrRT *data = (gs.sample < env.static_samples.size()) ? &env.static_samples[gs.sample] :
+                                                                   nullptr;
+    const bool usable = data && data->size > 0 && data->type == gs.type;
+    const int size = usable ? data->size : 0;
+    if (gs.sample < sample_sizes.size()) {
+      sample_sizes[gs.sample] = size;
+    }
+    if (ELEM(gs.type, Type::Int, Type::Bool)) {
+      Vector<int> values(std::max(size, 1), 0);
+      if (usable) {
+        soa_pack_ints(*data, size, values);
+      }
+      sample_ssbo[si] = make_ssbo(size_t(values.size()) * sizeof(int), values.data(), "wr_gs");
+    }
+    else {
+      Vector<float> values(std::max(size * soa_floats(gs.type), 1), 0.0f);
+      if (usable) {
+        soa_pack_floats(*data, size, values);
+      }
+      sample_ssbo[si] = make_ssbo(size_t(values.size()) * sizeof(float), values.data(), "wr_gs");
+    }
+  }
+  gpu::StorageBuf *sample_sizes_ssbo = program.gpu_samples.is_empty() ?
+                                           nullptr :
+                                           make_ssbo(size_t(sample_sizes.size()) * sizeof(int),
+                                                     sample_sizes.data(),
+                                                     "wr_gs_n");
+
+  gpu::StorageBuf *elem_num_ssbo[5] = {};
+  for (int kind = 0; kind < 5; kind++) {
+    if ((program.gpu_elem_nums & (1 << kind)) == 0) {
+      continue;
+    }
+    /* Without numbers from the executor (the size does not match) there is no such element. */
+    Vector<int> numbers(n, -1);
+    if (env.gpu_elem_nums[kind].size() == n) {
+      numbers.as_mutable_span().copy_from(env.gpu_elem_nums[kind]);
+    }
+    elem_num_ssbo[kind] = make_ssbo(size_t(n) * sizeof(int), numbers.data(), "wrangle_elem_num");
   }
 
   for (const int i : program.attrs.index_range()) {
@@ -900,7 +1595,9 @@ bool gpu_try_run(const Program &program,
     }
     return false;
   };
-  if (!sel_ssbo || (program.gpu_neighbors && (!nbr_off_ssbo || !nbr_idx_ssbo))) {
+  if (!sel_ssbo || !overflow_ssbo ||
+      (program.gpu_neighbors && (!nbr_off_ssbo || !nbr_idx_ssbo)))
+  {
     return fail_free();
   }
   for (const AttrGpu &g : ag) {
@@ -916,6 +1613,12 @@ bool gpu_try_run(const Program &program,
     return fail_free();
   }
   GPU_storagebuf_bind(sel_ssbo, sel_slot);
+  const int overflow_slot = ssbo_slot(shader, "wr_ovf");
+  if (overflow_slot < 0) {
+    GPU_shader_unbind();
+    return fail_free();
+  }
+  GPU_storagebuf_bind(overflow_ssbo, overflow_slot);
   if (program.gpu_neighbors) {
     const int off_slot = ssbo_slot(shader, "nbr_off");
     const int idx_slot = ssbo_slot(shader, "nbr_idx");
@@ -925,6 +1628,35 @@ bool gpu_try_run(const Program &program,
     }
     GPU_storagebuf_bind(nbr_off_ssbo, off_slot);
     GPU_storagebuf_bind(nbr_idx_ssbo, idx_slot);
+  }
+  if (!program.gpu_samples.is_empty()) {
+    const int sizes_slot = ssbo_slot(shader, "gs_n");
+    if (sizes_slot < 0 || sample_sizes_ssbo == nullptr) {
+      GPU_shader_unbind();
+      return fail_free();
+    }
+    GPU_storagebuf_bind(sample_sizes_ssbo, sizes_slot);
+    for (const int si : program.gpu_samples.index_range()) {
+      const std::string name = "gs" + std::to_string(program.gpu_samples[si].sample);
+      const int slot = ssbo_slot(shader, name.c_str());
+      if (slot < 0 || sample_ssbo[si] == nullptr) {
+        GPU_shader_unbind();
+        return fail_free();
+      }
+      GPU_storagebuf_bind(sample_ssbo[si], slot);
+    }
+  }
+  for (int kind = 0; kind < 5; kind++) {
+    if ((program.gpu_elem_nums & (1 << kind)) == 0) {
+      continue;
+    }
+    const std::string name = "en" + std::to_string(kind);
+    const int slot = ssbo_slot(shader, name.c_str());
+    if (slot < 0 || elem_num_ssbo[kind] == nullptr) {
+      GPU_shader_unbind();
+      return fail_free();
+    }
+    GPU_storagebuf_bind(elem_num_ssbo[kind], slot);
   }
   for (const int i : program.attrs.index_range()) {
     AttrGpu &g = ag[i];
@@ -985,6 +1717,21 @@ bool gpu_try_run(const Program &program,
         std::swap(g.in_ssbo, g.out_ssbo);
       }
     }
+  }
+
+  /* An array did not fit in the shader: nothing has been written back yet, the interpreter runs
+   * the program instead and gives the complete result. */
+  GPU_storagebuf_read(overflow_ssbo, &overflow);
+  if (overflow != 0) {
+    GPU_shader_unbind();
+    for (gpu::StorageBuf *b : to_free) {
+      if (b) {
+        GPU_storagebuf_unbind(b);
+        GPU_storagebuf_free(b);
+      }
+    }
+    r_error = "an array is longer than the GPU arrays, using the interpreter";
+    return false;
   }
 
   for (const int i : program.attrs.index_range()) {

@@ -822,6 +822,7 @@ bool is_geo_builtin(const Builtin id)
     case Builtin::PointsOfCurve:
     case Builtin::CurveOfPoint:
     case Builtin::PointCurve:
+    case Builtin::ElemNum:
     case Builtin::NearestPoints:
     case Builtin::NearPoints:
     case Builtin::Raycast:
@@ -1007,6 +1008,280 @@ static Value packed_to_typed_value(const bke::WrangleArrayValue &p, const Type t
     return value_from_int_array(std::move(vals));
   }
   return packed_to_value(p);
+}
+
+bool array_attr_words(const AttrRT &a,
+                      const int index,
+                      const bke::WrangleArrayValue &head,
+                      Vector<int> &r_words)
+{
+  if (head.truncated != bke::WrangleArrayValue::continued) {
+    return false;
+  }
+  if (a.array_overflow && a.array_overflow->any.load(std::memory_order_acquire)) {
+    /* Written earlier in this evaluation. */
+    std::lock_guard lock(a.array_overflow->mutex);
+    if (const Vector<int> *words = a.array_overflow->words.lookup_ptr(index)) {
+      r_words = *words;
+      return true;
+    }
+  }
+  const int stride = bke::WrangleArrayValue::item_words(head.kind);
+  if (stride <= 0) {
+    return false;
+  }
+  r_words.extend(Span<int>(head.d.i, int(head.count) * stride));
+  for (const bke::WrangleArrayValue *chunk : a.array_chunks) {
+    const bke::WrangleArrayValue &part = chunk[index];
+    if (part.count == 0) {
+      break;
+    }
+    r_words.extend(
+        Span<int>(part.d.i, std::min(int(part.count), int(bke::WrangleArrayValue::max_values))));
+  }
+  return true;
+}
+
+Value array_words_to_value(const bke::WrangleArrayKind kind,
+                           const Span<int> words,
+                           const Type type)
+{
+  using Kind = bke::WrangleArrayKind;
+  const Type runtime_type = array_runtime_type(type);
+  const auto as_float = [&](const int64_t i) {
+    float value;
+    memcpy(&value, &words[i], sizeof(float));
+    return value;
+  };
+  const int stride = bke::WrangleArrayValue::item_words(kind);
+  const int64_t items = stride > 0 ? words.size() / stride : 0;
+  switch (kind) {
+    case Kind::Int: {
+      if (runtime_type == Type::FloatArray) {
+        Vector<float> values;
+        values.reserve(items);
+        for (const int word : words) {
+          values.append(float(word));
+        }
+        return value_from_float_array(std::move(values));
+      }
+      return value_from_int_array(Vector<int>(words));
+    }
+    case Kind::Float: {
+      if (runtime_type == Type::IntArray) {
+        Vector<int> values;
+        values.reserve(items);
+        for (const int64_t i : words.index_range()) {
+          values.append(int(as_float(i)));
+        }
+        return value_from_int_array(std::move(values));
+      }
+      Vector<float> values;
+      values.reserve(items);
+      for (const int64_t i : words.index_range()) {
+        values.append(as_float(i));
+      }
+      return value_from_float_array(std::move(values));
+    }
+    case Kind::Float2:
+    case Kind::Float3:
+    case Kind::Float4: {
+      /* Read as the declared kind of vectors, whichever kind was stored. */
+      const bool as_vec4 = type_is_vec4_array(runtime_type) ||
+                           (kind == Kind::Float4 && runtime_type != Type::VecArray);
+      if (as_vec4) {
+        Vector<float4> values;
+        values.reserve(items);
+        for (int64_t i = 0; i < items; i++) {
+          float4 item(0.0f);
+          for (int c = 0; c < stride; c++) {
+            item[c] = as_float(i * stride + c);
+          }
+          values.append(item);
+        }
+        return value_from_vec4_array(std::move(values),
+                                     type_is_vec4_array(runtime_type) ? runtime_type :
+                                                                        Type::Vec4Array);
+      }
+      Vector<float3> values;
+      values.reserve(items);
+      for (int64_t i = 0; i < items; i++) {
+        float3 item(0.0f);
+        for (int c = 0; c < std::min(stride, 3); c++) {
+          item[c] = as_float(i * stride + c);
+        }
+        values.append(item);
+      }
+      return value_from_vec_array(std::move(values));
+    }
+    case Kind::Matrix:
+    case Kind::Matrix2:
+    case Kind::Matrix3: {
+      const int dim = (kind == Kind::Matrix) ? 4 : (kind == Kind::Matrix3) ? 3 : 2;
+      Vector<float4x4> values;
+      values.reserve(items);
+      for (int64_t i = 0; i < items; i++) {
+        float4x4 item = float4x4::identity();
+        for (int col = 0; col < dim; col++) {
+          for (int row = 0; row < dim; row++) {
+            item[col][row] = as_float(i * stride + col * dim + row);
+          }
+        }
+        values.append(item);
+      }
+      return value_from_mat_array(std::move(values));
+    }
+    case Kind::Ray: {
+      Vector<RayHit> values;
+      values.reserve(items);
+      for (int64_t i = 0; i < items; i++) {
+        RayHit hit;
+        hit.face = int(as_float(i * stride));
+        hit.hit = hit.face >= 0 ? 1 : 0;
+        hit.pos = float3(as_float(i * stride + 1), as_float(i * stride + 2), as_float(i * stride + 3));
+        hit.n = float3(as_float(i * stride + 4), as_float(i * stride + 5), as_float(i * stride + 6));
+        hit.dist = as_float(i * stride + 7);
+        values.append(hit);
+      }
+      return value_from_ray_array(std::move(values));
+    }
+    default:
+      return value_from_int_array({});
+  }
+}
+
+/**
+ * Every word of an array value the way #value_to_packed stores it in an attribute declared as
+ * \a dest, without the limit of the attribute value. False for values that are not such an array.
+ */
+static bool flatten_array_value(const Value &v,
+                                const Type dest,
+                                Vector<int> &r_words,
+                                bke::WrangleArrayKind &r_kind)
+{
+  using Kind = bke::WrangleArrayKind;
+  const auto push = [&](const float value) {
+    int word;
+    memcpy(&word, &value, sizeof(float));
+    r_words.append(word);
+  };
+  int range_start = 0;
+  int range_size = 0;
+  if (int_array_range(v, range_start, range_size) || iarr_mut(v)) {
+    const Vector<int> ints = int_array_values(v);
+    if (dest == Type::FloatArray) {
+      r_kind = Kind::Float;
+      for (const int value : ints) {
+        push(float(value));
+      }
+    }
+    else {
+      r_kind = Kind::Int;
+      r_words.extend(ints);
+    }
+    return true;
+  }
+  if (const Vector<float> *a = farr_mut(v)) {
+    if (dest == Type::IntArray) {
+      r_kind = Kind::Int;
+      for (const float value : *a) {
+        r_words.append(int(value));
+      }
+    }
+    else {
+      r_kind = Kind::Float;
+      for (const float value : *a) {
+        push(value);
+      }
+    }
+    return true;
+  }
+  if (const Vector<float3> *a = varr_mut(v)) {
+    r_kind = (dest == Type::Vec2Array) ? Kind::Float2 :
+             type_is_vec4_array(dest) ? Kind::Float4 :
+                                        Kind::Float3;
+    for (const float3 &item : *a) {
+      push(item.x);
+      push(item.y);
+      if (r_kind != Kind::Float2) {
+        push(item.z);
+      }
+      if (r_kind == Kind::Float4) {
+        push(0.0f);
+      }
+    }
+    return true;
+  }
+  if (const Vector<float4> *a = v4arr_mut(v)) {
+    r_kind = (dest == Type::Vec2Array) ? Kind::Float2 :
+             (dest == Type::VecArray) ? Kind::Float3 :
+                                        Kind::Float4;
+    for (const float4 &item : *a) {
+      push(item.x);
+      push(item.y);
+      if (r_kind != Kind::Float2) {
+        push(item.z);
+      }
+      if (r_kind == Kind::Float4) {
+        push(item.w);
+      }
+    }
+    return true;
+  }
+  if (const Vector<float4x4> *a = marr_mut(v)) {
+    r_kind = (dest == Type::Mat2Array) ? Kind::Matrix2 :
+             (dest == Type::Mat3Array) ? Kind::Matrix3 :
+                                         Kind::Matrix;
+    const int dim = (r_kind == Kind::Matrix) ? 4 : (r_kind == Kind::Matrix3) ? 3 : 2;
+    for (const float4x4 &item : *a) {
+      for (int col = 0; col < dim; col++) {
+        for (int row = 0; row < dim; row++) {
+          push(item[col][row]);
+        }
+      }
+    }
+    return true;
+  }
+  if (const Vector<RayHit> *a = rayarr_mut(v)) {
+    r_kind = Kind::Ray;
+    for (const RayHit &hit : *a) {
+      push(float(hit.face));
+      push(hit.pos.x);
+      push(hit.pos.y);
+      push(hit.pos.z);
+      push(hit.n.x);
+      push(hit.n.y);
+      push(hit.n.z);
+      push(hit.dist);
+    }
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Called after \a v was packed into \a head. When it did not fit and the attribute can continue
+ * in chunk attributes, \a head is marked as continued and \a r_words is the whole array.
+ */
+static bool array_overflow_words(const Value &v,
+                                 const AttrRT &a,
+                                 bke::WrangleArrayValue &head,
+                                 Vector<int> &r_words)
+{
+  if (!head.truncated || a.array_overflow == nullptr) {
+    return false;
+  }
+  bke::WrangleArrayKind kind = head.kind;
+  if (!flatten_array_value(v, a.type, r_words, kind) || kind != head.kind) {
+    return false;
+  }
+  const int stride = bke::WrangleArrayValue::item_words(kind);
+  if (stride <= 0) {
+    return false;
+  }
+  head.truncated = bke::WrangleArrayValue::continued;
+  head.set_total_items(int(r_words.size() / stride));
+  return true;
 }
 
 void value_to_packed(const Value &v,
@@ -1428,6 +1703,10 @@ Value load_attr_value(const AttrRT &a, const int index, VMEnv &env)
         if (a.type == Type::Matrix3) {
           return Value::from_matrix3(a.warr[index].as_matrix3());
         }
+        Vector<int> words;
+        if (array_attr_words(a, index, a.warr[index], words)) {
+          return array_words_to_value(a.warr[index].kind, words, a.type);
+        }
         return packed_to_typed_value(a.warr[index], a.type);
       }
       if (a.rarr) {
@@ -1436,6 +1715,10 @@ Value load_attr_value(const AttrRT &a, const int index, VMEnv &env)
         }
         if (a.type == Type::Matrix3) {
           return Value::from_matrix3(a.rarr[index].as_matrix3());
+        }
+        Vector<int> words;
+        if (array_attr_words(a, index, a.rarr[index], words)) {
+          return array_words_to_value(a.rarr[index].kind, words, a.type);
         }
         return packed_to_typed_value(a.rarr[index], a.type);
       }
@@ -1537,6 +1820,19 @@ void store_attr_value(AttrRT &a, const int index, const Value &v, VMEnv &env)
     case Type::RayArray:
       if (a.warr) {
         value_to_packed(v, a.warr[index], a.type, &env);
+        if (a.array_overflow) {
+          Vector<int> words;
+          if (array_overflow_words(v, a, a.warr[index], words)) {
+            std::lock_guard lock(a.array_overflow->mutex);
+            a.array_overflow->words.add_overwrite(index, std::move(words));
+            a.array_overflow->any.store(true, std::memory_order_release);
+          }
+          else if (a.array_overflow->any.load(std::memory_order_acquire)) {
+            /* A shorter array replaces a long one that was stored earlier in this evaluation. */
+            std::lock_guard lock(a.array_overflow->mutex);
+            a.array_overflow->words.remove(index);
+          }
+        }
       }
       break;
     case Type::String:
@@ -1565,6 +1861,11 @@ void add_inplace(Value &a, const Value &b)
   }
   if (a.type == Type::Matrix2 && b.type == Type::Matrix2) {
     a = Value::from_matrix2(a.as_matrix2() + b.as_matrix2());
+    return;
+  }
+  if (a.type == Type::Color || b.type == Type::Color) {
+    /* A color is a 4D vector that stays a color. It used to be added as a single float. */
+    a = Value::from_vec4(a.as_vec4() + b.as_vec4(), Type::Color);
     return;
   }
   if (a.type == Type::Vector4 || b.type == Type::Vector4) {
@@ -1607,6 +1908,7 @@ void attr_add_inplace(AttrRT &a, const int index, const Value &v)
       }
       break;
     case Type::Vector4:
+    case Type::Color:
       if (a.w4) {
         a.w4[index] += v.as_vec4();
       }
@@ -1636,7 +1938,10 @@ Value scale_value(const Value &v, const int k)
   if (v.type == Type::Vector4) {
     return Value::from_vec4(v.as_vec4() * s, Type::Vector4);
   }
-  if (v.type == Type::Vector || v.type == Type::Color) {
+  if (v.type == Type::Color) {
+    return Value::from_vec4(v.as_vec4() * s, Type::Color);
+  }
+  if (v.type == Type::Vector) {
     return Value::from_vec(v.as_vec() * s);
   }
   if (v.type == Type::Rotation) {
@@ -2059,6 +2364,14 @@ void attr_store_mask(AttrRT &a, const Value &v, const IndexMask &mask, VMEnv &en
       if (a.warr) {
         bke::WrangleArrayValue packed;
         value_to_packed(v, packed, a.type, &env);
+        Vector<int> words;
+        if (array_overflow_words(v, a, packed, words)) {
+          std::lock_guard lock(a.array_overflow->mutex);
+          mask.foreach_index([&](const int64_t i) {
+            a.array_overflow->words.add_overwrite(int(i), words);
+          });
+          a.array_overflow->any.store(true, std::memory_order_release);
+        }
         for_mask_dense(a.warr, mask, [packed](bke::WrangleArrayValue &p) { p = packed; });
       }
       break;
@@ -2516,6 +2829,9 @@ Value numeric_sub(const Value &a, const Value &b)
   if (a.type == Type::Matrix2 && b.type == Type::Matrix2) {
     return Value::from_matrix2(a.as_matrix2() - b.as_matrix2());
   }
+  if (a.type == Type::Color || b.type == Type::Color) {
+    return Value::from_vec4(a.as_vec4() - b.as_vec4(), Type::Color);
+  }
   if (a.type == Type::Vector4 || b.type == Type::Vector4) {
     return Value::from_vec4(a.as_vec4() - b.as_vec4(), Type::Vector4);
   }
@@ -2805,6 +3121,10 @@ Value numeric_mul(const Value &a, const Value &b, std::string *err = nullptr)
   if (type_is_vec_like(a.type) && type_is_matrix(b.type)) {
     return mul_mat_vec(b, a, true, err);
   }
+  if (a.type == Type::Color || b.type == Type::Color) {
+    /* Per channel; a number scales every channel. */
+    return Value::from_vec4(a.as_vec4() * b.as_vec4(), Type::Color);
+  }
   if (a.type == Type::Vector4 && b.type == Type::Vector4) {
     return Value::from_vec4(a.as_vec4() * b.as_vec4(), Type::Vector4);
   }
@@ -2840,6 +3160,15 @@ Value numeric_mul(const Value &a, const Value &b, std::string *err = nullptr)
 
 Value numeric_div(const Value &a, const Value &b)
 {
+  if (a.type == Type::Color || b.type == Type::Color) {
+    const float4 n = a.as_vec4();
+    const float4 d = b.as_vec4();
+    return Value::from_vec4(float4(d.x != 0.0f ? n.x / d.x : 0.0f,
+                                   d.y != 0.0f ? n.y / d.y : 0.0f,
+                                   d.z != 0.0f ? n.z / d.z : 0.0f,
+                                   d.w != 0.0f ? n.w / d.w : 0.0f),
+                            Type::Color);
+  }
   if (a.type == Type::Vector4 && b.type == Type::Vector4) {
     return Value::from_vec4(a.as_vec4() / b.as_vec4(), Type::Vector4);
   }

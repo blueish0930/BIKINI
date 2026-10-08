@@ -70,6 +70,62 @@ struct WrangleArrayValue {
     kind = k;
   }
 
+  /**
+   * Arrays longer than this value has room for. The attribute `name` keeps the first items and
+   * `truncated` is #continued; the words after them are in the hidden attributes
+   * #chunk_attribute_name(name, 1), (name, 2), ... on the same domain, #max_values words each
+   * (`count` is the number of words used there). Nothing is lost, unlike `truncated == 1`.
+   */
+  static constexpr uint8_t continued = 2;
+
+  /** Items of the whole array, also when it continues in chunk attributes. */
+  int total_items() const
+  {
+    return int(total) | (int(_pad[0]) << 16) | (int(_pad[1]) << 24);
+  }
+  void set_total_items(const int n)
+  {
+    total = uint16_t(n & 0xffff);
+    _pad[0] = uint8_t((n >> 16) & 0xff);
+    _pad[1] = uint8_t((n >> 24) & 0x7f);
+  }
+
+  /** 32-bit words of one item. 0 for strings, which are not stored as fixed size items. */
+  static int item_words(const WrangleArrayKind kind)
+  {
+    switch (kind) {
+      case WrangleArrayKind::Int:
+      case WrangleArrayKind::Float:
+        return 1;
+      case WrangleArrayKind::Float2:
+        return 2;
+      case WrangleArrayKind::Float3:
+        return 3;
+      case WrangleArrayKind::Float4:
+      case WrangleArrayKind::Matrix2:
+        return 4;
+      case WrangleArrayKind::Ray:
+        return 8;
+      case WrangleArrayKind::Matrix3:
+        return 9;
+      case WrangleArrayKind::Matrix:
+        return 16;
+      default:
+        return 0;
+    }
+  }
+
+  static std::string chunk_attribute_name(const StringRef name, const int index)
+  {
+    return "." + std::string(name) + ".wrangle_array." + std::to_string(index);
+  }
+
+  /** These attributes are storage of another attribute, they are not listed on their own. */
+  static bool is_chunk_attribute_name(const StringRef name)
+  {
+    return name.startswith(".") && name.find(".wrangle_array.") != StringRef::not_found;
+  }
+
   void set_ints(const Span<int> src)
   {
     clear(WrangleArrayKind::Int);

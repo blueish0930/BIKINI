@@ -1182,6 +1182,24 @@ TEST(nodes_vex, array_items_keep_their_type)
   EXPECT_EQ(m3.return_int, 8);
 }
 
+TEST(nodes_vex, attribute_read_after_conditional_write)
+{
+  /* The value a store caches is only valid where the store has run. This used to read the cache
+   * on the path that skipped the branch, which gave 0. */
+  const CompileOutput compiled = compile(
+      "if (i@index % 2 == 0) {\n"
+      "  f@a = f@a * 5;\n"
+      "}\n"
+      "f@d = f@a;\n");
+  ASSERT_TRUE(bool(compiled.program)) << compiled.error;
+  int attribute_loads = 0;
+  for (const Inst &in : compiled.program->code) {
+    attribute_loads += in.op == Op::PushAttr;
+  }
+  /* One load inside the branch, one for the read after it. */
+  EXPECT_EQ(attribute_loads, 2);
+}
+
 TEST(nodes_vex, array_index_assign)
 {
   const PureEvalOutput out = eval_source("int[] xs = array(4, 5, 6); xs[1] = 9; return xs[1];");
@@ -1780,6 +1798,90 @@ TEST(nodes_vex, gpu_source_for_rand_while)
   EXPECT_NE(compiled.program->gpu_src.find("wr_rand0"), std::string::npos);
 }
 
+TEST(nodes_vex, gpu_source_for_small_item_arrays)
+{
+  /* Arrays of 2D / 4D vectors and of matrices have their own accessors in the GLSL. */
+  const CompileOutput compiled = compile(
+      "vector2 us[] = array(vec2(1, 2), vec2(3, 4));\n"
+      "vector4 qs[];\n"
+      "matrix2 ms[] = array(matrix2(1, 2, 3, 4));\n"
+      "for (int k = 0; k < 2; k++) {\n"
+      "  qs[k] = vec4(us[k].x, us[k].y, determinant(ms[0]), k);\n"
+      "}\n"
+      "q@out = qs[1];\n");
+  ASSERT_TRUE(bool(compiled.program)) << compiled.error;
+  EXPECT_TRUE(compiled.program->gpu_ok) << compiled.program->gpu_error;
+  EXPECT_NE(compiled.program->gpu_src.find("wr_arr_v2"), std::string::npos);
+  EXPECT_NE(compiled.program->gpu_src.find("wr_arr_set_v4"), std::string::npos);
+  EXPECT_NE(compiled.program->gpu_src.find("wr_arr_m2"), std::string::npos);
+}
+TEST(nodes_vex, gpu_source_for_element_numbers)
+{
+  /* The shader reads them from one buffer per kind, which the executor fills. */
+  const CompileOutput compiled = compile(
+      "float acc = 0;\n"
+      "for (int k = 0; k < 2; k++) {\n"
+      "  acc += @facenum + @ptnum;\n"
+      "}\n"
+      "f@acc = acc;\n");
+  ASSERT_TRUE(bool(compiled.program)) << compiled.error;
+  EXPECT_TRUE(compiled.program->gpu_ok) << compiled.program->gpu_error;
+  EXPECT_EQ(int(compiled.program->gpu_elem_nums), (1 << 0) | (1 << 2));
+  EXPECT_NE(compiled.program->gpu_src.find("en2[elem_i]"), std::string::npos);
+  /* `face()` asks for another domain than the one the node may run over. */
+  const CompileOutput sampled = compile(
+      "for (int k = 0; k < 2; k++) {\n"
+      "  v@n = face(0, \"N\", @facenum);\n"
+      "}\n");
+  ASSERT_TRUE(bool(sampled.program)) << sampled.error;
+  EXPECT_TRUE(sampled.program->gpu_ok) << sampled.program->gpu_error;
+  ASSERT_EQ(sampled.program->gpu_samples.size(), 1);
+  EXPECT_EQ(sampled.program->element_samples[sampled.program->gpu_samples[0].sample].domain, 2);
+}
+TEST(nodes_vex, gpu_source_for_array_functions)
+{
+  const CompileOutput compiled = compile(
+      "int xs[] = array(5, 3, 9);\n"
+      "for (int k = 0; k < 3; k++) {\n"
+      "  append(xs, k, xs);\n"
+      "}\n"
+      "sort(xs);\n"
+      "i@n = len(unique(xs)) + len(find(xs, 3)) + sum(slice(xs, 1, -1)) + min(xs);\n");
+  ASSERT_TRUE(bool(compiled.program)) << compiled.error;
+  EXPECT_TRUE(compiled.program->gpu_ok) << compiled.program->gpu_error;
+  for (const char *helper : {"wr_arr_extend", "wr_arr_sort", "wr_arr_unique", "wr_arr_find",
+                             "wr_arr_slice", "wr_arr_sum_i", "wr_arr_min_i"})
+  {
+    EXPECT_NE(compiled.program->gpu_src.find(helper), std::string::npos) << helper;
+  }
+}
+TEST(nodes_vex, gpu_source_for_matrix_attributes)
+{
+  const CompileOutput compiled = compile(
+      "for (int k = 0; k < 2; k++) {\n"
+      "  3@m = 3@m * 2;\n"
+      "}\n"
+      "f@d = determinant(4@t);\n");
+  ASSERT_TRUE(bool(compiled.program)) << compiled.error;
+  EXPECT_TRUE(compiled.program->gpu_ok) << compiled.program->gpu_error;
+  EXPECT_NE(compiled.program->gpu_src.find("mat3("), std::string::npos);
+}
+TEST(nodes_vex, gpu_source_for_other_geometry_sample)
+{
+  const CompileOutput compiled = compile(
+      "vector total = set(0, 0, 0);\n"
+      "for (int k = 0; k < 4; k++) {\n"
+      "  total += point(1, \"vel\", k);\n"
+      "}\n"
+      "v@total = total;\n");
+  ASSERT_TRUE(bool(compiled.program)) << compiled.error;
+  EXPECT_TRUE(compiled.program->gpu_ok) << compiled.program->gpu_error;
+  ASSERT_EQ(compiled.program->gpu_samples.size(), 1);
+  const Program::GpuSample &sample = compiled.program->gpu_samples[0];
+  EXPECT_EQ(compiled.program->element_samples[sample.sample].geo, 1);
+  /* The attribute is only known by name, what it is added to makes it a vector. */
+  EXPECT_EQ(sample.type, Type::Vector);
+}
 TEST(nodes_vex, gpu_source_for_map_smooth)
 {
   const CompileOutput compiled = compile(

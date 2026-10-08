@@ -209,6 +209,8 @@ struct ElemUser {
     Array<float3> owned_v3;
     Array<float4> owned_v4;
     Array<ColorGeometry4f> owned_color;
+    /** Array attributes: the attributes with the rest of arrays that are longer than a value. */
+    Vector<GVArray> array_chunks;
   };
   Vector<const bke::GeometrySet *> geos;
   const bke::GeometrySet *self = nullptr; /* geometry currently being wrangled (geo 0) */
@@ -232,13 +234,42 @@ static std::string sample_attr_name(StringRef name)
   if (name.is_empty() || name == "P" || name == "p" || name == "vector") {
     return "position";
   }
-  if (name == "N" || name == "n") {
-    return "normal";
-  }
   if (name == "Cd") {
     return "color";
   }
   return std::string(name);
+}
+
+/**
+ * `N` when the geometry has no stored attribute of that name: the normals Blender computes for that
+ * domain, like the Normal node. Empty when the geometry has no normals there.
+ */
+static VArray<float3> computed_normals(
+    const bke::GeometrySet &geo,
+    const bke::AttrDomain domain,
+    const std::optional<bke::GeometryComponent::Type> component = std::nullopt)
+{
+  const bool mesh_domain = ELEM(domain,
+                                bke::AttrDomain::Point,
+                                bke::AttrDomain::Edge,
+                                bke::AttrDomain::Face,
+                                bke::AttrDomain::Corner);
+  if (!component || *component == bke::GeometryComponent::Type::Mesh) {
+    if (const Mesh *mesh = geo.get_mesh()) {
+      if (mesh_domain) {
+        const int size = mesh->attributes().domain_size(domain);
+        return bke::mesh_normals_varray(*mesh, IndexMask(size), domain);
+      }
+    }
+  }
+  if (!component || *component == bke::GeometryComponent::Type::Curve) {
+    if (const Curves *curves = geo.get_curves()) {
+      if (ELEM(domain, bke::AttrDomain::Point, bke::AttrDomain::Curve)) {
+        return bke::curve_normals_varray(curves->geometry.wrap(), domain);
+      }
+    }
+  }
+  return {};
 }
 
 static void prewarm_element_samples(const Program &program, ElemUser &user)
@@ -277,37 +308,60 @@ static void prewarm_element_samples(const Program &program, ElemUser &user)
       default:
         break;
     }
-    bke::GAttributeReader reader;
-    if (const Mesh *mesh = geo->get_mesh()) {
-      if (ELEM(domain,
-               bke::AttrDomain::Point,
-               bke::AttrDomain::Edge,
-               bke::AttrDomain::Face,
-               bke::AttrDomain::Corner))
-      {
-        reader = mesh->attributes().lookup(sample.name, domain);
+    const auto find_reader = [&](const StringRef name) {
+      bke::GAttributeReader reader;
+      if (const Mesh *mesh = geo->get_mesh()) {
+        if (ELEM(domain,
+                 bke::AttrDomain::Point,
+                 bke::AttrDomain::Edge,
+                 bke::AttrDomain::Face,
+                 bke::AttrDomain::Corner))
+        {
+          reader = mesh->attributes().lookup(name, domain);
+        }
+      }
+      if (!reader && domain == bke::AttrDomain::Point) {
+        if (const PointCloud *pointcloud = geo->get_pointcloud()) {
+          reader = pointcloud->attributes().lookup(name, domain);
+        }
+      }
+      if (!reader && ELEM(domain, bke::AttrDomain::Point, bke::AttrDomain::Curve)) {
+        if (const Curves *curves = geo->get_curves()) {
+          reader = curves->geometry.wrap().attributes().lookup(name, domain);
+        }
+      }
+      if (!reader && domain == bke::AttrDomain::Instance) {
+        if (const bke::Instances *instances = geo->get_instances()) {
+          reader = instances->attributes().lookup(name, domain);
+        }
+      }
+      return reader;
+    };
+    bke::GAttributeReader reader = find_reader(sample.name);
+    if (reader && reader.varray.type().is<bke::WrangleArrayValue>()) {
+      for (int chunk = 1;; chunk++) {
+        bke::GAttributeReader part = find_reader(
+            bke::WrangleArrayValue::chunk_attribute_name(sample.name, chunk));
+        if (!part || !part.varray.type().is<bke::WrangleArrayValue>() ||
+            part.varray.size() != reader.varray.size())
+        {
+          break;
+        }
+        cache.array_chunks.append(std::move(part.varray));
       }
     }
-    if (!reader && domain == bke::AttrDomain::Point) {
-      if (const PointCloud *pointcloud = geo->get_pointcloud()) {
-        reader = pointcloud->attributes().lookup(sample.name, domain);
+    GVArray values = reader ? reader.varray : GVArray();
+    if (!values && ELEM(StringRef(sample.name), "normal", "N", "n")) {
+      /* `point(1, "N", i)` / `face(0, "N", i)`: there is no such attribute, compute it. */
+      if (VArray<float3> normals = computed_normals(*geo, domain)) {
+        values = GVArray(std::move(normals));
       }
     }
-    if (!reader && ELEM(domain, bke::AttrDomain::Point, bke::AttrDomain::Curve)) {
-      if (const Curves *curves = geo->get_curves()) {
-        reader = curves->geometry.wrap().attributes().lookup(sample.name, domain);
-      }
-    }
-    if (!reader && domain == bke::AttrDomain::Instance) {
-      if (const bke::Instances *instances = geo->get_instances()) {
-        reader = instances->attributes().lookup(sample.name, domain);
-      }
-    }
-    if (!reader) {
+    if (!values) {
       user.element_samples.append(std::move(cache));
       continue;
     }
-    cache.values = std::move(reader.varray);
+    cache.values = std::move(values);
     cache.direct.size = int(cache.values.size());
     if (cache.values.type().is<bool>()) {
       cache.direct.type = Type::Bool;
@@ -391,6 +445,34 @@ static void prewarm_element_samples(const Program &program, ElemUser &user)
   }
 }
 
+/** An array attribute value that continues in chunk attributes. Void when it does not. */
+static Value long_array_from_sample(const ElemUser::ElementSampleCache &sample, const int index)
+{
+  Value none;
+  none.type = Type::Void;
+  if (!sample.values || !sample.values.type().is<bke::WrangleArrayValue>() || index < 0 ||
+      index >= sample.values.size())
+  {
+    return none;
+  }
+  const bke::WrangleArrayValue head = sample.values.typed<bke::WrangleArrayValue>()[index];
+  const int stride = bke::WrangleArrayValue::item_words(head.kind);
+  if (head.truncated != bke::WrangleArrayValue::continued || stride <= 0) {
+    return none;
+  }
+  Vector<int> words;
+  words.extend(Span<int>(head.d.i, int(head.count) * stride));
+  for (const GVArray &chunk : sample.array_chunks) {
+    const bke::WrangleArrayValue part = chunk.typed<bke::WrangleArrayValue>()[index];
+    if (part.count == 0) {
+      break;
+    }
+    words.extend(
+        Span<int>(part.d.i, std::min(int(part.count), int(bke::WrangleArrayValue::max_values))));
+  }
+  return array_words_to_value(head.kind, words, Type::Void);
+}
+
 static Value value_from_sample_cache(ElemUser::ElementSampleCache &sample,
                                      const int index,
                                      Vector<std::string> *interned)
@@ -437,6 +519,10 @@ static Value value_from_sample_cache(ElemUser::ElementSampleCache &sample,
         break;
     }
   }
+  const Value long_array = long_array_from_sample(sample, index);
+  if (long_array.type != Type::Void) {
+    return long_array;
+  }
   return value_from_varray(sample.values, index, interned);
 }
 
@@ -450,6 +536,41 @@ static bool is_normal_name(const StringRef n)
   return n == "normal" || n == "N" || n == "n";
 }
 
+/**
+ * An array attribute value that continues in chunk attributes, read from \a attrs. Void when
+ * \a head is the whole array.
+ */
+static Value long_array_from_attributes(const bke::AttributeAccessor &attrs,
+                                        const StringRef name,
+                                        const bke::AttrDomain domain,
+                                        const int index,
+                                        const bke::WrangleArrayValue &head)
+{
+  Value none;
+  none.type = Type::Void;
+  const int stride = bke::WrangleArrayValue::item_words(head.kind);
+  if (head.truncated != bke::WrangleArrayValue::continued || stride <= 0) {
+    return none;
+  }
+  Vector<int> words;
+  words.extend(Span<int>(head.d.i, int(head.count) * stride));
+  for (int chunk = 1;; chunk++) {
+    const bke::AttributeReader<bke::WrangleArrayValue> reader =
+        attrs.lookup<bke::WrangleArrayValue>(
+            bke::WrangleArrayValue::chunk_attribute_name(name, chunk), domain);
+    if (!reader || index < 0 || index >= reader.varray.size()) {
+      break;
+    }
+    const bke::WrangleArrayValue part = reader.varray[index];
+    if (part.count == 0) {
+      break;
+    }
+    words.extend(
+        Span<int>(part.d.i, std::min(int(part.count), int(bke::WrangleArrayValue::max_values))));
+  }
+  return array_words_to_value(head.kind, words, Type::Void);
+}
+
 static Value read_named_attr(const bke::AttributeAccessor &attrs,
                              const StringRef name,
                              const std::optional<bke::AttrDomain> domain,
@@ -461,6 +582,15 @@ static Value read_named_attr(const bke::AttributeAccessor &attrs,
     Value miss;
     miss.type = Type::Void;
     return miss;
+  }
+  if (reader.varray.type().is<bke::WrangleArrayValue>() && index >= 0 &&
+      index < reader.varray.size())
+  {
+    const bke::WrangleArrayValue head = reader.varray.typed<bke::WrangleArrayValue>()[index];
+    const Value long_array = long_array_from_attributes(attrs, name, reader.domain, index, head);
+    if (long_array.type != Type::Void) {
+      return long_array;
+    }
   }
   return value_from_varray(reader.varray, index, interned);
 }
@@ -515,10 +645,34 @@ static Value sample_mesh(const Mesh &mesh,
       }
     }
   }
-  if (is_normal_name(lookup) && ad == bke::AttrDomain::Point) {
-    const Span<float3> nrm = mesh.vert_normals();
-    if (index >= 0 && index < nrm.size()) {
-      return Value::from_vec(nrm[index]);
+  if (is_normal_name(lookup) && index >= 0 && !mesh.attributes().contains(lookup)) {
+    /* Computed for every domain, whichever domain the node runs over. */
+    if (ad == bke::AttrDomain::Point) {
+      const Span<float3> normals = mesh.vert_normals();
+      if (index < normals.size()) {
+        return Value::from_vec(normals[index]);
+      }
+    }
+    else if (ad == bke::AttrDomain::Face) {
+      const Span<float3> normals = mesh.face_normals();
+      if (index < normals.size()) {
+        return Value::from_vec(normals[index]);
+      }
+    }
+    else if (ad == bke::AttrDomain::Corner) {
+      const Span<float3> normals = mesh.corner_normals();
+      if (index < normals.size()) {
+        return Value::from_vec(normals[index]);
+      }
+    }
+    else if (ad == bke::AttrDomain::Edge) {
+      /* Like the Normal node: between the normals of its two points. */
+      const Span<int2> edges = mesh.edges();
+      const Span<float3> normals = mesh.vert_normals();
+      if (index < edges.size()) {
+        const int2 edge = edges[index];
+        return Value::from_vec(math::normalize(normals[edge[0]] + normals[edge[1]]));
+      }
     }
   }
   Value v = read_named_attr(mesh.attributes(), lookup, ad, index, interned);
@@ -607,6 +761,10 @@ Value load_elem_fn(void *user,
             default:
               break;
           }
+        }
+        const Value long_array = long_array_from_sample(sample, index);
+        if (long_array.type != Type::Void) {
+          return long_array;
         }
         return value_from_varray(sample.values, index, nullptr);
       }
@@ -1013,6 +1171,13 @@ struct BindState {
     size_t bytes = 0;
   };
   Vector<CopyBack> copy_back;
+  /* Long array attributes, see #bke::WrangleArrayValue::continued. Per attribute: the chunk
+   * attributes that exist, and the long arrays that are written in this evaluation. */
+  Array<Vector<const bke::WrangleArrayValue *>> array_chunks;
+  Array<std::unique_ptr<ArrayOverflow>> array_overflow;
+  std::optional<bke::MutableAttributeAccessor> attributes;
+  bke::AttrDomain domain = bke::AttrDomain::Point;
+  const Program *program = nullptr;
 };
 
 /** Types that are stored as a plain attribute, so an attribute of another type converts. */
@@ -1039,9 +1204,17 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
                 const int domain_size,
                 const IndexMask &mask,
                 const Program &program,
-                BindState &state)
+                BindState &state,
+                const VArray<float3> &normals)
 {
+  /* `v@N` without a stored attribute of that name reads the computed normals of this domain. */
+  const bool use_normals = normals && normals.size() == domain_size;
   state.rt.reinitialize(program.attrs.size());
+  state.array_chunks.reinitialize(program.attrs.size());
+  state.array_overflow.reinitialize(program.attrs.size());
+  state.attributes.emplace(attributes);
+  state.domain = domain;
+  state.program = &program;
   for (const int i : program.attrs.index_range()) {
     const AttrInfo &info = program.attrs[i];
     AttrRT &a = state.rt[i];
@@ -1049,6 +1222,26 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
     a.size = domain_size;
     if (domain_size == 0 || mask.is_empty()) {
       continue;
+    }
+    if (type_is_array(info.type) && info.type != Type::StringArray) {
+      /* The parts of arrays that are longer than one attribute value. */
+      for (int chunk = 1;; chunk++) {
+        bke::AttributeReader<bke::WrangleArrayValue> reader =
+            attributes.lookup<bke::WrangleArrayValue>(
+                bke::WrangleArrayValue::chunk_attribute_name(info.name, chunk), domain);
+        if (!reader || reader.varray.size() != domain_size) {
+          break;
+        }
+        const VArraySpan<bke::WrangleArrayValue> &span =
+            state.scope.construct<VArraySpan<bke::WrangleArrayValue>>(reader.varray);
+        state.scope.construct<bke::AttributeReader<bke::WrangleArrayValue>>(std::move(reader));
+        state.array_chunks[i].append(span.data());
+      }
+      a.array_chunks = state.array_chunks[i];
+      if (info.write) {
+        state.array_overflow[i] = std::make_unique<ArrayOverflow>();
+        a.array_overflow = state.array_overflow[i].get();
+      }
     }
     const bke::AttrType at = to_attr_type(info.type);
     if (info.write) {
@@ -1091,6 +1284,12 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
       if (fill_default) {
         const CPPType &type = writer.span.type();
         type.fill_assign_n(type.default_value(), writer.span.data(), writer.span.size());
+      }
+      if (!meta && use_normals && attr_name_is_normal(info.name) && info.type == Type::Vector &&
+          writer.span.type().is<float3>() && writer.span.size() == domain_size)
+      {
+        /* `v@N = -v@N;` creates the attribute, it starts from the computed normals. */
+        normals.materialize(writer.span.typed<float3>());
       }
       switch (info.type) {
         case Type::Bool: {
@@ -1207,6 +1406,13 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
     else {
       bke::GAttributeReader reader = attributes.lookup(info.name, domain);
       if (!reader) {
+        if (use_normals && attr_name_is_normal(info.name) && info.type == Type::Vector) {
+          state.rv.append({});
+          Array<float3> &buf = state.rv.last();
+          buf.reinitialize(domain_size);
+          normals.materialize(buf.as_mutable_span());
+          a.rv = buf.data();
+        }
         continue;
       }
       if (bind_type_converts(info.type) &&
@@ -1425,6 +1631,123 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
   return true;
 }
 
+/**
+ * What has to happen to the chunk attributes of one array attribute after the program has run.
+ * An element is one of: written with a long array (its words are in `long_items`), has a short
+ * array now (its chunks are emptied), or was not written and keeps what it had.
+ */
+struct ArrayChunkPlan {
+  std::string name;
+  int chunks_old = 0;
+  int chunks_new = 0;
+  struct LongItem {
+    int element = 0;
+    int head_words = 0;
+    bke::WrangleArrayKind kind = bke::WrangleArrayKind::Int;
+    Vector<int> words;
+  };
+  Vector<LongItem> long_items;
+  /** Elements whose array is complete in the head attribute. */
+  Vector<int> short_elements;
+};
+
+static void plan_array_chunks(BindState &state, Vector<ArrayChunkPlan> &r_plans)
+{
+  if (state.program == nullptr) {
+    return;
+  }
+  constexpr int chunk_words = bke::WrangleArrayValue::max_values;
+  for (const int i : state.program->attrs.index_range()) {
+    if (i >= state.array_overflow.size() || !state.array_overflow[i]) {
+      continue;
+    }
+    ArrayOverflow &overflow = *state.array_overflow[i];
+    const AttrRT &rt = state.rt[i];
+    const int chunks_old = int(state.array_chunks[i].size());
+    if (rt.warr == nullptr || (chunks_old == 0 && overflow.words.is_empty())) {
+      continue;
+    }
+    ArrayChunkPlan plan;
+    plan.name = state.program->attrs[i].name;
+    plan.chunks_old = chunks_old;
+    for (const auto item : overflow.words.items()) {
+      const bke::WrangleArrayValue &head = rt.warr[item.key];
+      if (head.truncated != bke::WrangleArrayValue::continued) {
+        continue;
+      }
+      ArrayChunkPlan::LongItem long_item;
+      long_item.element = item.key;
+      long_item.kind = head.kind;
+      long_item.head_words = int(head.count) * bke::WrangleArrayValue::item_words(head.kind);
+      long_item.words = item.value;
+      const int extra = std::max(int(long_item.words.size()) - long_item.head_words, 0);
+      plan.chunks_new = std::max(plan.chunks_new, (extra + chunk_words - 1) / chunk_words);
+      plan.long_items.append(std::move(long_item));
+    }
+    if (chunks_old > 0) {
+      for (int element = 0; element < rt.size; element++) {
+        if (rt.warr[element].truncated != bke::WrangleArrayValue::continued) {
+          plan.short_elements.append(element);
+        }
+        else if (!overflow.words.contains(element)) {
+          /* Not written here: the chunks it uses have to stay. */
+          int used = 0;
+          for (int chunk = 0; chunk < chunks_old; chunk++) {
+            if (state.array_chunks[i][chunk][element].count == 0) {
+              break;
+            }
+            used = chunk + 1;
+          }
+          plan.chunks_new = std::max(plan.chunks_new, used);
+        }
+      }
+    }
+    r_plans.append(std::move(plan));
+  }
+}
+
+static void apply_array_chunks(BindState &state, const Span<ArrayChunkPlan> plans)
+{
+  if (!state.attributes) {
+    return;
+  }
+  constexpr int chunk_words = bke::WrangleArrayValue::max_values;
+  bke::MutableAttributeAccessor &attributes = *state.attributes;
+  for (const ArrayChunkPlan &plan : plans) {
+    for (int chunk = 1; chunk <= plan.chunks_new; chunk++) {
+      bke::SpanAttributeWriter<bke::WrangleArrayValue> writer =
+          attributes.lookup_or_add_for_write_span<bke::WrangleArrayValue>(
+              bke::WrangleArrayValue::chunk_attribute_name(plan.name, chunk), state.domain);
+      if (!writer) {
+        continue;
+      }
+      for (const int element : plan.short_elements) {
+        if (element < writer.span.size()) {
+          writer.span[element] = {};
+        }
+      }
+      for (const ArrayChunkPlan::LongItem &item : plan.long_items) {
+        if (item.element >= writer.span.size()) {
+          continue;
+        }
+        const int offset = item.head_words + (chunk - 1) * chunk_words;
+        const int count = std::clamp(int(item.words.size()) - offset, 0, chunk_words);
+        bke::WrangleArrayValue &part = writer.span[item.element];
+        part.clear(item.kind);
+        part.count = uint16_t(count);
+        part.total = uint16_t(count);
+        if (count > 0) {
+          memcpy(part.d.i, item.words.data() + offset, sizeof(int) * size_t(count));
+        }
+      }
+      writer.finish();
+    }
+    for (int chunk = plan.chunks_new + 1; chunk <= plan.chunks_old; chunk++) {
+      attributes.remove(bke::WrangleArrayValue::chunk_attribute_name(plan.name, chunk));
+    }
+  }
+}
+
 void finish_bind(BindState &state)
 {
   for (const BindState::CopyBack &cb : state.copy_back) {
@@ -1432,6 +1755,9 @@ void finish_bind(BindState &state)
       memcpy(cb.dst, cb.src, cb.bytes);
     }
   }
+  /* Decided while the attributes are still bound, written once their writers are done. */
+  Vector<ArrayChunkPlan> array_chunk_plans;
+  plan_array_chunks(state, array_chunk_plans);
   for (bke::GSpanAttributeWriter *w : state.writers) {
     if (w) {
       w->finish();
@@ -1439,6 +1765,10 @@ void finish_bind(BindState &state)
   }
   state.writers.clear();
   state.copy_back.clear();
+  apply_array_chunks(state, array_chunk_plans);
+  for (std::unique_ptr<ArrayOverflow> &overflow : state.array_overflow) {
+    overflow.reset();
+  }
 }
 
 void append_positions_to_mesh(Mesh &mesh, const Span<float3> extra)
@@ -2335,6 +2665,141 @@ TopoUser::~TopoUser()
       kdtree_free(tree);
     }
   }
+}
+
+MeshTopoCache &mesh_topo(TopoUser *u, const int gi, const Mesh *mesh);
+
+/**
+ * `@ptnum`, `@edgenum`, `@facenum`, `@cornernum`, `@curvenum`: the element of another domain that
+ * the current element belongs to, like Houdini's `@ptnum` / `@primnum` / `@vtxnum`. For the domain
+ * the node runs over it is the element itself. When several elements qualify (the faces around a
+ * point) it is the first one, and -1 when there is none.
+ */
+static int element_number(TopoUser *u, const int kind, const int index)
+{
+  enum { Point = 0, Edge = 1, Face = 2, Corner = 3, Curve = 4 };
+  const auto first_or_none = [](const Span<int> items) {
+    return items.is_empty() ? -1 : items.first();
+  };
+  if (index < 0) {
+    return -1;
+  }
+  const bke::AttrDomain domain = u->bind_domain;
+  if (u->bind_type == bke::GeometryComponent::Type::Mesh && u->mesh) {
+    const Mesh &mesh = *u->mesh;
+    switch (domain) {
+      case bke::AttrDomain::Point: {
+        if (index >= mesh.verts_num) {
+          return -1;
+        }
+        switch (kind) {
+          case Point:
+            return index;
+          case Edge: {
+            MeshTopoCache &cache = mesh_topo(u, 0, &mesh);
+            cache.ensure_v2e();
+            return index < cache.v2e.size() ? first_or_none(cache.v2e[index]) : -1;
+          }
+          case Face:
+            return first_or_none(mesh.vert_to_face_map()[index]);
+          case Corner:
+            return first_or_none(mesh.vert_to_corner_map()[index]);
+          default:
+            return -1;
+        }
+      }
+      case bke::AttrDomain::Edge: {
+        if (index >= mesh.edges_num) {
+          return -1;
+        }
+        switch (kind) {
+          case Point:
+            return mesh.edges()[index][0];
+          case Edge:
+            return index;
+          case Face: {
+            MeshTopoCache &cache = mesh_topo(u, 0, &mesh);
+            cache.ensure_e2f();
+            return index < cache.e2f.size() ? first_or_none(cache.e2f[index]) : -1;
+          }
+          case Corner: {
+            MeshTopoCache &cache = mesh_topo(u, 0, &mesh);
+            cache.ensure_e2c();
+            return index < cache.e2c.size() ? first_or_none(cache.e2c[index]) : -1;
+          }
+          default:
+            return -1;
+        }
+      }
+      case bke::AttrDomain::Face: {
+        if (index >= mesh.faces_num) {
+          return -1;
+        }
+        if (kind == Face) {
+          return index;
+        }
+        const IndexRange face = mesh.faces()[index];
+        if (face.is_empty()) {
+          return -1;
+        }
+        switch (kind) {
+          case Point:
+            return mesh.corner_verts()[face.first()];
+          case Edge:
+            return mesh.corner_edges()[face.first()];
+          case Corner:
+            return int(face.first());
+          default:
+            return -1;
+        }
+      }
+      case bke::AttrDomain::Corner: {
+        if (index >= mesh.corners_num) {
+          return -1;
+        }
+        switch (kind) {
+          case Point:
+            return mesh.corner_verts()[index];
+          case Edge:
+            return mesh.corner_edges()[index];
+          case Face:
+            return mesh.corner_to_face_map()[index];
+          case Corner:
+            return index;
+          default:
+            return -1;
+        }
+      }
+      default:
+        return -1;
+    }
+  }
+  if (u->bind_type == bke::GeometryComponent::Type::Curve && u->curves) {
+    const bke::CurvesGeometry &curves = *u->curves;
+    if (domain == bke::AttrDomain::Point) {
+      if (kind == Point) {
+        return index < curves.points_num() ? index : -1;
+      }
+      if (kind == Curve) {
+        u->ensure_point_to_curve();
+        return index < u->point_to_curve.size() ? u->point_to_curve[index] : -1;
+      }
+      return -1;
+    }
+    if (domain == bke::AttrDomain::Curve) {
+      if (kind == Curve) {
+        return index < curves.curves_num() ? index : -1;
+      }
+      if (kind == Point && index < curves.curves_num()) {
+        const IndexRange points = curves.points_by_curve()[index];
+        return points.is_empty() ? -1 : int(points.first());
+      }
+      return -1;
+    }
+    return -1;
+  }
+  /* Point clouds and instances only have their own index. */
+  return (kind == Point && domain == bke::AttrDomain::Point) ? index : -1;
 }
 
 MeshTopoCache &mesh_topo(TopoUser *u, const int gi, const Mesh *mesh)
@@ -3959,6 +4424,8 @@ Value geo_builtin_fn(void *user,
       vals.append(corner_edges[c]);
       return value_from_int_array(std::move(vals));
     }
+    case Builtin::ElemNum:
+      return Value::from_int(element_number(u, args.is_empty() ? 0 : args[0].as_int(), env.index));
     case Builtin::FaceOfCorner: {
       if (!u->mesh) {
         return Value::from_int(-1);
@@ -6650,6 +7117,10 @@ ExecOutput run_on_accessor(const Program &program,
     topo.bind_domain = field_context->domain();
     topo.bind_type = field_context->type();
   }
+  if (topo.curves && program_uses_call(program, Builtin::ElemNum)) {
+    /* `@curvenum` of a point, the map is not built from the worker threads. */
+    topo.ensure_point_to_curve();
+  }
   profile_prewarm = ProfileClock::now();
 
   /* Neighbor gather/lerp stays on CPU like Blur Attribute. Skip bind/VM. */
@@ -6664,8 +7135,17 @@ ExecOutput run_on_accessor(const Program &program,
     return out;
   }
 
+  VArray<float3> normals;
+  if (field_context) {
+    for (const AttrInfo &info : program.attrs) {
+      if (attr_name_is_normal(info.name) && !attributes.contains(info.name)) {
+        normals = computed_normals(owner, bind_domain, field_context->type());
+        break;
+      }
+    }
+  }
   BindState state;
-  if (!bind_attrs(attributes, bind_domain, domain_size, mask, program, state)) {
+  if (!bind_attrs(attributes, bind_domain, domain_size, mask, program, state, normals)) {
     out.ok = false;
     out.error = BLT_translate_do_tooltip_any_thread("Failed to bind attributes");
     return out;
@@ -6676,6 +7156,10 @@ ExecOutput run_on_accessor(const Program &program,
   if (field_context) {
     topo.bind_domain = field_context->domain();
     topo.bind_type = field_context->type();
+  }
+  if (topo.curves && program_uses_call(program, Builtin::ElemNum)) {
+    /* `@curvenum` of a point, the map is not built from the worker threads. */
+    topo.ensure_point_to_curve();
   }
 
   if (try_jacobi_smooth(
@@ -6831,6 +7315,25 @@ ExecOutput run_on_accessor(const Program &program,
     env.gpu_nbr_idx = nbr_idx;
   }
 
+  /* `@ptnum`, `@facenum`, ... on the GPU: the shader has no mesh topology, so the number of every
+   * element is computed here and uploaded. */
+  Array<int> gpu_elem_nums[5];
+  if (program.gpu_ok && program.gpu_elem_nums != 0 && domain_size > 0) {
+    for (int kind = 0; kind < 5; kind++) {
+      if ((program.gpu_elem_nums & (1 << kind)) == 0) {
+        continue;
+      }
+      gpu_elem_nums[kind].reinitialize(domain_size);
+      MutableSpan<int> numbers = gpu_elem_nums[kind];
+      threading::parallel_for(IndexRange(domain_size), 4096, [&](const IndexRange range) {
+        for (const int i : range) {
+          numbers[i] = element_number(&topo, kind, i);
+        }
+      });
+      env.gpu_elem_nums[kind] = numbers;
+    }
+  }
+
   Vector<Array<int>> ch_i(program.gpu_ch.size());
   Vector<Array<float>> ch_f(program.gpu_ch.size());
   Vector<Array<float3>> ch_v(program.gpu_ch.size());
@@ -6943,14 +7446,79 @@ ExecOutput run_on_accessor(const Program &program,
     return out;
   }
 
-  if (program.gpu_ok && domain_size > 0 && !program_uses_addpoint(program) &&
+  /* The shader reads every sampled attribute from the buffers of this domain: `face(0, "N", f)`
+   * in a node that runs over points is not something it can answer. */
+  int bind_domain_bit = 0;
+  switch (bind_domain) {
+    case bke::AttrDomain::Edge:
+      bind_domain_bit = 1;
+      break;
+    case bke::AttrDomain::Face:
+      bind_domain_bit = 2;
+      break;
+    case bke::AttrDomain::Corner:
+      bind_domain_bit = 3;
+      break;
+    case bke::AttrDomain::Instance:
+      bind_domain_bit = 4;
+      break;
+    case bke::AttrDomain::Curve:
+      bind_domain_bit = 5;
+      break;
+    default:
+      break;
+  }
+  /* A sample of another domain or another geometry input needs its data, with the type the
+   * shader was written for. Without it the interpreter runs the program. */
+  bool gpu_samples_other_domain = false;
+  for (const Program::GpuSample &gs : program.gpu_samples) {
+    if (gs.sample >= elem_user.element_samples.size()) {
+      gpu_samples_other_domain = true;
+      break;
+    }
+    const ElemUser::ElementSampleCache &cache = elem_user.element_samples[gs.sample];
+    if (cache.geo == 0 && cache.domain == bind_domain_bit) {
+      continue;
+    }
+    const AttrRT &data = static_samples[gs.sample];
+    if (data.size <= 0 || data.type != gs.type) {
+      gpu_samples_other_domain = true;
+      break;
+    }
+  }
+  /* `BLENDER_VEX_NO_GPU` forces the interpreter, to compare both paths. */
+  const bool gpu_allowed = std::getenv("BLENDER_VEX_NO_GPU") == nullptr && !gpu_samples_other_domain;
+  if (gpu_allowed && program.gpu_ok && domain_size > 0 && !program_uses_addpoint(program) &&
       !program_uses_spatial(program) && !program_uses_geo_side_effects(program))
   {
-    if (gpu_try_run(program, env, mask, domain_size, error)) {
+    /* A failure on the GPU side must never take Blender down: the interpreter gives the same
+     * result. */
+    bool gpu_done = false;
+    try {
+      gpu_done = gpu_try_run(program, env, mask, domain_size, error);
+    }
+    catch (const std::exception &exception) {
+      error = exception.what();
+    }
+    if (gpu_done) {
+      if (profile) {
+        std::fprintf(stderr, "VEX_GPU ran domain=%d\n", domain_size);
+      }
       finish_bind(state);
       return out;
     }
+    if (profile) {
+      std::fprintf(stderr, "VEX_GPU failed %s\n", error.c_str());
+    }
     error.clear();
+  }
+  else if (profile) {
+    std::fprintf(stderr,
+                 "VEX_GPU skipped %s\n",
+                 gpu_samples_other_domain ? "a sampled attribute is missing or has another type" :
+                 !gpu_allowed ? "BLENDER_VEX_NO_GPU" :
+                 program.gpu_ok ? "geometry edits or spatial queries" :
+                                  program.gpu_error.c_str());
   }
 
   auto run_mask = [&](const IndexMask &run) {
@@ -7010,6 +7578,31 @@ ExecOutput run_on_accessor(const Program &program,
     }
   }
   profile_vm = ProfileClock::now();
+
+  /* A stored array attribute has a fixed size per element. Say so when an array did not fit,
+   * instead of dropping the rest without a word. */
+  for (const int i : program.attrs.index_range()) {
+    const AttrInfo &info = program.attrs[i];
+    if (!info.write || !type_is_array(info.type) || i >= state.rt.size() || !out.warning.empty()) {
+      continue;
+    }
+    const AttrRT &rt = state.rt[i];
+    if (rt.warr == nullptr) {
+      continue;
+    }
+    for (int element = 0; element < rt.size; element++) {
+      if (rt.warr[element].truncated == 1) {
+        out.warning = fmt::format(
+            fmt::runtime(BLT_translate_do_tooltip_any_thread(
+                "The array attribute @{} holds at most {} items per element, longer arrays were "
+                "cut off\nKeep long arrays in a local variable, or split them over several "
+                "attributes.")),
+            info.name,
+            int(rt.warr[element].count));
+        break;
+      }
+    }
+  }
 
   finish_bind(state);
   finish_extra_writers(topo);

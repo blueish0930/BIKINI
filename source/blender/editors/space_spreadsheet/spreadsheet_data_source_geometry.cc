@@ -8,6 +8,7 @@
 #include "BLI_math_matrix.hh"
 #include "BLI_virtual_array.hh"
 
+#include "BKE_wrangle_array.hh"
 #include "BKE_attribute.hh"
 #include "BKE_context.hh"
 #include "BKE_curves.hh"
@@ -216,6 +217,10 @@ bool GeometryDataSource::display_attribute(const StringRef name,
   }
   if (!show_internal_attributes_) {
     if (!bke::allow_procedural_attribute_access(name)) {
+      return false;
+    }
+    if (bke::WrangleArrayValue::is_chunk_attribute_name(name)) {
+      /* The rest of a long array attribute, which is shown in the column of that attribute. */
       return false;
     }
     if (domain == bke::AttrDomain::Instance && name == "instance_transform") {

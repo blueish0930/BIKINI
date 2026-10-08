@@ -203,7 +203,7 @@ const char *BLT_translate_do_tooltip_any_thread(const char *msgid)
 {
 #ifdef WITH_INTERNATIONAL
   /* The catalog is only read here. The Python fallback of #BLT_pgettext needs the main thread. */
-  if ((U.transopts & USER_TR_TOOLTIPS) && msgid && msgid[0]) {
+  if ((U.transopts & (USER_TR_TOOLTIPS | USER_TR_REPORTS)) && msgid && msgid[0]) {
     if (const std::optional<StringRefNull> translation = locale::translate(0, StringRef(), msgid))
     {
       return translation->c_str();
