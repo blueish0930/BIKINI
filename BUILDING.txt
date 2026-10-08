@@ -136,10 +136,29 @@ The verified configuration is Visual Studio 2022 (vc17), x64, the "full" configu
 Release. The build directory sits next to the source tree and is called
 build_windows_Full_x64_vc17_Release, the executable is bin\Release\blender.exe.
 
+The v4.0.1 GitHub Release includes BIKINI-build-dependencies-v4.0.1.zip. It contains the exact
+LuxCore patch used by this source tree and a script that fetches the recorded submodule commits,
+Git LFS objects, Spectra, OptiX headers and DLSS SDK from their original repositories. The ZIP
+does not contain Blender's large Windows libraries or NVIDIA SDK copies. Download it here:
+
+https://github.com/blueish0930/BIKINI/releases/download/v4.0.1/BIKINI-build-dependencies-v4.0.1.zip
+
 Run these commands in an already opened "x64 Native Tools Command Prompt for VS 2022":
 
     git clone https://github.com/blueish0930/BIKINI.git
     cd BIKINI
+
+    curl.exe -L -o "%TEMP%\BIKINI-build-dependencies-v4.0.1.zip" "https://github.com/blueish0930/BIKINI/releases/download/v4.0.1/BIKINI-build-dependencies-v4.0.1.zip"
+    powershell -NoProfile -Command "Expand-Archive -LiteralPath '%TEMP%\BIKINI-build-dependencies-v4.0.1.zip' -DestinationPath '%TEMP%\BIKINI-build-dependencies-v4.0.1' -Force"
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%TEMP%\BIKINI-build-dependencies-v4.0.1\tools\setup_release_dependencies.ps1" -RepoRoot "%CD%"
+
+    cd extern\luxcore
+    make.bat deps
+    cd ..\..
+
+    make.bat full 2022
+
+If you prefer to fetch the dependencies manually, the equivalent steps are:
 
     git submodule update --init extern/luxcore
     git -C extern/luxcore apply ../../patches/luxcore-bikini.patch
@@ -154,11 +173,10 @@ Run these commands in an already opened "x64 Native Tools Command Prompt for VS 
     git clone --depth 1 https://github.com/NVIDIA/optix-dev.git lib\windows_x64\optix
     git clone --recurse-submodules https://github.com/NVIDIA/DLSS.git lib\windows_x64\dlss
 
-    cd extern\luxcore
-    make.bat deps
-    cd ..\..
-
-    make.bat full 2022
+The Release script pins Spectra to bdd707b9, OptiX headers to f60c1e44 (OptiX 8.0.0), and DLSS
+to 37495948 (DLSS 310.9.1). The manual clones above follow each repository's current branch.
+The script keeps any existing dependency directory unchanged; check its version yourself if you
+already have one.
 
 When make.bat finds lib/windows_x64 still empty, it also offers to download it. The LFS objects
 are large, so the first "lfs pull" takes a while.
