@@ -245,8 +245,7 @@ class SpreadsheetLayoutDrawer : public SpreadsheetDrawer {
         [](bContext * /*C*/, void *arg, StringRef /*tip*/) {
           return *static_cast<std::string *>(arg);
         },
-        MEM_new<std::string>(__func__, std::move(description)),
-        [](void *arg) { MEM_delete(static_cast<std::string *>(arg)); });
+        MEM_new<std::string>(__func__, std::move(description)));
     /* Center-align column headers. */
     button_drawflag_disable(but, ui::BUT_TEXT_LEFT);
     button_drawflag_disable(but, ui::BUT_TEXT_RIGHT);
@@ -369,8 +368,7 @@ class SpreadsheetLayoutDrawer : public SpreadsheetDrawer {
           [](bContext * /*C*/, void *argN, const StringRef /*tip*/) {
             return fmt::format("{:f}", *(static_cast<float *>(argN)));
           },
-          MEM_new<float>(__func__, value),
-          MEM_delete_void);
+          MEM_new<float>(__func__, value));
       /* Right-align Floats. */
       button_drawflag_disable(but, ui::BUT_TEXT_LEFT);
       button_drawflag_enable(but, ui::BUT_TEXT_RIGHT);
@@ -483,8 +481,7 @@ class SpreadsheetLayoutDrawer : public SpreadsheetDrawer {
             const int length = std::min<int>(uint8_t(prop.s_len), sizeof(prop.s));
             return std::string(StringRef(prop.s, length));
           },
-          prop,
-          MEM_delete_void);
+          prop);
       return;
     }
     if (type.is<nodes::BundleItemValue>()) {
@@ -572,8 +569,7 @@ class SpreadsheetLayoutDrawer : public SpreadsheetDrawer {
           [](bContext * /*C*/, void *argN, const StringRef /*tip*/) {
             return fmt::format("{:f}", *(static_cast<float *>(argN)));
           },
-          MEM_new<float>(__func__, value),
-          MEM_delete_void);
+          MEM_new<float>(__func__, value));
       /* Right-align Floats. */
       button_drawflag_disable(but, ui::BUT_TEXT_LEFT);
       button_drawflag_enable(but, ui::BUT_TEXT_RIGHT);
@@ -618,8 +614,7 @@ class SpreadsheetLayoutDrawer : public SpreadsheetDrawer {
               BLI_str_format_int64_grouped(dst, *static_cast<int64_t *>(argN));
               return fmt::format("{} {}", dst, TIP_("bytes"));
             },
-            MEM_new<int64_t>(__func__, value),
-            MEM_delete_void);
+            MEM_new<int64_t>(__func__, value));
         break;
       }
       default: {
@@ -628,8 +623,7 @@ class SpreadsheetLayoutDrawer : public SpreadsheetDrawer {
             [](bContext * /*C*/, void *argN, const StringRef /*tip*/) {
               return fmt::format("{}", *static_cast<int64_t *>(argN));
             },
-            MEM_new<int64_t>(__func__, value),
-            MEM_delete_void);
+            MEM_new<int64_t>(__func__, value));
         break;
       }
     }
@@ -662,8 +656,7 @@ class SpreadsheetLayoutDrawer : public SpreadsheetDrawer {
           [](bContext * /*C*/, void *argN, const StringRef /*tip*/) {
             return fmt::format("{}", *(static_cast<int *>(argN)));
           },
-          MEM_new<int>(__func__, value),
-          MEM_delete_void);
+          MEM_new<int>(__func__, value));
       /* Right-align Floats. */
       button_drawflag_disable(but, ui::BUT_TEXT_LEFT);
       button_drawflag_enable(but, ui::BUT_TEXT_RIGHT);

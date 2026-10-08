@@ -2134,6 +2134,10 @@ void button_func_menu_step_set(Button *but, MenuStepFunc func);
 void button_menu_disable_hover_open(Button *but);
 
 void button_func_tooltip_set(Button *but, ButtonToolTipFunc func, void *arg, FreeArgFunc free_arg);
+template<typename T> void button_func_tooltip_set(Button *but, ButtonToolTipFunc func, T *arg)
+{
+  button_func_tooltip_set(but, func, arg, but_func_argN_free<T>);
+}
 /**
  * Enable a tooltip that appears faster than the usual tooltip. If the button has both a quick and
  * a normal tooltip, the quick one is shown first, and expanded to the full one after the usual
@@ -2184,6 +2188,11 @@ void button_func_tooltip_custom_set(Button *but,
                                     ButtonToolTipCustomFunc func,
                                     void *arg,
                                     FreeArgFunc free_arg);
+template<typename T>
+void button_func_tooltip_custom_set(Button *but, ButtonToolTipCustomFunc func, T *arg)
+{
+  button_func_tooltip_custom_set(but, func, arg, but_func_argN_free<T>);
+}
 
 template<typename Func> void button_func_tooltip_custom_set_cpp(Button &but, Func &&func)
 {
@@ -2194,8 +2203,7 @@ template<typename Func> void button_func_tooltip_custom_set_cpp(Button &but, Fun
         const Func &func = *static_cast<Func *>(argN);
         func(C, data);
       },
-      allocated,
-      [](void *arg) { MEM_delete<Func>(static_cast<Func *>(arg)); });
+      allocated);
 }
 
 /**
