@@ -951,9 +951,12 @@ void PathTrace::cancel()
 {
   thread_scoped_lock lock(render_cancel_.mutex);
 
-  /* Only cancel in the middle of rendering when more than one scheduled
-   * sample has completed. Temporal DLSS keeps just 1 spp in the buffer. */
-  if (render_scheduler_.get_num_rendered_samples() > 1) {
+  /* With interactive denoisers like DLSS always render 1 complete sample, otherwise
+   * interactivity becomes bad. Otherwise cancel immediately so the main thread isn't blocked.
+   * Temporal DLSS keeps just 1 spp in the buffer, so count scheduled samples instead. */
+  if (!render_scheduler_.is_denoiser_interactive() ||
+      render_scheduler_.get_num_rendered_samples() > 1)
+  {
     render_cancel_.is_requested = true;
   }
 

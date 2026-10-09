@@ -107,6 +107,9 @@ class RenderScheduler {
   void set_denoiser_params(const DenoiseParams &params);
   bool is_denoiser_gpu_used() const;
 
+  /* True for viewport DLSS, which keeps scheduling until the session stops. */
+  bool is_denoiser_interactive() const;
+
   void set_adaptive_sampling(const AdaptiveSampling &adaptive_sampling);
   bool is_adaptive_sampling_used() const;
 
@@ -257,9 +260,6 @@ class RenderScheduler {
   /* Check whether denoising is active during interactive update while resolution divider is not
    * unit. */
   bool is_denoise_active_during_update() const;
-
-  /* True for viewport DLSS, which keeps scheduling until the session stops. */
-  bool is_denoiser_interactive() const;
 
   /* True when DLSS consumes independent 1spp frames. F12 remains finite,
    * while viewport rendering is controlled by is_denoiser_interactive(). */
