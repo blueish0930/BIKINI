@@ -211,7 +211,7 @@ static Vector<bNode *> get_node_code_gen_order(bNodeTree &ntree)
       nodes.append(node);
     }
   }
-  if (!zones) {
+  if (!zones || zones->zones.is_empty()) {
     return nodes;
   }
   /* Insertion sort to make sure that all nodes in a zone are packed together right before the zone
@@ -222,12 +222,13 @@ static Vector<bNode *> get_node_code_gen_order(bNodeTree &ntree)
       continue;
     }
     const bke::bNodeTreeZone *zone = zones->get_zone_by_node(node->identifier);
-    if (!zone) {
-      /* None outside of any zone can stay where they are. */
-      continue;
+    if (zone && zone->output_node_id == node->identifier) {
+      /* The output of a zone should not be moved, except for nested zones,
+       * which still have to be packed together with the rest of the parent zone. */
+      zone = zone->parent_zone;
     }
-    if (zone->output_node_id == node->identifier) {
-      /* The output of a zone should not be moved. */
+    if (!zone) {
+      /* Nodes outside of any zone can stay where they are. */
       continue;
     }
     for (int new_i = old_i + 1; new_i < nodes.size(); new_i++) {
