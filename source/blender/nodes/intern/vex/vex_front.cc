@@ -3107,6 +3107,10 @@ struct Compiler {
       m.add("corneredges", int(Builtin::EdgesOfCorner));
       m.add("cornerpoint", int(Builtin::VertexOfCorner));
       m.add("offsetcorner", int(Builtin::OffsetCornerInFace));
+      m.add("facesedge", int(Builtin::FacesEdge));
+      m.add("equivalentcorner", int(Builtin::EquivalentCorner));
+      m.add("prevedge", int(Builtin::PrevEdge));
+      m.add("nextedge", int(Builtin::NextEdge));
       m.add("curvepoints", int(Builtin::PointsOfCurve));
       m.add("pointcurve", int(Builtin::PointCurve));
       m.add("nearestpoints", int(Builtin::NearestPoints));
@@ -4981,6 +4985,10 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
         case Builtin::FaceOfCorner:
         case Builtin::VertexOfCorner:
         case Builtin::OffsetCornerInFace:
+        case Builtin::FacesEdge:
+        case Builtin::EquivalentCorner:
+        case Builtin::PrevEdge:
+        case Builtin::NextEdge:
         case Builtin::CurveOfPoint:
           e->type = Type::Int;
           break;

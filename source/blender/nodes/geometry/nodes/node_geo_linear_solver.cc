@@ -124,11 +124,11 @@ static void node_declare(NodeDeclarationBuilder &b)
   /* Single typed sockets (not if/else branches) so float↔vector rebuilds cleanly. */
   const eNodeSocketDatatype data_sock = (dtype == DataType::Vector) ? SOCK_VECTOR : SOCK_FLOAT;
 
-  b.add_input<decl::Bundle>("A"_ustr)
-      .create_signature([](const bNode &) { return BundleSignature::sparse_coo(); })
-      .structure_type(StructureType::Single)
-      .description(
-          "Sparse COO matrix bundle: weight (float list), row (int list), col (int list)");
+  auto &a_in = b.add_input<decl::Bundle>("A"_ustr)
+                   .create_signature([](const bNode &) { return BundleSignature::sparse_coo(); })
+                   .structure_type(StructureType::Single)
+                   .description("Sparse COO matrix bundle: weight (float list), row (int list), "
+                                "col (int list)");
 
   auto &b_in = b.add_input(data_sock, "b"_ustr)
                    .structure_type(StructureType::List)
@@ -145,9 +145,12 @@ static void node_declare(NodeDeclarationBuilder &b)
 
   auto &pin = b.add_input<decl::Bool>("Pin"_ustr)
                   .structure_type(StructureType::List)
-                  .description("Boolean pin mask; pinned DOFs are fixed to the corresponding b values");
+                  .description("Boolean pin mask; pinned DOFs are fixed to the corresponding b "
+                               "values. For a matrix factor the mask is part of the factorization, "
+                               "and Solve with Decomposition takes the pinned values from its b");
   auto &decomp_in = b.add_input<decl::Bundle>("Decomposition"_ustr)
-                        .description("Reusable matrix factorization from Decompose mode");
+                        .description("Reusable matrix factorization from Decompose mode. It "
+                                     "replaces the matrix A, which is not needed again");
 
   auto &num_eigen = b.add_input<decl::Int>("Num Eigenpairs"_ustr)
                         .default_value(0)
@@ -189,8 +192,9 @@ static void node_declare(NodeDeclarationBuilder &b)
 
     const bool need_b = mode == Mode::Solve || mode == Mode::SolveWithDecomposition;
     const bool need_x_in = mode == Mode::Multiply;
-    const bool need_pin = mode == Mode::Solve || mode == Mode::SolveWithDecomposition ||
-                          (mode == Mode::Decompose && sub == DecomposeSubMode::Eigen);
+    /* The factorization already contains the matrix and the pin mask. */
+    const bool need_a = mode != Mode::SolveWithDecomposition;
+    const bool need_pin = mode == Mode::Solve || mode == Mode::Decompose;
     const bool need_decomp_in = mode == Mode::SolveWithDecomposition;
     const bool need_eigen_params = mode == Mode::Decompose && sub == DecomposeSubMode::Eigen;
     const bool need_shift = need_eigen_params && is_shift_eigen_kind(ekind);
@@ -201,6 +205,7 @@ static void node_declare(NodeDeclarationBuilder &b)
     const bool out_decomp = mode == Mode::Decompose && sub == DecomposeSubMode::MatrixFactor;
     const bool out_eigen = mode == Mode::Decompose && sub == DecomposeSubMode::Eigen;
 
+    a_in.available(need_a);
     b_in.available(need_b);
     x_in.available(need_x_in);
     pin.available(need_pin);
@@ -559,11 +564,6 @@ static void node_geo_exec(GeoNodeExecParams params)
   }
 
   if (mode == Mode::SolveWithDecomposition) {
-    BundlePtr A = params.extract_input<BundlePtr>("A"_ustr);
-    if (!extract_coo_from_bundle(A, coo, error)) {
-      fail(error);
-      return;
-    }
     std::vector<double> b;
     int n_pts = 0;
     extract_b(b, n_pts);
@@ -584,13 +584,11 @@ static void node_geo_exec(GeoNodeExecParams params)
       std::vector<double> x_planar(size_t(n) * 3, 0.0);
       for (int c = 0; c < 3; c++) {
         std::vector<double> bc(n, 0.0);
-        for (int i = 0; i < n; i++) {
-          const int idx = c * n + i;
-          if (idx < int(b.size())) {
-            bc[size_t(i)] = b[size_t(idx)];
-          }
+        /* b is planar with its own list length as stride, which may differ from n. */
+        for (int i = 0; i < n && i < n_pts; i++) {
+          bc[size_t(i)] = b[size_t(c) * size_t(n_pts) + size_t(i)];
         }
-        const ls::SolveResult one = ls::solve_with_decomposition((*item)->data, coo, bc);
+        const ls::SolveResult one = ls::solve_with_decomposition((*item)->data, bc);
         if (!one.success) {
           fail(one.message.empty() ? "Solve with decomposition failed" : one.message);
           return;
@@ -602,7 +600,7 @@ static void node_geo_exec(GeoNodeExecParams params)
       params.set_output("x"_ustr, planar_to_vector_list(x_planar, n));
       return;
     }
-    const ls::SolveResult result = ls::solve_with_decomposition((*item)->data, coo, b);
+    const ls::SolveResult result = ls::solve_with_decomposition((*item)->data, b);
     if (!result.success) {
       fail(result.message.empty() ? "Solve with decomposition failed" : result.message);
       return;

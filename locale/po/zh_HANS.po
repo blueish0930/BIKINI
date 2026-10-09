@@ -172802,11 +172802,11 @@ msgstr "未知量/乘法矢量列表（按数据类型为浮点或矢量）"
 msgid "Solution or matrix-vector product (same Data Type as inputs)"
 msgstr "解或矩阵-矢量乘积（与输入相同的数据类型）"
 
-msgid "Boolean pin mask; pinned DOFs are fixed to the corresponding b values"
-msgstr "布尔固定遮罩；被固定的 DOF 锁定为对应的 b 值"
+msgid "Boolean pin mask; pinned DOFs are fixed to the corresponding b values. For a matrix factor the mask is part of the factorization, and Solve with Decomposition takes the pinned values from its b"
+msgstr "布尔固定遮罩；被固定的 DOF 锁定为对应的 b 值。对于矩阵分解，遮罩是分解的一部分，“使用分解求解”从其 b 中取固定值"
 
-msgid "Reusable matrix factorization from Decompose mode"
-msgstr "分解模式得到的可复用矩阵分解"
+msgid "Reusable matrix factorization from Decompose mode. It replaces the matrix A, which is not needed again"
+msgstr "分解模式得到的可复用矩阵分解。它取代矩阵 A，无需再次输入 A"
 
 msgid "How many eigenpairs to compute. Sym/Gen shift solvers: the k eigenvalues closest to Shift (shift-invert); ordered by increasing |λ−σ|. Increasing k only appends farther pairs. 0 = a few pairs (or full spectrum if n is small)"
 msgstr "计算多少对特征对。对称/广义移位求解器：最接近移位的 k 个特征值（移位-求逆）；按 |λ−σ| 递增排序。增大 k 只追加更远的对。0 = 少量特征对（n 较小时为完整谱）"
@@ -178003,11 +178003,11 @@ msgstr "权重属性"
 msgid "Column Index Attribute"
 msgstr "列索引属性"
 
-msgid "Float attribute, or float array written by a Wrangle node (f[]@), on the point or face corner domain with the values of the matrix entries. The row of an entry is the vertex of its point or face corner"
-msgstr "点域或面拐域上的浮点属性，或由 Wrangle 节点写入的浮点数组 (f[]@)，存储矩阵元素的数值。元素所在的行为该点或面拐对应的顶点"
+msgid "Name of the weight attribute. Custom mode reads it: a float attribute, or float array written by a Wrangle node (f[]@), on the point or face corner domain with the values of the matrix entries, where the row of an entry is the vertex of its point or face corner. In the other modes it is the float array that Write Attribute stores on the points"
+msgstr "权重属性的名称。自定义模式读取它：点域或面拐域上的浮点属性，或由 Wrangle 节点写入的浮点数组 (f[]@)，存储矩阵元素的数值，元素所在的行为该点或面拐对应的顶点。在其他模式下，它是“写入属性”存储在点上的浮点数组"
 
-msgid "Integer attribute, or integer array written by a Wrangle node (i[]@), on the same domain as the weights with the vertex indices that are the columns of the matrix entries"
-msgstr "与权重位于同一域上的整数属性，或由 Wrangle 节点写入的整数数组 (i[]@)，存储作为矩阵元素所在列的顶点索引"
+msgid "Name of the column index attribute. Custom mode reads it: an integer attribute, or integer array written by a Wrangle node (i[]@), on the same domain as the weights with the vertex indices that are the columns of the matrix entries. In the other modes it is the integer array that Write Attribute stores on the points"
+msgstr "列索引属性的名称。自定义模式读取它：与权重位于同一域上的整数属性，或由 Wrangle 节点写入的整数数组 (i[]@)，存储作为矩阵元素所在列的顶点索引。在其他模式下，它是“写入属性”存储在点上的整数数组"
 
 msgid "The weight attribute must be on the point or face corner domain"
 msgstr "权重属性必须位于点域或面拐域上"
@@ -178020,6 +178020,24 @@ msgstr "权重属性与列索引属性必须可转换为浮点和整数"
 
 msgid "Entries with a column index outside of the vertex range were ignored"
 msgstr "列索引超出顶点范围的矩阵元素已被忽略"
+
+msgid "Write Attribute"
+msgstr "写入属性"
+
+msgid "Output the mesh with the matrix stored on it instead of the matrix bundle: every point gets a float array attribute and an integer array attribute, named by the two inputs, with the entries of its row, in the form that the Custom mode reads"
+msgstr "输出存有矩阵的网格，而不是矩阵捆包：每个点获得一个浮点数组属性和一个整数数组属性（名称由两个输入指定），包含其所在行的元素，格式与自定义模式读取的一致"
+
+msgid "The input mesh with the matrix stored in the two array attributes"
+msgstr "输入网格，矩阵存储在两个数组属性中"
+
+msgid "Failed to write the matrix attributes"
+msgstr "写入矩阵属性失败"
+
+msgid "The weight and column index attributes must have different names"
+msgstr "权重属性与列索引属性的名称必须不同"
+
+msgid "Cannot write the matrix to the built-in attribute \"{}\""
+msgstr "无法将矩阵写入内置属性 \"{}\""
 
 msgid "The weight and column index attributes must both be arrays or both be single values"
 msgstr "权重属性与列索引属性必须同为数组或同为单值"

@@ -318,6 +318,18 @@ static int wrangle_call_help(const StringRef fn, char (*out)[192], const int max
     row("  returns int[] point indices");
     return n;
   }
+  if (fn == "facesedge") {
+    row("facesedge(geo, face0, face1)");
+  }
+  if (fn == "equivalentcorner") {
+    row("equivalentcorner(geo, edge, corner)");
+  }
+  if (fn == "prevedge") {
+    row("prevedge(geo, corner)");
+  }
+  if (fn == "nextedge") {
+    row("nextedge(geo, corner)");
+  }
   if (fn == "offsetcorner" || fn == "offset_corner" || fn == "offsetcornerinface" ||
       fn == "offset_corner_in_face")
   {

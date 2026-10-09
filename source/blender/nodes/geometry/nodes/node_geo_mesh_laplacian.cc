@@ -7,6 +7,7 @@
 #include <fmt/format.h>
 
 #include "BLI_array_utils.hh"
+#include "BLI_offset_indices.hh"
 
 #include "GEO_mesh_laplacian.hh"
 #include "GEO_mesh_triangulate.hh"
@@ -38,38 +39,28 @@ enum class WeightMode {
   Custom = 2,
 };
 
+/** #bNode::custom2. */
+enum {
+  WRITE_ATTRIBUTE = (1 << 0),
+};
+
+/** Custom mode reads its matrix from attributes, so there it has nothing to write. */
+static bool node_writes_attributes(const bNode &node)
+{
+  return WeightMode(node.custom1) != WeightMode::Custom && (node.custom2 & WRITE_ATTRIBUTE) != 0;
+}
+
 static void node_declare(NodeDeclarationBuilder &b)
 {
   const bNode *node = b.node_or_null();
+  const bool is_custom = node != nullptr && WeightMode(node->custom1) == WeightMode::Custom;
+  const bool is_writing = node != nullptr && node_writes_attributes(*node);
 
   b.add_input<decl::Geometry>("Mesh"_ustr)
       .only_realized_data()
       .supported_type(GeometryComponent::Type::Mesh)
       .description(
           "Triangle mesh used to build the discrete Laplacian; other faces are triangulated");
-  auto &weight_attribute =
-      b.add_input<decl::String>("Weight Attribute"_ustr)
-          .default_value("weight")
-          .is_attribute_name()
-          .optional_label()
-          .description(
-              "Float attribute, or float array written by a Wrangle node (f[]@), on the point or "
-              "face corner domain with the values of the matrix entries. The row of an entry is "
-              "the vertex of its point or face corner");
-  auto &column_attribute =
-      b.add_input<decl::String>("Column Index Attribute"_ustr)
-          .default_value("col")
-          .is_attribute_name()
-          .optional_label()
-          .description(
-              "Integer attribute, or integer array written by a Wrangle node (i[]@), on the same "
-              "domain as the weights with the vertex indices that are the columns of the matrix "
-              "entries");
-  if (node != nullptr) {
-    const bool is_custom = WeightMode(node->custom1) == WeightMode::Custom;
-    weight_attribute.available(is_custom);
-    column_attribute.available(is_custom);
-  }
   b.add_input<decl::Bool>("Diffusion Matrix"_ustr)
       .default_value(false)
       .description("Output I+tL, or M+tML when Use Mass is enabled");
@@ -85,17 +76,53 @@ static void node_declare(NodeDeclarationBuilder &b)
       .description(
           "Include lumped mass M (face area/3). Without diffusion yields ML; with diffusion "
           "yields M+tML");
-  b.add_output<decl::Bundle>("Matrix"_ustr)
-      .create_signature([](const bNode &) { return BundleSignature::sparse_coo(); })
-      .structure_type(StructureType::Single)
-      .description(
-          "Sparse COO matrix as a bundle of equal-length lists: weight (float), row (int), col "
-          "(int)");
+  /* Read in custom mode, written with Write Attribute in the other modes. */
+  auto &weight_attribute =
+      b.add_input<decl::String>("Weight Attribute"_ustr)
+          .default_value("weight")
+          .is_attribute_name()
+          .optional_label()
+          .description(
+              "Name of the weight attribute. Custom mode reads it: a float attribute, or float "
+              "array written by a Wrangle node (f[]@), on the point or face corner domain with "
+              "the values of the matrix entries, where the row of an entry is the vertex of its "
+              "point or face corner. In the other modes it is the float array that Write "
+              "Attribute stores on the points");
+  auto &column_attribute =
+      b.add_input<decl::String>("Column Index Attribute"_ustr)
+          .default_value("col")
+          .is_attribute_name()
+          .optional_label()
+          .description(
+              "Name of the column index attribute. Custom mode reads it: an integer attribute, or "
+              "integer array written by a Wrangle node (i[]@), on the same domain as the weights "
+              "with the vertex indices that are the columns of the matrix entries. In the other "
+              "modes it is the integer array that Write Attribute stores on the points");
+  auto &mesh_output =
+      b.add_output<decl::Geometry>("Mesh"_ustr).propagate_all_geometry().description(
+          "The input mesh with the matrix stored in the two array attributes");
+  auto &matrix_output =
+      b.add_output<decl::Bundle>("Matrix"_ustr)
+          .create_signature([](const bNode &) { return BundleSignature::sparse_coo(); })
+          .structure_type(StructureType::Single)
+          .description("Sparse COO matrix as a bundle of equal-length lists: weight (float), row "
+                       "(int), col (int)");
+  if (node != nullptr) {
+    /* Write Attribute switches between the two outputs. */
+    weight_attribute.available(is_custom || is_writing);
+    column_attribute.available(is_custom || is_writing);
+    mesh_output.available(is_writing);
+    matrix_output.available(!is_writing);
+  }
 }
 
 static void node_layout(ui::Layout &layout, bContext * /*C*/, PointerRNA *ptr)
 {
+  const bNode &node = *static_cast<const bNode *>(ptr->data);
   layout.prop(ptr, "mode", UI_ITEM_NONE, "", ICON_NONE);
+  if (WeightMode(node.custom1) != WeightMode::Custom) {
+    layout.prop(ptr, "write_attribute", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+  }
 }
 
 static geometry::MeshLaplacianWeightMode to_geometry_mode(const WeightMode mode)
@@ -158,6 +185,138 @@ static BundlePtr coo_to_bundle(geometry::MeshLaplacianCOO &&coo)
   return bundle_ptr;
 }
 
+using ArraySpan = VArraySpan<bke::WrangleArrayValue>;
+
+/** The attributes that hold the rest of arrays too long for one value, see #continued. */
+static Vector<ArraySpan> lookup_array_chunks(const bke::AttributeAccessor &attributes,
+                                             const StringRef name,
+                                             const bke::AttrDomain domain)
+{
+  Vector<ArraySpan> chunks;
+  for (int chunk = 1;; chunk++) {
+    const bke::AttributeReader<bke::WrangleArrayValue> reader =
+        attributes.lookup<bke::WrangleArrayValue>(
+            bke::WrangleArrayValue::chunk_attribute_name(name, chunk), domain);
+    if (!reader) {
+      break;
+    }
+    chunks.append(*reader);
+  }
+  return chunks;
+}
+
+/** All 32-bit words of the number array of one element, including its chunks. */
+static void array_words(const bke::WrangleArrayValue &head,
+                        const Span<ArraySpan> chunks,
+                        const int index,
+                        Vector<int> &r_words)
+{
+  r_words.clear();
+  r_words.extend(Span<int>(head.d.i, head.count));
+  if (head.truncated != bke::WrangleArrayValue::continued) {
+    return;
+  }
+  for (const ArraySpan &chunk : chunks) {
+    const bke::WrangleArrayValue &part = chunk[index];
+    if (part.count == 0) {
+      break;
+    }
+    r_words.extend(
+        Span<int>(part.d.i, std::min(int(part.count), int(bke::WrangleArrayValue::max_values))));
+  }
+}
+
+/**
+ * Store one number array per point, \a words[offsets[i]] are the 32-bit words of point i. Arrays
+ * that do not fit in one value continue in chunk attributes like the ones of the Wrangle node.
+ */
+static bool write_array_attribute(bke::MutableAttributeAccessor attributes,
+                                  const StringRef name,
+                                  const bke::WrangleArrayKind kind,
+                                  const OffsetIndices<int> offsets,
+                                  const Span<int> words)
+{
+  constexpr int chunk_words = bke::WrangleArrayValue::max_values;
+  const std::optional<bke::AttributeMetaData> meta_data = attributes.lookup_meta_data(name);
+  if (meta_data && (meta_data->domain != bke::AttrDomain::Point ||
+                    meta_data->data_type != bke::AttrType::WrangleArray))
+  {
+    attributes.remove(name);
+  }
+  bke::SpanAttributeWriter<bke::WrangleArrayValue> head_writer =
+      attributes.lookup_or_add_for_write_only_span<bke::WrangleArrayValue>(
+          name, bke::AttrDomain::Point);
+  if (!head_writer) {
+    return false;
+  }
+  int chunks_num = 0;
+  for (const int i : offsets.index_range()) {
+    const Span<int> point_words = words.slice(offsets[i]);
+    bke::WrangleArrayValue &head = head_writer.span[i];
+    head.clear(kind);
+    head.count = uint16_t(std::min(int(point_words.size()), chunk_words));
+    head.set_total_items(int(point_words.size()));
+    std::copy_n(point_words.data(), head.count, head.d.i);
+    if (point_words.size() > chunk_words) {
+      head.truncated = bke::WrangleArrayValue::continued;
+      chunks_num = std::max(chunks_num,
+                            int(point_words.size() - 1) / chunk_words);
+    }
+  }
+  head_writer.finish();
+
+  for (int chunk = 1; chunk <= chunks_num; chunk++) {
+    bke::SpanAttributeWriter<bke::WrangleArrayValue> writer =
+        attributes.lookup_or_add_for_write_only_span<bke::WrangleArrayValue>(
+            bke::WrangleArrayValue::chunk_attribute_name(name, chunk), bke::AttrDomain::Point);
+    if (!writer) {
+      return false;
+    }
+    for (const int i : offsets.index_range()) {
+      const Span<int> point_words = words.slice(offsets[i]);
+      const int count = std::clamp(int(point_words.size()) - chunk * chunk_words, 0, chunk_words);
+      bke::WrangleArrayValue &part = writer.span[i];
+      part.clear(kind);
+      part.count = uint16_t(count);
+      part.total = uint16_t(count);
+      if (count > 0) {
+        std::copy_n(point_words.data() + chunk * chunk_words, count, part.d.i);
+      }
+    }
+    writer.finish();
+  }
+  /* Chunks of longer arrays that were stored under this name before. */
+  for (int chunk = chunks_num + 1;; chunk++) {
+    if (!attributes.remove(bke::WrangleArrayValue::chunk_attribute_name(name, chunk))) {
+      break;
+    }
+  }
+  return true;
+}
+
+/** Store the rows of the matrix as the point array attributes that the custom mode reads. */
+static bool write_matrix_attributes(Mesh &mesh,
+                                    const geometry::MeshLaplacianCOO &coo,
+                                    const StringRef weight_name,
+                                    const StringRef column_name)
+{
+  /* The entries are sorted by row, so the entries of a point are one range. */
+  Array<int> offset_data(mesh.verts_num + 1, 0);
+  for (const int row : coo.rows) {
+    offset_data[row]++;
+  }
+  const OffsetIndices<int> offsets = offset_indices::accumulate_counts_to_offsets(offset_data);
+  const Span<float> weights = coo.weights;
+  bke::MutableAttributeAccessor attributes = mesh.attributes_for_write();
+  return write_array_attribute(attributes,
+                               weight_name,
+                               bke::WrangleArrayKind::Float,
+                               offsets,
+                               weights.cast<int>()) &&
+         write_array_attribute(
+             attributes, column_name, bke::WrangleArrayKind::Int, offsets, coo.cols.as_span());
+}
+
 static void node_geo_exec(GeoNodeExecParams params)
 {
   GeometrySet geometry_set = params.extract_input<GeometrySet>("Mesh"_ustr);
@@ -165,11 +324,48 @@ static void node_geo_exec(GeoNodeExecParams params)
   const float diffusion_t = params.extract_input<float>("Diffusion Coefficient"_ustr);
   const bool use_mass = params.extract_input<bool>("Use Mass"_ustr);
   const WeightMode mode = WeightMode(params.node().custom1);
+  const bool write_attribute = node_writes_attributes(params.node());
+  /* The name inputs only exist when attributes are read or written. */
   std::string weight_name;
   std::string column_name;
-  if (mode == WeightMode::Custom) {
+  if (mode == WeightMode::Custom || write_attribute) {
     weight_name = params.extract_input<std::string>("Weight Attribute"_ustr);
     column_name = params.extract_input<std::string>("Column Index Attribute"_ustr);
+  }
+  /* Only one of the outputs exists: the mesh when writing attributes, otherwise the matrix. */
+  const auto set_outputs = [&](BundlePtr matrix) {
+    if (write_attribute) {
+      params.set_output("Mesh"_ustr, std::move(geometry_set));
+    }
+    else {
+      params.set_output("Matrix"_ustr, std::move(matrix));
+    }
+  };
+
+  if (write_attribute) {
+    /* Checked before anything is computed. */
+    std::string name_error;
+    if (weight_name.empty() || column_name.empty()) {
+      name_error = TIP_("Attribute name must not be empty");
+    }
+    else if (weight_name == column_name) {
+      name_error = TIP_("The weight and column index attributes must have different names");
+    }
+    else if (const Mesh *mesh = geometry_set.get_mesh()) {
+      const bke::AttributeAccessor attributes = mesh->attributes();
+      for (const std::string &name : {weight_name, column_name}) {
+        if (attributes.is_builtin(name)) {
+          name_error = fmt::format(
+              fmt::runtime(TIP_("Cannot write the matrix to the built-in attribute \"{}\"")),
+              name);
+        }
+      }
+    }
+    if (!name_error.empty()) {
+      params.error_message_add(NodeWarningType::Error, name_error);
+      set_outputs(empty_matrix_bundle());
+      return;
+    }
   }
 
   const Mesh *src_mesh = geometry_set.get_mesh();
@@ -178,7 +374,7 @@ static void node_geo_exec(GeoNodeExecParams params)
       params.error_message_add(NodeWarningType::Warning,
                                TIP_("Input geometry does not contain a mesh"));
     }
-    params.set_output("Matrix"_ustr, empty_matrix_bundle());
+    set_outputs(empty_matrix_bundle());
     return;
   }
 
@@ -200,7 +396,7 @@ static void node_geo_exec(GeoNodeExecParams params)
       params.error_message_add(NodeWarningType::Error,
                                fmt::format(fmt::runtime(TIP_("Attribute does not exist: \"{}\"")),
                                            weight_meta ? column_name : weight_name));
-      params.set_output("Matrix"_ustr, empty_matrix_bundle());
+      set_outputs(empty_matrix_bundle());
       return;
     }
     const bke::AttrDomain domain = weight_meta->domain;
@@ -208,14 +404,14 @@ static void node_geo_exec(GeoNodeExecParams params)
       params.error_message_add(
           NodeWarningType::Error,
           TIP_("The weight attribute must be on the point or face corner domain"));
-      params.set_output("Matrix"_ustr, empty_matrix_bundle());
+      set_outputs(empty_matrix_bundle());
       return;
     }
     if (column_meta->domain != domain) {
       params.error_message_add(
           NodeWarningType::Error,
           TIP_("The weight and column index attributes must be on the same domain"));
-      params.set_output("Matrix"_ustr, empty_matrix_bundle());
+      set_outputs(empty_matrix_bundle());
       return;
     }
     const bool weight_is_array = weight_meta->data_type == bke::AttrType::WrangleArray;
@@ -225,16 +421,19 @@ static void node_geo_exec(GeoNodeExecParams params)
           NodeWarningType::Error,
           TIP_("The weight and column index attributes must both be arrays or both be single "
                "values"));
-      params.set_output("Matrix"_ustr, empty_matrix_bundle());
+      set_outputs(empty_matrix_bundle());
       return;
     }
     const Span<int> corner_verts = src_mesh->corner_verts();
     if (weight_is_array) {
       /* Arrays written by a Wrangle node (`f[]@weight`, `i[]@col`): one entry per array item. */
-      const VArraySpan<bke::WrangleArrayValue> weights =
+      const ArraySpan weights =
           attributes.lookup(weight_name).varray.typed<bke::WrangleArrayValue>();
-      const VArraySpan<bke::WrangleArrayValue> cols =
-          attributes.lookup(column_name).varray.typed<bke::WrangleArrayValue>();
+      const ArraySpan cols = attributes.lookup(column_name).varray.typed<bke::WrangleArrayValue>();
+      const Vector<ArraySpan> weight_chunks = lookup_array_chunks(attributes, weight_name, domain);
+      const Vector<ArraySpan> col_chunks = lookup_array_chunks(attributes, column_name, domain);
+      Vector<int> weight_words;
+      Vector<int> col_words;
       const auto is_number_list = [](const bke::WrangleArrayValue &value) {
         return value.count == 0 ||
                ELEM(value.kind, bke::WrangleArrayKind::Int, bke::WrangleArrayKind::Float);
@@ -248,13 +447,18 @@ static void node_geo_exec(GeoNodeExecParams params)
           wrong_kind = true;
           continue;
         }
-        different_lengths |= weight.count != col.count;
+        array_words(weight, weight_chunks, i, weight_words);
+        array_words(col, col_chunks, i, col_words);
+        different_lengths |= weight_words.size() != col_words.size();
         const int row = domain == bke::AttrDomain::Point ? i : corner_verts[i];
-        for (const int k : IndexRange(std::min(weight.count, col.count))) {
-          array_weights.append(weight.kind == bke::WrangleArrayKind::Float ? weight.d.f[k] :
-                                                                              float(weight.d.i[k]));
-          array_cols.append(col.kind == bke::WrangleArrayKind::Int ? col.d.i[k] :
-                                                                     int(col.d.f[k]));
+        const Span<float> weight_floats = weight_words.as_span().cast<float>();
+        const Span<float> col_floats = col_words.as_span().cast<float>();
+        for (const int k : IndexRange(std::min(weight_words.size(), col_words.size()))) {
+          array_weights.append(weight.kind == bke::WrangleArrayKind::Float ?
+                                   weight_floats[k] :
+                                   float(weight_words[k]));
+          array_cols.append(col.kind == bke::WrangleArrayKind::Int ? col_words[k] :
+                                                                     int(col_floats[k]));
           array_rows.append(row);
         }
       }
@@ -281,7 +485,7 @@ static void node_geo_exec(GeoNodeExecParams params)
             NodeWarningType::Error,
             TIP_("The weight and column index attributes must be convertible to float and "
                  "integer"));
-        params.set_output("Matrix"_ustr, empty_matrix_bundle());
+        set_outputs(empty_matrix_bundle());
         return;
       }
       custom_weights = *weights;
@@ -328,7 +532,7 @@ static void node_geo_exec(GeoNodeExecParams params)
     }
     else {
       params.error_message_add(NodeWarningType::Error, TIP_("Failed to triangulate mesh"));
-      params.set_output("Matrix"_ustr, empty_matrix_bundle());
+      set_outputs(empty_matrix_bundle());
       return;
     }
   }
@@ -348,7 +552,19 @@ static void node_geo_exec(GeoNodeExecParams params)
     BKE_id_free(nullptr, owned_triangle_mesh);
   }
 
-  params.set_output("Matrix"_ustr, coo_to_bundle(std::move(coo)));
+  if (write_attribute) {
+    /* This may copy the mesh, the pointers to the input mesh are not used from here on. */
+    if (!write_matrix_attributes(
+            *geometry_set.get_mesh_for_write(), coo, weight_name, column_name))
+    {
+      params.error_message_add(NodeWarningType::Error,
+                               TIP_("Failed to write the matrix attributes"));
+    }
+    set_outputs(empty_matrix_bundle());
+    return;
+  }
+
+  set_outputs(coo_to_bundle(std::move(coo)));
 }
 
 static void node_rna(StructRNA *srna)
@@ -381,6 +597,14 @@ static void node_rna(StructRNA *srna)
                     mode_items,
                     NOD_inline_enum_accessors(custom1),
                     int(WeightMode::Cotangent));
+  RNA_def_node_boolean(
+      srna,
+      "write_attribute",
+      "Write Attribute",
+      "Output the mesh with the matrix stored on it instead of the matrix bundle: every point "
+      "gets a float array attribute and an integer array attribute, named by the two inputs, "
+      "with the entries of its row, in the form that the Custom mode reads",
+      NOD_inline_boolean_accessors(custom2, WRITE_ATTRIBUTE));
 }
 
 static void node_register()

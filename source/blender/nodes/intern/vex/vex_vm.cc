@@ -806,6 +806,10 @@ bool is_geo_builtin(const Builtin id)
     case Builtin::FaceOfCorner:
     case Builtin::VertexOfCorner:
     case Builtin::OffsetCornerInFace:
+    case Builtin::FacesEdge:
+    case Builtin::EquivalentCorner:
+    case Builtin::PrevEdge:
+    case Builtin::NextEdge:
     case Builtin::FacesOfVertex:
     case Builtin::Neighbours:
     case Builtin::PointNeighbours:

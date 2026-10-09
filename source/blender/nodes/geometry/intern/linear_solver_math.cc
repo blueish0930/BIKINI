@@ -103,45 +103,6 @@ static SpMat coo_to_sparse(const CooMatrix &coo, const int n)
   return A;
 }
 
-static void pack_csc(const SpMat &M,
-                     std::vector<double> &values,
-                     std::vector<int> &inner,
-                     std::vector<int> &outer)
-{
-  SpMat C = M;
-  C.makeCompressed();
-  const int nnz = int(C.nonZeros());
-  const int cols = int(C.cols());
-  values.assign(C.valuePtr(), C.valuePtr() + nnz);
-  inner.assign(C.innerIndexPtr(), C.innerIndexPtr() + nnz);
-  outer.assign(C.outerIndexPtr(), C.outerIndexPtr() + cols + 1);
-}
-
-static SpMat unpack_csc(const int rows,
-                        const int cols,
-                        const std::vector<double> &values,
-                        const std::vector<int> &inner,
-                        const std::vector<int> &outer)
-{
-  SpMat M(rows, cols);
-  if (cols == 0 || outer.empty()) {
-    M.makeCompressed();
-    return M;
-  }
-  std::vector<Eigen::Triplet<double>> trips;
-  trips.reserve(values.size());
-  for (int c = 0; c < cols; c++) {
-    const int begin = outer[size_t(c)];
-    const int end = outer[size_t(c) + 1];
-    for (int k = begin; k < end; k++) {
-      trips.emplace_back(inner[size_t(k)], c, values[size_t(k)]);
-    }
-  }
-  M.setFromTriplets(trips.begin(), trips.end());
-  M.makeCompressed();
-  return M;
-}
-
 /**
  * Build free-block sparse system:
  *   A_free = A[free, free]
@@ -402,6 +363,56 @@ static bool solve_direct_sparse(const SpMat &A_free,
   }
   message = "Unknown direct method";
   return false;
+}
+
+struct DecompositionFactor {
+  virtual ~DecompositionFactor() = default;
+  /** Apply the factorization. Const and without shared state, so safe from several threads. */
+  virtual bool solve(const DenseVec &b, DenseVec &x) const = 0;
+};
+
+template<typename Solver> struct DecompositionFactorImpl : public DecompositionFactor {
+  Solver solver;
+
+  bool solve(const DenseVec &b, DenseVec &x) const override
+  {
+    x = solver.solve(b);
+    return solver.info() == Eigen::Success;
+  }
+};
+
+template<typename Solver>
+static std::shared_ptr<const DecompositionFactor> factorize_with(const SpMat &A_free,
+                                                                 const char *failure,
+                                                                 std::string &message)
+{
+  auto factor = std::make_shared<DecompositionFactorImpl<Solver>>();
+  factor->solver.compute(A_free);
+  if (factor->solver.info() != Eigen::Success) {
+    message = failure;
+    return nullptr;
+  }
+  return factor;
+}
+
+static std::shared_ptr<const DecompositionFactor> factorize_sparse(const SpMat &A_free,
+                                                                   const DirectMethod method,
+                                                                   std::string &message)
+{
+  switch (method) {
+    case DirectMethod::LLT:
+      return factorize_with<Eigen::SimplicialLLT<SpMat>>(
+          A_free, "Sparse LLT failed (matrix may not be SPD)", message);
+    case DirectMethod::LDLT:
+      return factorize_with<Eigen::SimplicialLDLT<SpMat>>(A_free, "Sparse LDLT failed", message);
+    case DirectMethod::LU:
+      return factorize_with<Eigen::SparseLU<SpMat>>(A_free, "Sparse LU failed", message);
+    case DirectMethod::QR:
+      return factorize_with<Eigen::SparseQR<SpMat, Eigen::COLAMDOrdering<int>>>(
+          A_free, "Sparse QR failed", message);
+  }
+  message = "Unknown direct method";
+  return nullptr;
 }
 
 static SolveResult solve_prepared_sparse(const SpMat &A,
@@ -701,22 +712,18 @@ Decomposition decompose_system(const CooMatrix &coo,
     return decomp;
   }
 
-  /* Keep free block sparse; SWD re-runs sparse factor (cheap vs dense).
-   * Probe factor once so invalid SPD/method fails at Decompose time. */
-  std::string probe_msg;
-  DenseVec x_probe;
-  if (!solve_direct_sparse(A_free, b_free, x_probe, method, probe_msg)) {
-    decomp.message = probe_msg.empty() ? "Sparse factorization failed" : probe_msg;
+  /* Factor the free block once; Solve with Decomposition only applies it. */
+  std::string factor_msg;
+  decomp.factor = factorize_sparse(A_free, method, factor_msg);
+  if (!decomp.factor) {
+    decomp.message = factor_msg.empty() ? "Sparse factorization failed" : factor_msg;
     return decomp;
   }
-  pack_csc(A_free, decomp.A_values, decomp.A_inner, decomp.A_outer);
   decomp.valid = true;
   return decomp;
 }
 
-SolveResult solve_with_decomposition(const Decomposition &decomp,
-                                     const CooMatrix & /*coo*/,
-                                     const std::vector<double> &b_in)
+SolveResult solve_with_decomposition(const Decomposition &decomp, const std::vector<double> &b_in)
 {
   SolveResult result;
   if (!decomp.valid) {
@@ -740,9 +747,8 @@ SolveResult solve_with_decomposition(const Decomposition &decomp,
   DenseVec x_free = DenseVec::Zero(decomp.n_free);
 
   if (decomp.n_free > 0) {
-    SpMat A_free = unpack_csc(
-        decomp.n_free, decomp.n_free, decomp.A_values, decomp.A_inner, decomp.A_outer);
-    if (!solve_direct_sparse(A_free, b_free, x_free, decomp.method, result.message)) {
+    if (!decomp.factor || !decomp.factor->solve(b_free, x_free)) {
+      result.message = "Applying the stored factorization failed";
       return result;
     }
   }

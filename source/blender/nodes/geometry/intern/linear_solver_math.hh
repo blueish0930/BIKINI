@@ -12,6 +12,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -107,12 +108,14 @@ struct MultiplyResult {
   int components = 1;
 };
 
+/** Numeric factorization of a sparse matrix, defined next to the Eigen solvers. */
+struct DecompositionFactor;
+
 /**
- * Sparse free-block system for Solve-with-Decomposition.
+ * Factorized free-block system for Solve-with-Decomposition.
  *
- * Stores the free submatrix A_free (CSC) plus pin bookkeeping. Apply uses a
- * sparse direct factorization (SimplicialLLT/LDLT, SparseLU, SparseQR) — still
- * O(nnz) class work, not dense O(n³).
+ * Stores the sparse direct factorization of the free submatrix A_free (SimplicialLLT/LDLT,
+ * SparseLU, SparseQR) plus pin bookkeeping, so applying it is only the triangular solves.
  */
 struct Decomposition {
   bool valid = false;
@@ -121,10 +124,11 @@ struct Decomposition {
   int n_free = 0;
   std::string message;
 
-  /** Free-block A_free in CSC (column-compressed). */
-  std::vector<double> A_values;
-  std::vector<int> A_inner;
-  std::vector<int> A_outer;
+  /**
+   * Factorization of A_free, computed once by #decompose_system. Shared and read-only, so the
+   * decomposition can be copied and applied from several threads.
+   */
+  std::shared_ptr<const DecompositionFactor> factor;
 
   std::vector<int> free_map;
   std::vector<char> is_pinned;
@@ -175,9 +179,8 @@ Decomposition decompose_system(const CooMatrix &coo,
                                const std::vector<double> &pin_values_src,
                                DirectMethod method);
 
-SolveResult solve_with_decomposition(const Decomposition &decomp,
-                                     const CooMatrix &coo,
-                                     const std::vector<double> &b);
+/** Solve with the stored factorization. Pinned DOFs take their values from \a b. */
+SolveResult solve_with_decomposition(const Decomposition &decomp, const std::vector<double> &b);
 
 EigenResult compute_eigenpairs(const CooMatrix &coo,
                                const std::vector<char> &pin_mask,

@@ -157,6 +157,10 @@ StringRef function_param_types(const StringRef name)
       {"corneredges", "geo,int"},
       {"corner_edges", "geo,int"},
       {"offsetcorner", "geo,int,int"},
+      {"facesedge", "geo,int,int"},
+      {"equivalentcorner", "geo,int,int"},
+      {"prevedge", "geo,int"},
+      {"nextedge", "geo,int"},
       {"offset_corner", "geo,int,int"},
       {"offset_corner_in_face", "geo,int,int"},
       {"offsetcornerinface", "geo,int,int"},
@@ -605,6 +609,12 @@ void gather_completions(Vector<std::string> &r_owned_names,
   add("edges_of_corner", "Topology", C::Variable, K::Function, "edges_of_corner", "edges_of_corner()", true);
   add("face_of_corner", "Topology", C::Variable, K::Function, "face_of_corner", "face_of_corner()", true);
   add("vertex_of_corner", "Topology", C::Variable, K::Function, "vertex_of_corner", "vertex_of_corner()", true);
+  add("facesedge", "Topology", C::Variable, K::Function, "facesedge",
+      "facesedge(geo, face0, face1)", true);
+  add("equivalentcorner", "Topology", C::Variable, K::Function, "equivalentcorner",
+      "equivalentcorner(geo, edge, corner)", true);
+  add("prevedge", "Topology", C::Variable, K::Function, "prevedge", "prevedge(geo, corner)", true);
+  add("nextedge", "Topology", C::Variable, K::Function, "nextedge", "nextedge(geo, corner)", true);
   add("offsetcorner",
       "Topology",
       C::Variable,

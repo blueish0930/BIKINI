@@ -441,6 +441,13 @@ static void prewarm_element_samples(const Program &program, ElemUser &user)
         cache.direct.r4 = reinterpret_cast<const float4 *>(cache.owned_color.data());
       }
     }
+    /* Only expose samples backed by a direct typed pointer to the VM fast path. Packed
+     * matrix/array attributes (and other uncommon types) need value_from_varray(). */
+    if (!cache.direct.rb && !cache.direct.ri && !cache.direct.rf && !cache.direct.r2 &&
+        !cache.direct.rv && !cache.direct.r4)
+    {
+      cache.direct.size = 0;
+    }
     user.element_samples.append(std::move(cache));
   }
 }
@@ -4444,6 +4451,113 @@ Value geo_builtin_fn(void *user,
       }
       const Span<int> cv = mesh->corner_verts();
       return Value::from_int((c >= 0 && c < cv.size()) ? cv[c] : -1);
+    }
+    case Builtin::FacesEdge: {
+      /* facesedge(geo, face0, face1) or facesedge(face0, face1). */
+      const bool has_geo = args.size() >= 3;
+      const int gi = has_geo ? value_as_elem_index(args[0], 0) : 0;
+      const int face_a = args.size() > (has_geo ? 1 : 0) ? args[has_geo ? 1 : 0].as_int() : -1;
+      const int face_b = args.size() > (has_geo ? 2 : 1) ? args[has_geo ? 2 : 1].as_int() : -1;
+      const Mesh *mesh = mesh_at(u, gi);
+      if (!mesh || face_a < 0 || face_b < 0 || face_a >= mesh->faces_num ||
+          face_b >= mesh->faces_num || face_a == face_b)
+      {
+        return Value::from_int(-1);
+      }
+      const OffsetIndices faces = mesh->faces();
+      const Span<int> corner_edges = mesh->corner_edges();
+      /* The first shared edge in the order of the first face. */
+      for (const int corner_a : faces[face_a]) {
+        for (const int corner_b : faces[face_b]) {
+          if (corner_edges[corner_a] == corner_edges[corner_b]) {
+            return Value::from_int(corner_edges[corner_a]);
+          }
+        }
+      }
+      return Value::from_int(-1);
+    }
+    case Builtin::EquivalentCorner: {
+      /* equivalentcorner(geo, edge, corner) or equivalentcorner(edge, corner). */
+      const bool has_geo = args.size() >= 3;
+      const int gi = has_geo ? value_as_elem_index(args[0], 0) : 0;
+      const int edge = args.size() > (has_geo ? 1 : 0) ? args[has_geo ? 1 : 0].as_int() : -1;
+      const int corner = args.size() > (has_geo ? 2 : 1) ? args[has_geo ? 2 : 1].as_int() :
+                                                           env.index;
+      const Mesh *mesh = mesh_at(u, gi);
+      if (!mesh || edge < 0 || edge >= mesh->edges_num || corner < 0 ||
+          corner >= mesh->corners_num)
+      {
+        return Value::from_int(-1);
+      }
+      const Span<int> corner_verts = mesh->corner_verts();
+      const Span<int> corner_edges = mesh->corner_edges();
+      const Span<int> corner_to_face = mesh->corner_to_face_map();
+      const OffsetIndices faces = mesh->faces();
+      const int own_face = corner_to_face[corner];
+      const IndexRange own = faces[own_face];
+      /* Where the edge starts in the face of the corner, and how far the corner is from there. */
+      int own_start = -1;
+      for (const int c : own) {
+        if (corner_edges[c] == edge) {
+          own_start = c;
+          break;
+        }
+      }
+      if (own_start < 0) {
+        return Value::from_int(-1);
+      }
+      const int steps = math::mod_periodic<int>(corner - own_start, int(own.size()));
+      const int vert_start = corner_verts[own_start];
+      const int vert_end = corner_verts[bke::mesh::face_corner_next(own, own_start)];
+      MeshTopoCache &cache = mesh_topo(u, gi, mesh);
+      cache.ensure_e2f();
+      if (edge >= cache.e2f.size()) {
+        return Value::from_int(-1);
+      }
+      for (const int face : cache.e2f[edge]) {
+        if (face == own_face) {
+          continue;
+        }
+        /* The face on the other side is entered at the other end of the edge and walked the
+         * same number of steps, away from the edge like in the own face. The two ends are found
+         * by their points, so it does not matter which way either face winds. */
+        const IndexRange other = faces[face];
+        int other_start = -1;
+        int other_end = -1;
+        for (const int c : other) {
+          if (corner_verts[c] == vert_end) {
+            other_start = c;
+          }
+          else if (corner_verts[c] == vert_start) {
+            other_end = c;
+          }
+        }
+        if (other_start < 0 || other_end < 0) {
+          continue;
+        }
+        const int direction = (bke::mesh::face_corner_next(other, other_start) == other_end) ? 1 :
+                                                                                               -1;
+        const int local = math::mod_periodic<int>(
+            other_start - int(other.start()) + direction * steps, int(other.size()));
+        return Value::from_int(int(other.start()) + local);
+      }
+      return Value::from_int(-1);
+    }
+    case Builtin::PrevEdge:
+    case Builtin::NextEdge: {
+      int gi = 0;
+      int c = env.index;
+      parse_geo_elem(args, env.index, gi, c);
+      const Mesh *mesh = mesh_at(u, gi);
+      if (!mesh || c < 0 || c >= mesh->corners_num) {
+        return Value::from_int(-1);
+      }
+      const Span<int> corner_edges = mesh->corner_edges();
+      if (id == Builtin::NextEdge) {
+        return Value::from_int(corner_edges[c]);
+      }
+      const IndexRange face = mesh->faces()[mesh->corner_to_face_map()[c]];
+      return Value::from_int(corner_edges[bke::mesh::face_corner_prev(face, c)]);
     }
     case Builtin::OffsetCornerInFace: {
       int gi = 0;

@@ -618,6 +618,17 @@ enum class Builtin : uint16_t {
    * 4 curve.
    */
   ElemNum,
+  /** `facesedge(geo, face0, face1)`: the edge two faces share, -1 when there is none. */
+  FacesEdge,
+  /**
+   * `equivalentcorner(geo, edge, corner)`: the corner opposite to \a corner across the edge, in
+   * the face on the other side: the other end of the edge for a corner on the edge, and the
+   * corner the same number of steps away from the edge otherwise. -1 when there is none.
+   */
+  EquivalentCorner,
+  /** `prevedge(geo, corner)` / `nextedge(geo, corner)`: the edge into and out of a corner. */
+  PrevEdge,
+  NextEdge,
 };
 
 /** Widget behind a `chramp()` / `chcurve()` parameter. */
