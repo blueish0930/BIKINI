@@ -265,6 +265,7 @@ struct GeoNodesOperatorData {
 };
 
 class GeometryNodesOutputCache;
+struct GeometryNodesOutputCacheEvalState;
 
 struct GeoNodesCallData {
   /**
@@ -291,6 +292,11 @@ struct GeoNodesCallData {
    * Owned by the Nodes modifier runtime. Null when evaluating outside a modifier.
    */
   GeometryNodesOutputCache *output_cache = nullptr;
+  /**
+   * What cached nodes can depend on in this evaluation, from
+   * #GeometryNodesOutputCache::prepare_for_eval. Null when no node has its cache enabled.
+   */
+  const GeometryNodesOutputCacheEvalState *output_cache_eval = nullptr;
   /**
    * Some nodes should be executed even when their output is not used (e.g. active viewer nodes and
    * the node groups they are contained in).
@@ -359,9 +365,10 @@ struct GeoNodesUserData : public fn::UserData {
    */
   bool verbose_log = true;
   /**
-   * Identity of the current group/zone caller inputs. Mixed into the output-cache key so nodes
-   * inside a group miss when the group’s incoming geometry (or other inputs) change, even if the
-   * nested tree itself was not edited.
+   * State of the node that entered the current compute context (group node, Evaluate Closure),
+   * from #geometry_nodes_output_cache_child_token. Cached nodes that depend on the context's
+   * inputs mix it into their own state, so they miss when anything feeding the caller changed,
+   * even if the nested tree itself was not edited. Zero in the root context.
    */
   uint64_t output_cache_caller_token = 0;
 

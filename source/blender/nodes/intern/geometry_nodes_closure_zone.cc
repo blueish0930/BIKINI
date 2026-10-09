@@ -292,6 +292,8 @@ struct EvaluateClosureEvalStorage {
   std::optional<ClosureIntermediateGraphSideEffectProvider> side_effect_provider;
   void *graph_executor_storage = nullptr;
   int64_t accumulated_cook_ns = 0;
+  /** Output-cache decision and captured outputs of this evaluation. */
+  OutputCacheSession cache_session;
 };
 
 /**
@@ -354,17 +356,6 @@ class LazyFunctionForEvaluateClosureNode : public LazyFunction {
     std::destroy_at(s);
   }
 
-  GeometryNodesOutputCache::Key cache_key(const GeoNodesUserData &user_data) const
-  {
-    GeometryNodesOutputCache::Key key;
-    key.tree_session_uid = geometry_nodes_output_cache_tree_uid(btree_);
-    key.node_id = bnode_.identifier;
-    key.context_hash = user_data.compute_context->hash();
-    key.sockets_token = geometry_nodes_output_cache_hash_node_inputs(bnode_);
-    key.caller_token = user_data.output_cache_caller_token;
-    return key;
-  }
-
   void execute_impl(lf::Params &params, const lf::Context &context) const override
   {
     auto &user_data = *static_cast<GeoNodesUserData *>(context.user_data);
@@ -383,18 +374,18 @@ class LazyFunctionForEvaluateClosureNode : public LazyFunction {
                   .is_empty();
     }();
 
-    const bool cache_enabled = geometry_nodes_output_cache_node_enabled(
-        bnode_, user_data.call_data ? user_data.call_data->output_cache : nullptr);
-    if (cache_enabled && !has_inner_side_effects && user_data.call_data &&
-        user_data.call_data->output_cache && user_data.compute_context)
-    {
-      const GeometryNodesOutputCache::Hit hit = user_data.call_data->output_cache->try_restore(
-          this->cache_key(user_data), params);
-      if (hit.hit) {
-        geometry_nodes_output_cache_skip_unprovided_inputs(params, int(inputs_.size()));
-        geometry_nodes_output_cache_log_hit(context, bnode_.identifier, hit.exec_time_ns);
+    const OutputCacheSite cache_site{&btree_, &bnode_};
+    OutputCacheSession &cache_session = eval_storage.cache_session;
+    if (has_inner_side_effects) {
+      cache_session.status = OutputCacheSession::Status::Disabled;
+    }
+    switch (geometry_nodes_output_cache_restore(context, params, cache_site, cache_session)) {
+      case OutputCacheLookup::Hit:
+      case OutputCacheLookup::Pending:
         return;
-      }
+      case OutputCacheLookup::Miss:
+      case OutputCacheLookup::Disabled:
+        break;
     }
 
     const ScopedNodeTimer node_timer{context, bnode_};
@@ -441,6 +432,8 @@ class LazyFunctionForEvaluateClosureNode : public LazyFunction {
     closure_user_data.compute_context = &closure_compute_context;
     closure_user_data.verbose_log = should_log_verbose_in_context(user_data,
                                                                   closure_compute_context.hash());
+    closure_user_data.output_cache_caller_token = geometry_nodes_output_cache_child_token(
+        user_data, cache_site);
     GeoNodesLocalUserData closure_local_user_data{closure_user_data};
 
     if (!eval_storage.graph_executor) {
@@ -455,23 +448,13 @@ class LazyFunctionForEvaluateClosureNode : public LazyFunction {
     lf::Context eval_graph_context{
         eval_storage.graph_executor_storage, &closure_user_data, &closure_local_user_data};
 
-    if (cache_enabled && user_data.call_data && user_data.call_data->output_cache &&
-        user_data.compute_context)
-    {
+    if (cache_session.status == OutputCacheSession::Status::Miss) {
       GeometryNodesOutputCaptureParams capture{*this, params};
       eval_storage.graph_executor->execute(capture, eval_graph_context);
       eval_storage.accumulated_cook_ns += node_timer.elapsed_ns();
-      Vector<GeometryNodesOutputCache::CachedSocket> sockets = std::move(capture.captured());
-      if (!sockets.is_empty()) {
-        int64_t frozen_ns = eval_storage.accumulated_cook_ns;
-        if (user_data.call_data->output_cache->store(this->cache_key(user_data),
-                                                     std::move(sockets),
-                                                     eval_storage.accumulated_cook_ns,
-                                                     &frozen_ns))
-        {
-          geometry_nodes_output_cache_log_frozen_overlay(context, bnode_.identifier, frozen_ns);
-        }
-      }
+      int64_t frozen_ns = eval_storage.accumulated_cook_ns;
+      geometry_nodes_output_cache_store(
+          context, params, cache_site, cache_session, std::move(capture.captured()), frozen_ns);
     }
     else {
       eval_storage.graph_executor->execute(params, eval_graph_context);

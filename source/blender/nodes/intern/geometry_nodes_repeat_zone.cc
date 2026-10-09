@@ -197,6 +197,8 @@ struct RepeatEvalStorage {
   Vector<int> output_index_map;
   /** Wall time of every execute_impl in this eval (graph build + lazy passes). */
   int64_t accumulated_cook_ns = 0;
+  /** Output-cache decision and captured outputs of this evaluation. */
+  OutputCacheSession cache_session;
 };
 
 class LazyFunctionForRepeatZone : public LazyFunction {
@@ -262,35 +264,26 @@ class LazyFunctionForRepeatZone : public LazyFunction {
       return !iterations_with_side_effects.is_empty();
     }();
 
-    const bool cache_enabled = geometry_nodes_output_cache_node_enabled(
-        repeat_output_bnode_, user_data.call_data ? user_data.call_data->output_cache : nullptr);
-    /* Inner viewers need the zone body. Restoring then executing would set outputs twice. */
-    if (cache_enabled && !zone_has_inner_side_effects && user_data.call_data &&
-        user_data.call_data->output_cache && user_data.compute_context)
-    {
-      GeometryNodesOutputCache::Key key;
-      key.tree_session_uid = geometry_nodes_output_cache_tree_uid(btree_);
-      key.node_id = repeat_output_bnode_.identifier;
-      key.context_hash = user_data.compute_context->hash();
-      if (const bNode *input_node = zone_.input_node()) {
-        key.sockets_token = geometry_nodes_output_cache_hash_node_inputs(*input_node);
-      }
-      key.caller_token = user_data.output_cache_caller_token;
-      const GeometryNodesOutputCache::Hit hit = user_data.call_data->output_cache->try_restore(
-          key, params);
-      if (hit.hit) {
-        geometry_nodes_output_cache_skip_unprovided_inputs(params, int(inputs_.size()));
-        geometry_nodes_output_cache_log_hit(
-            context, repeat_output_bnode_.identifier, hit.exec_time_ns);
+    RepeatEvalStorage &eval_storage = *static_cast<RepeatEvalStorage *>(context.storage);
+    const OutputCacheSite cache_site{&btree_, &repeat_output_bnode_, zone_.input_node()};
+    OutputCacheSession &cache_session = eval_storage.cache_session;
+    if (zone_has_inner_side_effects) {
+      /* Inner viewers need the zone body. Restoring then executing would set outputs twice. */
+      cache_session.status = OutputCacheSession::Status::Disabled;
+    }
+    switch (geometry_nodes_output_cache_restore(context, params, cache_site, cache_session)) {
+      case OutputCacheLookup::Hit:
+      case OutputCacheLookup::Pending:
         return;
-      }
+      case OutputCacheLookup::Miss:
+      case OutputCacheLookup::Disabled:
+        break;
     }
 
     const ScopedNodeTimer node_timer{context, repeat_output_bnode_};
 
     const NodeGeometryRepeatOutput &node_storage = *static_cast<const NodeGeometryRepeatOutput *>(
         repeat_output_bnode_.storage);
-    RepeatEvalStorage &eval_storage = *static_cast<RepeatEvalStorage *>(context.storage);
 
     if (!eval_storage.graph_executor) {
       /* Create the execution graph in the first evaluation. The GraphExecutor storage must
@@ -312,28 +305,9 @@ class LazyFunctionForRepeatZone : public LazyFunction {
     eval_storage.accumulated_cook_ns += node_timer.elapsed_ns();
     const int64_t cook_ns = eval_storage.accumulated_cook_ns;
 
-    if (cache_enabled && user_data.call_data && user_data.call_data->output_cache &&
-        user_data.compute_context)
-    {
-      Vector<GeometryNodesOutputCache::CachedSocket> sockets = std::move(capture.captured());
-      if (!sockets.is_empty()) {
-        GeometryNodesOutputCache::Key key;
-        key.tree_session_uid = geometry_nodes_output_cache_tree_uid(btree_);
-        key.node_id = repeat_output_bnode_.identifier;
-        key.context_hash = user_data.compute_context->hash();
-        if (const bNode *input_node = zone_.input_node()) {
-          key.sockets_token = geometry_nodes_output_cache_hash_node_inputs(*input_node);
-        }
-        key.caller_token = user_data.output_cache_caller_token;
-        int64_t frozen_ns = cook_ns;
-        if (user_data.call_data->output_cache->store(
-                key, std::move(sockets), cook_ns, &frozen_ns))
-        {
-          geometry_nodes_output_cache_log_frozen_overlay(
-              context, repeat_output_bnode_.identifier, frozen_ns);
-        }
-      }
-    }
+    int64_t frozen_ns = cook_ns;
+    geometry_nodes_output_cache_store(
+        context, params, cache_site, cache_session, std::move(capture.captured()), frozen_ns);
   }
 
   /**

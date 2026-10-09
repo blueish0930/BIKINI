@@ -2743,9 +2743,21 @@ static void modifyGeometry(ModifierData *md,
     nmd_orig->runtime->output_cache = std::make_shared<nodes::GeometryNodesOutputCache>();
   }
   nmd->runtime->output_cache = nmd_orig->runtime->output_cache;
-  nmd->runtime->output_cache->prepare_for_eval(
-      tree, geometry_set, ctx->object, ctx->depsgraph, DEG_get_ctime(ctx->depsgraph));
-  call_data.output_cache = nmd->runtime->output_cache.get();
+  nodes::GeometryNodesOutputCache::PrepareParams output_cache_params;
+  output_cache_params.root_tree = &tree;
+  output_cache_params.input_geometry = &geometry_set;
+  output_cache_params.self_object = ctx->object;
+  output_cache_params.depsgraph = ctx->depsgraph;
+  output_cache_params.ctime = DEG_get_ctime(ctx->depsgraph);
+  output_cache_params.properties = nmd->modifier.system_properties;
+  /* Kept alive here: the viewport and a render may evaluate this modifier concurrently, each
+   * with its own snapshot. */
+  const std::shared_ptr<const nodes::GeometryNodesOutputCacheEvalState> output_cache_eval =
+      nmd->runtime->output_cache->prepare_for_eval(output_cache_params);
+  if (output_cache_eval) {
+    call_data.output_cache = nmd->runtime->output_cache.get();
+    call_data.output_cache_eval = output_cache_eval.get();
+  }
 
   geometry_set = nodes::execute_geometry_nodes_on_geometry(
       tree, properties_ptr, modifier_compute_context, call_data, std::move(geometry_set));

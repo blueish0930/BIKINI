@@ -5,55 +5,434 @@
 #include "NOD_geometry_nodes_output_cache.hh"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <memory>
-#include <variant>
 
-#include "BLI_color_types.hh"
 #include "BLI_function_ref.hh"
 #include "BLI_generic_span.hh"
+#include "BLI_generic_virtual_array.hh"
 #include "BLI_hash.hh"
+#include "BLI_implicit_sharing.hh"
 #include "BLI_listbase.hh"
 #include "BLI_math_matrix_types.hh"
 #include "BLI_math_vector_types.hh"
 #include "BLI_set.hh"
 #include "BLI_stack.hh"
+#include "BLI_string.hh"
 #include "BLI_vector_set.hh"
 
 #include "NOD_geometry_nodes_lazy_function.hh"
 
 #include "DNA_ID.h"
-#include "DNA_color_types.h"
-#include "DNA_colorband_types.h"
+#include "DNA_action_types.h"
+#include "DNA_anim_types.h"
+#include "DNA_camera_types.h"
+#include "DNA_collection_types.h"
 #include "DNA_curves_types.h"
+#include "DNA_customdata_types.h"
 #include "DNA_mesh_types.h"
+#include "DNA_meshdata_types.h"
+#include "DNA_node_tree_interface_types.h"
 #include "DNA_node_types.h"
 #include "DNA_object_types.h"
 #include "DNA_pointcloud_types.h"
+#include "DNA_scene_types.h"
 
 #include "BKE_anim_data.hh"
+#include "BKE_attribute.hh"
 #include "BKE_curves.hh"
+#include "BKE_customdata.hh"
+#include "BKE_geometry_nodes_reference_set.hh"
 #include "BKE_geometry_set.hh"
+#include "BKE_geometry_set_instances.hh"
+#include "BKE_idprop.hh"
 #include "BKE_instances.hh"
 #include "BKE_mesh.hh"
+#include "BKE_mesh_types.hh"
 #include "BKE_node.hh"
 #include "BKE_node_legacy_types.hh"
 #include "BKE_node_runtime.hh"
 #include "BKE_object.hh"
 #include "BKE_pointcloud.hh"
 
+#include "DEG_depsgraph_build.hh"
 #include "DEG_depsgraph_query.hh"
 
 #include "FN_lazy_function.hh"
 
 #include "NOD_dependencies.hh"
-#include "NOD_geometry_nodes_closure.hh"
-#include "NOD_geometry_nodes_list.hh"
+#include "NOD_node_declaration.hh"
+
+#include "RNA_access.hh"
+#include "RNA_path.hh"
 
 namespace blender::nodes {
 
 using bke::SocketValueVariant;
 namespace lf = fn::lazy_function;
+
+/* -------------------------------------------------------------------- */
+/** \name Hashing
+ * \{ */
+
+static uint64_t mix(const uint64_t seed, const uint64_t value)
+{
+  uint64_t x = seed ^ (value + 0x9E3779B97F4A7C15ull + (seed << 6) + (seed >> 2));
+  x ^= x >> 33;
+  x *= 0xFF51AFD7ED558CCDull;
+  x ^= x >> 33;
+  x *= 0xC4CEB9FE1A85EC53ull;
+  x ^= x >> 33;
+  return x;
+}
+
+static uint64_t hash_bytes(const void *data, const int64_t size)
+{
+  if (data == nullptr || size <= 0) {
+    return 0;
+  }
+  const ComputeContextHash hash = ComputeContextHash::from_bytes(data, size);
+  return mix(hash.v1, hash.v2);
+}
+
+static uint64_t hash_text(const StringRef str)
+{
+  return hash_bytes(str.data(), str.size());
+}
+
+/**
+ * Session uid of the original data-block. Evaluated copies do not carry one (it reads as
+ * zero), so comparing theirs would make every data-block look like the same one.
+ */
+static uint32_t stable_session_uid(const ID *id)
+{
+  if (id == nullptr) {
+    return 0;
+  }
+  if (const ID *id_orig = DEG_get_original(id)) {
+    return id_orig->session_uid;
+  }
+  return id->session_uid;
+}
+
+/** A token that never equals an earlier one, for data whose content cannot be identified. */
+static uint64_t unique_token()
+{
+  static std::atomic<uint64_t> counter{1};
+  return mix(0x554E4951ull, counter.fetch_add(1, std::memory_order_relaxed));
+}
+
+/**
+ * Content hashes of shared arrays, remembered per #ImplicitSharingInfo. An array that is still
+ * the same shared data at the same version is not read again, so an unchanged input geometry
+ * costs one map lookup per attribute.
+ */
+struct GeometryNodesOutputCache::ContentHasher {
+  struct Memo {
+    int64_t version = 0;
+    int64_t size = 0;
+    uint64_t hash = 0;
+  };
+  Map<const ImplicitSharingInfo *, Memo> memo;
+
+  ~ContentHasher()
+  {
+    for (const ImplicitSharingInfo *info : memo.keys()) {
+      info->remove_weak_user_and_delete_if_last();
+    }
+  }
+
+  uint64_t shared(const ImplicitSharingInfo *info,
+                  const int64_t size,
+                  const FunctionRef<uint64_t()> compute)
+  {
+    if (info == nullptr) {
+      return compute();
+    }
+    const int64_t version = info->version();
+    if (Memo *known = memo.lookup_ptr(info)) {
+      if (known->version != version || known->size != size) {
+        *known = {version, size, compute()};
+      }
+      return known->hash;
+    }
+    /* The weak user keeps the address from being reused by another array. */
+    info->add_weak_user();
+    const uint64_t hash = compute();
+    memo.add_new(info, {version, size, hash});
+    return hash;
+  }
+
+  uint64_t bytes(const void *data, const int64_t size, const ImplicitSharingInfo *info)
+  {
+    return this->shared(info, size, [&]() { return hash_bytes(data, size); });
+  }
+
+  void remove_expired()
+  {
+    memo.remove_if([](const auto &item) {
+      if (item.key->is_expired()) {
+        item.key->remove_weak_user_and_delete_if_last();
+        return true;
+      }
+      return false;
+    });
+  }
+};
+
+static uint64_t attributes_token(const bke::AttributeAccessor &attributes,
+                                 GeometryNodesOutputCache::ContentHasher &hasher)
+{
+  /* Summed, so the storage order of attributes does not matter. */
+  uint64_t token = 0;
+  attributes.foreach_attribute([&](const bke::AttributeIter &iter) {
+    const bke::GAttributeReader reader = iter.get();
+    if (!reader) {
+      return;
+    }
+    const GVArray &varray = reader.varray;
+    const CPPType &type = varray.type();
+    const int64_t size = varray.size();
+    uint64_t part = mix(hash_text(iter.name), uint64_t(iter.domain));
+    part = mix(part, uint64_t(iter.data_type));
+    part = mix(part, uint64_t(size));
+    if (!type.is_trivial) {
+      part = mix(part, unique_token());
+    }
+    else if (varray.is_span()) {
+      const GSpan span = varray.get_internal_span();
+      part = mix(part, hasher.bytes(span.data(), size * type.size, reader.sharing_info));
+    }
+    else if (varray.is_single()) {
+      BUFFER_FOR_CPP_TYPE_VALUE(type, buffer);
+      varray.get_internal_single(buffer);
+      part = mix(part, hash_bytes(buffer, type.size));
+    }
+    else {
+      /* Vertex groups show up as computed arrays. They are hashed from the weights instead. */
+      return;
+    }
+    token += part;
+  });
+  return token;
+}
+
+static uint64_t deform_verts_token(const Span<MDeformVert> dverts,
+                                   const ImplicitSharingInfo *sharing_info,
+                                   GeometryNodesOutputCache::ContentHasher &hasher)
+{
+  if (dverts.is_empty()) {
+    return 0;
+  }
+  return hasher.shared(sharing_info, dverts.size(), [&]() {
+    uint64_t token = uint64_t(dverts.size());
+    for (const MDeformVert &dvert : dverts) {
+      token = mix(token, uint64_t(dvert.totweight));
+      if (dvert.dw != nullptr && dvert.totweight > 0) {
+        token = mix(token, hash_bytes(dvert.dw, sizeof(MDeformWeight) * dvert.totweight));
+      }
+    }
+    return token;
+  });
+}
+
+static uint64_t materials_token(Material *const *materials, const int materials_num)
+{
+  uint64_t token = uint64_t(materials_num);
+  for (int i = 0; i < materials_num; i++) {
+    const Material *material = materials ? materials[i] : nullptr;
+    token = mix(token, stable_session_uid(reinterpret_cast<const ID *>(material)));
+  }
+  return token;
+}
+
+static uint64_t mesh_token(const Mesh &mesh, GeometryNodesOutputCache::ContentHasher &hasher)
+{
+  uint64_t token = mix(0x4D455348ull, uint64_t(mesh.verts_num));
+  token = mix(token, uint64_t(mesh.edges_num));
+  token = mix(token, uint64_t(mesh.faces_num));
+  token = mix(token, uint64_t(mesh.corners_num));
+  token = mix(token, attributes_token(mesh.attributes(), hasher));
+  const Span<int> face_offsets = mesh.face_offsets();
+  token = mix(token,
+              hasher.bytes(face_offsets.data(),
+                           face_offsets.size_in_bytes(),
+                           mesh.runtime->face_offsets_sharing_info));
+  const int dvert_layer = CustomData_get_layer_index(&mesh.vert_data, CD_MDEFORMVERT);
+  if (dvert_layer != -1) {
+    token = mix(token,
+                deform_verts_token(
+                    mesh.deform_verts(), mesh.vert_data.layers[dvert_layer].sharing_info, hasher));
+    for (const bDeformGroup &group : mesh.vertex_group_names) {
+      token = mix(token, hash_text(group.name));
+    }
+  }
+  token = mix(token, materials_token(mesh.mat, mesh.totcol));
+  return token;
+}
+
+static uint64_t curves_token(const Curves &curves_id,
+                             GeometryNodesOutputCache::ContentHasher &hasher)
+{
+  const bke::CurvesGeometry &curves = curves_id.geometry.wrap();
+  uint64_t token = mix(0x43555256ull, uint64_t(curves.points_num()));
+  token = mix(token, uint64_t(curves.curves_num()));
+  token = mix(token, attributes_token(curves.attributes(), hasher));
+  const Span<int> offsets = curves.offsets();
+  token = mix(token,
+              hasher.bytes(offsets.data(),
+                           offsets.size_in_bytes(),
+                           curves.runtime->curve_offsets_sharing_info));
+  const Span<float> knots = curves.nurbs_custom_knots();
+  token = mix(token,
+              hasher.bytes(
+                  knots.data(), knots.size_in_bytes(), curves.runtime->custom_knots_sharing_info));
+  token = mix(token, materials_token(curves_id.mat, curves_id.totcol));
+  return token;
+}
+
+static uint64_t geometry_token(const bke::GeometrySet &geometry,
+                               GeometryNodesOutputCache::ContentHasher &hasher);
+
+static uint64_t instances_token(const bke::Instances &instances,
+                                GeometryNodesOutputCache::ContentHasher &hasher)
+{
+  uint64_t token = mix(0x494E5354ull, uint64_t(instances.instances_num()));
+  token = mix(token, attributes_token(instances.attributes(), hasher));
+  for (const bke::InstanceReference &reference : instances.references()) {
+    token = mix(token, uint64_t(reference.type()));
+    switch (reference.type()) {
+      case bke::InstanceReference::Type::Object:
+        token = mix(token, stable_session_uid(&reference.object().id));
+        break;
+      case bke::InstanceReference::Type::Collection:
+        token = mix(token, stable_session_uid(&reference.collection().id));
+        break;
+      case bke::InstanceReference::Type::GeometrySet:
+        token = mix(token, geometry_token(reference.geometry_set(), hasher));
+        break;
+      case bke::InstanceReference::Type::None:
+        break;
+    }
+  }
+  return token;
+}
+
+/**
+ * Identity of a geometry's content. Equal tokens mean equal data; pointers of the geometry
+ * itself are never used, because the depsgraph hands out a new #Mesh on every evaluation.
+ */
+static uint64_t geometry_token(const bke::GeometrySet &geometry,
+                               GeometryNodesOutputCache::ContentHasher &hasher)
+{
+  uint64_t token = 0x47454F4Dull;
+  if (const Mesh *mesh = geometry.get_mesh()) {
+    token = mix(token, mesh_token(*mesh, hasher));
+  }
+  if (const PointCloud *pointcloud = geometry.get_pointcloud()) {
+    token = mix(token, mix(0x50434C44ull, uint64_t(pointcloud->totpoint)));
+    token = mix(token, attributes_token(pointcloud->attributes(), hasher));
+    token = mix(token, materials_token(pointcloud->mat, pointcloud->totcol));
+  }
+  if (const Curves *curves = geometry.get_curves()) {
+    token = mix(token, curves_token(*curves, hasher));
+  }
+  if (const bke::Instances *instances = geometry.get_instances()) {
+    token = mix(token, instances_token(*instances, hasher));
+  }
+  if (geometry.has_volume() || geometry.has_grease_pencil()) {
+    /* No cheap content identity for these yet, so they always count as changed. */
+    token = mix(token, unique_token());
+  }
+  return token;
+}
+
+static uint64_t idproperty_token(const IDProperty &prop)
+{
+  uint64_t token = mix(uint64_t(prop.type), hash_text(prop.name));
+  switch (prop.type) {
+    case IDP_STRING: {
+      const char *str = static_cast<const char *>(prop.data.pointer);
+      token = mix(token, str ? hash_text(str) : 0);
+      break;
+    }
+    case IDP_INT:
+    case IDP_FLOAT:
+    case IDP_DOUBLE:
+    case IDP_BOOLEAN: {
+      token = mix(token, uint64_t(uint32_t(prop.data.val)));
+      token = mix(token, uint64_t(uint32_t(prop.data.val2)));
+      break;
+    }
+    case IDP_ARRAY: {
+      int64_t item_size = 0;
+      switch (prop.subtype) {
+        case IDP_INT:
+        case IDP_FLOAT:
+          item_size = 4;
+          break;
+        case IDP_DOUBLE:
+          item_size = 8;
+          break;
+        case IDP_BOOLEAN:
+          item_size = 1;
+          break;
+        default:
+          break;
+      }
+      token = mix(token, uint64_t(prop.len));
+      token = mix(token, hash_bytes(prop.data.pointer, item_size * prop.len));
+      break;
+    }
+    case IDP_GROUP: {
+      for (const IDProperty &child : prop.data.group) {
+        token = mix(token, idproperty_token(child));
+      }
+      break;
+    }
+    case IDP_ID: {
+      token = mix(token, stable_session_uid(static_cast<const ID *>(prop.data.pointer)));
+      break;
+    }
+    case IDP_IDPARRAY: {
+      const IDProperty *items = static_cast<const IDProperty *>(prop.data.pointer);
+      for (int i = 0; i < prop.len; i++) {
+        token = mix(token, idproperty_token(items[i]));
+      }
+      break;
+    }
+    default:
+      break;
+  }
+  return token;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Debug Output
+ * \{ */
+
+static bool debug_enabled()
+{
+  static const bool enabled = std::getenv("BLENDER_GN_CACHE_DEBUG") != nullptr;
+  return enabled;
+}
+
+static void debug_print(const char *event, const bNode &node, const char *detail)
+{
+  if (!debug_enabled()) {
+    return;
+  }
+  fprintf(stderr, "GN_CACHE %s node=\"%s\"%s%s\n", event, node.name, detail ? " " : "", detail ? detail : "");
+  fflush(stderr);
+}
+
+/** \} */
 
 bool socket_value_is_output_cacheable(const SocketValueVariant &value)
 {
@@ -76,6 +455,10 @@ bool socket_value_is_output_cacheable(const SocketValueVariant &value)
       return true;
   }
 }
+
+/* -------------------------------------------------------------------- */
+/** \name Tree Edit Generations
+ * \{ */
 
 struct GeometryNodesOutputCacheTreeState {
   Mutex mutex;
@@ -142,51 +525,17 @@ GeometryNodesOutputCache::~GeometryNodesOutputCache()
   registered_caches().remove(this);
 }
 
-bool geometry_nodes_output_cache_node_enabled(const bNode &node,
-                                              const GeometryNodesOutputCache *cache)
-{
-  if ((node.flag & NODE_OUTPUT_CACHE) != 0) {
-    return true;
-  }
-  if (cache == nullptr) {
-    return false;
-  }
-  /* Eval/COW copies often lag the original DNA flag by one depsgraph cycle. Never
-   * ensure_topology_cache on the original from a worker (that crashed For Each). */
-  const bNodeTree *tree = (node.runtime != nullptr) ? node.runtime->owner_tree : nullptr;
-  if (tree == nullptr) {
-    return false;
-  }
-  return cache->is_node_enabled(original_tree_session_uid(*tree), node.identifier);
-}
-
-bool GeometryNodesOutputCache::is_node_enabled(const uint32_t tree_session_uid,
-                                               const int32_t node_id) const
-{
-  NodeRef ref;
-  ref.tree_session_uid = tree_session_uid;
-  ref.node_id = node_id;
-  std::lock_guard lock{mutex_};
-  return enabled_nodes_.contains(ref);
-}
-
 void GeometryNodesOutputCache::discard_node(const uint32_t tree_session_uid, const int32_t node_id)
 {
   std::lock_guard lock{mutex_};
-  Vector<Key> stale;
-  for (const auto &item : entries_.items()) {
-    if (item.key.tree_session_uid == tree_session_uid && item.key.node_id == node_id) {
-      stale.append(item.key);
-    }
-  }
-  for (const Key &key : stale) {
-    entries_.remove(key);
-  }
+  entries_.remove_if([&](const auto &item) {
+    return item.key.tree_session_uid == tree_session_uid && item.key.node_id == node_id;
+  });
   NodeRef ref;
   ref.tree_session_uid = tree_session_uid;
   ref.node_id = node_id;
   frozen_time_ns_.remove(ref);
-  frozen_time_gen_.remove(ref);
+  frozen_time_state_.remove(ref);
 }
 
 static Vector<GeometryNodesOutputCache *> snapshot_registered_caches()
@@ -241,45 +590,18 @@ int geometry_nodes_output_cache_debug_count(const bNodeTree *ntree, const bNode 
   return count;
 }
 
-Vector<GeometryNodesOutputCache::CachedSocket> geometry_nodes_output_cache_collect_outputs(
-    lf::Params &params, const int outputs_num)
-{
-  Vector<GeometryNodesOutputCache::CachedSocket> sockets;
-  const Span<lf::Output> outputs = params.fn_.outputs();
-  for (int i = 0; i < outputs_num; i++) {
-    if (!params.output_was_set(i)) {
-      continue;
-    }
-    if (outputs[i].type != &CPPType::get<SocketValueVariant>()) {
-      continue;
-    }
-    void *ptr = params.get_output_data_ptr(i);
-    if (ptr == nullptr) {
-      continue;
-    }
-    const auto &value = *static_cast<const SocketValueVariant *>(ptr);
-    if (!socket_value_is_output_cacheable(value)) {
-      continue;
-    }
-    GeometryNodesOutputCache::CachedSocket cached;
-    cached.output_index = i;
-    cached.value = value;
-    cached.value.ensure_owns_direct_data();
-    sockets.append(std::move(cached));
-  }
-  return sockets;
-}
-
-static void foreach_downstream(const bNodeTree &tree,
-                               const bNode &start,
-                               const FunctionRef<void(const bNode &)> visit);
-
 uint32_t geometry_nodes_output_cache_tree_uid(const bNodeTree &tree)
 {
   return original_tree_session_uid(tree);
 }
 
-uint64_t geometry_nodes_output_cache_hash_node_inputs(const bNode &node)
+/**
+ * Hash the unlinked input values of a node.
+ *
+ * \param r_complete: Set to false when a value could not be read. The hash then does not
+ * identify the node's inputs on its own.
+ */
+static uint64_t hash_node_inputs(const bNode &node, bool *r_complete)
 {
   /* Use SOCK_IS_LINKED (maintained by tree update), not is_directly_linked(), so eval/cache
    * hits never rebuild topology under a mutex that ntree update may already hold. */
@@ -293,40 +615,77 @@ uint64_t geometry_nodes_output_cache_hash_node_inputs(const bNode &node)
     if (linked) {
       continue;
     }
-    if (socket->default_value == nullptr) {
+    const void *value = socket->default_value;
+    if (value == nullptr) {
       continue;
     }
+    const auto id_hash = [](const ID *id) { return uint64_t(stable_session_uid(id)); };
     switch (eNodeSocketDatatype(socket->type)) {
-      case SOCK_FLOAT: {
-        const auto &value = *static_cast<const bNodeSocketValueFloat *>(socket->default_value);
-        h = get_default_hash(h, value.value);
+      case SOCK_FLOAT:
+        h = mix(h, hash_bytes(&static_cast<const bNodeSocketValueFloat *>(value)->value, 4));
         break;
-      }
-      case SOCK_INT: {
-        const auto &value = *static_cast<const bNodeSocketValueInt *>(socket->default_value);
-        h = get_default_hash(h, value.value);
+      case SOCK_INT:
+        h = mix(h, uint64_t(uint32_t(static_cast<const bNodeSocketValueInt *>(value)->value)));
         break;
-      }
-      case SOCK_BOOLEAN: {
-        const auto &value = *static_cast<const bNodeSocketValueBoolean *>(socket->default_value);
-        h = get_default_hash(h, int(value.value));
+      case SOCK_BOOLEAN:
+        h = mix(h, uint64_t(static_cast<const bNodeSocketValueBoolean *>(value)->value));
         break;
-      }
       case SOCK_VECTOR: {
-        const auto &value = *static_cast<const bNodeSocketValueVector *>(socket->default_value);
-        h = get_default_hash(h, value.value[0], value.value[1], value.value[2], value.value[3]);
+        const auto &typed = *static_cast<const bNodeSocketValueVector *>(value);
+        h = mix(h, hash_bytes(typed.value, sizeof(typed.value)));
         break;
       }
       case SOCK_RGBA: {
-        const auto &value = *static_cast<const bNodeSocketValueRGBA *>(socket->default_value);
-        h = get_default_hash(h, value.value[0], value.value[1], value.value[2], value.value[3]);
+        const auto &typed = *static_cast<const bNodeSocketValueRGBA *>(value);
+        h = mix(h, hash_bytes(typed.value, sizeof(typed.value)));
         break;
       }
+      case SOCK_ROTATION: {
+        const auto &typed = *static_cast<const bNodeSocketValueRotation *>(value);
+        h = mix(h, hash_bytes(typed.value_euler, sizeof(typed.value_euler)));
+        break;
+      }
+      case SOCK_STRING:
+        h = mix(h, hash_text(static_cast<const bNodeSocketValueString *>(value)->value));
+        break;
+      case SOCK_MENU:
+        h = mix(h, uint64_t(uint32_t(static_cast<const bNodeSocketValueMenu *>(value)->value)));
+        break;
+      case SOCK_OBJECT:
+        h = mix(h, id_hash(reinterpret_cast<const ID *>(
+                       static_cast<const bNodeSocketValueObject *>(value)->value)));
+        break;
+      case SOCK_COLLECTION:
+        h = mix(h, id_hash(reinterpret_cast<const ID *>(
+                       static_cast<const bNodeSocketValueCollection *>(value)->value)));
+        break;
+      case SOCK_MATERIAL:
+        h = mix(h, id_hash(reinterpret_cast<const ID *>(
+                       static_cast<const bNodeSocketValueMaterial *>(value)->value)));
+        break;
+      case SOCK_IMAGE:
+        h = mix(h, id_hash(reinterpret_cast<const ID *>(
+                       static_cast<const bNodeSocketValueImage *>(value)->value)));
+        break;
+      case SOCK_GEOMETRY:
+      case SOCK_MATRIX:
+      case SOCK_BUNDLE:
+      case SOCK_CLOSURE:
+        /* Nothing to read: unlinked sockets of these types always hold the same value. */
+        break;
       default:
+        if (r_complete != nullptr) {
+          *r_complete = false;
+        }
         break;
     }
   }
   return h;
+}
+
+uint64_t geometry_nodes_output_cache_hash_node_inputs(const bNode &node)
+{
+  return hash_node_inputs(node, nullptr);
 }
 
 void geometry_nodes_output_cache_copy_dirty_seeds(const bNodeTree &ntree, Vector<int32_t> &r_seeds)
@@ -385,37 +744,23 @@ static bool tree_flag_is_unknown_full_invalidation(const uint64_t changed_flag)
   return (changed_flag & unknown_bits) != 0;
 }
 
-static void collect_downstream_bumps(const bNodeTree &tree,
-                                     const bNode &start,
-                                     Vector<std::pair<uint32_t, int32_t>> &r_nodes)
-{
-  const uint32_t uid = original_tree_session_uid(tree);
-  /* Do not recursively wipe every node inside a group. Nested trees have their own gens, and
-   * inner keys include caller_token so a group input disconnect already misses. Recursing here
-   * made Viewer-on-parent (group tagged NODE_OUTPUT) recook Repeat and every inner node. */
-  foreach_downstream(tree, start, [&](const bNode &node) {
-    r_nodes.append({uid, node.identifier});
-  });
-}
-
-static void apply_gen_bumps(const Span<std::pair<uint32_t, int32_t>> bumps)
-{
-  for (const auto &[uid, node_id] : bumps) {
-    GeometryNodesOutputCacheTreeState &state = tree_state_for(uid);
-    std::lock_guard lock{state.mutex};
-    uint64_t &gen = state.node_gen.lookup_or_add(node_id, 0);
-    gen++;
-  }
-}
-
+/**
+ * Visit the start nodes and every node that can receive a value from them.
+ *
+ * Zones pass values without links: the output node of every zone depends on its input node,
+ * and in zones that run more than once (repeat, simulation) the input node reads what the
+ * output node produced in the previous step.
+ */
 static void foreach_downstream(const bNodeTree &tree,
-                               const bNode &start,
+                               const Span<const bNode *> starts,
                                const FunctionRef<void(const bNode &)> visit)
 {
   tree.ensure_topology_cache();
   Stack<const bNode *> stack;
   Set<const bNode *> visited;
-  stack.push(&start);
+  for (const bNode *start : starts) {
+    stack.push(start);
+  }
   while (!stack.is_empty()) {
     const bNode *node = stack.pop();
     if (!visited.add(node)) {
@@ -435,6 +780,44 @@ static void foreach_downstream(const bNodeTree &tree,
         }
       }
     }
+    if (const bke::bNodeZoneType *zone_type = bke::zone_type_by_node_type(node->type_legacy)) {
+      if (node->type_legacy == zone_type->input_type) {
+        if (zone_type->output_id_requires_storage() && node->storage == nullptr) {
+          continue;
+        }
+        if (const bNode *output_node = zone_type->get_corresponding_output(tree, *node)) {
+          stack.push(output_node);
+        }
+      }
+      else if (ELEM(node->type_legacy, GEO_NODE_REPEAT_OUTPUT, GEO_NODE_SIMULATION_OUTPUT)) {
+        if (const bNode *input_node = zone_type->get_corresponding_input(tree, *node)) {
+          stack.push(input_node);
+        }
+      }
+    }
+  }
+}
+
+static void collect_downstream_bumps(const bNodeTree &tree,
+                                     const bNode &start,
+                                     Vector<std::pair<uint32_t, int32_t>> &r_nodes)
+{
+  const uint32_t uid = original_tree_session_uid(tree);
+  /* Do not recursively wipe every node inside a group. Nested trees have their own gens, and
+   * inner nodes mix the state of the calling group node into theirs, so a change that reaches
+   * the group node already makes them miss. */
+  foreach_downstream(tree, {&start}, [&](const bNode &node) {
+    r_nodes.append({uid, node.identifier});
+  });
+}
+
+static void apply_gen_bumps(const Span<std::pair<uint32_t, int32_t>> bumps)
+{
+  for (const auto &[uid, node_id] : bumps) {
+    GeometryNodesOutputCacheTreeState &state = tree_state_for(uid);
+    std::lock_guard lock{state.mutex};
+    uint64_t &gen = state.node_gen.lookup_or_add(node_id, 0);
+    gen++;
   }
 }
 
@@ -530,276 +913,41 @@ void geometry_nodes_output_cache_propagate(bNodeTree &ntree)
   }
 }
 
-static uint64_t hash_float3_components(const float3 &v)
-{
-  return get_default_hash(v.x, v.y, v.z);
-}
+/** \} */
 
-static uint64_t hash_sampled_positions(const Span<float3> positions)
-{
-  if (positions.is_empty()) {
-    return 0;
-  }
-  const int n = positions.size();
-  /* Hash components, never the float3 struct (padding would flicker the token). */
-  return get_default_hash(hash_float3_components(positions[0]),
-                          hash_float3_components(positions[n / 2]),
-                          hash_float3_components(positions[n - 1]));
-}
+/* -------------------------------------------------------------------- */
+/** \name Evaluation State
+ * \{ */
 
-static uint64_t hash_transform_stable(const float4x4 &t)
-{
-  return get_default_hash(hash_float3_components(t.location()),
-                          hash_float3_components(t.x_axis()),
-                          hash_float3_components(t.y_axis()),
-                          hash_float3_components(t.z_axis()));
-}
+/** What a node's result can depend on besides its own tree. */
+enum : uint8_t {
+  /** Inputs of the compute context: modifier inputs, group inputs, closure inputs. */
+  DEP_CONTEXT = 1 << 0,
+  DEP_IDS = 1 << 1,
+  DEP_TIME = 1 << 2,
+  DEP_CAMERA = 1 << 3,
+  DEP_ANIMATION = 1 << 4,
+  DEP_ALL = (1 << 5) - 1,
+};
 
-static uint64_t hash_geometry_content(const bke::GeometrySet &geometry)
-{
-  /* Content only — never pointers. Depsgraph copy-for-eval allocates a new Mesh every cook, so a
-   * pointer token made every node-property edit look like a new modifier input and recooked the
-   * whole tree. */
-  uint64_t token = geometry.is_empty() ? uint64_t(0x1) : uint64_t(0x2);
-
-  if (const Mesh *mesh = geometry.get_mesh()) {
-    token = get_default_hash(token,
-                             mesh->verts_num,
-                             mesh->edges_num,
-                             mesh->faces_num,
-                             hash_sampled_positions(mesh->vert_positions()));
-  }
-  if (const PointCloud *points = geometry.get_pointcloud()) {
-    token = get_default_hash(
-        token, points->totpoint, hash_sampled_positions(points->positions()));
-  }
-  if (const Curves *curves_id = geometry.get_curves()) {
-    const bke::CurvesGeometry &curves = curves_id->geometry.wrap();
-    token = get_default_hash(token,
-                             curves.points_num(),
-                             curves.curves_num(),
-                             hash_sampled_positions(curves.positions()));
-  }
-  if (const bke::Instances *instances = geometry.get_instances()) {
-    token = get_default_hash(token, instances->instances_num());
-    const Span<float4x4> transforms = instances->transforms();
-    if (!transforms.is_empty()) {
-      const int n = transforms.size();
-      const auto hash_transform = [&](const float4x4 &t) {
-        token = get_default_hash(token, hash_transform_stable(t));
-      };
-      hash_transform(transforms[0]);
-      hash_transform(transforms[n / 2]);
-      hash_transform(transforms[n - 1]);
-    }
-  }
-  return token;
-}
-
-uint64_t geometry_nodes_output_cache_hash_value(const SocketValueVariant &value)
-{
-  if (value.is_field() || value.is_volume_grid()) {
-    return uint64_t(0xF1E1D);
-  }
-  if (value.is_list()) {
-    const GListPtr list = value.copy_as<GListPtr>();
-    if (!list) {
-      return uint64_t(0x15);
-    }
-    uint64_t token = get_default_hash(uint64_t(0x15), list->size(), int(value.socket_type()));
-    const std::variant<GSpan, GPointer> values = list->values();
-    if (const GSpan *span = std::get_if<GSpan>(&values)) {
-      if (!span->is_empty()) {
-        const int n = span->size();
-        const CPPType &type = span->type();
-        if (type.is<SocketValueVariant>()) {
-          const Span<SocketValueVariant> typed = span->typed<SocketValueVariant>();
-          token = get_default_hash(token,
-                                   geometry_nodes_output_cache_hash_value(typed[0]),
-                                   geometry_nodes_output_cache_hash_value(typed[n / 2]),
-                                   geometry_nodes_output_cache_hash_value(typed[n - 1]));
-        }
-        else if (type.is<float>()) {
-          const Span<float> typed = span->typed<float>();
-          token = get_default_hash(token, typed[0], typed[n / 2], typed[n - 1]);
-        }
-        else if (type.is<int>()) {
-          const Span<int> typed = span->typed<int>();
-          token = get_default_hash(token, typed[0], typed[n / 2], typed[n - 1]);
-        }
-      }
-    }
-    return token;
-  }
-  if (!value.is_single()) {
-    return uint64_t(0x2);
-  }
-  switch (value.socket_type()) {
-    case SOCK_FLOAT:
-      return get_default_hash(value.copy_as<float>());
-    case SOCK_INT:
-      return get_default_hash(value.copy_as<int>());
-    case SOCK_BOOLEAN:
-      return get_default_hash(value.copy_as<bool>());
-    case SOCK_VECTOR:
-      return hash_float3_components(value.copy_as<float3>());
-    case SOCK_RGBA: {
-      const ColorGeometry4f c = value.copy_as<ColorGeometry4f>();
-      return get_default_hash(c.r, c.g, c.b, c.a);
-    }
-    case SOCK_GEOMETRY:
-      return hash_geometry_content(value.copy_as<bke::GeometrySet>());
-    case SOCK_CLOSURE: {
-      const ClosurePtr closure = value.copy_as<ClosurePtr>();
-      if (!closure) {
-        return uint64_t(SOCK_CLOSURE);
-      }
-      uint64_t token = uint64_t(SOCK_CLOSURE);
-      if (const std::optional<ClosureSourceLocation> &loc = closure->source_location()) {
-        token = get_default_hash(token, loc->closure_output_node_id, loc->compute_context_hash.v1,
-                                 loc->compute_context_hash.v2);
-      }
-      for (const SocketValueVariant *captured : closure->captured_values()) {
-        if (captured) {
-          token = get_default_hash(token, geometry_nodes_output_cache_hash_value(*captured));
-        }
-      }
-      return token;
-    }
-    case SOCK_CURVE: {
-      const auto *curve_ptr = value.get_if<CurveMapping *>();
-      const CurveMapping *curve = curve_ptr ? *curve_ptr : nullptr;
-      if (curve == nullptr) {
-        return uint64_t(SOCK_CURVE);
-      }
-      uint64_t token = get_default_hash(uint64_t(SOCK_CURVE), curve->cur, curve->flag);
-      for (int channel = 0; channel < CM_TOT; channel++) {
-        const CurveMap &map = curve->cm[channel];
-        token = get_default_hash(token, map.totpoint);
-        if (map.curve == nullptr) {
-          continue;
-        }
-        for (int point = 0; point < map.totpoint; point++) {
-          token = get_default_hash(token, map.curve[point].x, map.curve[point].y);
-        }
-      }
-      return token;
-    }
-    case SOCK_COLOR_RAMP: {
-      const auto *band_ptr = value.get_if<ColorBand *>();
-      const ColorBand *band = band_ptr ? *band_ptr : nullptr;
-      if (band == nullptr) {
-        return uint64_t(SOCK_COLOR_RAMP);
-      }
-      uint64_t token = get_default_hash(
-          uint64_t(SOCK_COLOR_RAMP), band->tot, band->ipotype, band->color_mode);
-      const int stops = min_ii(int(band->tot), 32);
-      for (int i = 0; i < stops; i++) {
-        const CBData &stop = band->data[i];
-        token = get_default_hash(token, stop.pos, stop.r, stop.g, stop.b, stop.a);
-      }
-      return token;
-    }
-    default:
-      return uint64_t(value.socket_type());
-  }
-}
-
-static uint64_t hash_object_eval(const Object &object_eval)
-{
-  uint64_t token = get_default_hash(object_eval.id.session_uid);
-  token = get_default_hash(token, hash_transform_stable(object_eval.object_to_world()));
-  if (const Mesh *mesh = BKE_object_get_evaluated_mesh(&object_eval)) {
-    token = get_default_hash(token,
-                             mesh->verts_num,
-                             mesh->edges_num,
-                             mesh->faces_num,
-                             hash_sampled_positions(mesh->vert_positions()));
-  }
-  return token;
-}
-
-static uint64_t compute_objects_token(const bNodeTree &root_tree,
-                                      const Object *self_object,
-                                      Depsgraph *depsgraph)
-{
-  if (root_tree.runtime == nullptr || root_tree.runtime->eval_dependencies == nullptr) {
-    return 0;
-  }
-  const EvalDependencies &deps = *root_tree.runtime->eval_dependencies;
-  const uint32_t self_uid = self_object ? self_object->id.session_uid : 0;
-  /* Map iteration order is not stable across rebuilds; mixing hashes in visit order made
-   * object-dependent geometry miss every redraw while List (not object-dependent) still hit. */
-  Vector<std::pair<uint32_t, uint64_t>> parts;
-  parts.reserve(deps.ids.size());
-  for (ID *id : deps.ids.values()) {
-    if (id == nullptr) {
-      continue;
-    }
-    if (self_object && id->session_uid == self_uid) {
-      continue;
-    }
-    uint64_t part = get_default_hash(id->session_uid, GS(id->name));
-    if (GS(id->name) == ID_OB && depsgraph != nullptr) {
-      const Object *object_eval = DEG_get_evaluated(depsgraph, reinterpret_cast<Object *>(id));
-      if (object_eval == nullptr) {
-        object_eval = reinterpret_cast<Object *>(id);
-      }
-      part = get_default_hash(part, hash_object_eval(*object_eval));
-    }
-    parts.append({id->session_uid, part});
-  }
-  std::sort(parts.begin(), parts.end());
-  uint64_t token = 0;
-  for (const auto &[uid, part] : parts) {
-    token = get_default_hash(token, uid, part);
-  }
-  return token;
-}
-
-static uint64_t compute_camera_token(const bNodeTree &root_tree)
-{
-  if (root_tree.runtime == nullptr || root_tree.runtime->eval_dependencies == nullptr) {
-    return 0;
-  }
-  if (!root_tree.runtime->eval_dependencies->needs_viewport_camera) {
-    return 0;
-  }
-  const std::optional<GeoNodesViewportCameraData> viewport = get_last_viewport_camera();
-  if (!viewport) {
-    return 0;
-  }
-  return get_default_hash(
-      hash_transform_stable(viewport->object_to_world), viewport->lens, viewport->is_perspective);
-}
-
-static bool is_time_source_node(const bNode &node)
-{
-  return ELEM(node.type_legacy,
-              GEO_NODE_INPUT_SCENE_TIME,
-              GEO_NODE_TIME_SHIFT,
-              GEO_NODE_SIMULATION_INPUT,
-              GEO_NODE_SIMULATION_OUTPUT);
-}
-
-static bool is_id_source_node(const bNode &node)
-{
-  return ELEM(node.type_legacy,
-              GEO_NODE_OBJECT_INFO,
-              GEO_NODE_COLLECTION_INFO,
-              GEO_NODE_IMAGE_TEXTURE,
-              GEO_NODE_IMAGE);
-}
-
-static bool is_camera_source_node(const bNode &node)
-{
-  return ELEM(node.type_legacy, GEO_NODE_VIEWPORT_CAMERA, GEO_NODE_INPUT_ACTIVE_CAMERA);
-}
-
-static bool node_is_group_output(const bNode &node)
-{
-  return node.is_group_output();
-}
+struct GeometryNodesOutputCacheEvalState {
+  uint32_t root_tree_uid = 0;
+  Map<uint32_t, uint64_t> topology_gen_by_tree;
+  Map<uint32_t, Map<int32_t, uint64_t>> node_gen_by_tree;
+  /** `DEP_*` flags of every node of every tree in the hierarchy. */
+  Map<uint32_t, Map<int32_t, uint8_t>> dep_flags_by_tree;
+  /** Nodes whose original (or eval) flag has NODE_OUTPUT_CACHE. */
+  Set<GeometryNodesOutputCache::NodeRef> enabled_nodes;
+  /** Root tree: identity of every modifier input, by interface index. */
+  Vector<uint64_t> root_input_tokens;
+  /** Root tree: combined identity of the modifier inputs each node is downstream of. */
+  Map<int32_t, uint64_t> root_context_token;
+  uint64_t all_root_inputs_token = 0;
+  uint64_t ids_token = 0;
+  uint64_t time_token = 0;
+  uint64_t camera_token = 0;
+  uint64_t animation_token = 0;
+};
 
 /** Group node's `id` is a nested node tree — never a mesh/object/image. File load and
  * custom groups can leave a non-null pointer of the wrong ID type; casting that to
@@ -821,8 +969,7 @@ static const bNodeTree *nested_group_tree(const bNode &node)
 }
 
 static void snapshot_tree_gens(const bNodeTree &tree,
-                               Map<uint32_t, uint64_t> &topology_gen_by_tree,
-                               Map<uint32_t, Map<int32_t, uint64_t>> &node_gen_by_tree,
+                               GeometryNodesOutputCacheEvalState &state,
                                Set<uint32_t> &visited_trees)
 {
   if (tree.runtime == nullptr) {
@@ -833,102 +980,532 @@ static void snapshot_tree_gens(const bNodeTree &tree,
     return;
   }
   {
-    GeometryNodesOutputCacheTreeState &state = tree_state_for(uid);
-    std::lock_guard lock{state.mutex};
-    topology_gen_by_tree.add_overwrite(uid, state.topology_gen);
-    node_gen_by_tree.add_overwrite(uid, state.node_gen);
+    GeometryNodesOutputCacheTreeState &tree_state = tree_state_for(uid);
+    std::lock_guard lock{tree_state.mutex};
+    state.topology_gen_by_tree.add_overwrite(uid, tree_state.topology_gen);
+    state.node_gen_by_tree.add_overwrite(uid, tree_state.node_gen);
   }
   /* Walk DNA ListBase, not `group_nodes()`: the topology cache can hold dangling node
    * pointers if it was built before a COW/rebuild. */
   for (const bNode &node : tree.nodes) {
     if (const bNodeTree *group = nested_group_tree(node)) {
-      snapshot_tree_gens(*group, topology_gen_by_tree, node_gen_by_tree, visited_trees);
+      snapshot_tree_gens(*group, state, visited_trees);
     }
   }
 }
 
-static bool collect_dependent_from_pred_impl(const bNodeTree &tree,
-                                             const FunctionRef<bool(const bNode &)> is_seed,
-                                             Set<GeometryNodesOutputCache::NodeRef> &r_nodes,
-                                             Set<uint32_t> &visiting)
+static bool socket_holds_data_block(const bNodeSocket &socket)
 {
-  if (tree.runtime == nullptr) {
-    return false;
-  }
-  const uint32_t uid = original_tree_session_uid(tree);
-  if (!visiting.add(uid)) {
-    /* The group is already on this path. Treat its output as dependent so an output cache
-     * cannot reuse a value after an input to a recursive call changes. */
+  /* Materials are left out: nodes pass them along as handles and never read them. */
+  return ELEM(socket.type,
+              SOCK_OBJECT,
+              SOCK_COLLECTION,
+              SOCK_IMAGE,
+              SOCK_TEXTURE,
+              SOCK_FONT,
+              SOCK_SCENE,
+              SOCK_TEXT_ID,
+              SOCK_MASK,
+              SOCK_SOUND);
+}
+
+/** True for nodes that read a data-block or the evaluation mode. */
+static bool is_ids_seed(const bNode &node)
+{
+  if (ELEM(node.type_legacy, GEO_NODE_IS_VIEWPORT, GEO_NODE_SELF_OBJECT)) {
     return true;
   }
-  tree.ensure_topology_cache();
-  bool output_affected = false;
+  /* These only pass data-block handles along. A node behind them that reads the handle is a
+   * seed itself; group nodes take the dependencies of their tree instead. */
+  if (node.is_group() || node.is_reroute() || node.is_group_input() || node.is_group_output() ||
+      ELEM(node.type_legacy, GEO_NODE_SWITCH, GEO_NODE_INDEX_SWITCH, GEO_NODE_MENU_SWITCH) ||
+      bke::zone_type_by_node_type(node.type_legacy) != nullptr)
+  {
+    return false;
+  }
+  if (node.id != nullptr && GS(node.id->name) != ID_NT) {
+    return true;
+  }
+  for (const bNodeSocket *socket : node.input_sockets()) {
+    if (socket->is_available() && socket_holds_data_block(*socket)) {
+      return true;
+    }
+  }
+  return false;
+}
 
-  Vector<const bNode *> seeds;
-  for (const bNode *node : tree.all_nodes()) {
-    if (node == nullptr || node->is_muted()) {
+static bool is_time_seed(const bNode &node)
+{
+  if (ELEM(node.type_legacy,
+           GEO_NODE_INPUT_SCENE_TIME,
+           GEO_NODE_TIME_SHIFT,
+           GEO_NODE_SIMULATION_INPUT,
+           GEO_NODE_SIMULATION_OUTPUT,
+           GEO_NODE_BAKE))
+  {
+    return true;
+  }
+  /* Solvers advance their own state with the scene frame. */
+  if (node.is_type("GeometryNodeJoltSolver"_ustr) || node.is_type("GeometryNodeFlipSolver"_ustr) ||
+      node.is_type("GeometryNodeXPBDSolver"_ustr) ||
+      node.is_type("GeometryNodeBoxEngineSolver"_ustr))
+  {
+    return true;
+  }
+  for (const bNodeSocket *socket : node.input_sockets()) {
+    if ((socket->flag & SOCK_IS_LINKED) != 0 || socket->runtime == nullptr ||
+        socket->runtime->declaration == nullptr)
+    {
       continue;
     }
-    if (const bNodeTree *group = nested_group_tree(*node)) {
-      const bool nested_output = collect_dependent_from_pred_impl(*group, is_seed, r_nodes, visiting);
-      if (nested_output) {
-        seeds.append(node);
-      }
-    }
-    if (is_seed(*node)) {
-      seeds.append(node);
+    if (socket->runtime->declaration->default_input_type == NODE_DEFAULT_INPUT_SCENE_FRAME) {
+      return true;
     }
   }
+  return false;
+}
 
-  for (const bNode *seed : seeds) {
-    foreach_downstream(tree, *seed, [&](const bNode &node) {
-      GeometryNodesOutputCache::NodeRef ref;
-      ref.tree_session_uid = uid;
-      ref.node_id = node.identifier;
-      r_nodes.add(ref);
-      if (node_is_group_output(node)) {
-        output_affected = true;
+static bool is_camera_seed(const bNode &node)
+{
+  return ELEM(node.type_legacy, GEO_NODE_VIEWPORT_CAMERA, GEO_NODE_INPUT_ACTIVE_CAMERA);
+}
+
+static uint64_t hash_rna_value(PointerRNA &id_ptr, const char *path, const int array_index)
+{
+  PointerRNA ptr;
+  PropertyRNA *prop = nullptr;
+  if (!RNA_path_resolve_property(&id_ptr, path, &ptr, &prop) || prop == nullptr) {
+    return 0;
+  }
+  const bool is_array = RNA_property_array_check(prop);
+  if (is_array && (array_index < 0 || array_index >= RNA_property_array_length(&ptr, prop))) {
+    return 0;
+  }
+  switch (RNA_property_type(prop)) {
+    case PROP_FLOAT: {
+      const float value = is_array ? RNA_property_float_get_index(&ptr, prop, array_index) :
+                                     RNA_property_float_get(&ptr, prop);
+      return hash_bytes(&value, sizeof(value));
+    }
+    case PROP_INT: {
+      const int value = is_array ? RNA_property_int_get_index(&ptr, prop, array_index) :
+                                   RNA_property_int_get(&ptr, prop);
+      return mix(1, uint64_t(uint32_t(value)));
+    }
+    case PROP_BOOLEAN: {
+      const bool value = is_array ? RNA_property_boolean_get_index(&ptr, prop, array_index) :
+                                    RNA_property_boolean_get(&ptr, prop);
+      return mix(2, uint64_t(value));
+    }
+    case PROP_ENUM:
+      return mix(3, uint64_t(uint32_t(RNA_property_enum_get(&ptr, prop))));
+    default:
+      return 0;
+  }
+}
+
+/**
+ * Animation and drivers write into the evaluated tree without a tree update, so no generation
+ * changes. Find the nodes they target and hash the values they currently have.
+ */
+static uint64_t collect_animated_nodes(const bNodeTree &tree, Set<int32_t> &r_animated_nodes)
+{
+  if (!BKE_animdata_id_is_animated(&tree.id)) {
+    return 0;
+  }
+  Map<StringRef, const bNode *> node_by_name;
+  for (const bNode &node : tree.nodes) {
+    node_by_name.add(node.name, &node);
+  }
+  ID *id = const_cast<ID *>(&tree.id);
+  PointerRNA id_ptr = RNA_id_pointer_create(id);
+  uint64_t token = 1;
+  BKE_fcurves_id_cb(id, [&](ID * /*id*/, FCurve *fcurve) {
+    if (fcurve->rna_path_ptr == nullptr) {
+      return;
+    }
+    const char *rna_path = fcurve->rna_path_ptr;
+    char node_name[256];
+    if (!BLI_str_quoted_substr(rna_path, "nodes[", node_name, sizeof(node_name))) {
+      return;
+    }
+    const bNode *node = node_by_name.lookup_default(node_name, nullptr);
+    if (node == nullptr) {
+      return;
+    }
+    r_animated_nodes.add(node->identifier);
+    token = mix(token, uint64_t(node->identifier));
+    token = mix(token, hash_text(rna_path));
+    token = mix(token, uint64_t(fcurve->array_index));
+    token = mix(token, hash_rna_value(id_ptr, rna_path, fcurve->array_index));
+  });
+  return token;
+}
+
+/** Works out for every node of a tree hierarchy which external state it is downstream of. */
+struct TreeClassifier {
+  GeometryNodesOutputCacheEvalState &state;
+  /** Flags that reach a Group Output node, per tree. */
+  Map<uint32_t, uint8_t> output_flags_by_tree;
+  Set<uint32_t> visiting;
+  uint8_t seen_flags = 0;
+
+  uint8_t classify(const bNodeTree &tree)
+  {
+    if (tree.runtime == nullptr) {
+      return DEP_ALL & ~DEP_CONTEXT;
+    }
+    const uint32_t uid = original_tree_session_uid(tree);
+    if (const uint8_t *known = output_flags_by_tree.lookup_ptr(uid)) {
+      return *known;
+    }
+    if (!visiting.add(uid)) {
+      /* The group is already on this path. Its output can depend on anything. */
+      return DEP_ALL & ~DEP_CONTEXT;
+    }
+    tree.ensure_topology_cache();
+
+    Set<int32_t> animated_nodes;
+    if (const uint64_t animation = collect_animated_nodes(tree, animated_nodes)) {
+      state.animation_token += mix(uid, animation);
+    }
+
+    Vector<std::pair<const bNode *, uint8_t>> seeds;
+    for (const bNode *node : tree.all_nodes()) {
+      if (node == nullptr) {
+        continue;
       }
+      uint8_t flags = 0;
+      if (animated_nodes.contains(node->identifier)) {
+        flags |= DEP_ANIMATION;
+      }
+      if (!node->is_muted()) {
+        if (const bNodeTree *group = nested_group_tree(*node)) {
+          flags |= this->classify(*group);
+        }
+        if (node->is_group_input() || node->type_legacy == NODE_CLOSURE_INPUT) {
+          flags |= DEP_CONTEXT;
+        }
+        if (is_ids_seed(*node)) {
+          flags |= DEP_IDS;
+        }
+        if (is_time_seed(*node)) {
+          flags |= DEP_TIME;
+        }
+        if (is_camera_seed(*node)) {
+          flags |= DEP_CAMERA;
+        }
+      }
+      if (flags != 0) {
+        seeds.append({node, flags});
+      }
+    }
+
+    Map<int32_t, uint8_t> node_flags;
+    for (const bNode *node : tree.all_nodes()) {
+      if (node != nullptr) {
+        node_flags.add(node->identifier, 0);
+      }
+    }
+    uint8_t output_flags = 0;
+    for (const uint8_t flag : {DEP_CONTEXT, DEP_IDS, DEP_TIME, DEP_CAMERA, DEP_ANIMATION}) {
+      Vector<const bNode *> starts;
+      for (const auto &[node, flags] : seeds) {
+        if (flags & flag) {
+          starts.append(node);
+        }
+      }
+      if (starts.is_empty()) {
+        continue;
+      }
+      seen_flags |= flag;
+      foreach_downstream(tree, starts, [&](const bNode &node) {
+        node_flags.lookup_or_add(node.identifier, 0) |= flag;
+        if (node.is_group_output()) {
+          output_flags |= flag;
+        }
+      });
+    }
+    state.dep_flags_by_tree.add_overwrite(uid, std::move(node_flags));
+
+    visiting.remove(uid);
+    /* What a group node gets from its own inputs is decided by the links of the calling tree. */
+    output_flags &= ~DEP_CONTEXT;
+    output_flags_by_tree.add_overwrite(uid, output_flags);
+    return output_flags;
+  }
+};
+
+static uint64_t object_token(const Object &object,
+                             const EvalDependencies::ObjectDependencyInfo &info,
+                             const Object *self_object,
+                             GeometryNodesOutputCache::ContentHasher &hasher,
+                             Set<const Collection *> &visited_collections);
+
+static uint64_t collection_token(const Collection &collection,
+                                 const Object *self_object,
+                                 GeometryNodesOutputCache::ContentHasher &hasher,
+                                 Set<const Collection *> &visited_collections)
+{
+  uint64_t token = mix(0x434F4C4Cull, stable_session_uid(&collection.id));
+  if (!visited_collections.add(&collection)) {
+    return token;
+  }
+  token = mix(token, hash_bytes(collection.instance_offset, sizeof(collection.instance_offset)));
+  for (const CollectionObject &collection_object : collection.gobject) {
+    if (collection_object.ob != nullptr) {
+      token = mix(token,
+                  object_token(*collection_object.ob,
+                               EvalDependencies::all_object_deps,
+                               self_object,
+                               hasher,
+                               visited_collections));
+    }
+  }
+  for (const CollectionChild &child : collection.children) {
+    if (child.collection != nullptr) {
+      token = mix(token,
+                  collection_token(*child.collection, self_object, hasher, visited_collections));
+    }
+  }
+  return token;
+}
+
+static uint64_t object_token(const Object &object,
+                             const EvalDependencies::ObjectDependencyInfo &info,
+                             const Object *self_object,
+                             GeometryNodesOutputCache::ContentHasher &hasher,
+                             Set<const Collection *> &visited_collections)
+{
+  uint64_t token = mix(0x4F424A45ull, stable_session_uid(&object.id));
+  token = mix(token, uint64_t(object.type));
+  if (info.transform) {
+    const float4x4 &transform = object.object_to_world();
+    token = mix(token, hash_bytes(&transform, sizeof(float4x4)));
+  }
+  /* The modifier's own geometry is what is being evaluated right now. */
+  const bool is_self = self_object != nullptr &&
+                       DEG_get_original(&object.id) == DEG_get_original(&self_object->id);
+  if (info.geometry && !is_self) {
+    if (object.type == OB_EMPTY && object.instance_collection != nullptr) {
+      token = mix(token,
+                  collection_token(
+                      *object.instance_collection, self_object, hasher, visited_collections));
+    }
+    else if (DEG_object_has_geometry_component(const_cast<Object *>(&object))) {
+      token = mix(token, geometry_token(bke::object_get_evaluated_geometry_set(object), hasher));
+    }
+  }
+  if (info.camera_parameters && object.type == OB_CAMERA && object.data != nullptr) {
+    const Camera &camera = *reinterpret_cast<const Camera *>(object.data);
+    for (const float value : {camera.lens,
+                              camera.ortho_scale,
+                              camera.clip_start,
+                              camera.clip_end,
+                              camera.sensor_x,
+                              camera.sensor_y,
+                              camera.shiftx,
+                              camera.shifty})
+    {
+      token = mix(token, hash_bytes(&value, sizeof(value)));
+    }
+    token = mix(token, uint64_t(camera.type));
+    token = mix(token, uint64_t(camera.sensor_fit));
+  }
+  if (info.pose && object.type == OB_ARMATURE && object.pose != nullptr) {
+    for (const bPoseChannel &channel : object.pose->chanbase) {
+      token = mix(token, hash_bytes(channel.pose_mat, sizeof(channel.pose_mat)));
+    }
+  }
+  return token;
+}
+
+/** Hash the state of every data-block the modifier depends on, as evaluated in this depsgraph. */
+static uint64_t compute_ids_token(const bNodeTree &root_tree,
+                                  const GeometryNodesOutputCache::PrepareParams &params,
+                                  GeometryNodesOutputCache::ContentHasher &hasher)
+{
+  /* Use the list the original tree keeps. Collecting it from the evaluated tree does not work:
+   * dependencies are keyed by session uid, which evaluated data-blocks do not have. */
+  EvalDependencies deps;
+  const bNodeTree *tree_orig = reinterpret_cast<const bNodeTree *>(DEG_get_original(&root_tree.id));
+  if (tree_orig != nullptr && tree_orig->runtime != nullptr &&
+      tree_orig->runtime->eval_dependencies != nullptr)
+  {
+    deps.merge(*tree_orig->runtime->eval_dependencies);
+  }
+  if (params.properties != nullptr) {
+    IDP_foreach_property(const_cast<IDProperty *>(params.properties),
+                         IDP_TYPE_FILTER_ID,
+                         [&](IDProperty *property) {
+                           if (ID *id = IDP_ID_get(property)) {
+                             deps.add_generic_id_full(const_cast<ID *>(DEG_get_original(id)));
+                           }
+                         });
+  }
+
+  /* Map iteration order is not stable across rebuilds, so sort by session uid. */
+  Vector<std::pair<uint32_t, uint64_t>> parts;
+  parts.reserve(deps.ids.size());
+  Set<const Collection *> visited_collections;
+  for (ID *id : deps.ids.values()) {
+    if (id == nullptr) {
+      continue;
+    }
+    uint64_t part = mix(uint64_t(GS(id->name)), id->session_uid);
+    switch (GS(id->name)) {
+      case ID_OB: {
+        const Object *object = reinterpret_cast<const Object *>(id);
+        if (params.depsgraph != nullptr) {
+          object = DEG_get_evaluated(params.depsgraph, object);
+        }
+        visited_collections.clear();
+        part = mix(part,
+                   object_token(*object,
+                                deps.objects_info.lookup_default(id->session_uid, {}),
+                                params.self_object,
+                                hasher,
+                                visited_collections));
+        break;
+      }
+      case ID_GR: {
+        const Collection *collection = reinterpret_cast<const Collection *>(id);
+        if (params.depsgraph != nullptr) {
+          collection = DEG_get_evaluated(params.depsgraph, collection);
+        }
+        visited_collections.clear();
+        part = mix(
+            part,
+            collection_token(*collection, params.self_object, hasher, visited_collections));
+        break;
+      }
+      default:
+        break;
+    }
+    parts.append({id->session_uid, part});
+  }
+  std::sort(parts.begin(), parts.end());
+
+  uint64_t token = 0x49445321ull;
+  for (const auto &[uid, part] : parts) {
+    token = mix(token, part);
+  }
+  if (params.depsgraph != nullptr) {
+    token = mix(token, uint64_t(DEG_get_mode(params.depsgraph)));
+  }
+  /* Relative transforms and the Self Object node read the modifier object's transform. */
+  if (deps.needs_own_transform && params.self_object != nullptr) {
+    const float4x4 &transform = params.self_object->object_to_world();
+    token = mix(token, hash_bytes(&transform, sizeof(float4x4)));
+  }
+  return token;
+}
+
+static uint64_t compute_camera_token(const GeometryNodesOutputCache::PrepareParams &params,
+                                     GeometryNodesOutputCache::ContentHasher &hasher)
+{
+  uint64_t token = 0x43414D21ull;
+  if (const std::optional<GeoNodesViewportCameraData> viewport = get_last_viewport_camera()) {
+    token = mix(token, hash_bytes(&viewport->object_to_world, sizeof(float4x4)));
+    token = mix(token, hash_bytes(&viewport->lens, sizeof(viewport->lens)));
+    token = mix(token, uint64_t(viewport->is_perspective));
+  }
+  if (params.depsgraph != nullptr) {
+    if (const Scene *scene = DEG_get_evaluated_scene(params.depsgraph)) {
+      if (scene->camera != nullptr) {
+        EvalDependencies::ObjectDependencyInfo info;
+        info.transform = true;
+        info.camera_parameters = true;
+        Set<const Collection *> visited_collections;
+        token = mix(
+            token,
+            object_token(*scene->camera, info, params.self_object, hasher, visited_collections));
+      }
+    }
+  }
+  return token;
+}
+
+/**
+ * One token per interface input of the root tree: the content of the modifier's geometry for
+ * geometry inputs, the stored panel value for the others.
+ */
+static Vector<uint64_t> compute_root_input_tokens(
+    const bNodeTree &root_tree,
+    const GeometryNodesOutputCache::PrepareParams &params,
+    GeometryNodesOutputCache::ContentHasher &hasher)
+{
+  root_tree.ensure_interface_cache();
+  const Span<const bNodeTreeInterfaceSocket *> inputs = root_tree.interface_inputs();
+  Vector<uint64_t> tokens(inputs.size(), 0);
+
+  const IDProperty *properties = params.properties;
+  const IDProperty *inputs_group = nullptr;
+  if (properties != nullptr && properties->type == IDP_GROUP) {
+    inputs_group = IDP_GetPropertyFromGroup_null(properties, "inputs");
+    if (inputs_group != nullptr && inputs_group->type != IDP_GROUP) {
+      inputs_group = nullptr;
+    }
+  }
+  /* Used when an input's value cannot be found by name: any panel change counts then. */
+  const uint64_t all_properties_token = properties ? idproperty_token(*properties) : 0;
+
+  bool used_input_geometry = false;
+  for (const int i : inputs.index_range()) {
+    const bNodeTreeInterfaceSocket &input = *inputs[i];
+    if (STREQ(input.socket_type, "NodeSocketGeometry")) {
+      /* Only the first geometry input receives the modifier's geometry. */
+      if (!used_input_geometry && params.input_geometry != nullptr) {
+        tokens[i] = geometry_token(*params.input_geometry, hasher);
+        used_input_geometry = true;
+      }
+      continue;
+    }
+    const IDProperty *value = nullptr;
+    if (inputs_group != nullptr && input.identifier != nullptr) {
+      value = IDP_GetPropertyFromGroup_null(inputs_group, input.identifier);
+    }
+    tokens[i] = value ? idproperty_token(*value) : all_properties_token;
+  }
+  return tokens;
+}
+
+static void compute_root_context_tokens(const bNodeTree &root_tree,
+                                        const Span<uint64_t> input_tokens,
+                                        GeometryNodesOutputCacheEvalState &state)
+{
+  root_tree.ensure_topology_cache();
+  for (const int i : input_tokens.index_range()) {
+    const uint64_t part = mix(uint64_t(i) + 1, input_tokens[i]);
+    state.all_root_inputs_token += part;
+    Vector<const bNode *> starts;
+    for (const bNode *group_input : root_tree.group_input_nodes()) {
+      if (i >= group_input->output_sockets().size()) {
+        continue;
+      }
+      for (const bNodeLink *link : group_input->output_socket(i).directly_linked_links()) {
+        if (!link->is_muted() && link->is_available() && link->tonode != nullptr) {
+          starts.append(link->tonode);
+        }
+      }
+    }
+    if (starts.is_empty()) {
+      continue;
+    }
+    foreach_downstream(root_tree, starts, [&](const bNode &node) {
+      state.root_context_token.lookup_or_add(node.identifier, 0) += part;
     });
   }
-  visiting.remove(uid);
-  return output_affected;
 }
 
-static bool collect_dependent_from_pred(const bNodeTree &tree,
-                                        const FunctionRef<bool(const bNode &)> is_seed,
-                                        Set<GeometryNodesOutputCache::NodeRef> &r_nodes)
+std::shared_ptr<const GeometryNodesOutputCacheEvalState> GeometryNodesOutputCache::prepare_for_eval(
+    const PrepareParams &params)
 {
-  Set<uint32_t> visiting;
-  return collect_dependent_from_pred_impl(tree, is_seed, r_nodes, visiting);
-}
-
-void GeometryNodesOutputCache::prepare_for_eval(const bNodeTree &root_tree,
-                                                const bke::GeometrySet &input_geometry,
-                                                const Object *self_object,
-                                                Depsgraph *depsgraph,
-                                                float ctime)
-{
-  /* Snapshot tree state and walk the graph WITHOUT holding mutex_. Holding the cache mutex while
-   * taking tree_state locks deadlocked against the node-editor cache toggle. */
-  Map<uint32_t, uint64_t> topology_gen_by_tree;
-  Map<uint32_t, Map<int32_t, uint64_t>> node_gen_by_tree;
-  Set<uint32_t> visited_trees;
-  snapshot_tree_gens(root_tree, topology_gen_by_tree, node_gen_by_tree, visited_trees);
-
-  Set<NodeRef> object_dependent;
-  Set<NodeRef> time_dependent;
-  Set<NodeRef> camera_dependent;
-  collect_dependent_from_pred(root_tree, is_id_source_node, object_dependent);
-  collect_dependent_from_pred(root_tree, is_time_source_node, time_dependent);
-  collect_dependent_from_pred(root_tree, is_camera_source_node, camera_dependent);
-
-  const uint64_t input_token = hash_geometry_content(input_geometry);
-  const uint64_t objects_token = compute_objects_token(root_tree, self_object, depsgraph);
-  const uint64_t camera_token = compute_camera_token(root_tree);
+  const bNodeTree &root_tree = *params.root_tree;
+  auto state = std::make_shared<GeometryNodesOutputCacheEvalState>();
+  state->root_tree_uid = original_tree_session_uid(root_tree);
 
   Set<NodeRef> live;
-  Set<NodeRef> enabled_nodes;
   {
     Stack<const bNodeTree *> trees;
     trees.push(&root_tree);
@@ -952,132 +1529,175 @@ void GeometryNodesOutputCache::prepare_for_eval(const bNodeTree &root_tree,
         ref.node_id = node->identifier;
         live.add(ref);
         if ((node->flag & NODE_OUTPUT_CACHE) != 0) {
-          enabled_nodes.add(ref);
+          state->enabled_nodes.add(ref);
         }
         if (const bNodeTree *group = nested_group_tree(*node)) {
           trees.push(group);
         }
       }
-      /* Original ListBase — no topology rebuild. Python/UI toggle writes the original. */
+      /* Eval/COW copies often lag the original DNA flag by one depsgraph cycle. Read the
+       * original ListBase — no topology rebuild. Python/UI toggle writes the original. */
       if (const ID *orig_id = DEG_get_original(&tree.id)) {
         const bNodeTree &orig_tree = *reinterpret_cast<const bNodeTree *>(orig_id);
-        for (const bNode *orig_node = orig_tree.nodes.first();
-             orig_node != nullptr;
-             orig_node = orig_node->next)
-        {
-          if ((orig_node->flag & NODE_OUTPUT_CACHE) != 0) {
+        for (const bNode &orig_node : orig_tree.nodes) {
+          if ((orig_node.flag & NODE_OUTPUT_CACHE) != 0) {
             NodeRef ref;
             ref.tree_session_uid = uid;
-            ref.node_id = orig_node->identifier;
-            enabled_nodes.add(ref);
+            ref.node_id = orig_node.identifier;
+            state->enabled_nodes.add(ref);
           }
         }
       }
     }
   }
 
-  std::lock_guard lock{mutex_};
+  if (state->enabled_nodes.is_empty()) {
+    /* Nothing is cached in this tree: keep the evaluation free of any cache work. */
+    std::lock_guard lock{mutex_};
+    entries_.clear();
+    frozen_time_ns_.clear();
+    frozen_time_state_.clear();
+    return nullptr;
+  }
 
-  topology_gen_by_tree_ = std::move(topology_gen_by_tree);
-  node_gen_by_tree_ = std::move(node_gen_by_tree);
-  object_dependent_ = std::move(object_dependent);
-  time_dependent_ = std::move(time_dependent);
-  camera_dependent_ = std::move(camera_dependent);
-  enabled_nodes_ = std::move(enabled_nodes);
+  /* Snapshot tree state and walk the graph WITHOUT holding mutex_. Holding the cache mutex while
+   * taking tree_state locks deadlocked against the node-editor cache toggle. */
+  {
+    Set<uint32_t> visited_trees;
+    snapshot_tree_gens(root_tree, *state, visited_trees);
+  }
 
-  /* Never wipe the whole table: viewport + render (or orig + eval) share this cache and would
-   * otherwise ping-pong-clear each other every redraw. Separate input tokens keep both worlds. */
-  if (has_prev_input_token_ && input_token != current_input_token_) {
-    prev_input_token_ = current_input_token_;
-    Vector<Key> stale;
-    for (const auto &item : entries_.items()) {
-      if (item.key.input_token != input_token && item.key.input_token != prev_input_token_) {
-        stale.append(item.key);
+  TreeClassifier classifier{*state};
+  classifier.classify(root_tree);
+
+  {
+    std::lock_guard lock{prepare_mutex_};
+    if (!content_hasher_) {
+      content_hasher_ = std::make_unique<ContentHasher>();
+    }
+    state->root_input_tokens = compute_root_input_tokens(root_tree, params, *content_hasher_);
+    compute_root_context_tokens(root_tree, state->root_input_tokens, *state);
+    if (classifier.seen_flags & DEP_IDS) {
+      state->ids_token = compute_ids_token(root_tree, params, *content_hasher_);
+    }
+    if (classifier.seen_flags & DEP_CAMERA) {
+      state->camera_token = compute_camera_token(params, *content_hasher_);
+    }
+    content_hasher_->remove_expired();
+  }
+  state->time_token = mix(0x54494D45ull, hash_bytes(&params.ctime, sizeof(params.ctime)));
+
+  {
+    std::lock_guard lock{mutex_};
+    entries_.remove_if([&](const auto &item) {
+      NodeRef ref;
+      ref.tree_session_uid = item.key.tree_session_uid;
+      ref.node_id = item.key.node_id;
+      return !live.contains(ref) || !state->enabled_nodes.contains(ref);
+    });
+    frozen_time_ns_.remove_if([&](const auto &item) { return !live.contains(item.key); });
+    frozen_time_state_.remove_if([&](const auto &item) { return !live.contains(item.key); });
+  }
+  return state;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Lookup and Store
+ * \{ */
+
+static const char *state_difference(const GeometryNodesOutputCache::StateToken &stored,
+                                    const GeometryNodesOutputCache::StateToken &current)
+{
+  if (stored.tree != current.tree) {
+    return "(node or upstream edited)";
+  }
+  if (stored.context != current.context) {
+    return "(input geometry or values changed)";
+  }
+  if (stored.ids != current.ids) {
+    return "(referenced data-block changed)";
+  }
+  if (stored.time != current.time) {
+    return "(frame changed)";
+  }
+  if (stored.camera != current.camera) {
+    return "(camera changed)";
+  }
+  if (stored.animation != current.animation) {
+    return "(animated value changed)";
+  }
+  return nullptr;
+}
+
+/** True when everything asked for now was also asked for when the entry was cooked. */
+static bool requirements_are_covered(const GeometryNodesOutputCache::Requirements &stored,
+                                     const GeometryNodesOutputCache::Requirements &current)
+{
+  for (const auto &[index, used] : current.usages) {
+    if (!used) {
+      continue;
+    }
+    bool covered = false;
+    for (const auto &[stored_index, stored_used] : stored.usages) {
+      if (stored_index == index) {
+        covered = stored_used;
+        break;
       }
     }
-    for (const Key &key : stale) {
-      entries_.remove(key);
+    if (!covered) {
+      return false;
     }
   }
-
-  current_input_token_ = input_token;
-  current_objects_token_ = objects_token;
-  current_camera_token_ = camera_token;
-  current_ctime_ = ctime;
-  has_prev_input_token_ = true;
-
-  Vector<Key> dead;
-  for (const auto &item : entries_.items()) {
-    NodeRef ref;
-    ref.tree_session_uid = item.key.tree_session_uid;
-    ref.node_id = item.key.node_id;
-    if (!live.contains(ref)) {
-      dead.append(item.key);
+  for (const auto &[index, names] : current.reference_sets) {
+    if (!names || names->is_empty()) {
+      continue;
+    }
+    const Set<std::string> *stored_names = nullptr;
+    for (const auto &[stored_index, stored_set] : stored.reference_sets) {
+      if (stored_index == index) {
+        stored_names = stored_set.get();
+        break;
+      }
+    }
+    if (stored_names == nullptr) {
+      return false;
+    }
+    for (const std::string &name : *names) {
+      if (!stored_names->contains(name)) {
+        return false;
+      }
     }
   }
-  for (const Key &key : dead) {
-    NodeRef ref;
-    ref.tree_session_uid = key.tree_session_uid;
-    ref.node_id = key.node_id;
-    entries_.remove(key);
-    frozen_time_ns_.remove(ref);
-    frozen_time_gen_.remove(ref);
-  }
+  return true;
 }
 
-static bool node_ref_contains(const Set<GeometryNodesOutputCache::NodeRef> &nodes,
-                              const uint32_t tree_uid,
-                              const int32_t node_id)
+GeometryNodesOutputCache::Lookup GeometryNodesOutputCache::try_restore(
+    const Key &key,
+    const StateToken &state,
+    const Requirements &requirements,
+    lf::Params &params,
+    const bool restore_usage_outputs,
+    int64_t &r_exec_time_ns,
+    const char *&r_miss_reason) const
 {
-  GeometryNodesOutputCache::NodeRef ref;
-  ref.tree_session_uid = tree_uid;
-  ref.node_id = node_id;
-  return nodes.contains(ref);
-}
-
-GeometryNodesOutputCache::Hit GeometryNodesOutputCache::try_restore(const Key &key_in,
-                                                                    lf::Params &params) const
-{
-  Hit result;
   Entry entry_copy;
   {
     std::lock_guard lock{mutex_};
-
-    Key key = key_in;
-    key.input_token = current_input_token_;
-
-    const uint64_t node_gen = [&]() -> uint64_t {
-      if (const Map<int32_t, uint64_t> *per_node = node_gen_by_tree_.lookup_ptr(
-              key.tree_session_uid))
-      {
-        return per_node->lookup_default(key.node_id, 0);
-      }
-      return 0;
-    }();
-
     const Entry *entry = entries_.lookup_ptr(key);
     if (entry == nullptr) {
-      return result;
+      r_miss_reason = "(nothing stored)";
+      return Lookup::Miss;
     }
-    if (entry->node_gen != node_gen) {
-      return result;
+    if (entry->state != state) {
+      r_miss_reason = state_difference(entry->state, state);
+      return Lookup::Miss;
     }
-    if (node_ref_contains(object_dependent_, key.tree_session_uid, key.node_id) &&
-        entry->objects_token != current_objects_token_)
-    {
-      return result;
+    if (!requirements_are_covered(entry->requirements, requirements)) {
+      r_miss_reason = "(a consumer needs an attribute that was not cooked)";
+      return Lookup::Miss;
     }
-    if (node_ref_contains(camera_dependent_, key.tree_session_uid, key.node_id) &&
-        entry->camera_token != current_camera_token_)
-    {
-      return result;
-    }
-    if (node_ref_contains(time_dependent_, key.tree_session_uid, key.node_id) &&
-        entry->ctime != current_ctime_)
-    {
-      return result;
-    }
-
     entry_copy = *entry;
   }
 
@@ -1100,7 +1720,8 @@ GeometryNodesOutputCache::Hit GeometryNodesOutputCache::try_restore(const Key &k
       continue;
     }
     if (!value_by_output.contains(lf_index)) {
-      return result;
+      r_miss_reason = "(a used output was not cooked)";
+      return Lookup::Miss;
     }
   }
 
@@ -1113,93 +1734,359 @@ GeometryNodesOutputCache::Hit GeometryNodesOutputCache::try_restore(const Key &k
     if (params.output_was_set(lf_index)) {
       continue;
     }
-    if (params.get_output_data_ptr(lf_index) == nullptr) {
-      continue;
-    }
     if (lf_outputs[lf_index].type == &CPPType::get<SocketValueVariant>()) {
       const SocketValueVariant *const *cached = value_by_output.lookup_ptr(lf_index);
       if (cached == nullptr || *cached == nullptr) {
         continue;
       }
+      if (params.get_output_data_ptr(lf_index) == nullptr) {
+        continue;
+      }
       params.set_output(lf_index, **cached);
     }
-    else if (lf_outputs[lf_index].type == &CPPType::get<bool>()) {
+    else if (restore_usage_outputs && lf_outputs[lf_index].type == &CPPType::get<bool>()) {
+      if (params.get_output_data_ptr(lf_index) == nullptr) {
+        continue;
+      }
       /* Zone input-usage: cache hit means those inputs are not pulled. */
       params.set_output(lf_index, false);
     }
   }
 
-  result.hit = true;
-  result.exec_time_ns = entry_copy.exec_time_ns;
-  return result;
+  r_exec_time_ns = entry_copy.exec_time_ns;
+  return Lookup::Hit;
 }
 
-bool GeometryNodesOutputCache::store(const Key &key_in,
+bool GeometryNodesOutputCache::store(const Key &key,
+                                     const StateToken &state,
+                                     Requirements requirements,
                                      Vector<CachedSocket> sockets,
                                      const int64_t exec_time_ns,
-                                     int64_t *r_frozen_ns)
+                                     int64_t &r_frozen_ns)
 {
   std::lock_guard lock{mutex_};
-
-  Key key = key_in;
-  key.input_token = current_input_token_;
-
-  /* One live entry per node in this input world. A sockets_token change (List defaults, etc.)
-   * used to add a second key and leave the previous list resident. */
-  {
-    Vector<Key> stale;
-    for (const auto &item : entries_.items()) {
-      if (item.key.tree_session_uid == key.tree_session_uid && item.key.node_id == key.node_id &&
-          item.key.input_token == key.input_token && item.key != key)
-      {
-        stale.append(item.key);
-      }
-    }
-    for (const Key &stale_key : stale) {
-      entries_.remove(stale_key);
-    }
-  }
 
   if (sockets.is_empty()) {
     entries_.remove(key);
     return false;
   }
 
-  Entry entry;
-  entry.node_gen = [&]() -> uint64_t {
-    if (const Map<int32_t, uint64_t> *per_node = node_gen_by_tree_.lookup_ptr(key.tree_session_uid))
-    {
-      return per_node->lookup_default(key.node_id, 0);
-    }
-    return 0;
-  }();
-  entry.topology_gen = topology_gen_by_tree_.lookup_default(key.tree_session_uid, 0);
-  entry.objects_token = current_objects_token_;
-  entry.camera_token = current_camera_token_;
-  entry.ctime = current_ctime_;
-  entry.sockets = std::move(sockets);
-  entry.exec_time_ns = exec_time_ns;
-  /* Keep the first complete-eval time per node until THIS node's gen bumps. Do not fold
-   * topology_gen in: viewer rewires used to reset frozen 900ms down to a 50–60ms re-run. */
+  /* Keep the first complete-eval time per node until its tree state changes. Later passes of
+   * the same cook only re-run the wrapper and would show a few milliseconds. */
   NodeRef ref;
   ref.tree_session_uid = key.tree_session_uid;
   ref.node_id = key.node_id;
   int64_t &frozen = frozen_time_ns_.lookup_or_add(ref, 0);
-  uint64_t &frozen_gen = frozen_time_gen_.lookup_or_add(ref, entry.node_gen);
-  if (frozen_gen != entry.node_gen) {
-    frozen_gen = entry.node_gen;
+  uint64_t &frozen_state = frozen_time_state_.lookup_or_add(ref, state.tree);
+  if (frozen_state != state.tree) {
+    frozen_state = state.tree;
     frozen = exec_time_ns;
   }
   else if (exec_time_ns > frozen) {
     frozen = exec_time_ns;
   }
+  r_frozen_ns = frozen;
+
+  Entry entry;
+  entry.state = state;
+  entry.requirements = std::move(requirements);
+  entry.sockets = std::move(sockets);
   entry.exec_time_ns = frozen;
-  if (r_frozen_ns != nullptr) {
-    *r_frozen_ns = frozen;
-  }
   entries_.add_overwrite(key, std::move(entry));
   return true;
 }
+
+static const GeometryNodesOutputCacheEvalState *eval_state_from(const GeoNodesUserData &user_data)
+{
+  if (user_data.call_data == nullptr || user_data.call_data->output_cache == nullptr ||
+      user_data.compute_context == nullptr)
+  {
+    return nullptr;
+  }
+  return user_data.call_data->output_cache_eval;
+}
+
+static GeometryNodesOutputCache::NodeRef site_node_ref(const OutputCacheSite &site)
+{
+  GeometryNodesOutputCache::NodeRef ref;
+  ref.tree_session_uid = original_tree_session_uid(*site.tree);
+  ref.node_id = site.node->identifier;
+  return ref;
+}
+
+bool geometry_nodes_output_cache_site_enabled(const GeoNodesUserData &user_data,
+                                              const OutputCacheSite &site)
+{
+  const GeometryNodesOutputCacheEvalState *state = eval_state_from(user_data);
+  if (state == nullptr || site.tree == nullptr || site.node == nullptr) {
+    return false;
+  }
+  return state->enabled_nodes.contains(site_node_ref(site));
+}
+
+static GeometryNodesOutputCache::StateToken site_state_token(
+    const GeometryNodesOutputCacheEvalState &state,
+    const GeoNodesUserData &user_data,
+    const OutputCacheSite &site)
+{
+  const GeometryNodesOutputCache::NodeRef ref = site_node_ref(site);
+  uint64_t node_gen = 0;
+  if (const Map<int32_t, uint64_t> *gens = state.node_gen_by_tree.lookup_ptr(ref.tree_session_uid))
+  {
+    node_gen = gens->lookup_default(ref.node_id, 0);
+  }
+  /* A node the classification did not see can depend on anything. */
+  uint8_t flags = DEP_ALL;
+  if (const Map<int32_t, uint8_t> *tree_flags = state.dep_flags_by_tree.lookup_ptr(
+          ref.tree_session_uid))
+  {
+    flags = tree_flags->lookup_default(ref.node_id, DEP_ALL);
+  }
+
+  GeometryNodesOutputCache::StateToken token;
+  token.tree = mix(0x54524545ull, state.topology_gen_by_tree.lookup_default(ref.tree_session_uid, 0));
+  token.tree = mix(token.tree, node_gen);
+  token.tree = mix(token.tree,
+                   geometry_nodes_output_cache_hash_node_inputs(site.sockets_node ?
+                                                                    *site.sockets_node :
+                                                                    *site.node));
+  if (flags & DEP_CONTEXT) {
+    const uint64_t caller_token = user_data.output_cache_caller_token;
+    if (caller_token != 0) {
+      token.context = caller_token;
+    }
+    else if (ref.tree_session_uid == state.root_tree_uid) {
+      token.context = mix(
+          1, state.root_context_token.lookup_default(ref.node_id, state.all_root_inputs_token));
+    }
+    else {
+      token.context = mix(1, state.all_root_inputs_token);
+    }
+  }
+  if (flags & DEP_IDS) {
+    token.ids = state.ids_token;
+  }
+  if (flags & DEP_TIME) {
+    token.time = state.time_token;
+  }
+  if (flags & DEP_CAMERA) {
+    token.camera = state.camera_token;
+  }
+  if (flags & DEP_ANIMATION) {
+    token.animation = mix(1, state.animation_token);
+  }
+  return token;
+}
+
+static uint64_t combine_state_token(const GeometryNodesOutputCache::StateToken &state)
+{
+  uint64_t token = 0x53544154ull;
+  for (const uint64_t part :
+       {state.tree, state.context, state.ids, state.time, state.camera, state.animation})
+  {
+    token = mix(token, part);
+  }
+  return token;
+}
+
+uint64_t geometry_nodes_output_cache_child_token(const GeoNodesUserData &user_data,
+                                                 const OutputCacheSite &site)
+{
+  const GeometryNodesOutputCacheEvalState *state = eval_state_from(user_data);
+  if (state == nullptr || site.tree == nullptr || site.node == nullptr) {
+    return 0;
+  }
+  /* Describe what flows into the node: its own unlinked values and the state of every node
+   * linked to it. The node's own generation is left out on purpose. It also changes when the
+   * tree behind a group node is edited, and that must not invalidate nodes inside the group
+   * that come before the edit. */
+  const bNode &node = *site.node;
+  bool complete = true;
+  uint64_t token = mix(0x4348494Cull, uint64_t(node.identifier));
+  token = mix(token, hash_node_inputs(node, &complete));
+  const bool is_root_context = user_data.output_cache_caller_token == 0 &&
+                               original_tree_session_uid(*site.tree) == state->root_tree_uid;
+  for (const bNodeSocket *socket : node.input_sockets()) {
+    if (!socket->is_available()) {
+      continue;
+    }
+    for (const bNodeLink *link : socket->directly_linked_links()) {
+      if (link->fromnode == nullptr || link->fromsock == nullptr) {
+        continue;
+      }
+      token = mix(token, uint64_t(socket->index()));
+      const int source_index = link->fromsock->index();
+      if (is_root_context && link->fromnode->is_group_input() &&
+          state->root_input_tokens.index_range().contains(source_index))
+      {
+        /* Only this modifier input, not all of them. */
+        token = mix(token, mix(uint64_t(source_index) + 1, state->root_input_tokens[source_index]));
+        continue;
+      }
+      const OutputCacheSite source{site.tree, link->fromnode};
+      token = mix(token, combine_state_token(site_state_token(*state, user_data, source)));
+    }
+  }
+  if (!complete) {
+    token = mix(token, combine_state_token(site_state_token(*state, user_data, site)));
+  }
+  /* The root context is recognized by a zero token. */
+  return token == 0 ? 1 : token;
+}
+
+/**
+ * Read the inputs that say what consumers need from the node. They are cheap usage values, not
+ * socket data, so asking for them does not evaluate anything upstream.
+ */
+static bool gather_requirements(lf::Params &params,
+                                GeometryNodesOutputCache::Requirements &r_requirements)
+{
+  const Span<lf::Input> inputs = params.fn_.inputs();
+  bool all_available = true;
+  for (const int i : inputs.index_range()) {
+    const CPPType *type = inputs[i].type;
+    if (type == &CPPType::get<bool>()) {
+      if (const void *value = params.try_get_input_data_ptr_or_request(i)) {
+        r_requirements.usages.append({i, *static_cast<const bool *>(value)});
+      }
+      else {
+        all_available = false;
+      }
+    }
+    else if (type == &CPPType::get<bke::GeometryNodesReferenceSet>()) {
+      if (const void *value = params.try_get_input_data_ptr_or_request(i)) {
+        r_requirements.reference_sets.append(
+            {i, static_cast<const bke::GeometryNodesReferenceSet *>(value)->names});
+      }
+      else {
+        all_available = false;
+      }
+    }
+  }
+  return all_available;
+}
+
+OutputCacheLookup geometry_nodes_output_cache_restore(const lf::Context &context,
+                                                      lf::Params &params,
+                                                      const OutputCacheSite &site,
+                                                      OutputCacheSession &session,
+                                                      const bool body_runs_for_side_effects)
+{
+  using Status = OutputCacheSession::Status;
+  const GeoNodesUserData &user_data = *static_cast<const GeoNodesUserData *>(context.user_data);
+
+  if (session.status == Status::Disabled) {
+    return OutputCacheLookup::Disabled;
+  }
+  if (session.status == Status::Miss) {
+    /* The node is being evaluated. A later pass must not switch to stored values. */
+    return OutputCacheLookup::Miss;
+  }
+  const GeometryNodesOutputCacheEvalState *state = eval_state_from(user_data);
+  if (session.status == Status::Undecided) {
+    if (state == nullptr || !geometry_nodes_output_cache_site_enabled(user_data, site)) {
+      session.status = Status::Disabled;
+      return OutputCacheLookup::Disabled;
+    }
+    GeometryNodesOutputCache::Requirements requirements;
+    if (!gather_requirements(params, requirements)) {
+      return OutputCacheLookup::Pending;
+    }
+    session.requirements = std::move(requirements);
+    session.key.tree_session_uid = original_tree_session_uid(*site.tree);
+    session.key.node_id = site.node->identifier;
+    session.key.context_hash = user_data.compute_context->hash();
+    session.state = site_state_token(*state, user_data, site);
+  }
+
+  int64_t exec_time_ns = 0;
+  const char *miss_reason = nullptr;
+  const GeometryNodesOutputCache::Lookup lookup = user_data.call_data->output_cache->try_restore(
+      session.key,
+      session.state,
+      session.requirements,
+      params,
+      !body_runs_for_side_effects,
+      exec_time_ns,
+      miss_reason);
+  if (lookup == GeometryNodesOutputCache::Lookup::Miss) {
+    if (session.status == Status::Undecided) {
+      debug_print("miss ", *site.node, miss_reason);
+    }
+    session.status = Status::Miss;
+    return OutputCacheLookup::Miss;
+  }
+  if (session.status == Status::Undecided) {
+    debug_print("hit  ", *site.node, body_runs_for_side_effects ? "(body runs for viewer)" : nullptr);
+  }
+  session.status = Status::Hit;
+  if (!body_runs_for_side_effects) {
+    geometry_nodes_output_cache_skip_unprovided_inputs(params, int(params.fn_.inputs().size()));
+  }
+  geometry_nodes_output_cache_log_hit(context, site.node->identifier, exec_time_ns);
+  return OutputCacheLookup::Hit;
+}
+
+void geometry_nodes_output_cache_merge_captured(
+    Vector<GeometryNodesOutputCache::CachedSocket> &accumulated,
+    Vector<GeometryNodesOutputCache::CachedSocket> &&captured)
+{
+  for (GeometryNodesOutputCache::CachedSocket &socket : captured) {
+    bool replaced = false;
+    for (GeometryNodesOutputCache::CachedSocket &known : accumulated) {
+      if (known.output_index == socket.output_index) {
+        known.value = std::move(socket.value);
+        replaced = true;
+        break;
+      }
+    }
+    if (!replaced) {
+      accumulated.append(std::move(socket));
+    }
+  }
+  captured.clear();
+}
+
+bool geometry_nodes_output_cache_store(const lf::Context &context,
+                                       lf::Params &params,
+                                       const OutputCacheSite &site,
+                                       OutputCacheSession &session,
+                                       Vector<GeometryNodesOutputCache::CachedSocket> &&captured,
+                                       int64_t &exec_time_ns)
+{
+  const GeoNodesUserData &user_data = *static_cast<const GeoNodesUserData *>(context.user_data);
+  if (session.status != OutputCacheSession::Status::Miss) {
+    return false;
+  }
+  geometry_nodes_output_cache_merge_captured(session.captured, std::move(captured));
+  /* Outputs can arrive over several passes. An entry with some of them missing would never
+   * be usable, so wait for the pass that completes the set. */
+  if (session.captured.is_empty() ||
+      !geometry_nodes_output_cache_used_values_ready(params, int(params.fn_.outputs().size())))
+  {
+    return false;
+  }
+  int64_t frozen_ns = exec_time_ns;
+  if (!user_data.call_data->output_cache->store(session.key,
+                                                session.state,
+                                                session.requirements,
+                                                session.captured,
+                                                exec_time_ns,
+                                                frozen_ns))
+  {
+    return false;
+  }
+  debug_print("store", *site.node, nullptr);
+  exec_time_ns = frozen_ns;
+  geometry_nodes_output_cache_log_frozen_overlay(context, site.node->identifier, frozen_ns);
+  return true;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Timing Overlay
+ * \{ */
 
 void geometry_nodes_output_cache_log_hit(const lf::Context &context,
                                          const int32_t node_id,
@@ -1253,5 +2140,7 @@ void geometry_nodes_output_cache_log_frozen_overlay(const lf::Context &context,
   logger->frozen_overlay_times.append(*logger->allocator, {node_id, start, end});
   logger->cache_hit_node_ids.append(*logger->allocator, node_id);
 }
+
+/** \} */
 
 }  // namespace blender::nodes

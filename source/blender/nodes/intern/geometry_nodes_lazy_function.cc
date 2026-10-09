@@ -309,71 +309,6 @@ class LazyFunctionForGeometryNode : public LazyFunction {
     make_data_inputs_maybe();
   }
 
-  bool try_restore_output_cache(lf::Params &params, const lf::Context &context) const
-  {
-    const GeoNodesUserData &user_data = *static_cast<const GeoNodesUserData *>(context.user_data);
-    if (user_data.call_data == nullptr || user_data.call_data->output_cache == nullptr) {
-      return false;
-    }
-    if (user_data.compute_context == nullptr) {
-      return false;
-    }
-    if (!geometry_nodes_output_cache_node_enabled(node_, user_data.call_data->output_cache)) {
-      return false;
-    }
-    const std::optional<FoundNestedNodeID> nested = find_nested_node_id(user_data, node_.identifier);
-    if (nested.has_value() && (nested->is_in_loop || nested->is_in_simulation)) {
-      return false;
-    }
-    GeometryNodesOutputCache::Key key;
-    key.tree_session_uid = own_lf_graph_info_.original_tree_session_uid;
-    key.node_id = node_.identifier;
-    key.context_hash = user_data.compute_context->hash();
-    key.sockets_token = geometry_nodes_output_cache_hash_node_inputs(node_);
-    key.caller_token = user_data.output_cache_caller_token;
-    const GeometryNodesOutputCache::Hit hit = user_data.call_data->output_cache->try_restore(
-        key, params);
-    if (!hit.hit) {
-      return false;
-    }
-    geometry_nodes_output_cache_skip_unprovided_inputs(params, int(inputs_.size()));
-    geometry_nodes_output_cache_log_hit(context, node_.identifier, hit.exec_time_ns);
-    return true;
-  }
-
-  bool store_output_cache(const GeoNodesUserData &user_data,
-                          Vector<GeometryNodesOutputCache::CachedSocket> sockets,
-                          int64_t &exec_time_ns) const
-  {
-    if (user_data.call_data == nullptr || user_data.call_data->output_cache == nullptr) {
-      return false;
-    }
-    if (user_data.compute_context == nullptr) {
-      return false;
-    }
-    if (!geometry_nodes_output_cache_node_enabled(node_, user_data.call_data->output_cache)) {
-      return false;
-    }
-    const std::optional<FoundNestedNodeID> nested = find_nested_node_id(user_data, node_.identifier);
-    if (nested.has_value() && (nested->is_in_loop || nested->is_in_simulation)) {
-      return false;
-    }
-    GeometryNodesOutputCache::Key key;
-    key.tree_session_uid = own_lf_graph_info_.original_tree_session_uid;
-    key.node_id = node_.identifier;
-    key.context_hash = user_data.compute_context->hash();
-    key.sockets_token = geometry_nodes_output_cache_hash_node_inputs(node_);
-    key.caller_token = user_data.output_cache_caller_token;
-    int64_t frozen_ns = exec_time_ns;
-    if (!user_data.call_data->output_cache->store(
-            key, std::move(sockets), exec_time_ns, &frozen_ns))
-    {
-      return false;
-    }
-    exec_time_ns = frozen_ns;
-    return true;
-  }
-
   void execute_impl(lf::Params &params, const lf::Context &context) const override
   {
     GeoNodesUserData *user_data = dynamic_cast<GeoNodesUserData *>(context.user_data);
@@ -432,8 +367,23 @@ class LazyFunctionForGeometryNode : public LazyFunction {
     /* Select/Edit Elements must run so they can snapshot geometry for interactive edit. */
     const bool skip_output_cache = node_.is_type("GeometryNodeSelectElements"_ustr) ||
                                    node_.is_type("GeometryNodeEditElements"_ustr);
-    if (!skip_output_cache && this->try_restore_output_cache(params, context)) {
-      return;
+    const OutputCacheSite cache_site{&node_.owner_tree(), &node_};
+    /* The node cooks in one pass once its inputs are there, and nothing is consumed before
+     * that, so every earlier pass reaches the same decision without keeping it. */
+    OutputCacheSession cache_session;
+    if (skip_output_cache ||
+        !geometry_nodes_output_cache_site_enabled(*user_data, cache_site) ||
+        this->is_nested_in_loop_or_simulation(*user_data))
+    {
+      cache_session.status = OutputCacheSession::Status::Disabled;
+    }
+    switch (geometry_nodes_output_cache_restore(context, params, cache_site, cache_session)) {
+      case OutputCacheLookup::Hit:
+      case OutputCacheLookup::Pending:
+        return;
+      case OutputCacheLookup::Miss:
+      case OutputCacheLookup::Disabled:
+        break;
     }
 
     bool missing_input = false;
@@ -470,9 +420,18 @@ class LazyFunctionForGeometryNode : public LazyFunction {
 
     node_.typeinfo->geometry_node_execute(geo_params);
     int64_t cook_ns = node_timer.elapsed_ns();
-    if (this->store_output_cache(*user_data, std::move(capture_params.captured()), cook_ns)) {
-      geometry_nodes_output_cache_log_frozen_overlay(context, node_.identifier, cook_ns);
+    geometry_nodes_output_cache_store(
+        context, params, cache_site, cache_session, std::move(capture_params.captured()), cook_ns);
+  }
+
+  bool is_nested_in_loop_or_simulation(const GeoNodesUserData &user_data) const
+  {
+    if (user_data.call_data->root_ntree == nullptr) {
+      return false;
     }
+    const std::optional<FoundNestedNodeID> nested = find_nested_node_id(user_data,
+                                                                        node_.identifier);
+    return nested.has_value() && (nested->is_in_loop || nested->is_in_simulation);
   }
 
   std::string input_name(const int index) const override
@@ -2121,6 +2080,8 @@ class LazyFunctionForGroupNode : public LazyFunction {
   struct Storage {
     void *group_storage = nullptr;
     int64_t accumulated_cook_ns = 0;
+    /** Output-cache decision and captured outputs of this evaluation. */
+    OutputCacheSession cache_session;
   };
 
  public:
@@ -2202,26 +2163,29 @@ class LazyFunctionForGroupNode : public LazyFunction {
       return !user_data->call_data->side_effect_nodes->nodes_by_context.lookup(inner_context.hash())
                   .is_empty();
     }();
-    const bool cache_enabled = geometry_nodes_output_cache_node_enabled(
-        group_node_, user_data->call_data ? user_data->call_data->output_cache : nullptr);
-    /* Inner viewers need the group body. Restoring then executing would set outputs twice. */
-    if (cache_enabled && !recursion_limit_reached && !skip_output_cache &&
-        !group_has_inner_side_effects &&
-        user_data->call_data && user_data->call_data->output_cache && user_data->compute_context)
+    Storage *storage = static_cast<Storage *>(context.storage);
+    const OutputCacheSite cache_site{&group_node_.owner_tree(), &group_node_};
+    OutputCacheSession &cache_session = storage->cache_session;
+    if (recursion_limit_reached || skip_output_cache) {
+      cache_session.status = OutputCacheSession::Status::Disabled;
+    }
+    /* An inner viewer needs the group body, but only what the viewer pulls: the group's own
+     * outputs still come from the cache. */
+    bool body_only_for_side_effects = false;
+    switch (geometry_nodes_output_cache_restore(
+        context, params, cache_site, cache_session, group_has_inner_side_effects))
     {
-      GeometryNodesOutputCache::Key key;
-      key.tree_session_uid = geometry_nodes_output_cache_tree_uid(group_node_.owner_tree());
-      key.node_id = group_node_.identifier;
-      key.context_hash = user_data->compute_context->hash();
-      key.sockets_token = geometry_nodes_output_cache_hash_node_inputs(group_node_);
-      key.caller_token = user_data->output_cache_caller_token;
-      const GeometryNodesOutputCache::Hit hit = user_data->call_data->output_cache->try_restore(
-          key, params);
-      if (hit.hit) {
-        geometry_nodes_output_cache_skip_unprovided_inputs(params, int(inputs_.size()));
-        geometry_nodes_output_cache_log_hit(context, group_node_.identifier, hit.exec_time_ns);
+      case OutputCacheLookup::Pending:
         return;
-      }
+      case OutputCacheLookup::Hit:
+        if (!group_has_inner_side_effects) {
+          return;
+        }
+        body_only_for_side_effects = true;
+        break;
+      case OutputCacheLookup::Miss:
+      case OutputCacheLookup::Disabled:
+        break;
     }
 
     const ScopedNodeTimer node_timer{context, group_node_};
@@ -2251,8 +2215,6 @@ class LazyFunctionForGroupNode : public LazyFunction {
       lazy_threading::send_hint();
     }
 
-    Storage *storage = static_cast<Storage *>(context.storage);
-
     /* The compute context changes when entering a node group. */
     bke::GroupNodeComputeContext compute_context{
         user_data->compute_context, group_node_.identifier, &group_node_.owner_tree()};
@@ -2261,22 +2223,18 @@ class LazyFunctionForGroupNode : public LazyFunction {
     group_user_data.compute_context = &compute_context;
     group_user_data.verbose_log = should_log_verbose_in_context(*user_data,
                                                                 compute_context.hash());
-    uint64_t caller_token = geometry_nodes_output_cache_hash_node_inputs(group_node_);
-    for (const int i : inputs_.index_range()) {
-      if (inputs_[i].type != &CPPType::get<SocketValueVariant>()) {
-        continue;
-      }
-      if (const SocketValueVariant *value = params.try_get_input_data_ptr<SocketValueVariant>(i)) {
-        caller_token = get_default_hash(
-            caller_token, i, geometry_nodes_output_cache_hash_value(*value));
-      }
-    }
-    group_user_data.output_cache_caller_token = caller_token;
+    group_user_data.output_cache_caller_token = geometry_nodes_output_cache_child_token(
+        *user_data, cache_site);
 
     GeoNodesLocalUserData group_local_user_data{group_user_data};
     lf::Context group_context{storage->group_storage, &group_user_data, &group_local_user_data};
 
     ScopedComputeContextTimer timer(group_context);
+    if (body_only_for_side_effects) {
+      GeometryNodesOutputCacheSideEffectParams side_effect_params{*this, params};
+      group_lazy_function_.function->execute(side_effect_params, group_context);
+      return;
+    }
     GeometryNodesOutputCaptureParams capture{*this, params};
     group_lazy_function_.function->execute(capture, group_context);
 
@@ -2305,25 +2263,9 @@ class LazyFunctionForGroupNode : public LazyFunction {
           compute_context.hash(), recorded_inputs, recorded_outputs);
     }
 
-    if (cache_enabled && !skip_output_cache && user_data->call_data &&
-        user_data->call_data->output_cache && user_data->compute_context &&
-        geometry_nodes_output_cache_used_values_ready(params, int(outputs_.size())))
-    {
-      GeometryNodesOutputCache::Key key;
-      key.tree_session_uid = geometry_nodes_output_cache_tree_uid(group_node_.owner_tree());
-      key.node_id = group_node_.identifier;
-      key.context_hash = user_data->compute_context->hash();
-      key.sockets_token = geometry_nodes_output_cache_hash_node_inputs(group_node_);
-      key.caller_token = user_data->output_cache_caller_token;
-      int64_t frozen_ns = cook_ns;
-      Vector<GeometryNodesOutputCache::CachedSocket> sockets = std::move(capture.captured());
-      if (user_data->call_data->output_cache->store(
-              key, std::move(sockets), cook_ns, &frozen_ns))
-      {
-        geometry_nodes_output_cache_log_frozen_overlay(
-            context, group_node_.identifier, frozen_ns);
-      }
-    }
+    int64_t frozen_ns = cook_ns;
+    geometry_nodes_output_cache_store(
+        context, params, cache_site, cache_session, std::move(capture.captured()), frozen_ns);
   }
 
   void *init_storage(LinearAllocator<> &allocator) const override
