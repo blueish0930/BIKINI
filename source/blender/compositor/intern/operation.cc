@@ -6,6 +6,12 @@
 #include <memory>
 #include <string>
 
+#define FMT_USE_RTTI 1
+#include <fmt/format.h>
+#include <fmt/std.h>
+
+#include "PRF_profile.hh"
+
 #include "BLI_map.hh"
 #include "BLI_string_ref.hh"
 #include "BLI_vector.hh"
@@ -27,6 +33,9 @@ Operation::~Operation() = default;
 
 void Operation::evaluate()
 {
+  PRF_scope_with_name("compositor::Operation", ProfileCategory::Default);
+  PRF_scope_set_dynamic_name("%s", fmt::format("{}", typeid(*this)).c_str());
+
   this->evaluate_input_processors();
   this->execute();
   this->log_data();
