@@ -463,6 +463,8 @@ struct EditEdge {
     GeomOut geom_out;
     geom_out.ws_P = ws_P;
     geom_out.color = final_color;
+    /* Flat color, set once for the whole edge by `geometry_main()`. */
+    geom_out.color_outer = out_geom.color_outer;
     geom_out.edge_coord = coord;
     geom_out.hs_P = hs_P;
     /* Multiply offset by 2 because gl_Position range is [-1..1]. */
@@ -770,6 +772,9 @@ void vert_main([[resource_table]] const Resources &srt,
   }
   /* Occluded geometry fading. */
   v_out.color.a *= srt.test_occlusion(out_pos) ? srt.alpha : 1.0f;
+  /* Viewing angle dependent (aka "Fresnel") coloring. */
+  float3 vs_N = view.normal_world_to_view(model.normal_object_to_world(v_in.norAndFlag.xyz));
+  v_out.color = srt.facing_coloring(v_out.color, vs_N, view.view_incident_vector(vs_P));
 
   out_point_size = theme.sizes.face_dot;
 
