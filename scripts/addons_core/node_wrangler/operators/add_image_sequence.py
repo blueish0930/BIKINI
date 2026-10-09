@@ -66,7 +66,7 @@ class NODE_OT_add_image_sequence(Operator, NWBase, ImportHelper):
         filename = self.filename
         files = self.files
         frame_start = self.frame_start
-        tree = context.space_data.node_tree
+        tree = context.space_data.edit_tree
         nodes = tree.nodes
 
         # DEBUG
