@@ -272,13 +272,20 @@ gpu::VertBufPtr extract_attr_viewer(const MeshRenderData &mr, MeshBufferCache &c
   if (attributes.contains(".debug_color")) {
     attr_name = ".debug_color";
   }
-  const bke::GAttributeReader attr = attributes.lookup(
+  bke::GAttributeReader attr = attributes.lookup(
       attr_name, std::nullopt, bke::AttrType::ColorFloat);
   if (!attr) {
     gpu::VertBufPtr vbo = vbo_create(format, mr.corners_num);
     vbo->data<ColorGeometry4f>().fill(ColorGeometry4f(1.0f, 0.0f, 1.0f, 1.0f));
     return vbo;
   }
+
+  /* The GPU edge to corner gather only uses one edge per corner. Interpolate on the CPU instead,
+   * mixing both face edges adjacent to each corner, so the value shows along the edge. */
+  if (attr.domain == bke::AttrDomain::Edge) {
+    attr = attributes.lookup(attr_name, bke::AttrDomain::Corner, bke::AttrType::ColorFloat);
+  }
+
   return extract_attribute_data(mr, cache, attr, format);
 }
 
