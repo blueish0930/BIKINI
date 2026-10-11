@@ -823,6 +823,7 @@ bool is_geo_builtin(const Builtin id)
     case Builtin::FaceNeighbours:
     case Builtin::FaceCorners:
     case Builtin::CornerFace:
+    case Builtin::CornerOrder:
     case Builtin::PointsOfCurve:
     case Builtin::CurveOfPoint:
     case Builtin::PointCurve:

@@ -2,10 +2,6 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later */
 
-#include <algorithm>
-
-#include "DEG_depsgraph_query.hh"
-
 #include "node_geometry_util.hh"
 
 namespace blender::nodes::node_geo_time_shift_cc {
@@ -17,25 +13,22 @@ static void node_declare(NodeDeclarationBuilder &b)
 
   b.add_input<decl::Geometry>("Geometry"_ustr)
       .is_default_link_socket()
-      .description("Geometry to cache at the current scene frame");
+      .description("Geometry to output at another frame");
   b.add_output<decl::Geometry>("Geometry"_ustr)
       .propagate_all()
       .align_with_previous()
-      .description("Geometry cooked at the absolute Frame (Houdini-style Time Shift)");
-  b.add_input<decl::Int>("Frame"_ustr)
-      .default_value(1)
-      .min(1)
-      .max(100000)
+      .description("The input geometry as it is at the given frame");
+  b.add_input<decl::Float>("Frame"_ustr)
+      .default_value(1.0f)
       .description(
-          "Absolute scene frame to output (minimum 1). Uses Time Shift's own cache; cooks on "
-          "demand when missing");
+          "Scene frame to output the geometry of, in the units of the Frame output of the Scene "
+          "Time node. Subframes are supported");
 }
 
 static void node_geo_exec(GeoNodeExecParams params)
 {
   GeometrySet geometry = params.extract_input<GeometrySet>("Geometry"_ustr);
-  /* Clamp hard: negative Frame values used to poison the absolute-frame map and sim resume. */
-  const int frame = std::max(1, params.extract_input<int>("Frame"_ustr));
+  const float frame = params.extract_input<float>("Frame"_ustr);
 
   GeoNodesUserData *user_data = params.user_data();
   if (!user_data || !user_data->call_data->time_shift_params) {
@@ -62,12 +55,14 @@ static void node_geo_exec(GeoNodeExecParams params)
   }
 
   GeometrySet shifted_geometry;
-  int missing_frame = frame;
-  /* On miss, a silent background filler computes up to this absolute frame (reusing simulation
-   * cache when possible). Do not spam "not in cache" — that is the expected fill path. */
-  user_data->call_data->time_shift_params->evaluate(
-      found_id->id, frame, std::move(geometry), shifted_geometry, missing_frame);
-  UNUSED_VARS(missing_frame);
+  /* A frame that is not known yet is computed right after this evaluation, followed by another
+   * evaluation of this node. The message only stays when that was not possible. */
+  if (!user_data->call_data->time_shift_params->evaluate(
+          found_id->id, frame, std::move(geometry), shifted_geometry))
+  {
+    params.error_message_add(NodeWarningType::Info,
+                             TIP_("The frame is not available, the input is passed through"));
+  }
   params.set_output("Geometry"_ustr, std::move(shifted_geometry));
 }
 
@@ -77,9 +72,8 @@ static void node_register()
   geo_node_type_base(&ntype, "GeometryNodeTimeShift"_ustr, GEO_NODE_TIME_SHIFT);
   ntype.ui_name = "Time Shift";
   ntype.ui_description =
-      "Output geometry at an absolute scene frame. Scene Time ± offset is sampled on the current "
-      "playhead; animated inputs cook that frame directly; unbaked simulations play forward and "
-      "block until the frame is ready";
+      "Output the geometry as it is at another scene frame. Animation in front of the node is "
+      "evaluated at that frame, simulations are stepped up to it";
   ntype.enum_name_legacy = "TIME_SHIFT";
   ntype.nclass = NODE_CLASS_GEOMETRY;
   ntype.declare = node_declare;

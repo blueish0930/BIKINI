@@ -816,6 +816,29 @@ void blo_do_versions_501(FileData * /*fd*/, Library * /*lib*/, Main *bmain)
         }
       }
     }
+    else if (node_tree->type == NTREE_GEOMETRY) {
+      /* The Frame input of the Time Shift node was an integer. Files were written with either
+       * type in the same version, so this checks the socket itself. */
+      for (bNode &node : node_tree->nodes) {
+        if (!STREQ(node.idname, "GeometryNodeTimeShift")) {
+          continue;
+        }
+        for (bNodeSocket &socket : node.inputs) {
+          if (socket.type != SOCK_INT || !STREQ(socket.identifier, "Frame")) {
+            continue;
+          }
+          const int frame = socket.default_value ?
+                                static_cast<bNodeSocketValueInt *>(socket.default_value)->value :
+                                1;
+          bke::socket_value_free(SOCK_INT, socket.default_value, false);
+          socket.default_value = bke::socket_value_new(SOCK_FLOAT, PROP_NONE);
+          static_cast<bNodeSocketValueFloat *>(socket.default_value)->value = float(
+              std::max(frame, 1));
+          socket.type = SOCK_FLOAT;
+          STRNCPY(socket.idname, "NodeSocketFloat");
+        }
+      }
+    }
   }
   FOREACH_NODETREE_END;
 

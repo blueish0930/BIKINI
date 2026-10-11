@@ -4344,7 +4344,7 @@ Value geo_builtin_fn(void *user,
                      const int builtin_id,
                      const Span<Value> args,
                      VMEnv &env,
-                     std::string & /*error*/)
+                     std::string &error)
 {
   auto *u = static_cast<TopoUser *>(user);
   const Builtin id = Builtin(builtin_id);
@@ -4850,25 +4850,21 @@ Value geo_builtin_fn(void *user,
       }
       return range_to_int_arr(mesh->faces()[f]);
     }
-    case Builtin::CornerFace: {
+    case Builtin::CornerFace:
+    case Builtin::CornerOrder: {
       int gi = 0;
       int c = env.index;
       parse_geo_elem(args, env.index, gi, c);
+      /* `cornerface`: the face of the corner. `cornerorder`: its position in that face. */
       const Mesh *mesh = mesh_at(u, gi);
-      Vector<int> vals;
-      vals.append(-1);
-      vals.append(-1);
-      if (mesh) {
-        const Span<int> c2f = mesh->corner_to_face_map();
-        if (c >= 0 && c < c2f.size()) {
-          const int f = c2f[c];
-          vals[0] = f;
-          if (f >= 0 && f < mesh->faces_num) {
-            vals[1] = c - int(mesh->faces()[f].start());
-          }
-        }
+      if (!mesh || c < 0 || c >= mesh->corners_num) {
+        return Value::from_int(-1);
       }
-      return value_from_int_array(std::move(vals));
+      const int face = mesh->corner_to_face_map()[c];
+      if (id == Builtin::CornerFace) {
+        return Value::from_int(face);
+      }
+      return Value::from_int(c - int(mesh->faces()[face].start()));
     }
     case Builtin::PointsOfCurve: {
       int gi = 0;
@@ -7602,7 +7598,10 @@ ExecOutput run_on_accessor(const Program &program,
   }
   /* `BLENDER_VEX_NO_GPU` forces the interpreter, to compare both paths. */
   const bool gpu_allowed = std::getenv("BLENDER_VEX_NO_GPU") == nullptr && !gpu_samples_other_domain;
-  if (gpu_allowed && program.gpu_ok && domain_size > 0 && !program_uses_addpoint(program) &&
+  /* A one-element Wrangle has no parallel work to amortize shader compilation and GPU transfers.
+   * Keep whole-geometry algorithms such as pattern selection on the VM. */
+  const bool gpu_has_parallel_work = domain_size > 1;
+  if (gpu_allowed && program.gpu_ok && gpu_has_parallel_work && !program_uses_addpoint(program) &&
       !program_uses_spatial(program) && !program_uses_geo_side_effects(program))
   {
     /* A failure on the GPU side must never take Blender down: the interpreter gives the same
@@ -7630,7 +7629,8 @@ ExecOutput run_on_accessor(const Program &program,
     std::fprintf(stderr,
                  "VEX_GPU skipped %s\n",
                  gpu_samples_other_domain ? "a sampled attribute is missing or has another type" :
-                 !gpu_allowed ? "BLENDER_VEX_NO_GPU" :
+                  !gpu_allowed ? "BLENDER_VEX_NO_GPU" :
+                  !gpu_has_parallel_work ? "single-element domain" :
                  program.gpu_ok ? "geometry edits or spatial queries" :
                                   program.gpu_error.c_str());
   }
@@ -7735,6 +7735,7 @@ ExecOutput run_on_accessor(const Program &program,
       apply_pending_sets(topo, owner);
     }
     merge_addprims(owner, topo);
+
   }
   if (topo.geo_forced.load(std::memory_order_relaxed)) {
     const int g = topo.geo_forced_from.load(std::memory_order_relaxed);

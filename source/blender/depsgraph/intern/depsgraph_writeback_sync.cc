@@ -27,3 +27,21 @@ void add(blender::Depsgraph &depsgraph, std::function<void()> fn)
 }
 
 }  // namespace blender::deg::sync_writeback
+
+namespace blender::deg::post_eval {
+
+void add(blender::Depsgraph &depsgraph, std::function<void()> fn)
+{
+  deg::Depsgraph &deg_graph = reinterpret_cast<deg::Depsgraph &>(depsgraph);
+  std::lock_guard lock{deg_graph.post_eval_callbacks_mutex};
+  deg_graph.post_eval_callbacks.append(std::move(fn));
+}
+
+void add_free_callback(blender::Depsgraph &depsgraph, std::function<void()> fn)
+{
+  deg::Depsgraph &deg_graph = reinterpret_cast<deg::Depsgraph &>(depsgraph);
+  std::lock_guard lock{deg_graph.post_eval_callbacks_mutex};
+  deg_graph.free_callbacks.append(std::move(fn));
+}
+
+}  // namespace blender::deg::post_eval

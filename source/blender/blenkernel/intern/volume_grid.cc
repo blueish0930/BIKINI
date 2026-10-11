@@ -217,9 +217,12 @@ const CPPType *VolumeGridData::cpp_type() const
 
 void VolumeGridData::count_memory(MemoryCounter &memory) const
 {
-  std::lock_guard lock{mutex_};
-  if (!tree_loaded_) {
-    return;
+  {
+    /* Not locked below: #size_in_bytes accesses the grid, which locks the mutex again. */
+    std::lock_guard lock{mutex_};
+    if (!tree_loaded_) {
+      return;
+    }
   }
   memory.add_shared(tree_sharing_info_.get(), [&](MemoryCounter &shared_memory) {
     shared_memory.add(this->size_in_bytes());

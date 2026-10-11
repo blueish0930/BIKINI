@@ -629,6 +629,8 @@ enum class Builtin : uint16_t {
   /** `prevedge(geo, corner)` / `nextedge(geo, corner)`: the edge into and out of a corner. */
   PrevEdge,
   NextEdge,
+  /** `cornerorder(geo, corner)`: the position of the corner in its face, 0 for the first one. */
+  CornerOrder,
 };
 
 /** Widget behind a `chramp()` / `chcurve()` parameter. */

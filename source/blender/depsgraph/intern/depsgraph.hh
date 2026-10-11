@@ -199,6 +199,18 @@ struct Depsgraph {
   /** Needs to be locked when adding a writeback callback during evaluation. */
   Mutex sync_writeback_callbacks_mutex;
 
+  /**
+   * Functions that run after an evaluation is done, on any depsgraph (active or not). They may
+   * evaluate the depsgraph again. Also see `DEG_depsgraph_writeback_sync.hh`.
+   */
+  Vector<std::function<void()>> post_eval_callbacks;
+  /** Needs to be locked when adding a callback during evaluation. */
+  Mutex post_eval_callbacks_mutex;
+  /** True while the callbacks above run, so that the evaluations they do don't run them again. */
+  bool is_running_post_eval = false;
+  /** Called when the depsgraph is freed. */
+  Vector<std::function<void()>> free_callbacks;
+
   MEM_CXX_CLASS_ALLOC_FUNCS("Depsgraph");
 };
 

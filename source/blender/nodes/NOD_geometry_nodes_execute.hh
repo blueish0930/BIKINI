@@ -63,11 +63,16 @@ bke::SocketValueVariant init_socket_cpp_value(const GeoNodesCallData *call_data,
                                               const bNodeTree &ntree,
                                               const bNodeTreeInterfaceSocket &io_socket);
 
+/**
+ * \param only_side_effects: Do not compute the outputs of the tree, only what its side-effect
+ * nodes (viewers, gizmos, ...) need. An empty geometry is returned.
+ */
 bke::GeometrySet execute_geometry_nodes_on_geometry(const bNodeTree &btree,
                                                     const PointerRNA &properties_ptr,
                                                     const ComputeContext &base_compute_context,
                                                     GeoNodesCallData &call_data,
-                                                    bke::GeometrySet input_geometry);
+                                                    bke::GeometrySet input_geometry,
+                                                    bool only_side_effects = false);
 
 /**
  * Get input values for the node tree for static value/usage inferencing. Inferencing does not

@@ -150,12 +150,18 @@ class GeoNodesBakeParams {
 
 class GeoNodesTimeShiftParams {
  public:
-  /** Store the current geometry and return the geometry at the shifted frame. */
+  /**
+   * Remember the geometry for the frame that is evaluated and get the geometry the node had at
+   * another frame.
+   *
+   * \param id: Nested node id of the Time Shift node.
+   * \return False when that frame is not known yet. Then the current geometry is passed through,
+   * the frame is computed after this evaluation and the object is evaluated again.
+   */
   virtual bool evaluate(int id,
-                        int frame,
+                        float frame,
                         bke::GeometrySet current_geometry,
-                        bke::GeometrySet &r_shifted_geometry,
-                        int &r_missing_frame) const = 0;
+                        bke::GeometrySet &r_shifted_geometry) const = 0;
 };
 
 struct GeoNodesSideEffectNodes {

@@ -354,8 +354,11 @@ static int wrangle_call_help(const StringRef fn, char (*out)[192], const int max
     row("  matrix m = {c0x,c0y,c0z,c0w, c1x,...};");
     return n;
   }
-  if (fn == "cornerface" || fn == "corner_face") {
-    row("cornerface(geo, corner, faceindex, order)");
+  if (fn == "cornerorder") {
+    row("cornerorder(geo, corner)");
+  }
+  if (fn == "cornerface") {
+    row("cornerface(geo, corner)");
     row("  faceindex: out int   order: out int");
     return n;
   }
@@ -1908,8 +1911,6 @@ struct WrangleEditPopupArg {
   char status[256] = {};
   int find_from = 0;
   bool pinned = false;
-  /** Only activate the text box the first time the popup is built. */
-  bool activate_editor = true;
   /** Editor font size in points. 0 means "initialize from stored scale". */
   float font_pt = 0.0f;
 };
@@ -2175,16 +2176,6 @@ static ui::Block *wrangle_edit_popup(bContext *C, ARegion *region, void *arg_v)
   const int64_t buttons_before = block->buttons_ptrs.size();
   layout.textbox_with_state(&node_ptr, "code", &arg->editor_state, std::nullopt);
   wrangle_apply_code_editor_flags(block, buttons_before);
-  if (arg->activate_editor) {
-    for (int64_t i = buttons_before; i < block->buttons_ptrs.size(); i++) {
-      ui::Button *but = block->buttons_ptrs[i].get();
-      if (but && but->type == ui::ButtonType::TextBox) {
-        button_flag_enable(but, ui::BUT_ACTIVATE_ON_INIT);
-        button_flag_enable(but, ui::BUT_ACTIVATE_ON_INIT_NO_SELECT);
-      }
-    }
-    arg->activate_editor = false;
-  }
 
   const int bounds_offset[2] = {0, -UI_UNIT_Y};
   ui::block_bounds_set_popup(block, int(0.3f * U.widget_unit), bounds_offset);

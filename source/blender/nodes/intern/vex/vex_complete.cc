@@ -164,8 +164,8 @@ StringRef function_param_types(const StringRef name)
       {"offset_corner", "geo,int,int"},
       {"offset_corner_in_face", "geo,int,int"},
       {"offsetcornerinface", "geo,int,int"},
-      {"cornerface", "geo,int,out int,out int"},
-      {"corner_face", "geo,int,out int,out int"},
+      {"cornerface", "geo,int"},
+      {"cornerorder", "geo,int"},
       {"pointcurve", "geo,int,out int,out int"},
       {"point_curve", "geo,int,out int,out int"},
       {"curvepoints", "geo,int"},
@@ -603,7 +603,8 @@ void gather_completions(Vector<std::string> &r_owned_names,
   add("faceedges", "Topology", C::Variable, K::Function, "faceedges", "faceedges(0, i@index)", true);
   add("faceneighbours", "Topology", C::Variable, K::Function, "faceneighbours", "faceneighbours(0, i@index)", true);
   add("facecorners", "Topology", C::Variable, K::Function, "facecorners", "facecorners(0, i@index)", true);
-  add("cornerface", "Topology", C::Variable, K::Function, "cornerface", "cornerface(0, i@index, faceindex, order)", true);
+  add("cornerface", "Topology", C::Variable, K::Function, "cornerface", "cornerface(geo, corner)", true);
+  add("cornerorder", "Topology", C::Variable, K::Function, "cornerorder", "cornerorder(geo, corner)", true);
   add("cornerpoint", "Topology", C::Variable, K::Function, "cornerpoint", "cornerpoint(0, i@index)", true);
   add("corneredges", "Topology", C::Variable, K::Function, "corneredges", "corneredges(0, i@index)", true);
   add("edges_of_corner", "Topology", C::Variable, K::Function, "edges_of_corner", "edges_of_corner()", true);

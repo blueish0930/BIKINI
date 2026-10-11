@@ -44,6 +44,7 @@
 
 #include "BKE_anim_data.hh"
 #include "BKE_attribute.hh"
+#include "BKE_compute_contexts.hh"
 #include "BKE_curves.hh"
 #include "BKE_customdata.hh"
 #include "BKE_geometry_nodes_reference_set.hh"
@@ -182,6 +183,12 @@ struct GeometryNodesOutputCache::ContentHasher {
       return false;
     });
   }
+};
+
+/** Result of the whole modifier, see #GeometryNodesOutputCache::store_root_output. */
+struct GeometryNodesOutputCache::RootOutput {
+  uint64_t token = 0;
+  bke::GeometrySet geometry;
 };
 
 static uint64_t attributes_token(const bke::AttributeAccessor &attributes,
@@ -466,6 +473,10 @@ struct GeometryNodesOutputCacheTreeState {
   Map<int32_t, uint64_t> node_gen;
   /** Node identifiers tagged since the last propagate (property, socket, link target, …). */
   VectorSet<int32_t> dirty_seeds;
+  /** Nodes whose incoming links were edited, see #geometry_nodes_output_cache_tag_node_links. */
+  VectorSet<int32_t> link_seeds;
+  /** Per node, which sockets its inputs read from as of the last tree update. */
+  Map<int32_t, uint64_t> logical_inputs;
 };
 
 static Map<uint32_t, std::unique_ptr<GeometryNodesOutputCacheTreeState>> &tree_states()
@@ -536,6 +547,9 @@ void GeometryNodesOutputCache::discard_node(const uint32_t tree_session_uid, con
   ref.node_id = node_id;
   frozen_time_ns_.remove(ref);
   frozen_time_state_.remove(ref);
+  references_.remove_if([&](const auto &item) {
+    return item.key.tree_session_uid == tree_session_uid && item.key.node_id == node_id;
+  });
 }
 
 static Vector<GeometryNodesOutputCache *> snapshot_registered_caches()
@@ -708,13 +722,15 @@ bool geometry_nodes_output_cache_only_viewer_seeds(const bNodeTree &ntree)
   ntree.ensure_topology_cache();
   GeometryNodesOutputCacheTreeState &state = tree_state_for(original_tree_session_uid(ntree));
   std::lock_guard lock{state.mutex};
-  if (state.dirty_seeds.is_empty()) {
+  if (state.dirty_seeds.is_empty() && state.link_seeds.is_empty()) {
     return false;
   }
-  for (const int32_t id : state.dirty_seeds) {
-    const bNode *node = ntree.node_by_id(id);
-    if (node == nullptr || node->type_legacy != GEO_NODE_VIEWER) {
-      return false;
+  for (const Span<int32_t> seeds : {state.dirty_seeds.as_span(), state.link_seeds.as_span()}) {
+    for (const int32_t id : seeds) {
+      const bNode *node = ntree.node_by_id(id);
+      if (node == nullptr || node->type_legacy != GEO_NODE_VIEWER) {
+        return false;
+      }
     }
   }
   return true;
@@ -732,6 +748,99 @@ void geometry_nodes_output_cache_tag_node(bNodeTree *ntree, const bNode *node)
   GeometryNodesOutputCacheTreeState &state = tree_state_for(original_tree_session_uid(*ntree));
   std::lock_guard lock{state.mutex};
   state.dirty_seeds.add(node->identifier);
+}
+
+void geometry_nodes_output_cache_tag_node_links(bNodeTree *ntree, const bNode *node)
+{
+  if (ntree == nullptr || ntree->type != NTREE_GEOMETRY || node == nullptr) {
+    return;
+  }
+  if (!DEG_is_original(&ntree->id)) {
+    return;
+  }
+  GeometryNodesOutputCacheTreeState &state = tree_state_for(original_tree_session_uid(*ntree));
+  std::lock_guard lock{state.mutex};
+  state.link_seeds.add(node->identifier);
+}
+
+/**
+ * Which sockets the inputs of a node read from, looking through reroutes and muted nodes. A
+ * socket on a dangling reroute reads nothing but is not the same as an unlinked one, which
+ * uses its own value.
+ */
+static uint64_t logical_inputs_signature(const bNode &node)
+{
+  uint64_t signature = 0x4C4F4749ull;
+  for (const bNodeSocket *socket : node.input_sockets()) {
+    if (!socket->is_available()) {
+      continue;
+    }
+    signature = mix(signature, uint64_t(socket->index()));
+    signature = mix(signature, uint64_t(socket->is_directly_linked()));
+    for (const bNodeSocket *origin : socket->logically_linked_sockets()) {
+      signature = mix(signature, uint64_t(origin->owner_node().identifier));
+      signature = mix(signature, uint64_t(origin->index()));
+    }
+  }
+  return signature;
+}
+
+bool geometry_nodes_output_cache_resolve_link_seeds(bNodeTree &ntree)
+{
+  if (ntree.type != NTREE_GEOMETRY || !DEG_is_original(&ntree.id)) {
+    return false;
+  }
+  ntree.ensure_topology_cache();
+  GeometryNodesOutputCacheTreeState &state = tree_state_for(original_tree_session_uid(ntree));
+  std::lock_guard lock{state.mutex};
+
+  Stack<const bNode *> stack;
+  for (const int32_t id : state.link_seeds) {
+    if (const bNode *node = ntree.node_by_id(id)) {
+      stack.push(node);
+    }
+  }
+  state.link_seeds.clear();
+  /* A reroute has nothing of its own that could change. What matters is whether the nodes
+   * behind it read from somewhere else now. */
+  Vector<int32_t> reroute_seeds;
+  for (const int32_t id : state.dirty_seeds) {
+    const bNode *node = ntree.node_by_id(id);
+    if (node != nullptr && node->is_reroute()) {
+      reroute_seeds.append(id);
+      stack.push(node);
+    }
+  }
+  for (const int32_t id : reroute_seeds) {
+    state.dirty_seeds.remove(id);
+  }
+
+  bool unchanged_rewiring = false;
+  Set<const bNode *> visited;
+  while (!stack.is_empty()) {
+    const bNode *node = stack.pop();
+    if (!visited.add(node)) {
+      continue;
+    }
+    if (node->is_reroute()) {
+      unchanged_rewiring = true;
+      for (const bNodeSocket *output : node->output_sockets()) {
+        for (const bNodeLink *link : output->directly_linked_links()) {
+          if (link->tonode != nullptr) {
+            stack.push(link->tonode);
+          }
+        }
+      }
+      continue;
+    }
+    const uint64_t *known = state.logical_inputs.lookup_ptr(node->identifier);
+    if (known != nullptr && *known == logical_inputs_signature(*node)) {
+      unchanged_rewiring = true;
+      continue;
+    }
+    state.dirty_seeds.add(node->identifier);
+  }
+  return unchanged_rewiring;
 }
 
 static bool tree_flag_is_unknown_full_invalidation(const uint64_t changed_flag)
@@ -841,9 +950,19 @@ void geometry_nodes_output_cache_propagate(bNodeTree &ntree)
       seed_ids.add(id);
     }
     state.dirty_seeds.clear();
+    state.link_seeds.clear();
+    /* Remember what every node reads from, to recognize link edits that change nothing. */
+    state.logical_inputs.clear();
+    for (const bNode *node : ntree.all_nodes()) {
+      state.logical_inputs.add(node->identifier, logical_inputs_signature(*node));
+    }
   }
 
   for (const bNode *node : ntree.all_nodes()) {
+    if (node->is_reroute()) {
+      /* See #geometry_nodes_output_cache_resolve_link_seeds. */
+      continue;
+    }
     const uint64_t node_flag = node->runtime->changed_flag;
     /* PARENT / INTERNAL_LINK: mute-link refresh on ANY/LINK. Socket flags: declaration
      * refresh tags every reused socket. Neither means this node's output changed. */
@@ -943,6 +1062,8 @@ struct GeometryNodesOutputCacheEvalState {
   /** Root tree: combined identity of the modifier inputs each node is downstream of. */
   Map<int32_t, uint64_t> root_context_token;
   uint64_t all_root_inputs_token = 0;
+  /** Root tree: all modifier settings, including the names of output attributes. */
+  uint64_t root_properties_token = 0;
   uint64_t ids_token = 0;
   uint64_t time_token = 0;
   uint64_t camera_token = 0;
@@ -1506,10 +1627,10 @@ std::shared_ptr<const GeometryNodesOutputCacheEvalState> GeometryNodesOutputCach
   state->root_tree_uid = original_tree_session_uid(root_tree);
 
   Set<NodeRef> live;
+  Set<uint32_t> visited;
   {
     Stack<const bNodeTree *> trees;
     trees.push(&root_tree);
-    Set<uint32_t> visited;
     while (!trees.is_empty()) {
       const bNodeTree &tree = *trees.pop();
       const uint32_t uid = original_tree_session_uid(tree);
@@ -1553,11 +1674,16 @@ std::shared_ptr<const GeometryNodesOutputCacheEvalState> GeometryNodesOutputCach
 
   if (state->enabled_nodes.is_empty()) {
     /* Nothing is cached in this tree: keep the evaluation free of any cache work. */
-    std::lock_guard lock{mutex_};
-    entries_.clear();
-    frozen_time_ns_.clear();
-    frozen_time_state_.clear();
-    return nullptr;
+    {
+      std::lock_guard lock{mutex_};
+      entries_.clear();
+      frozen_time_ns_.clear();
+      frozen_time_state_.clear();
+      references_.clear();
+    }
+    if (!params.track_root_output) {
+      return nullptr;
+    }
   }
 
   /* Snapshot tree state and walk the graph WITHOUT holding mutex_. Holding the cache mutex while
@@ -1586,6 +1712,9 @@ std::shared_ptr<const GeometryNodesOutputCacheEvalState> GeometryNodesOutputCach
     content_hasher_->remove_expired();
   }
   state->time_token = mix(0x54494D45ull, hash_bytes(&params.ctime, sizeof(params.ctime)));
+  if (params.properties != nullptr) {
+    state->root_properties_token = idproperty_token(*params.properties);
+  }
 
   {
     std::lock_guard lock{mutex_};
@@ -1597,6 +1726,15 @@ std::shared_ptr<const GeometryNodesOutputCacheEvalState> GeometryNodesOutputCach
     });
     frozen_time_ns_.remove_if([&](const auto &item) { return !live.contains(item.key); });
     frozen_time_state_.remove_if([&](const auto &item) { return !live.contains(item.key); });
+    references_.remove_if([&](const auto &item) {
+      if (item.key.node_id == -1) {
+        return !visited.contains(item.key.tree_session_uid);
+      }
+      NodeRef ref;
+      ref.tree_session_uid = item.key.tree_session_uid;
+      ref.node_id = item.key.node_id;
+      return !live.contains(ref);
+    });
   }
   return state;
 }
@@ -1796,6 +1934,34 @@ bool GeometryNodesOutputCache::store(const Key &key,
   return true;
 }
 
+bool GeometryNodesOutputCache::lookup_references(const ReferencesKey &key,
+                                                 const uint64_t state,
+                                                 std::shared_ptr<Set<std::string>> &r_names) const
+{
+  std::lock_guard lock{mutex_};
+  const ReferencesEntry *entry = references_.lookup_ptr(key);
+  if (entry == nullptr || entry->state != state) {
+    return false;
+  }
+  /* Copied, so nothing a consumer does with its set reaches the stored one. */
+  r_names = entry->names ? std::make_shared<Set<std::string>>(*entry->names) : nullptr;
+  return true;
+}
+
+void GeometryNodesOutputCache::store_references(const ReferencesKey &key,
+                                                const uint64_t state,
+                                                std::shared_ptr<Set<std::string>> names)
+{
+  std::lock_guard lock{mutex_};
+  /* There is one entry per socket per compute context. Deep recursion can make many contexts;
+   * start over instead of growing without bound. */
+  constexpr int64_t max_entries = 1 << 14;
+  if (references_.size() >= max_entries) {
+    references_.clear();
+  }
+  references_.add_overwrite(key, ReferencesEntry{state, std::move(names)});
+}
+
 static const GeometryNodesOutputCacheEvalState *eval_state_from(const GeoNodesUserData &user_data)
 {
   if (user_data.call_data == nullptr || user_data.call_data->output_cache == nullptr ||
@@ -1889,6 +2055,65 @@ static uint64_t combine_state_token(const GeometryNodesOutputCache::StateToken &
   return token;
 }
 
+bool GeometryNodesOutputCache::has_cached_nodes(const GeometryNodesOutputCacheEvalState &state)
+{
+  return !state.enabled_nodes.is_empty();
+}
+
+uint64_t GeometryNodesOutputCache::root_output_token(
+    const GeometryNodesOutputCacheEvalState &state, const bNodeTree &root_tree)
+{
+  root_tree.ensure_topology_cache();
+  const bNode *output_node = root_tree.group_output_node();
+  if (output_node == nullptr) {
+    return 0;
+  }
+  /* The root context: no calling node. */
+  GeoNodesUserData user_data;
+  const OutputCacheSite site{&root_tree, output_node};
+  uint64_t token = combine_state_token(site_state_token(state, user_data, site));
+  token = mix(token, state.root_properties_token);
+  return token == 0 ? 1 : token;
+}
+
+bool GeometryNodesOutputCache::restore_root_output(const uint64_t token,
+                                                   bke::GeometrySet &r_geometry) const
+{
+  std::lock_guard lock{mutex_};
+  if (!root_output_ || root_output_->token != token) {
+    if (debug_enabled()) {
+      fprintf(stderr, "GN_CACHE miss modifier output%s\n", root_output_ ? "" : " (nothing stored)");
+      fflush(stderr);
+    }
+    return false;
+  }
+  r_geometry = root_output_->geometry;
+  if (debug_enabled()) {
+    fprintf(stderr, "GN_CACHE hit modifier output\n");
+    fflush(stderr);
+  }
+  return true;
+}
+
+void GeometryNodesOutputCache::store_root_output(const uint64_t token,
+                                                 const bke::GeometrySet &geometry)
+{
+  auto root_output = std::make_unique<RootOutput>();
+  root_output->token = token;
+  root_output->geometry = geometry;
+  /* The modifier's input can be passed through without being owned. */
+  root_output->geometry.ensure_owns_direct_data();
+  std::lock_guard lock{mutex_};
+  std::swap(root_output_, root_output);
+}
+
+void GeometryNodesOutputCache::clear_root_output()
+{
+  std::unique_ptr<RootOutput> root_output;
+  std::lock_guard lock{mutex_};
+  std::swap(root_output_, root_output);
+}
+
 uint64_t geometry_nodes_output_cache_child_token(const GeoNodesUserData &user_data,
                                                  const OutputCacheSite &site)
 {
@@ -1915,7 +2140,15 @@ uint64_t geometry_nodes_output_cache_child_token(const GeoNodesUserData &user_da
         continue;
       }
       token = mix(token, uint64_t(socket->index()));
+      /* A muted link passes nothing on. */
+      token = mix(token, uint64_t(link->is_muted()));
+      if (link->is_muted()) {
+        continue;
+      }
+      /* Moving the link to another output of the same node changes what flows in, but not the
+       * state of that node. */
       const int source_index = link->fromsock->index();
+      token = mix(token, uint64_t(source_index));
       if (is_root_context && link->fromnode->is_group_input() &&
           state->root_input_tokens.index_range().contains(source_index))
       {
@@ -1934,9 +2167,83 @@ uint64_t geometry_nodes_output_cache_child_token(const GeoNodesUserData &user_da
   return token == 0 ? 1 : token;
 }
 
+/** True inside zones that run their body many times or carry state from frame to frame. */
+static bool context_is_iterated(const ComputeContext *context)
+{
+  for (; context != nullptr; context = context->parent()) {
+    if (dynamic_cast<const bke::RepeatZoneComputeContext *>(context) ||
+        dynamic_cast<const bke::ForeachGeometryElementZoneComputeContext *>(context) ||
+        dynamic_cast<const bke::SimulationZoneComputeContext *>(context))
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool references_key_and_state(const GeoNodesUserData &user_data,
+                                     const OutputCacheReferenceSource &source,
+                                     GeometryNodesOutputCache::ReferencesKey &r_key,
+                                     uint64_t &r_state)
+{
+  const GeometryNodesOutputCacheEvalState *state = eval_state_from(user_data);
+  if (state == nullptr || source.tree == nullptr) {
+    return false;
+  }
+  /* Nodes in there are not cached either, and every iteration would add its own entries. */
+  if (context_is_iterated(user_data.compute_context)) {
+    return false;
+  }
+  r_key.tree_session_uid = original_tree_session_uid(*source.tree);
+  r_key.index = source.index;
+  r_key.context_hash = user_data.compute_context->hash();
+  if (source.node == nullptr) {
+    /* Inputs of the root tree are passed in by the caller and cost nothing to scan. Inputs of a
+     * nested tree are computed by what is linked to the calling node, which is exactly what the
+     * caller token describes. */
+    if (user_data.output_cache_caller_token == 0) {
+      return false;
+    }
+    r_key.node_id = -1;
+    r_state = mix(user_data.output_cache_caller_token, uint64_t(source.index));
+    return true;
+  }
+  r_key.node_id = source.node->identifier;
+  const OutputCacheSite site{source.tree, source.node, source.sockets_node};
+  r_state = combine_state_token(site_state_token(*state, user_data, site));
+  return true;
+}
+
+bool geometry_nodes_output_cache_restore_references(const GeoNodesUserData &user_data,
+                                                    const OutputCacheReferenceSource &source,
+                                                    std::shared_ptr<Set<std::string>> &r_names)
+{
+  GeometryNodesOutputCache::ReferencesKey key;
+  uint64_t state = 0;
+  if (!references_key_and_state(user_data, source, key, state)) {
+    return false;
+  }
+  return user_data.call_data->output_cache->lookup_references(key, state, r_names);
+}
+
+void geometry_nodes_output_cache_store_references(const GeoNodesUserData &user_data,
+                                                  const OutputCacheReferenceSource &source,
+                                                  const std::shared_ptr<Set<std::string>> &names)
+{
+  GeometryNodesOutputCache::ReferencesKey key;
+  uint64_t state = 0;
+  if (!references_key_and_state(user_data, source, key, state)) {
+    return;
+  }
+  user_data.call_data->output_cache->store_references(
+      key, state, names ? std::make_shared<Set<std::string>>(*names) : nullptr);
+}
+
 /**
- * Read the inputs that say what consumers need from the node. They are cheap usage values, not
- * socket data, so asking for them does not evaluate anything upstream.
+ * Read the inputs that say what consumers need from the node. They are usage values, not socket
+ * data, so asking for them should not evaluate anything upstream. The attributes to propagate
+ * can be read from a value in front of the node though (a zone output, a group input); those
+ * names come from #geometry_nodes_output_cache_restore_references while the value is unchanged.
  */
 static bool gather_requirements(lf::Params &params,
                                 GeometryNodesOutputCache::Requirements &r_requirements)

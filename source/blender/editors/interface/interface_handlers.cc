@@ -3664,6 +3664,30 @@ static void wrangle_commit_code_run_direct(bNode *node)
   }
 }
 
+/** True when the draft (`code`) is not what the node currently evaluates (`code_run`). */
+static bool wrangle_draft_differs_from_run(const bNode *node)
+{
+  if (node == nullptr || node->storage == nullptr || node->idname == nullptr) {
+    return false;
+  }
+  const char *code = nullptr;
+  const char *code_run = nullptr;
+  if (STREQ(node->idname, "ShaderNodeWrangle")) {
+    const NodeShaderWrangle &st = *static_cast<const NodeShaderWrangle *>(node->storage);
+    code = st.code;
+    code_run = st.code_run;
+  }
+  else if (STREQ(node->idname, "GeometryNodeWrangle")) {
+    const NodeGeometryWrangle &st = *static_cast<const NodeGeometryWrangle *>(node->storage);
+    code = st.code;
+    code_run = st.code_run;
+  }
+  else {
+    return false;
+  }
+  return !STREQ(code ? code : "", code_run ? code_run : "");
+}
+
 static void wrangle_code_editor_cook(bContext *C, Button *but)
 {
   bNode *node = wrangle_node_from_button(but);
@@ -11216,25 +11240,23 @@ static void button_activate_exit(
     button_activate_state(C, but, BUTTON_STATE_EXIT);
   }
 
-  bool cook_wrangle = false;
-  int wrangle_node_id = 0;
-  const char *cook_op = nullptr;
+  bNode *wrangle_node = nullptr;
   if (!onfree && !data->cancel && but_is_code_editor(but) && data->text_edit.edit_string &&
       but->rnapoin.data)
   {
-    if (bNode *node = wrangle_node_from_button(but)) {
-      cook_op = wrangle_compile_operator_idname(node);
-      if (cook_op) {
-        cook_wrangle = true;
-        wrangle_node_id = node->identifier;
-      }
-    }
+    wrangle_node = wrangle_node_from_button(but);
   }
 
   /* apply the button action or value */
   if (!onfree) {
     apply_but(C, block, but, data, false);
   }
+
+  /* Leaving the editor only cooks when the draft is not what the node already runs, so a click
+   * outside after reading (or after Ctrl+Enter) does not compile and re-evaluate the tree. The
+   * compile operator pushes its own undo step, and without a change there is nothing to undo. */
+  const bool cook_wrangle = wrangle_draft_differs_from_run(wrangle_node);
+  const bool skip_undo_push = wrangle_node != nullptr;
 
 #ifdef USE_DRAG_MULTINUM
   if (data->multi_data.has_mbuts) {
@@ -11266,7 +11288,9 @@ static void button_activate_exit(
 
   if (!onfree && !data->cancel) {
     /* autokey & undo push */
-    apply_but_undo(but);
+    if (!skip_undo_push) {
+      apply_but_undo(but);
+    }
     apply_but_autokey(C, but);
 
 #ifdef USE_ALLSELECT
@@ -11363,9 +11387,8 @@ static void button_activate_exit(
 
   /* After the button is fully released: cook wrangle. Typing only writes the
    * draft (`code`); evaluation reads `code_run` until this commit. */
-  if (cook_wrangle && cook_op) {
+  if (cook_wrangle) {
     wrangle_code_editor_cook(C, but);
-    (void)wrangle_node_id;
   }
 }
 

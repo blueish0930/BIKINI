@@ -2435,8 +2435,22 @@ class LazyFunctionForIndexSwitchSocketUsage : public lf::LazyFunction {
  * references.
  */
 class LazyFunctionForExtractingReferenceSet : public lf::LazyFunction {
+ private:
+  /**
+   * Where the value comes from. With it, the output cache remembers the references so that a
+   * cached node asking what it has to propagate does not compute the value (e.g. a whole zone).
+   */
+  std::optional<OutputCacheReferenceSource> cache_source_;
+
+  struct Storage {
+    /** Once the value was asked for, the node has to wait for it. */
+    bool value_requested = false;
+  };
+
  public:
-  LazyFunctionForExtractingReferenceSet()
+  LazyFunctionForExtractingReferenceSet(
+      std::optional<OutputCacheReferenceSource> cache_source = std::nullopt)
+      : cache_source_(cache_source)
   {
     debug_name_ = "Extract References";
     inputs_.append_as("Use", CPPType::get<bool>());
@@ -2444,13 +2458,36 @@ class LazyFunctionForExtractingReferenceSet : public lf::LazyFunction {
     outputs_.append_as("References", CPPType::get<GeometryNodesReferenceSet>());
   }
 
-  void execute_impl(lf::Params &params, const lf::Context & /*context*/) const override
+  void *init_storage(LinearAllocator<> &allocator) const override
+  {
+    return allocator.construct<Storage>().release();
+  }
+
+  void destruct_storage(void *storage) const override
+  {
+    std::destroy_at(static_cast<Storage *>(storage));
+  }
+
+  void execute_impl(lf::Params &params, const lf::Context &context) const override
   {
     const bool use = params.get_input<bool>(0);
     if (!use) {
       params.set_output<GeometryNodesReferenceSet>(0, {});
       return;
     }
+    const GeoNodesUserData &user_data = *static_cast<const GeoNodesUserData *>(context.user_data);
+    Storage &storage = *static_cast<Storage *>(context.storage);
+    if (cache_source_ && !storage.value_requested) {
+      GeometryNodesReferenceSet known_references;
+      if (geometry_nodes_output_cache_restore_references(
+              user_data, *cache_source_, known_references.names))
+      {
+        params.set_input_unused(1);
+        params.set_output(0, std::move(known_references));
+        return;
+      }
+    }
+    storage.value_requested = true;
     const SocketValueVariant *value_variant =
         params.try_get_input_data_ptr_or_request<SocketValueVariant>(1);
     if (value_variant == nullptr) {
@@ -2470,6 +2507,9 @@ class LazyFunctionForExtractingReferenceSet : public lf::LazyFunction {
     visit_params.check_GField = scan_field;
     check_recursive(*value_variant, visit_params);
 
+    if (cache_source_) {
+      geometry_nodes_output_cache_store_references(user_data, *cache_source_, references.names);
+    }
     params.set_output(0, std::move(references));
   }
 
@@ -3659,8 +3699,13 @@ struct GeometryNodesLazyFunctionBuilder {
           {
             lf::OutputSocket *lf_usage_socket = graph_params.usage_by_bsocket.lookup_default(
                 &bsocket, nullptr);
+            /* Values that enter a closure are not described by the state of a node. */
+            const std::optional<OutputCacheReferenceSource> cache_source =
+                reference_set.type == ReferenceSetType::LocalReferenceSet ?
+                    std::make_optional(this->reference_source_for_socket(bsocket)) :
+                    std::nullopt;
             lf::OutputSocket &lf_reference_set_socket = this->get_extracted_reference_set(
-                *lf_socket, lf_usage_socket, graph_params);
+                *lf_socket, lf_usage_socket, graph_params, cache_source);
             lf_reference_sets.add(reference_set_i, &lf_reference_set_socket);
           }
           else {
@@ -3862,7 +3907,7 @@ struct GeometryNodesLazyFunctionBuilder {
           lf::OutputSocket *lf_usage_socket = graph_params.usage_by_bsocket.lookup_default(
               &bsocket, nullptr);
           lf::OutputSocket &lf_reference_set_socket = this->get_extracted_reference_set(
-              lf_socket, lf_usage_socket, graph_params);
+              lf_socket, lf_usage_socket, graph_params, this->reference_source_for_socket(bsocket));
           lf_reference_sets.add_new(reference_set_i, &lf_reference_set_socket);
           break;
         }
@@ -3870,8 +3915,14 @@ struct GeometryNodesLazyFunctionBuilder {
           const int group_input_i = reference_set.index;
           lf::GraphInputSocket &lf_socket = *group_input_sockets_[group_input_i];
           lf::OutputSocket *lf_usage_socket = group_input_usage_sockets_[group_input_i]->origin();
+          /* A recursive call gets its inputs from nodes of this same tree, which the token of
+           * the outermost caller does not describe. */
+          std::optional<OutputCacheReferenceSource> cache_source;
+          if ((btree_.flag & NTREE_GEOMETRY_RECURSIVE) == 0) {
+            cache_source = OutputCacheReferenceSource{&btree_, nullptr, nullptr, group_input_i};
+          }
           lf::OutputSocket &lf_reference_set_socket = this->get_extracted_reference_set(
-              lf_socket, lf_usage_socket, graph_params);
+              lf_socket, lf_usage_socket, graph_params, cache_source);
           lf_reference_sets.add_new(reference_set_i, &lf_reference_set_socket);
           break;
         }
@@ -4014,11 +4065,30 @@ struct GeometryNodesLazyFunctionBuilder {
     }
   }
 
-  lf::OutputSocket &get_extracted_reference_set(lf::OutputSocket &lf_field_socket,
-                                                lf::OutputSocket *lf_usage_socket,
-                                                BuildGraphParams &graph_params)
+  /** Describes a node output for #LazyFunctionForExtractingReferenceSet. */
+  OutputCacheReferenceSource reference_source_for_socket(const bNodeSocket &bsocket) const
   {
-    auto &lazy_function = scope_.construct<LazyFunctionForExtractingReferenceSet>();
+    const bNode &bnode = bsocket.owner_node();
+    OutputCacheReferenceSource source;
+    source.tree = &btree_;
+    source.node = &bnode;
+    source.index = bsocket.index();
+    /* What a zone outputs also depends on the unlinked values of its input node. */
+    if (const bke::bNodeZoneType *zone_type = bke::zone_type_by_node_type(bnode.type_legacy)) {
+      if (bnode.type_legacy == zone_type->output_type) {
+        source.sockets_node = zone_type->get_corresponding_input(btree_, bnode);
+      }
+    }
+    return source;
+  }
+
+  lf::OutputSocket &get_extracted_reference_set(
+      lf::OutputSocket &lf_field_socket,
+      lf::OutputSocket *lf_usage_socket,
+      BuildGraphParams &graph_params,
+      const std::optional<OutputCacheReferenceSource> &cache_source = std::nullopt)
+  {
+    auto &lazy_function = scope_.construct<LazyFunctionForExtractingReferenceSet>(cache_source);
     lf::Node &lf_node = graph_params.lf_graph.add_function(lazy_function);
     lf::InputSocket &lf_use_input = lf_node.input(0);
     lf::InputSocket &lf_field_input = lf_node.input(1);

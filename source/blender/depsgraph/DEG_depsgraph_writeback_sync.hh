@@ -31,4 +31,20 @@ namespace deg::sync_writeback {
 void add(Depsgraph &depsgraph, std::function<void()> fn);
 
 }  // namespace deg::sync_writeback
+
+namespace deg::post_eval {
+
+/**
+ * Add a task during depsgraph evaluation that runs right after the evaluation is done, in the
+ * thread that evaluates. Unlike #sync_writeback::add this works on every depsgraph, including the
+ * ones used for rendering. The function may evaluate the depsgraph again, e.g. at another frame,
+ * but it has to leave the depsgraph evaluated at the frame it found it at. It must not change
+ * original data-blocks.
+ */
+void add(Depsgraph &depsgraph, std::function<void()> fn);
+
+/** The function is called when the depsgraph is freed. */
+void add_free_callback(Depsgraph &depsgraph, std::function<void()> fn);
+
+}  // namespace deg::post_eval
 }  // namespace blender

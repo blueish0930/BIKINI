@@ -896,6 +896,11 @@ class NodeTreeMainUpdater {
       this->update_modal_events(ntree);
     }
 
+    /* Link edits that leave every node reading from the same sockets (a reroute inserted on a
+     * wire) are not a change of the output. */
+    const bool unchanged_rewiring = (ntree.type == NTREE_GEOMETRY) &&
+                                    geometry_nodes_output_cache_resolve_link_seeds(ntree);
+
     {
       const OutputChangeInfo change = this->check_if_output_changed(ntree, viewer_only);
       result.output_changed = change.group_output;
@@ -949,6 +954,10 @@ class NodeTreeMainUpdater {
         {
           result.rebuild_lf_graph = true;
         }
+      }
+      if (unchanged_rewiring) {
+        /* Nothing is evaluated again, but the graph refers to the links and reroutes. */
+        result.rebuild_lf_graph = true;
       }
       /* Consume node/tree change flags into persistent cache generations before they are reset. */
       geometry_nodes_output_cache_propagate(ntree);
@@ -2107,6 +2116,10 @@ class NodeTreeMainUpdater {
     geometry_nodes_output_cache_copy_dirty_seeds(tree, seed_ids);
     tree.ensure_topology_cache();
     for (const bNode *node : tree.all_nodes()) {
+      if (node->is_reroute()) {
+        /* Reroutes are looked through, see #geometry_nodes_output_cache_resolve_link_seeds. */
+        continue;
+      }
       const uint64_t node_flag = node->runtime->changed_flag;
       if (node_flag & (NTREE_CHANGED_NODE_PROPERTY | NTREE_CHANGED_NODE_OUTPUT)) {
         seed_ids.append(node->identifier);
@@ -2932,7 +2945,7 @@ void BKE_ntree_update_tag_node_removed(bNodeTree *ntree, const bNode *node)
       geometry_nodes_output_cache_discard_node(ntree, node);
       for (const bNodeLink &link : ntree->links) {
         if (link.fromnode == node && link.tonode && link.tonode != node) {
-          geometry_nodes_output_cache_tag_node(ntree, link.tonode);
+          geometry_nodes_output_cache_tag_node_links(ntree, link.tonode);
         }
       }
     }
@@ -2959,7 +2972,7 @@ void BKE_ntree_update_tag_link_changed(bNodeTree *ntree, const bNodeLink *link)
   if (link) {
     image_process_mark_link_endpoints(ntree, link);
     if (link->tonode) {
-      geometry_nodes_output_cache_tag_node(ntree, link->tonode);
+      geometry_nodes_output_cache_tag_node_links(ntree, link->tonode);
     }
   }
 }
@@ -2971,7 +2984,7 @@ void BKE_ntree_update_tag_link_removed(bNodeTree *ntree, const bNodeLink *link)
   /* Remaining endpoints still exist — partial cook must reach Image Output / Viewer. */
   image_process_mark_link_endpoints(ntree, link);
   if (link && link->tonode) {
-    geometry_nodes_output_cache_tag_node(ntree, link->tonode);
+    geometry_nodes_output_cache_tag_node_links(ntree, link->tonode);
   }
 }
 
@@ -2983,7 +2996,7 @@ void BKE_ntree_update_tag_link_added(bNodeTree *ntree, bNodeLink *link)
    * Does not clear viewer_preview_only so Ctrl-Shift preview can still skip Image Output. */
   image_process_mark_link_endpoints(ntree, link);
   if (link && link->tonode) {
-    geometry_nodes_output_cache_tag_node(ntree, link->tonode);
+    geometry_nodes_output_cache_tag_node_links(ntree, link->tonode);
   }
 }
 

@@ -77,6 +77,7 @@ set(SRC
   intern/MOD_mirror.cc
   intern/MOD_multires.cc
   intern/MOD_nodes.cc
+  intern/MOD_nodes_time_shift.cc
   intern/MOD_none.cc
   intern/MOD_normal_edit.cc
   intern/MOD_ocean.cc
@@ -119,6 +120,7 @@ set(SRC
 
   MOD_modifiertypes.hh
   MOD_nodes.hh
+  MOD_nodes_time_shift.hh
   intern/MOD_grease_pencil_util.hh
   intern/MOD_meshcache_util.hh
   intern/MOD_solidify_util.hh

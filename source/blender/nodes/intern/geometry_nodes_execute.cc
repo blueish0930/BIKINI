@@ -598,7 +598,8 @@ bke::GeometrySet execute_geometry_nodes_on_geometry(const bNodeTree &btree,
                                                     const PointerRNA &properties_ptr,
                                                     const ComputeContext &base_compute_context,
                                                     GeoNodesCallData &call_data,
-                                                    bke::GeometrySet input_geometry)
+                                                    bke::GeometrySet input_geometry,
+                                                    const bool only_side_effects)
 {
   PRF_scope(ProfileCategory::Default);
   const std::shared_ptr<const GeometryNodesLazyFunctionGraphInfo> &lf_graph_info_ptr =
@@ -618,8 +619,11 @@ bke::GeometrySet execute_geometry_nodes_on_geometry(const bNodeTree &btree,
   Array<lf::ValueUsage> param_output_usages(num_outputs);
   Array<bool> param_set_outputs(num_outputs, false);
 
-  /* We want to evaluate the main outputs, but don't care about which inputs are used for now. */
-  param_output_usages.as_mutable_span().slice(function.outputs.main).fill(lf::ValueUsage::Used);
+  /* We want to evaluate the main outputs, but don't care about which inputs are used for now.
+   * Side-effect nodes run whether or not an output is used. */
+  param_output_usages.as_mutable_span()
+      .slice(function.outputs.main)
+      .fill(only_side_effects ? lf::ValueUsage::Unused : lf::ValueUsage::Used);
   param_output_usages.as_mutable_span()
       .slice(function.outputs.input_usages)
       .fill(lf::ValueUsage::Unused);
@@ -693,6 +697,15 @@ bke::GeometrySet execute_geometry_nodes_on_geometry(const bNodeTree &btree,
     lazy_function.execute(lf_params, lf_context);
   }
   lazy_function.destruct_storage(lf_context.storage);
+
+  if (only_side_effects) {
+    for (const int i : IndexRange(num_outputs)) {
+      if (param_set_outputs[i]) {
+        param_outputs[i].destruct();
+      }
+    }
+    return {};
+  }
 
   bke::GeometrySet output_geometry =
       param_outputs[0].get<bke::SocketValueVariant>()->extract<bke::GeometrySet>();

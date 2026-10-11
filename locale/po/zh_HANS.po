@@ -172682,6 +172682,21 @@ msgstr "在绝对帧求值的几何（Houdini 风格时间偏移）"
 msgid "Absolute scene frame to output (minimum 1). Uses Time Shift's own cache; cooks on demand when missing"
 msgstr "要输出的绝对场景帧（最小为 1）。使用时间偏移自己的缓存；缺失时按需求值"
 
+msgid "Geometry to output at another frame"
+msgstr "要在另一帧输出的几何"
+
+msgid "The input geometry as it is at the given frame"
+msgstr "输入几何在给定帧时的状态"
+
+msgid "Scene frame to output the geometry of, in the units of the Frame output of the Scene Time node. Subframes are supported"
+msgstr "要输出其几何的场景帧，单位与场景时间节点的帧输出相同。支持子帧"
+
+msgid "The frame is not available, the input is passed through"
+msgstr "该帧不可用，已直接传递输入"
+
+msgid "Output the geometry as it is at another scene frame. Animation in front of the node is evaluated at that frame, simulations are stepped up to it"
+msgstr "输出几何在另一场景帧时的状态。节点之前的动画会在该帧求值，模拟会逐步推进到该帧"
+
 msgid "Time Shift requires a Geometry Nodes modifier context"
 msgstr "时间偏移需要几何节点修改器上下文"
 

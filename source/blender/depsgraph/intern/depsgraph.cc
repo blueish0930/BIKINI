@@ -73,6 +73,9 @@ Depsgraph::Depsgraph(Main *bmain, Scene *scene, ViewLayer *view_layer, eEvaluati
 
 Depsgraph::~Depsgraph()
 {
+  for (std::function<void()> &fn : free_callbacks) {
+    fn();
+  }
   clear_id_nodes();
   delete time_source;
   BLI_spin_end(&lock);

@@ -60,22 +60,6 @@ namespace ed::object {
 
 struct XFormObjectData;
 
-/**
- * Time Shift own-cache fill (not Bake).
- * Blocks until the absolute frame is cached: one cook for animated/static graphs, or play-forward
- * for unbaked Simulation (wait cursor). Called from depsgraph writeback on the main thread.
- */
-namespace time_shift {
-void cache_ensure(wmWindowManager &wm,
-                  wmWindow *window,
-                  Main &bmain,
-                  Depsgraph &depsgraph,
-                  Scene &scene,
-                  Object &object,
-                  NodesModifierData &nmd,
-                  int frame);
-}  // namespace time_shift
-
 /* `object_edit.cc` */
 
 /** `context.object` */

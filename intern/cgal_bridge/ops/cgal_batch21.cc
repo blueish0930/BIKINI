@@ -6,6 +6,9 @@
 #include "cgal_mesh_io.hh"
 #include "cgal_types.hh"
 
+#include <CGAL/Default.h>
+#include <CGAL/Eigen_sparse_matrix.h>
+#include <CGAL/Eigen_vector.h>
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Surface_mesh.h>
 #include <CGAL/Surface_mesh_deformation.h>
@@ -37,6 +40,8 @@
 #include <CGAL/mst_orient_normals.h>
 #include <CGAL/property_map.h>
 #include <boost/graph/graph_traits.hpp>
+
+#include <Eigen/SparseLU>
 
 #include <algorithm>
 #include <cmath>
@@ -184,6 +189,68 @@ inline const Vector_3 &get(const PwnRGNormalMap & /*m*/, const PwnRGIt it)
 {
   return it->second;
 }
+
+/**
+ * Solver traits for #SMP::ARAP_parameterizer_3 that keep the factorization.
+ *
+ * The parameterizer builds its system matrix once, but solves `A * X = B` twice per iteration
+ * (U and V), and #CGAL::Eigen_solver_traits factorizes `A` again on every one of those calls.
+ * Here the LU factors are reused for as long as the same matrix is passed in, which leaves only
+ * the triangular solves inside the minimization loop.
+ */
+class ArapCachedSolverTraits {
+ public:
+  using NT = double;
+  using Vector = CGAL::Eigen_vector<NT>;
+  using Matrix = CGAL::Eigen_sparse_matrix<NT>;
+
+  bool linear_solver(const Matrix &A, const Vector &B, Vector &X, NT &D)
+  {
+    D = 1; /* Eigen does not support homogeneous coordinates. */
+
+    const EigenMatrix &matrix = A.eigen_object();
+    if (!state_->is_factorized || !same_matrix(state_->factorized, matrix)) {
+      state_->is_factorized = false;
+      state_->solver.compute(matrix);
+      if (state_->solver.info() != Eigen::Success) {
+        return false;
+      }
+      state_->factorized = matrix;
+      /* The comparison needs compressed storage; without it every call factorizes again. */
+      state_->is_factorized = matrix.isCompressed();
+    }
+
+    X = state_->solver.solve(B);
+    return state_->solver.info() == Eigen::Success;
+  }
+
+ private:
+  using EigenMatrix = Matrix::EigenType;
+
+  struct State {
+    Eigen::SparseLU<EigenMatrix> solver;
+    /** Copy of the matrix the factors belong to, so a rebuilt matrix is never mistaken for it. */
+    EigenMatrix factorized;
+    bool is_factorized = false;
+  };
+
+  static bool same_matrix(const EigenMatrix &a, const EigenMatrix &b)
+  {
+    if (a.rows() != b.rows() || a.cols() != b.cols() || a.nonZeros() != b.nonZeros() ||
+        !a.isCompressed() || !b.isCompressed())
+    {
+      return false;
+    }
+    const auto nnz = a.nonZeros();
+    const auto outer_num = a.outerSize() + 1;
+    return std::equal(a.outerIndexPtr(), a.outerIndexPtr() + outer_num, b.outerIndexPtr()) &&
+           std::equal(a.innerIndexPtr(), a.innerIndexPtr() + nnz, b.innerIndexPtr()) &&
+           std::equal(a.valuePtr(), a.valuePtr() + nnz, b.valuePtr());
+  }
+
+  /* Shared, because the parameterizer stores its traits by value. */
+  std::shared_ptr<State> state_ = std::make_shared<State>();
+};
 
 }  // namespace
 
@@ -356,7 +423,8 @@ bool mesh_parameterize_uv_corners(const MeshIn &mesh,
       if (meth == 1) {
         const double lam = (lambda > 0.0) ? lambda : 1000.0;
         const unsigned int iters = unsigned(energy_iterations > 0 ? energy_iterations : 50);
-        using Parameterizer = SMP::ARAP_parameterizer_3<Surface_mesh>;
+        using Parameterizer =
+            SMP::ARAP_parameterizer_3<Surface_mesh, CGAL::Default, ArapCachedSolverTraits>;
         err = SMP::parameterize(
             patch,
             Parameterizer(typename Parameterizer::Border_parameterizer(),
@@ -638,7 +706,8 @@ bool mesh_parameterize_uv_corners(const MeshIn &mesh,
             if (meth == 1) {
               const double lam = (lambda > 0.0) ? lambda : 1000.0;
               const unsigned int iters = unsigned(energy_iterations > 0 ? energy_iterations : 50);
-              using Parameterizer = SMP::ARAP_parameterizer_3<Seam_mesh>;
+              using Parameterizer =
+                  SMP::ARAP_parameterizer_3<Seam_mesh, CGAL::Default, ArapCachedSolverTraits>;
               err = SMP::parameterize(
                   seam_mesh,
                   Parameterizer(typename Parameterizer::Border_parameterizer(),

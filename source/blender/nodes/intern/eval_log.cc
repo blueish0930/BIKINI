@@ -313,14 +313,54 @@ NodeLog::~NodeLog()
   IMB_freeImBuf(image_preview);
 }
 
-NodeTreeLog::NodeTreeLog(NodesEvalLog *root_log, Vector<NodeTreeLogger *> tree_loggers)
-    : root_log_(root_log), tree_loggers_(std::move(tree_loggers))
+NodeTreeLog::NodeTreeLog(NodesEvalLog *root_log,
+                         Vector<NodeTreeLogger *> tree_loggers,
+                         Vector<NodeTreeLogger *> base_tree_loggers)
+    : root_log_(root_log),
+      tree_loggers_(std::move(tree_loggers)),
+      base_tree_loggers_(std::move(base_tree_loggers))
 {
   for (NodeTreeLogger *tree_logger : tree_loggers_) {
     for (const ComputeContextHash &hash : tree_logger->children_hashes) {
       children_hashes_.add(hash);
     }
   }
+  for (NodeTreeLogger *tree_logger : base_tree_loggers_) {
+    for (const ComputeContextHash &hash : tree_logger->children_hashes) {
+      children_hashes_.add(hash);
+    }
+  }
+}
+
+const NodeTreeLogger *NodeTreeLog::first_logger() const
+{
+  if (!tree_loggers_.is_empty()) {
+    return tree_loggers_[0];
+  }
+  if (!base_tree_loggers_.is_empty()) {
+    return base_tree_loggers_[0];
+  }
+  return nullptr;
+}
+
+bool NodeTreeLog::use_base_log_for_node(const int32_t node_id)
+{
+  if (!evaluated_node_ids_) {
+    Set<int32_t> node_ids;
+    for (const NodeTreeLogger *tree_logger : tree_loggers_) {
+      for (const NodeTreeLogger::NodeExecutionTime &item : tree_logger->node_execution_times) {
+        node_ids.add(item.node_id);
+      }
+      for (const NodeTreeLogger::SocketValueLog &item : tree_logger->output_socket_values) {
+        node_ids.add(item.node_id);
+      }
+      for (const NodeTreeLogger::WarningWithNode &item : tree_logger->node_warnings) {
+        node_ids.add(item.node_id);
+      }
+    }
+    evaluated_node_ids_ = std::move(node_ids);
+  }
+  return !evaluated_node_ids_->contains(node_id);
 }
 
 NodeTreeLog::~NodeTreeLog() = default;
@@ -499,33 +539,44 @@ void NodeTreeLog::ensure_node_warnings(
   if (reduced_node_warnings_) {
     return;
   }
-  if (tree_loggers_.is_empty()) {
+  const NodeTreeLogger *first_logger = this->first_logger();
+  if (first_logger == nullptr) {
     return;
   }
-  const std::optional<uint32_t> tree_uid = tree_loggers_[0]->tree_orig_session_uid;
+  const std::optional<uint32_t> tree_uid = first_logger->tree_orig_session_uid;
   const bNodeTree *tree = tree_uid ? orig_tree_by_session_uid.lookup_default(*tree_uid, nullptr) :
                                      nullptr;
 
+  auto add_warning = [&](const NodeTreeLogger::WarningWithNode &warning) {
+    NodeWarningPropagation propagation = NODE_WARNING_PROPAGATION_ALL;
+    if (tree) {
+      if (const bNode *node = tree->node_by_id(warning.node_id)) {
+        propagation = node->warning_propagation;
+      }
+    }
+    this->lookup_or_add_node_log(warning.node_id).warnings.add(warning.warning);
+    if (warning_is_propagated(propagation, warning.warning.type)) {
+      this->all_warnings.add(warning.warning);
+    }
+  };
   for (NodeTreeLogger *tree_logger : tree_loggers_) {
     for (const NodeTreeLogger::WarningWithNode &warning : tree_logger->node_warnings) {
-      NodeWarningPropagation propagation = NODE_WARNING_PROPAGATION_ALL;
-      if (tree) {
-        if (const bNode *node = tree->node_by_id(warning.node_id)) {
-          propagation = node->warning_propagation;
-        }
-      }
-      this->lookup_or_add_node_log(warning.node_id).warnings.add(warning.warning);
-      if (warning_is_propagated(propagation, warning.warning.type)) {
-        this->all_warnings.add(warning.warning);
+      add_warning(warning);
+    }
+  }
+  for (NodeTreeLogger *tree_logger : base_tree_loggers_) {
+    for (const NodeTreeLogger::WarningWithNode &warning : tree_logger->node_warnings) {
+      if (this->use_base_log_for_node(warning.node_id)) {
+        add_warning(warning);
       }
     }
   }
   for (const ComputeContextHash &child_hash : children_hashes_) {
     NodeTreeLog &child_log = root_log_->get_tree_log(child_hash);
-    if (child_log.tree_loggers_.is_empty()) {
+    if (child_log.first_logger() == nullptr) {
       continue;
     }
-    const NodeTreeLogger &first_child_logger = *child_log.tree_loggers_[0];
+    const NodeTreeLogger &first_child_logger = *child_log.first_logger();
     NodeWarningPropagation propagation = NODE_WARNING_PROPAGATION_ALL;
     const std::optional<int32_t> &caller_node_id = first_child_logger.parent_node_id;
     if (tree && caller_node_id) {
@@ -569,6 +620,33 @@ void NodeTreeLog::ensure_execution_times()
     }
     this->execution_time += tree_logger->execution_time;
   }
+  if (!base_tree_loggers_.is_empty()) {
+    /* The latest evaluation only ran a part of this context. Show what all of it took. */
+    this->execution_time = {};
+    for (NodeTreeLogger *tree_logger : base_tree_loggers_) {
+      for (const NodeTreeLogger::NodeExecutionTime &timings : tree_logger->node_execution_times) {
+        if (this->use_base_log_for_node(timings.node_id)) {
+          const std::chrono::nanoseconds duration = timings.end - timings.start;
+          this->lookup_or_add_node_log(timings.node_id).execution_time += duration;
+        }
+      }
+      for (const int32_t node_id : tree_logger->cache_hit_node_ids) {
+        if (this->use_base_log_for_node(node_id)) {
+          this->lookup_or_add_node_log(node_id).from_cache = true;
+        }
+      }
+      this->execution_time += tree_logger->execution_time;
+    }
+    for (NodeTreeLogger *tree_logger : base_tree_loggers_) {
+      for (const NodeTreeLogger::NodeExecutionTime &frozen : tree_logger->frozen_overlay_times) {
+        if (this->use_base_log_for_node(frozen.node_id)) {
+          NodeLog &node_log = this->lookup_or_add_node_log(frozen.node_id);
+          node_log.execution_time = frozen.end - frozen.start;
+          node_log.from_cache = true;
+        }
+      }
+    }
+  }
   reduced_execution_times_ = true;
 }
 
@@ -577,16 +655,22 @@ void NodeTreeLog::ensure_socket_values()
   if (reduced_socket_values_) {
     return;
   }
-  for (NodeTreeLogger *tree_logger : tree_loggers_) {
-    for (const NodeTreeLogger::SocketValueLog &value_log_data : tree_logger->input_socket_values) {
+  auto add_values = [&](const NodeTreeLogger &tree_logger) {
+    for (const NodeTreeLogger::SocketValueLog &value_log_data : tree_logger.input_socket_values) {
       this->lookup_or_add_node_log(value_log_data.node_id)
           .input_values_.add(value_log_data.socket_index, value_log_data.value.get());
     }
-    for (const NodeTreeLogger::SocketValueLog &value_log_data : tree_logger->output_socket_values)
-    {
+    for (const NodeTreeLogger::SocketValueLog &value_log_data : tree_logger.output_socket_values) {
       this->lookup_or_add_node_log(value_log_data.node_id)
           .output_values_.add(value_log_data.socket_index, value_log_data.value.get());
     }
+  };
+  for (NodeTreeLogger *tree_logger : tree_loggers_) {
+    add_values(*tree_logger);
+  }
+  /* The first value of a socket is kept, so these only fill in what is missing. */
+  for (NodeTreeLogger *tree_logger : base_tree_loggers_) {
+    add_values(*tree_logger);
   }
   reduced_socket_values_ = true;
 }
@@ -666,14 +750,20 @@ void NodeTreeLog::ensure_used_named_attributes()
       add_attribute(item.node_id, item.attribute_name, item.usage);
     }
   }
+  for (NodeTreeLogger *tree_logger : base_tree_loggers_) {
+    for (const NodeTreeLogger::AttributeUsageWithNode &item : tree_logger->used_named_attributes) {
+      if (this->use_base_log_for_node(item.node_id)) {
+        add_attribute(item.node_id, item.attribute_name, item.usage);
+      }
+    }
+  }
   for (const ComputeContextHash &child_hash : children_hashes_) {
     NodeTreeLog &child_log = root_log_->get_tree_log(child_hash);
-    if (child_log.tree_loggers_.is_empty()) {
+    if (child_log.first_logger() == nullptr) {
       continue;
     }
     child_log.ensure_used_named_attributes();
-    if (const std::optional<int32_t> &parent_node_id = child_log.tree_loggers_[0]->parent_node_id)
-    {
+    if (const std::optional<int32_t> &parent_node_id = child_log.first_logger()->parent_node_id) {
       for (const auto item : child_log.used_named_attributes.items()) {
         add_attribute(*parent_node_id, item.key, item.value);
       }
@@ -691,6 +781,14 @@ void NodeTreeLog::ensure_debug_messages()
     for (const NodeTreeLogger::DebugMessage &debug_message : tree_logger->debug_messages) {
       this->lookup_or_add_node_log(debug_message.node_id)
           .debug_messages.append(debug_message.message);
+    }
+  }
+  for (NodeTreeLogger *tree_logger : base_tree_loggers_) {
+    for (const NodeTreeLogger::DebugMessage &debug_message : tree_logger->debug_messages) {
+      if (this->use_base_log_for_node(debug_message.node_id)) {
+        this->lookup_or_add_node_log(debug_message.node_id)
+            .debug_messages.append(debug_message.message);
+      }
     }
   }
   reduced_debug_messages_ = true;
@@ -754,6 +852,15 @@ void NodeTreeLog::ensure_node_image_previews()
       this->lookup_or_add_node_log(preview.node_id).image_preview = preview.image_preview;
     }
   }
+  for (NodeTreeLogger *tree_logger : base_tree_loggers_) {
+    for (const NodeTreeLogger::NodeImagePreview &preview : tree_logger->node_image_previews) {
+      NodeLog &node_log = this->lookup_or_add_node_log(preview.node_id);
+      if (node_log.image_preview == nullptr) {
+        IMB_refImBuf(preview.image_preview);
+        node_log.image_preview = preview.image_preview;
+      }
+    }
+  }
 
   reduced_node_image_previews_ = true;
 }
@@ -765,12 +872,22 @@ std::optional<int32_t> NodeTreeLog::caller_node_id() const
       return logger->parent_node_id;
     }
   }
+  for (const NodeTreeLogger *logger : base_tree_loggers_) {
+    if (logger->parent_node_id) {
+      return logger->parent_node_id;
+    }
+  }
   return std::nullopt;
 }
 
 std::optional<uint32_t> NodeTreeLog::tree_session_uid() const
 {
   for (const NodeTreeLogger *logger : tree_loggers_) {
+    if (logger->tree_orig_session_uid) {
+      return logger->tree_orig_session_uid;
+    }
+  }
+  for (const NodeTreeLogger *logger : base_tree_loggers_) {
     if (logger->tree_orig_session_uid) {
       return logger->tree_orig_session_uid;
     }
@@ -1049,15 +1166,19 @@ NodeTreeLog &NodesEvalLog::get_tree_log(const ComputeContextHash &compute_contex
       }
       return tree_logs;
     };
+    Vector<NodeTreeLogger *> base_loggers;
+    if (base_log_) {
+      base_loggers = find_loggers(*base_log_);
+    }
     if (inspection_overlay_ && inspection_overlay_contexts_.contains(compute_context_hash)) {
       /* Values come from the call that was evaluated alone. Nested recursive calls were not
        * executed there, so they are only known from the full evaluation. */
       auto tree_log = std::make_unique<NodeTreeLog>(this, find_loggers(*inspection_overlay_));
-      const NodeTreeLog full_tree_log(this, find_loggers(*this));
+      const NodeTreeLog full_tree_log(this, find_loggers(*this), std::move(base_loggers));
       tree_log->add_child_context_hashes(full_tree_log);
       return tree_log;
     }
-    return std::make_unique<NodeTreeLog>(this, find_loggers(*this));
+    return std::make_unique<NodeTreeLog>(this, find_loggers(*this), std::move(base_loggers));
   });
   return reduced_tree_log;
 }
@@ -1091,8 +1212,22 @@ void NodesEvalLog::record_recursive_call(
 const NodesEvalLog::RecursiveCall *NodesEvalLog::find_recursive_call(
     const ComputeContextHash &call_hash)
 {
-  std::lock_guard lock{recursive_calls_mutex_};
-  return recursive_calls_.lookup_ptr(call_hash);
+  {
+    std::lock_guard lock{recursive_calls_mutex_};
+    if (const RecursiveCall *call = recursive_calls_.lookup_ptr(call_hash)) {
+      return call;
+    }
+  }
+  return base_log_ ? base_log_->find_recursive_call(call_hash) : nullptr;
+}
+
+void NodesEvalLog::set_base_log(std::shared_ptr<NodesEvalLog> previous)
+{
+  if (previous && previous->base_log_) {
+    previous = previous->base_log_;
+  }
+  base_log_ = std::move(previous);
+  tree_logs_.clear();
 }
 
 Set<ComputeContextHash> NodesEvalLog::logged_contexts_in(const ComputeContextHash &root_hash)
@@ -1235,6 +1370,10 @@ void NodesEvalLog::inherit_missing_execution_times(NodesEvalLog &src)
         have_frozen.add(t.node_id);
       }
     }
+  }
+  if (src.base_log_) {
+    /* Afterwards: the times in \a src are newer. */
+    this->inherit_missing_execution_times(*src.base_log_);
   }
 }
 

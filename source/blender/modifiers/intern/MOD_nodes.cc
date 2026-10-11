@@ -88,6 +88,7 @@
 
 #include "MOD_modifiertypes.hh"
 #include "MOD_nodes.hh"
+#include "MOD_nodes_time_shift.hh"
 #include "MOD_ui_common.hh"
 
 #include "ED_node.hh"
@@ -987,6 +988,31 @@ static void find_side_effect_nodes(const NodesModifierData &nmd,
   find_side_effect_nodes_for_guide_geometry(nmd, ctx, *wm, r_side_effect_nodes);
 }
 
+/** True when a node editor shows the tree of the modifier. */
+static bool node_tree_is_open_in_editor(const NodesModifierData &nmd_orig,
+                                        const ModifierEvalContext &ctx)
+{
+  Main *bmain = DEG_get_bmain(ctx.depsgraph);
+  wmWindowManager *wm = bmain->wm.first();
+  if (wm == nullptr) {
+    return false;
+  }
+  for (const wmWindow &window : wm->windows) {
+    const bScreen *screen = BKE_workspace_active_screen_get(window.workspace_hook);
+    for (const ScrArea &area : screen->areabase) {
+      const SpaceLink *sl = area.spacedata.first_as<SpaceLink>();
+      if (sl == nullptr || sl->spacetype != SPACE_NODE) {
+        continue;
+      }
+      const SpaceNode &snode = *reinterpret_cast<const SpaceNode *>(sl);
+      if (snode.nodetree == nmd_orig.node_group) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 static void find_verbose_log_contexts(const NodesModifierData &nmd,
                                       const ModifierEvalContext &ctx,
                                       Set<ComputeContextHash> &r_socket_log_contexts,
@@ -1227,171 +1253,35 @@ static bool try_find_baked_data(const NodesModifierBake &bake,
 }
 
 /**
- * O(1) content fingerprint for Time Shift invalidation (counts + a few samples).
- * Must stay cheap: evaluate() can run on every depsgraph/viewport redraw when the modifier is
- * tagged — never walk all vertices here.
+ * The frames a Time Shift node asked for are computed by other evaluations. Show how long that
+ * took on the node instead of the time it takes to look up the result.
  */
-static uint64_t time_shift_geometry_content_token(const bke::GeometrySet &geometry)
-{
-  uint64_t token = geometry.is_empty() ? uint64_t(0x1) : uint64_t(0x2);
-
-  if (const Mesh *mesh = geometry.get_mesh()) {
-    token = get_default_hash(token, mesh->verts_num, mesh->edges_num, mesh->faces_num);
-    const Span<float3> positions = mesh->vert_positions();
-    if (!positions.is_empty()) {
-      const int n = positions.size();
-      token = get_default_hash(token, positions[0], positions[n / 2], positions[n - 1]);
-    }
-  }
-  if (const PointCloud *points = geometry.get_pointcloud()) {
-    token = get_default_hash(token, points->totpoint);
-    const Span<float3> positions = points->positions();
-    if (!positions.is_empty()) {
-      const int n = positions.size();
-      token = get_default_hash(token, positions[0], positions[n / 2], positions[n - 1]);
-    }
-  }
-  if (const Curves *curves_id = geometry.get_curves()) {
-    const bke::CurvesGeometry &curves = curves_id->geometry.wrap();
-    token = get_default_hash(token, curves.points_num(), curves.curves_num());
-    const Span<float3> positions = curves.positions();
-    if (!positions.is_empty()) {
-      const int n = positions.size();
-      token = get_default_hash(token, positions[0], positions[n / 2], positions[n - 1]);
-    }
-  }
-  if (const bke::Instances *instances = geometry.get_instances()) {
-    token = get_default_hash(token, instances->instances_num());
-    const Span<float4x4> transforms = instances->transforms();
-    if (!transforms.is_empty()) {
-      const int n = transforms.size();
-      const auto hash_transform = [&](const float4x4 &t) {
-        token = get_default_hash(token, t.location().x, t.location().y, t.location().z);
-        token = get_default_hash(token, t.x_axis().x, t.y_axis().y, t.z_axis().z);
-      };
-      hash_transform(transforms[0]);
-      hash_transform(transforms[n / 2]);
-      hash_transform(transforms[n - 1]);
-    }
-  }
-  return token;
-}
-
-/** Clear absolute-frame store + fingerprints and bump revision (aborts in-flight fills). */
-static void time_shift_cache_wipe_store(NodesModifierTimeShiftCache &cache)
-{
-  if (!cache.geometries_by_frame.is_empty() || !cache.content_token_by_frame.is_empty()) {
-    cache.geometries_by_frame.clear();
-    cache.content_token_by_frame.clear();
-    cache.revision++;
-  }
-  cache.cook_time_ns_by_frame.clear();
-  cache.attributed_node_time_ns.clear();
-  cache.last_fill_time_ns = 0;
-  cache.ensure_in_flight_frame = std::nullopt;
-  cache.background_cache_active = false;
-  cache.simulation_warmup_active = false;
-  cache.ignore_user_modified_during_warmup = false;
-  cache.warmup_target_frame = std::nullopt;
-}
-
-/**
- * Push Time Shift fill / light-cook wall times into the current eval log so the node editor does
- * not only show the cache-hit path (~0.1 ms) after an expensive multi-frame cook.
- */
-static void time_shift_inject_attributed_timings(nodes::eval_log::NodesEvalLog &eval_log,
-                                                 NodesModifierTimeShiftCache &ts_cache,
-                                                 const bNodeTree &tree,
-                                                 const ComputeContext &compute_context)
+static void time_shift_log_fill_times(nodes::eval_log::NodesEvalLog &eval_log,
+                                      NodesModifierTimeShiftCache &ts_cache,
+                                      const bNodeTree &tree,
+                                      const ComputeContext &compute_context)
 {
   using Clock = nodes::eval_log::Clock;
   std::lock_guard lock{ts_cache.mutex};
-  if (ts_cache.attributed_node_time_ns.is_empty() && ts_cache.cook_time_ns_by_frame.is_empty() &&
-      ts_cache.last_fill_time_ns <= 0)
-  {
+  if (ts_cache.fill_time_ns.is_empty()) {
     return;
   }
-
   nodes::eval_log::NodeTreeLogger &tree_logger = eval_log.get_local_tree_logger(compute_context);
   const nodes::eval_log::TimePoint end = Clock::now();
-
-  auto append_duration = [&](const int32_t node_id, const int64_t duration_ns) {
-    if (duration_ns <= 0 || node_id < 0) {
-      return;
-    }
-    const auto duration = std::chrono::nanoseconds(duration_ns);
-    /* Always log attributed cooks — they are often the only accurate cost after a fill. */
-    tree_logger.node_execution_times.append(*tree_logger.allocator,
-                                            {node_id, end - duration, end});
-    tree_logger.execution_time += duration;
-  };
-
-  for (const auto item : ts_cache.attributed_node_time_ns.items()) {
-    append_duration(item.key, item.value);
-  }
-
-  /* Ensure every Time Shift node reports the cook cost of its current absolute Frame. */
-  tree.ensure_topology_cache();
-  for (const bNode *node : tree.nodes_by_type("GeometryNodeTimeShift"_ustr)) {
-    if (node->is_muted()) {
+  for (const bNestedNodeRef &ref : tree.nested_node_refs_span()) {
+    if (ref.path.id_in_node != -1) {
+      /* Only nodes of this tree, the ones in groups are logged in another context. */
       continue;
     }
-    const bNodeSocket *socket = bke::node_find_socket(*node, SOCK_IN, "Frame"_ustr);
-    int frame = 1;
-    if (socket && socket->type == SOCK_INT && !socket->is_logically_linked()) {
-      frame = std::max(1, socket->default_value_typed<bNodeSocketValueInt>()->value);
+    const int64_t *time_ns = ts_cache.fill_time_ns.lookup_ptr(ref.id);
+    if (time_ns == nullptr || *time_ns <= 0) {
+      continue;
     }
-    else if (ts_cache.requested_frame) {
-      frame = *ts_cache.requested_frame;
-    }
-    int64_t cook_ns = 0;
-    if (const int64_t *ptr = ts_cache.cook_time_ns_by_frame.lookup_ptr(frame)) {
-      cook_ns = *ptr;
-    }
-    else if (ts_cache.last_fill_time_ns > 0 && ts_cache.requested_frame &&
-             *ts_cache.requested_frame == frame)
-    {
-      cook_ns = ts_cache.last_fill_time_ns;
-    }
-    /* Avoid double-count if already in attributed map for this node. */
-    if (cook_ns > 0 && !ts_cache.attributed_node_time_ns.contains(node->identifier)) {
-      append_duration(node->identifier, cook_ns);
-    }
+    const auto duration = std::chrono::nanoseconds(*time_ns);
+    tree_logger.node_execution_times.append(*tree_logger.allocator,
+                                            {ref.path.node_id, end - duration, end});
+    tree_logger.execution_time += duration;
   }
-}
-
-/**
- * Store a snapshot that is safe to outlive the evaluation that produced it.
- *
- * - #ensure_owns_all_data: deep-own mesh/point/curve data (not eval buffers).
- * - #ensure_no_shared_components: break sharing with the live pipeline so Viewer /
- *   Store Named Attribute COW/mutations cannot corrupt the absolute-frame store.
- *   Without this, "preview upstream then preview Time Shift again" can crash when the
- *   cached geometry was shared with a previous output that wrote .viewer attributes.
- */
-static void time_shift_cache_store_frame(NodesModifierTimeShiftCache &cache,
-                                        const int frame,
-                                        const bke::GeometrySet &geometry,
-                                        const uint64_t content_token)
-{
-  bke::GeometrySet stored = geometry;
-  stored.ensure_owns_all_data();
-  stored.ensure_no_shared_components();
-  cache.geometries_by_frame.add_overwrite(frame, std::move(stored));
-  cache.content_token_by_frame.add_overwrite(frame, content_token);
-}
-
-/** Copy a cached snapshot for output; never return a raw map reference to callers. */
-static bke::GeometrySet time_shift_cache_copy_frame(const bke::GeometrySet &cached)
-{
-  bke::GeometrySet out = cached;
-  /* Always break sharing with the store. `owns_direct_data()` only checks Mesh-ID
-   * ownership, not GeometryComponent implicit-sharing. A copied GeometrySet still
-   * shares the component; Viewer / Store Named Attribute / eval-result release
-   * then decrement a sharing_info the cache still points at. */
-  out.ensure_owns_all_data();
-  out.ensure_no_shared_components();
-  return out;
 }
 
 static void get_simulation_input_serials(const NodesModifierData &nmd,
@@ -1462,6 +1352,7 @@ class NodesModifierSimulationParams : public nodes::GeoNodesSimulationParams {
   bake::ModifierCache *modifier_cache_;
   float fps_;
   bool has_invalid_simulation_ = false;
+  bool time_shift_fill_ = false;
 
  public:
   struct DataPerZone {
@@ -1480,18 +1371,10 @@ class NodesModifierSimulationParams : public nodes::GeoNodesSimulationParams {
     const Scene *scene = DEG_get_input_scene(depsgraph);
     scene_ = scene;
     use_frame_cache_ = ctx_.object->flag & OB_FLAG_USE_SIMULATION_CACHE;
-    bool ignore_user_modified_during_warmup = false;
-    bool ignore_user_modified_for_frame_scrub = false;
-    if (nmd.runtime->time_shift_cache) {
-      std::lock_guard lock{nmd.runtime->time_shift_cache->mutex};
-      /* Shared cache flags apply to both original and evaluated modifier instances. */
-      use_frame_cache_ |= nmd.runtime->time_shift_cache->simulation_warmup_active;
-      ignore_user_modified_during_warmup =
-          nmd.runtime->time_shift_cache->ignore_user_modified_during_warmup;
-      /* Only skip UserModified sim invalidation for THIS eval when Time Shift Frame sockets
-       * changed. Must not stay sticky — that left sim Valid forever after upstream edits. */
-      ignore_user_modified_for_frame_scrub = nmd.runtime->time_shift_cache->frame_socket_scrub_active;
-    }
+    /* Other frames are evaluated for Time Shift nodes. The simulations keep every state then so
+     * that they can return to the frame they were at, and nothing is invalidated. */
+    time_shift_fill_ = time_shift::is_filling(depsgraph);
+    use_frame_cache_ |= time_shift_fill_;
     depsgraph_is_active_ = DEG_is_active(depsgraph);
     modifier_cache_ = nmd.runtime->cache.get();
     fps_ = scene->frames_per_second();
@@ -1501,8 +1384,7 @@ class NodesModifierSimulationParams : public nodes::GeoNodesSimulationParams {
     }
     const bool invalidate_for_user_edit = depsgraph_is_active_ &&
                                           (nmd.modifier.flag & eModifierFlag_UserModified) &&
-                                          !ignore_user_modified_during_warmup &&
-                                          !ignore_user_modified_for_frame_scrub;
+                                          !time_shift_fill_;
     bool any_sim_reset = false;
     bool any_sim_invalidated = false;
     {
@@ -1542,7 +1424,7 @@ class NodesModifierSimulationParams : public nodes::GeoNodesSimulationParams {
           node_cache.observed_simulation_input_serial = true;
         }
       }
-      if (depsgraph_is_active_) {
+      if (depsgraph_is_active_ && !time_shift_fill_) {
         any_sim_reset = this->reset_invalid_node_bakes();
       }
       for (const std::unique_ptr<bake::SimulationNodeCache> &node_cache_ptr :
@@ -1555,11 +1437,10 @@ class NodesModifierSimulationParams : public nodes::GeoNodesSimulationParams {
         }
       }
     }
-    /* Drop Time Shift snapshots when the simulation itself was invalidated, not when the
-     * user only edited nodes downstream of Simulation Output. */
+    /* What Time Shift nodes remember comes from the simulation that is discarded here. Edits
+     * behind the simulation output keep it. */
     if (nmd.runtime->time_shift_cache && (any_sim_invalidated || any_sim_reset)) {
-      std::lock_guard lock{nmd.runtime->time_shift_cache->mutex};
-      time_shift_cache_wipe_store(*nmd.runtime->time_shift_cache);
+      time_shift::wipe(*nmd.runtime->time_shift_cache);
     }
   }
 
@@ -1643,12 +1524,12 @@ class NodesModifierSimulationParams : public nodes::GeoNodesSimulationParams {
         *static_cast<const NodeGeometrySimulationOutput *>(simulation_output_node->storage);
     const bool is_bake_requested = modifier_cache_->requested_bakes.contains(zone_id);
     const IndexRange sim_frame_range = *sim_frame_range_opt;
-    bool time_shift_warmup_active = false;
-    if (nmd_.runtime->time_shift_cache) {
-      std::lock_guard lock{nmd_.runtime->time_shift_cache->mutex};
-      time_shift_warmup_active = nmd_.runtime->time_shift_cache->simulation_warmup_active;
-    }
-    const int frame_cache_limit = (is_bake_requested || time_shift_warmup_active) ?
+    const bool time_shift_warmup_active = time_shift_fill_;
+    /* Nothing is removed while other frames are evaluated for Time Shift nodes, the simulation
+     * has to find the state of the frame it returns to. */
+    const int frame_cache_limit = time_shift_warmup_active ?
+                                      std::numeric_limits<int>::max() :
+                                      is_bake_requested ?
                                       int(sim_frame_range.size()) :
                                       std::max(simulation_output_storage.cache_limit, 1);
     const float memory_cache_limit_mib = std::max(simulation_output_storage.cache_memory_limit,
@@ -2075,269 +1956,6 @@ class NodesModifierBakeParams : public nodes::GeoNodesBakeParams {
   }
 };
 
-class NodesModifierTimeShiftParams : public nodes::GeoNodesTimeShiftParams {
- private:
-  SubFrame current_frame_;
-  NodesModifierData &nmd_;
-  const ModifierEvalContext &ctx_;
-  std::shared_ptr<NodesModifierTimeShiftCache> cache_;
-  bool simulation_warmup_active_ = false;
-  bool background_cache_active_ = false;
-
- public:
-  NodesModifierTimeShiftParams(NodesModifierData &nmd, const ModifierEvalContext &ctx)
-      : current_frame_(DEG_get_ctime(ctx.depsgraph)),
-        nmd_(nmd),
-        ctx_(ctx),
-        cache_(nmd.runtime->time_shift_cache)
-  {
-    if (cache_) {
-      std::lock_guard lock{cache_->mutex};
-      simulation_warmup_active_ = cache_->simulation_warmup_active;
-      background_cache_active_ = cache_->background_cache_active;
-      /* Topology change invalidates Time Shift's own cache (Frame value changes do not). */
-      const uint32_t topology_hash = nmd.node_group ? nmd.node_group->runtime->output_topology_hash :
-                                                      0;
-      if (topology_hash != 0 && cache_->output_topology_hash != 0 &&
-          cache_->output_topology_hash != topology_hash)
-      {
-        time_shift_cache_wipe_store(*cache_);
-        cache_->output_topology_hash = topology_hash;
-        cache_->frame_socket_scrub_active = false;
-        cache_->last_frame_socket_values.clear();
-      }
-      else if (cache_->output_topology_hash == 0) {
-        cache_->output_topology_hash = topology_hash;
-      }
-    }
-  }
-
-  bool evaluate(const int /*id*/,
-                const int frame,
-                bke::GeometrySet current_geometry,
-                bke::GeometrySet &r_shifted_geometry,
-                int &r_missing_frame) const override
-  {
-    /* Frame < 1 poisons the absolute map and crashes simulation resume (negative scene cook). */
-    constexpr int min_frame = 1;
-    const int target_frame = std::max(frame, min_frame);
-
-    if (!cache_) {
-      r_shifted_geometry = std::move(current_geometry);
-      return current_frame_ == SubFrame(target_frame);
-    }
-
-    const int evaluated_frame = current_frame_.frame();
-    const bool user_modified_flag = (nmd_.modifier.flag & eModifierFlag_UserModified) != 0;
-
-    /*
-     * FAST PATH (viewport orbit / redraw / depsgraph re-run with cache already filled):
-     * Do NOT ensure_owns_all_data, do NOT hash all geometry, do NOT rewrite the store.
-     * Those used to run every evaluate and made a single viewport crawl even when the absolute
-     * frame was already cached.
-     *
-     * Invalidation on real upstream edits is handled by:
-     * - modifyGeometry pre-pass (UserModified / topology / rewind wipe)
-     * - the slow path below when UserModified is set or we must refresh the live-frame baseline
-     */
-    {
-      std::lock_guard lock{cache_->mutex};
-      cache_->requested_frame = target_frame;
-
-      const bool frame_scrub = cache_->frame_socket_scrub_active;
-      const bool user_edit = user_modified_flag && !frame_scrub;
-      const bool in_fill = cache_->background_cache_active || cache_->simulation_warmup_active;
-      /* Cook of a frame other than the playhead: do not satisfy it from the Frame socket.
-       * That socket was evaluated at the playhead; during the cook it follows the new Scene Time. */
-      const bool capturing = cache_->fill_viewer_frame.has_value() &&
-                             evaluated_frame != *cache_->fill_viewer_frame;
-
-      if (!capturing && !user_edit && !in_fill && target_frame != evaluated_frame) {
-        if (const bke::GeometrySet *hit = cache_->geometries_by_frame.lookup_ptr(target_frame)) {
-          r_shifted_geometry = time_shift_cache_copy_frame(*hit);
-          return true;
-        }
-      }
-
-      /* Live scene frame equals requested absolute frame: output live geometry. */
-      if (!capturing && evaluated_frame == target_frame && evaluated_frame >= min_frame &&
-          !user_edit)
-      {
-        if (const bke::GeometrySet *hit = cache_->geometries_by_frame.lookup_ptr(evaluated_frame)) {
-          /* Prefer cached snapshot when present so we skip ensure_owns on steady redraws. */
-          r_shifted_geometry = time_shift_cache_copy_frame(*hit);
-          return true;
-        }
-        /* First time at this frame: fall through to store (needs ownership). */
-      }
-    }
-
-    /* ---- SLOW PATH: store / invalidate / schedule fill ---- */
-    current_geometry.ensure_owns_all_data();
-    const uint64_t live_token = time_shift_geometry_content_token(current_geometry);
-
-    {
-      std::lock_guard lock{cache_->mutex};
-      cache_->requested_frame = target_frame;
-
-      const bool frame_scrub = cache_->frame_socket_scrub_active;
-      const bool user_edit = user_modified_flag && !frame_scrub;
-
-      /* Purge illegal keys rarely (only on slow path). */
-      Vector<int> bad_keys;
-      for (const int key : cache_->geometries_by_frame.keys()) {
-        if (key < min_frame) {
-          bad_keys.append(key);
-        }
-      }
-      for (const int key : bad_keys) {
-        cache_->geometries_by_frame.remove(key);
-        cache_->content_token_by_frame.remove(key);
-      }
-
-      /* Filling some absolute frame other than the playhead that started the fill.
-       * Frame was already sampled at that playhead (Scene Time ± offset). Applying the socket
-       * again here re-reads Scene Time at the cooked frame and shifts a second time, so the
-       * stored/returned geometry is not the absolute frame we jumped to. Pass the upstream
-       * geometry through and record it under the scene frame actually being cooked. */
-      /* fill_viewer_frame alone: a token wipe clears the warmup flags but must not
-       * re-enable the Frame socket until the fill's playhead is restored. */
-      const bool capturing = cache_->fill_viewer_frame.has_value() &&
-                             evaluated_frame != *cache_->fill_viewer_frame;
-      if (capturing && evaluated_frame >= min_frame) {
-        cache_->requested_frame = evaluated_frame;
-        time_shift_cache_store_frame(*cache_, evaluated_frame, current_geometry, live_token);
-        r_shifted_geometry = time_shift_cache_copy_frame(
-            *cache_->geometries_by_frame.lookup_ptr(evaluated_frame));
-        return true;
-      }
-
-      /* A fill is still on the stack (including the playhead restore). A token mismatch
-       * here is the cook touching the live frame, not an upstream edit. Wiping the whole
-       * store would drop absolute frames just read out of the simulation cache. */
-      const bool in_fill = cache_->fill_viewer_frame.has_value() ||
-                           cache_->background_cache_active || cache_->simulation_warmup_active;
-      if (!in_fill && evaluated_frame >= min_frame) {
-        if (const uint64_t *cached_token = cache_->content_token_by_frame.lookup_ptr(
-                evaluated_frame))
-        {
-          if (*cached_token != live_token) {
-            /* Live upstream at this scene frame disagrees with what we stored → drop all. */
-            time_shift_cache_wipe_store(*cache_);
-          }
-        }
-        else if (user_edit && !cache_->geometries_by_frame.is_empty()) {
-          time_shift_cache_wipe_store(*cache_);
-        }
-
-        /* Only rewrite store when missing or after wipe (avoid GeometrySet copy every redraw). */
-        if (!cache_->geometries_by_frame.contains(evaluated_frame) ||
-            !cache_->content_token_by_frame.contains(evaluated_frame))
-        {
-          time_shift_cache_store_frame(*cache_, evaluated_frame, current_geometry, live_token);
-        }
-      }
-
-      if (evaluated_frame == target_frame && evaluated_frame >= min_frame) {
-        r_shifted_geometry = std::move(current_geometry);
-        return true;
-      }
-
-      if (const bke::GeometrySet *target_geometry = cache_->geometries_by_frame.lookup_ptr(
-              target_frame))
-      {
-        r_shifted_geometry = time_shift_cache_copy_frame(*target_geometry);
-        return true;
-      }
-    }
-
-    r_shifted_geometry = {};
-    r_missing_frame = target_frame;
-
-    Main *bmain = DEG_get_bmain(ctx_.depsgraph);
-    Scene *scene = DEG_get_input_scene(ctx_.depsgraph);
-    if (!bmain || !scene || !ctx_.object) {
-      return false;
-    }
-    wmWindowManager *wm = static_cast<wmWindowManager *>(bmain->wm.first());
-    wmWindow *window = wm ? static_cast<wmWindow *>(wm->windows.first()) : nullptr;
-    if (!(wm && DEG_is_active(ctx_.depsgraph) && !G.is_rendering)) {
-      return false;
-    }
-    Object *object_orig = DEG_get_original(ctx_.object);
-    if (!object_orig) {
-      return false;
-    }
-    std::shared_ptr<NodesModifierTimeShiftCache> ts_cache = cache_;
-    NodesModifierData *nmd_ptr = &nmd_;
-    {
-      std::lock_guard lock{ts_cache->mutex};
-      if (ts_cache->background_cache_active || ts_cache->simulation_warmup_active) {
-        return false;
-      }
-      if (ts_cache->ensure_in_flight_frame.has_value() &&
-          *ts_cache->ensure_in_flight_frame == target_frame)
-      {
-        return false;
-      }
-      if (const bke::GeometrySet *hit = ts_cache->geometries_by_frame.lookup_ptr(target_frame)) {
-        r_shifted_geometry = time_shift_cache_copy_frame(*hit);
-        return true;
-      }
-      ts_cache->background_cache_active = true;
-      ts_cache->ensure_in_flight_frame = target_frame;
-      ts_cache->requested_frame = target_frame;
-      ts_cache->warmup_target_frame = target_frame;
-    }
-    deg::sync_writeback::add(
-        *ctx_.depsgraph,
-        [wm,
-         window,
-         bmain,
-         depsgraph = ctx_.depsgraph,
-         scene,
-         object = object_orig,
-         nmd_ptr,
-         ts_cache,
-         request_frame = target_frame]() {
-          auto clear_inflight = [&]() {
-            if (!ts_cache) {
-              return;
-            }
-            std::lock_guard lock{ts_cache->mutex};
-            ts_cache->background_cache_active = false;
-            ts_cache->simulation_warmup_active = false;
-            ts_cache->ignore_user_modified_during_warmup = false;
-            ts_cache->warmup_target_frame = std::nullopt;
-            ts_cache->ensure_in_flight_frame = std::nullopt;
-          };
-          if (!object || !nmd_ptr || !ts_cache || !depsgraph || !scene || !wm) {
-            clear_inflight();
-            return;
-          }
-          NodesModifierData *nmd = nmd_ptr;
-          for (ModifierData &md : object->modifiers) {
-            if (md.type != eModifierType_Nodes) {
-              continue;
-            }
-            auto &candidate = reinterpret_cast<NodesModifierData &>(md);
-            if (candidate.runtime && candidate.runtime->time_shift_cache == ts_cache) {
-              nmd = &candidate;
-              break;
-            }
-          }
-          if (nmd && nmd->runtime) {
-            ed::object::time_shift::cache_ensure(
-                *wm, window, *bmain, *depsgraph, *scene, *object, *nmd, request_frame);
-          }
-          else {
-            clear_inflight();
-          }
-        });
-    return false;
-  }
-};
-
 static void add_missing_data_block_mappings(
     NodesModifierBake &bake,
     const Span<bake::BakeDataBlockID> missing,
@@ -2632,87 +2250,7 @@ static void modifyGeometry(ModifierData *md,
   auto eval_log = std::make_unique<nodes::eval_log::NodesEvalLog>();
   call_data.modifier_data = &modifier_eval_data;
 
-  /* Time Shift store invalidation (before SimulationParams / tree eval):
-   * - Topology change → wipe ALL frames.
-   * - UserModified (any node/mesh edit except pure Time Shift Frame scrub this eval) → wipe.
-   * - Rewind playhead to sim start → wipe (edge-triggered; last_scene_frame ignores fill).
-   * Primary correctness path is inside TimeShiftParams::evaluate: live upstream geometry from
-   * geo-nodes re-eval is fingerprinted; mismatch vs stored token wipes the whole store. */
-  if (nmd->runtime && nmd->runtime->time_shift_cache && nmd->node_group) {
-    auto &ts_cache = *nmd->runtime->time_shift_cache;
-    std::lock_guard lock{ts_cache.mutex};
-    const uint32_t topology_hash = nmd->node_group->runtime->output_topology_hash;
-    const int scene_frame = int(std::floor(DEG_get_ctime(ctx->depsgraph)));
-
-    if (ts_cache.output_topology_hash != 0 && ts_cache.output_topology_hash != topology_hash) {
-      ts_cache.frame_socket_scrub_active = false;
-      ts_cache.last_frame_socket_values.clear();
-      time_shift_cache_wipe_store(ts_cache);
-      ts_cache.output_topology_hash = topology_hash;
-    }
-    else {
-      if (ts_cache.output_topology_hash == 0) {
-        ts_cache.output_topology_hash = topology_hash;
-      }
-      nmd->node_group->ensure_topology_cache();
-      Vector<int> socket_frames;
-      for (const bNode *node : nmd->node_group->all_nodes()) {
-        if (node->type_legacy != GEO_NODE_TIME_SHIFT) {
-          continue;
-        }
-        const bNodeSocket *socket = bke::node_find_socket(*node, SOCK_IN, "Frame"_ustr);
-        if (!socket || socket->type != SOCK_INT || socket->is_logically_linked()) {
-          continue;
-        }
-        socket_frames.append(std::max(1, socket->default_value_typed<bNodeSocketValueInt>()->value));
-      }
-      std::sort(socket_frames.begin(), socket_frames.end());
-
-      const bool frame_values_changed = !socket_frames.is_empty() &&
-                                        !ts_cache.last_frame_socket_values.is_empty() &&
-                                        socket_frames != ts_cache.last_frame_socket_values;
-      const bool in_warmup = ts_cache.simulation_warmup_active || ts_cache.background_cache_active;
-      const bool user_modified = (nmd->modifier.flag & eModifierFlag_UserModified) != 0;
-
-      const Scene *scene = DEG_get_input_scene(ctx->depsgraph);
-      int sim_start_frame = scene ? scene->r.sfra : 1;
-      if (scene && (scene->flag & SCE_CUSTOM_SIMULATION_RANGE)) {
-        sim_start_frame = std::min(sim_start_frame, scene->simulation_frame_start);
-      }
-      for (const NodesModifierBake &bake : Span{nmd->bakes, nmd->bakes_num}) {
-        if (bake.flag & NODES_MODIFIER_BAKE_CUSTOM_SIMULATION_FRAME_RANGE) {
-          sim_start_frame = std::min(sim_start_frame, bake.frame_start);
-        }
-      }
-      sim_start_frame = std::max(sim_start_frame, 1);
-
-      /* Mark Frame-scrub for this eval only (before SimulationParams reads it). */
-      ts_cache.frame_socket_scrub_active = frame_values_changed;
-
-      if (!in_warmup) {
-        const bool rewound_to_start = ts_cache.last_scene_frame.has_value() &&
-                                      *ts_cache.last_scene_frame > sim_start_frame &&
-                                      scene_frame <= sim_start_frame;
-        const bool jumped_back_to_start = ts_cache.last_scene_frame.has_value() &&
-                                          scene_frame < *ts_cache.last_scene_frame &&
-                                          scene_frame <= sim_start_frame;
-        if (rewound_to_start || jumped_back_to_start) {
-          time_shift_cache_wipe_store(ts_cache);
-        }
-        ts_cache.last_scene_frame = scene_frame;
-      }
-
-      /* Any real user edit of the tree/object — not "only dragged Time Shift Frame". */
-      if (user_modified && !in_warmup && !frame_values_changed) {
-        time_shift_cache_wipe_store(ts_cache);
-      }
-
-      if (!socket_frames.is_empty()) {
-        ts_cache.last_frame_socket_values = socket_frames;
-      }
-    }
-  }
-  NodesModifierTimeShiftParams time_shift_params{*nmd, *ctx};
+  time_shift::ModifierParams time_shift_params{*nmd, *ctx};
   call_data.time_shift_params = &time_shift_params;
   NodesModifierSimulationParams simulation_params(*nmd, *ctx);
   call_data.simulation_params = &simulation_params;
@@ -2749,26 +2287,72 @@ static void modifyGeometry(ModifierData *md,
   output_cache_params.self_object = ctx->object;
   output_cache_params.depsgraph = ctx->depsgraph;
   output_cache_params.ctime = DEG_get_ctime(ctx->depsgraph);
+  if (const uint64_t revision = time_shift_params.revision()) {
+    /* What a Time Shift node outputs at a frame changes when the frames it asked for have been
+     * computed. The time is only used to tell evaluations apart, so that is mixed into it. */
+    const uint32_t time_hash = uint32_t(get_default_hash(output_cache_params.ctime, revision));
+    memcpy(&output_cache_params.ctime, &time_hash, sizeof(float));
+  }
   output_cache_params.properties = nmd->modifier.system_properties;
+  /* While the tree is being worked on, many evaluations are triggered by changes that do not
+   * reach the Group Output node: the viewer is moved to another node, a node is added that is
+   * not connected yet, a node that only the viewer uses is edited. Those keep the previous
+   * result and only compute what the side-effect nodes need. */
+  const bool has_side_effect_nodes = !side_effect_nodes.nodes_by_context.is_empty();
+  const bool track_output = logging_enabled(ctx) &&
+                            (has_side_effect_nodes || node_tree_is_open_in_editor(*nmd_orig, *ctx));
+  output_cache_params.track_root_output = track_output;
   /* Kept alive here: the viewport and a render may evaluate this modifier concurrently, each
    * with its own snapshot. */
   const std::shared_ptr<const nodes::GeometryNodesOutputCacheEvalState> output_cache_eval =
       nmd->runtime->output_cache->prepare_for_eval(output_cache_params);
-  if (output_cache_eval) {
+  if (output_cache_eval && nodes::GeometryNodesOutputCache::has_cached_nodes(*output_cache_eval)) {
     call_data.output_cache = nmd->runtime->output_cache.get();
     call_data.output_cache_eval = output_cache_eval.get();
   }
 
-  geometry_set = nodes::execute_geometry_nodes_on_geometry(
-      tree, properties_ptr, modifier_compute_context, call_data, std::move(geometry_set));
+  uint64_t output_token = 0;
+  if (track_output && output_cache_eval) {
+    output_token = nodes::GeometryNodesOutputCache::root_output_token(*output_cache_eval, tree);
+    if (output_token != 0) {
+      output_token = get_default_hash(
+                         output_token, int(DEG_get_mode(ctx->depsgraph)), int(ctx->flag)) |
+                     1;
+    }
+  }
+  bke::GeometrySet previous_output;
+  const bool reuse_output = output_token != 0 &&
+                            nmd->runtime->output_cache->restore_root_output(output_token,
+                                                                            previous_output);
+  if (reuse_output) {
+    if (has_side_effect_nodes) {
+      nodes::execute_geometry_nodes_on_geometry(
+          tree, properties_ptr, modifier_compute_context, call_data, std::move(geometry_set), true);
+    }
+    geometry_set = std::move(previous_output);
+  }
+  else {
+    geometry_set = nodes::execute_geometry_nodes_on_geometry(
+        tree, properties_ptr, modifier_compute_context, call_data, std::move(geometry_set));
+    /* Not when a Time Shift node passed its input through, that is not the final result. */
+    if (output_token != 0 && !time_shift_params.had_miss()) {
+      nmd->runtime->output_cache->store_root_output(output_token, geometry_set);
+    }
+    else {
+      nmd->runtime->output_cache->clear_root_output();
+    }
+  }
 
   if (logging_enabled(ctx)) {
-    /* Re-attribute multi-frame Time Shift / Simulation fill cost that ran outside this eval. */
     if (nmd->runtime && nmd->runtime->time_shift_cache && call_data.eval_log) {
-      time_shift_inject_attributed_timings(
+      time_shift_log_fill_times(
           *call_data.eval_log, *nmd->runtime->time_shift_cache, tree, modifier_compute_context);
     }
-    if (nmd_orig->runtime->eval_log) {
+    if (reuse_output) {
+      /* Only the side-effect nodes were evaluated. Everything else is as logged before. */
+      eval_log->set_base_log(nmd_orig->runtime->eval_log);
+    }
+    else if (nmd_orig->runtime->eval_log) {
       eval_log->inherit_missing_execution_times(*nmd_orig->runtime->eval_log);
     }
     nmd_orig->runtime->eval_log = std::move(eval_log);

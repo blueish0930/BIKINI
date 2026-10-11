@@ -43,6 +43,97 @@ using fn::GField;
 class LazyFunctionForForeachGeometryElementZone;
 struct ForeachGeometryElementEvalStorage;
 
+/**
+ * Name of the anonymous attribute that holds the values of a main or generation item. It only
+ * depends on where the zone is evaluated, not on what the iterations compute.
+ */
+static std::string foreach_item_attribute_name(const GeoNodesUserData &user_data,
+                                               const bNode &output_bnode,
+                                               const int item_identifier)
+{
+  const char *self_name = "";
+  if (const Object *self_object = user_data.call_data->self_object()) {
+    self_name = self_object->id.name;
+  }
+  else if (user_data.call_data->root_ntree) {
+    self_name = user_data.call_data->root_ntree->id.name;
+  }
+  return bke::hash_to_anonymous_attribute_name(
+      self_name, user_data.compute_context->hash(), output_bnode.identifier, item_identifier);
+}
+
+/**
+ * Passed to the graph that runs the iterations. Outputs the zone has provided itself already
+ * (see #LazyFunctionForForeachGeometryElementZone::output_attribute_fields) read as computed and
+ * unused there, so the graph neither computes nor writes them a second time.
+ */
+class ForeachAttributeFieldOutputsParams final : public lf::Params {
+ private:
+  lf::Params &base_;
+  Span<bool> is_provided_output_;
+  /** Receives a value the graph writes although the output reads as unused. */
+  Vector<std::unique_ptr<SocketValueVariant>> discarded_;
+  Mutex discarded_mutex_;
+
+ public:
+  ForeachAttributeFieldOutputsParams(const LazyFunction &fn,
+                                     lf::Params &base,
+                                     const Span<bool> is_provided_output)
+      : Params(fn, true), base_(base), is_provided_output_(is_provided_output)
+  {
+  }
+
+  void *try_get_input_data_ptr_impl(const int index) const override
+  {
+    return base_.try_get_input_data_ptr(index);
+  }
+  void *try_get_input_data_ptr_or_request_impl(const int index) override
+  {
+    return base_.try_get_input_data_ptr_or_request(index);
+  }
+  void *get_output_data_ptr_impl(const int index) override
+  {
+    if (is_provided_output_[index]) {
+      /* Not expected: the executor checks the usage first. Hand out valid storage anyway. */
+      std::lock_guard lock{discarded_mutex_};
+      discarded_.append(std::make_unique<SocketValueVariant>());
+      SocketValueVariant *value = discarded_.last().get();
+      std::destroy_at(value);
+      return value;
+    }
+    return base_.get_output_data_ptr(index);
+  }
+  void output_set_impl(const int index) override
+  {
+    if (is_provided_output_[index]) {
+      return;
+    }
+    base_.output_set(index);
+  }
+  bool output_was_set_impl(const int index) const override
+  {
+    if (is_provided_output_[index]) {
+      return true;
+    }
+    return base_.output_was_set(index);
+  }
+  lf::ValueUsage get_output_usage_impl(const int index) const override
+  {
+    if (is_provided_output_[index]) {
+      return lf::ValueUsage::Unused;
+    }
+    return base_.get_output_usage(index);
+  }
+  void set_input_unused_impl(const int index) override
+  {
+    base_.set_input_unused(index);
+  }
+  bool try_enable_multi_threading_impl() override
+  {
+    return base_.try_enable_multi_threading();
+  }
+};
+
 struct ForeachElementComponentID {
   GeometryComponent::Type component_type;
   AttrDomain domain;
@@ -267,6 +358,17 @@ class LazyFunctionForForeachGeometryElementZone : public LazyFunction {
     ItemIndices generation;
   } indices_;
 
+  /** An output that is a field reading an anonymous attribute the zone creates. */
+  struct AttributeFieldOutput {
+    int lf_index;
+    int bsocket_index;
+    int item_identifier;
+    const CPPType *type;
+  };
+  Vector<AttributeFieldOutput> attribute_field_outputs_;
+  /** True for the lazy-function outputs listed in #attribute_field_outputs_. */
+  Array<bool> is_attribute_field_output_;
+
   friend LazyFunctionForReduceForeachGeometryElement;
 
  public:
@@ -320,6 +422,69 @@ class LazyFunctionForForeachGeometryElementZone : public LazyFunction {
                                                                     generation_items_num);
     indices_.generation.bsocket_inner = IndexRange::from_begin_size(1 + main_items_num,
                                                                     generation_items_num);
+
+    is_attribute_field_output_.reinitialize(outputs_.size());
+    is_attribute_field_output_.fill(false);
+    const auto add_attribute_field_output = [&](const int lf_outer,
+                                                const int bsocket_outer,
+                                                const int item_identifier,
+                                                const eNodeSocketDatatype socket_type) {
+      const CPPType *type = bke::socket_type_to_geo_nodes_base_cpp_type(socket_type);
+      if (type == nullptr) {
+        return;
+      }
+      const int lf_index = zone_info.indices.outputs.main[lf_outer];
+      attribute_field_outputs_.append({lf_index, bsocket_outer, item_identifier, type});
+      is_attribute_field_output_[lf_index] = true;
+    };
+    for (const int item_i : IndexRange(main_items_num)) {
+      const NodeForeachGeometryElementMainItem &item = node_storage.main_items.items[item_i];
+      add_attribute_field_output(indices_.main.lf_outer[item_i],
+                                 indices_.main.bsocket_outer[item_i],
+                                 item.identifier,
+                                 eNodeSocketDatatype(item.socket_type));
+    }
+    /* Generation items in front of the first geometry belong to no geometry and output a
+     * default value instead. */
+    bool geometry_item_found = false;
+    for (const int item_i : IndexRange(generation_items_num)) {
+      const NodeForeachGeometryElementGenerationItem &item =
+          node_storage.generation_items.items[item_i];
+      if (item.socket_type == SOCK_GEOMETRY) {
+        geometry_item_found = true;
+        continue;
+      }
+      if (geometry_item_found) {
+        add_attribute_field_output(indices_.generation.lf_outer[item_i],
+                                   indices_.generation.bsocket_outer[item_i],
+                                   item.identifier,
+                                   eNodeSocketDatatype(item.socket_type));
+      }
+    }
+  }
+
+  /**
+   * The field outputs only name an anonymous attribute that the zone puts on its output
+   * geometries, and that name is known without running a single iteration. Providing them right
+   * away means a consumer that needs just the field, or wants to know which attribute it reads,
+   * does not make the zone iterate. That matters when the geometry comes from an output cache
+   * behind the zone.
+   */
+  void output_attribute_fields(lf::Params &params, const GeoNodesUserData &user_data) const
+  {
+    for (const AttributeFieldOutput &output : attribute_field_outputs_) {
+      if (params.output_was_set(output.lf_index) ||
+          params.get_output_usage(output.lf_index) == lf::ValueUsage::Unused)
+      {
+        continue;
+      }
+      auto attribute_field = bke::AttributeFieldInput::from(
+          foreach_item_attribute_name(user_data, output_bnode_, output.item_identifier),
+          *output.type,
+          make_anonymous_attribute_socket_inspection_string(
+              output_bnode_.output_socket(output.bsocket_index)));
+      params.set_output(output.lf_index, SocketValueVariant::from(std::move(attribute_field)));
+    }
   }
 
   void *init_storage(LinearAllocator<> &allocator) const override
@@ -353,6 +518,8 @@ class LazyFunctionForForeachGeometryElementZone : public LazyFunction {
       return !iterations_with_side_effects.is_empty();
     }();
 
+    this->output_attribute_fields(params, user_data);
+
     auto &eval_storage = *static_cast<ForeachGeometryElementEvalStorage *>(context.storage);
     const OutputCacheSite cache_site{&btree_, &output_bnode_, zone_.input_node()};
     OutputCacheSession &cache_session = eval_storage.cache_session;
@@ -366,6 +533,21 @@ class LazyFunctionForForeachGeometryElementZone : public LazyFunction {
       case OutputCacheLookup::Miss:
       case OutputCacheLookup::Disabled:
         break;
+    }
+
+    if (!eval_storage.graph_executor && !zone_has_inner_side_effects) {
+      /* Nothing besides the attribute fields may be needed so far. Don't set up the iterations
+       * before something asks for their result. */
+      bool any_output_missing = false;
+      for (const int i : outputs_.index_range()) {
+        if (params.get_output_usage(i) == lf::ValueUsage::Used && !params.output_was_set(i)) {
+          any_output_missing = true;
+          break;
+        }
+      }
+      if (!any_output_missing) {
+        return;
+      }
     }
 
     /* Main inputs are Maybe so a cache hit can skip the body. Vanilla For Each marked them Used;
@@ -409,8 +591,10 @@ class LazyFunctionForForeachGeometryElementZone : public LazyFunction {
     lf::Context eval_graph_context{
         eval_storage.graph_executor_storage, context.user_data, context.local_user_data};
 
+    /* The attribute fields were provided above. */
+    ForeachAttributeFieldOutputsParams graph_params{*this, params, is_attribute_field_output_};
     if (cache_session.status == OutputCacheSession::Status::Miss) {
-      GeometryNodesOutputCaptureParams capture{*this, params};
+      GeometryNodesOutputCaptureParams capture{*this, graph_params};
       eval_storage.graph_executor->execute(capture, eval_graph_context);
       eval_storage.accumulated_cook_ns += node_timer.elapsed_ns();
       int64_t frozen_ns = eval_storage.accumulated_cook_ns;
@@ -418,8 +602,7 @@ class LazyFunctionForForeachGeometryElementZone : public LazyFunction {
           context, params, cache_site, cache_session, std::move(capture.captured()), frozen_ns);
     }
     else {
-      /* Cache off: identical to stock For Each (no wrapper). */
-      eval_storage.graph_executor->execute(params, eval_graph_context);
+      eval_storage.graph_executor->execute(graph_params, eval_graph_context);
       eval_storage.accumulated_cook_ns += node_timer.elapsed_ns();
     }
   }
@@ -952,18 +1135,8 @@ void LazyFunctionForReduceForeachGeometryElement::handle_main_items_and_geometry
     const bke::AttrType cd_type = bke::cpp_type_to_attribute_type(*base_cpp_type);
 
     /* Compute output attribute name for this item. */
-    const char *self_name = "";
-    if (const Object *self_object = user_data.call_data->self_object()) {
-      self_name = self_object->id.name;
-    }
-    else if (user_data.call_data->root_ntree) {
-      self_name = user_data.call_data->root_ntree->id.name;
-    }
-    const std::string attribute_name = bke::hash_to_anonymous_attribute_name(
-        self_name,
-        user_data.compute_context->hash(),
-        parent_.output_bnode_.identifier,
-        item.identifier);
+    const std::string attribute_name = foreach_item_attribute_name(
+        user_data, parent_.output_bnode_, item.identifier);
 
     /* Create a new output attribute for the current item on each iteration component. */
     for (const ForeachElementComponent &component_info : eval_storage_.components) {
@@ -1105,18 +1278,8 @@ void LazyFunctionForReduceForeachGeometryElement::handle_generation_items_group(
     const int item_i = generation_items_range[i];
     const NodeForeachGeometryElementGenerationItem &item =
         node_storage.generation_items.items[item_i];
-    const char *self_name = "";
-    if (const Object *self_object = user_data.call_data->self_object()) {
-      self_name = self_object->id.name;
-    }
-    else if (user_data.call_data->root_ntree) {
-      self_name = user_data.call_data->root_ntree->id.name;
-    }
-    attribute_names[i] = bke::hash_to_anonymous_attribute_name(
-        self_name,
-        user_data.compute_context->hash(),
-        parent_.output_bnode_.identifier,
-        item.identifier);
+    attribute_names[i] = foreach_item_attribute_name(
+        user_data, parent_.output_bnode_, item.identifier);
   }
 
   for (const ForeachElementComponent &component_info : eval_storage_.components) {

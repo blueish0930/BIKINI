@@ -1735,9 +1735,8 @@ TEST(nodes_vex, topology_geo_index_builtins_compile)
       "int cp = cornerpoint(0, 0);\n"
       "int[] ce = corneredges(0, 0);\n"
       "int oc = offsetcorner(0, 0, 1);\n"
-      "int fi, ord;\n"
-      "cornerface(0, 0, fi, ord);\n"
-      "int[] cf = cornerface(0, 0);\n"
+      "int fi = cornerface(0, 0);\n"
+      "int ord = cornerorder(0, 0);\n"
       "int cidx, corder;\n"
       "pointcurve(0, i@index, cidx, corder);\n"
       "int[] cps = curvepoints(0, 0);\n");

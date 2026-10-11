@@ -22,6 +22,17 @@
  *
  * Besides the token, an entry remembers which anonymous attributes its consumers asked for. A
  * consumer that needs more than what was cooked misses.
+ *
+ * What consumers ask for can itself depend on values in front of the cached node: the
+ * attributes to propagate are partly read from the fields a value references (zone outputs,
+ * group inputs). Those names are remembered per socket under the same kind of state token, so
+ * asking for them does not compute the value again.
+ *
+ * Independent of the per-node toggle, the result of the whole modifier is kept while its tree
+ * is being edited (#store_root_output). An evaluation that finds nothing changed in front of
+ * the Group Output node returns it and only computes what viewers and other side-effect nodes
+ * need. That covers moving the viewer, adding nodes that are not connected to the output, and
+ * editing nodes that only a viewer uses.
  */
 
 #include <memory>
@@ -70,6 +81,20 @@ uint64_t geometry_nodes_output_cache_hash_node_inputs(const bNode &node);
 
 /** Record a node whose output may have changed (property, socket, link target, …). */
 void geometry_nodes_output_cache_tag_node(bNodeTree *ntree, const bNode *node);
+
+/**
+ * Record a node whose incoming links were edited. Unlike #geometry_nodes_output_cache_tag_node,
+ * this only counts as a change if the node ends up reading from other sockets than before:
+ * inserting or dissolving a reroute on a wire changes links, but not what flows through them.
+ */
+void geometry_nodes_output_cache_tag_node_links(bNodeTree *ntree, const bNode *node);
+
+/**
+ * Turn the nodes recorded by #geometry_nodes_output_cache_tag_node_links into regular dirty
+ * seeds where their inputs really changed. Call during the tree update, before the seeds are
+ * read. Returns true when links were edited that left the inputs of a node as they were.
+ */
+bool geometry_nodes_output_cache_resolve_link_seeds(bNodeTree &ntree);
 
 /** Drop every cached entry for this node (delete, disable cache, or force recache). */
 void geometry_nodes_output_cache_discard_node(bNodeTree *ntree, const bNode *node);
@@ -208,6 +233,8 @@ class GeometryNodesOutputCache : NonCopyable, NonMovable {
     float ctime = 0.0f;
     /** Modifier input values (`ModifierData::system_properties`). */
     const IDProperty *properties = nullptr;
+    /** Build the state even when no node is cached, for #root_output_token. */
+    bool track_root_output = false;
   };
 
   /**
@@ -219,6 +246,21 @@ class GeometryNodesOutputCache : NonCopyable, NonMovable {
    */
   std::shared_ptr<const GeometryNodesOutputCacheEvalState> prepare_for_eval(
       const PrepareParams &params);
+
+  /** False when the state was only built for #root_output_token. */
+  static bool has_cached_nodes(const GeometryNodesOutputCacheEvalState &state);
+
+  /**
+   * Token of everything the outputs of the root tree depend on: the state of its Group Output
+   * node and the modifier settings. Zero when it cannot be told.
+   */
+  static uint64_t root_output_token(const GeometryNodesOutputCacheEvalState &state,
+                                    const bNodeTree &root_tree);
+
+  /** Get the result of the last evaluation of the whole tree if it was made in this state. */
+  bool restore_root_output(uint64_t token, bke::GeometrySet &r_geometry) const;
+  void store_root_output(uint64_t token, const bke::GeometrySet &geometry);
+  void clear_root_output();
 
   enum class Lookup {
     Miss,
@@ -257,8 +299,34 @@ class GeometryNodesOutputCache : NonCopyable, NonMovable {
 
   int debug_count_node(uint32_t tree_session_uid, int32_t node_id) const;
 
+  /** One socket value in one compute context whose referenced attributes are remembered. */
+  struct ReferencesKey {
+    uint32_t tree_session_uid = 0;
+    /** Node that outputs the value. -1 for an input of the tree. */
+    int32_t node_id = 0;
+    /** Index of the output socket in the node, or of the tree input. */
+    int32_t index = 0;
+    ComputeContextHash context_hash;
+
+    uint64_t hash() const
+    {
+      return get_default_hash(
+          get_default_hash(tree_session_uid, node_id, index), context_hash.v1, context_hash.v2);
+    }
+    friend bool operator==(const ReferencesKey &a, const ReferencesKey &b) = default;
+  };
+
+  /** Returns false when nothing is known for this state of the value. */
+  bool lookup_references(const ReferencesKey &key,
+                         uint64_t state,
+                         std::shared_ptr<Set<std::string>> &r_names) const;
+  void store_references(const ReferencesKey &key,
+                        uint64_t state,
+                        std::shared_ptr<Set<std::string>> names);
+
   /** Memoized content hashes of shared arrays, see the implementation. */
   struct ContentHasher;
+  struct RootOutput;
 
  private:
   mutable Mutex mutex_;
@@ -267,9 +335,17 @@ class GeometryNodesOutputCache : NonCopyable, NonMovable {
   Map<NodeRef, int64_t> frozen_time_ns_;
   Map<NodeRef, uint64_t> frozen_time_state_;
 
+  struct ReferencesEntry {
+    uint64_t state = 0;
+    std::shared_ptr<Set<std::string>> names;
+  };
+  Map<ReferencesKey, ReferencesEntry> references_;
+
   /** Serializes #prepare_for_eval, which owns #content_hasher_. */
   Mutex prepare_mutex_;
   std::unique_ptr<ContentHasher> content_hasher_;
+
+  std::unique_ptr<RootOutput> root_output_;
 };
 
 /** Identifies the node whose outputs are cached at one call site. */
@@ -351,6 +427,33 @@ bool geometry_nodes_output_cache_store(const fn::lazy_function::Context &context
  */
 uint64_t geometry_nodes_output_cache_child_token(const GeoNodesUserData &user_data,
                                                  const OutputCacheSite &site);
+
+/** A socket value that is scanned for the anonymous attributes its fields reference. */
+struct OutputCacheReferenceSource {
+  /** Tree that owns the socket (the evaluated copy). */
+  const bNodeTree *tree = nullptr;
+  /** Node that outputs the value. Null for an input of #tree. */
+  const bNode *node = nullptr;
+  /** See #OutputCacheSite::sockets_node. */
+  const bNode *sockets_node = nullptr;
+  /** Index of the output socket in #node, or of the tree input. */
+  int index = 0;
+};
+
+/**
+ * Get the attribute names referenced by a socket value from an earlier evaluation in which the
+ * value was the same. Without this, a cached node behind a zone would compute the zone just to
+ * find out which attributes its consumers need.
+ *
+ * Returns false when the names are not known. The caller then scans the value and stores them.
+ */
+bool geometry_nodes_output_cache_restore_references(const GeoNodesUserData &user_data,
+                                                    const OutputCacheReferenceSource &source,
+                                                    std::shared_ptr<Set<std::string>> &r_names);
+
+void geometry_nodes_output_cache_store_references(const GeoNodesUserData &user_data,
+                                                  const OutputCacheReferenceSource &source,
+                                                  const std::shared_ptr<Set<std::string>> &names);
 
 /** Add outputs captured in a later execution pass to the ones captured before. */
 void geometry_nodes_output_cache_merge_captured(

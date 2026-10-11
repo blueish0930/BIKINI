@@ -3104,6 +3104,7 @@ struct Compiler {
       m.add("faceneighbours", int(Builtin::FaceNeighbours));
       m.add("facecorners", int(Builtin::FaceCorners));
       m.add("cornerface", int(Builtin::CornerFace));
+      m.add("cornerorder", int(Builtin::CornerOrder));
       m.add("corneredges", int(Builtin::EdgesOfCorner));
       m.add("cornerpoint", int(Builtin::VertexOfCorner));
       m.add("offsetcorner", int(Builtin::OffsetCornerInFace));
@@ -3709,11 +3710,6 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
           }
         }
         e->type = st;
-      }
-      else if (builtin == Builtin::CornerFace && argc >= 3) {
-        n_out = 2;
-        out_types[0] = Type::Int;
-        out_types[1] = Type::Int;
       }
       else if (builtin == Builtin::PointCurve && argc >= 3) {
         n_out = 2;
@@ -4936,7 +4932,6 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
         case Builtin::FaceEdges:
         case Builtin::FaceNeighbours:
         case Builtin::FaceCorners:
-        case Builtin::CornerFace:
         case Builtin::PointCurve:
         case Builtin::PointsOfCurve:
         case Builtin::NearestPoints:
@@ -4989,6 +4984,8 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
         case Builtin::EquivalentCorner:
         case Builtin::PrevEdge:
         case Builtin::NextEdge:
+        case Builtin::CornerFace:
+        case Builtin::CornerOrder:
         case Builtin::CurveOfPoint:
           e->type = Type::Int;
           break;
@@ -5129,7 +5126,7 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
           compile_lvalue_store(e->args[n_in + 1], out_types[1]);
           e->type = Type::Float;
         }
-        else if (ELEM(builtin, Builtin::CornerFace, Builtin::PointCurve)) {
+        else if (builtin == Builtin::PointCurve) {
           emit(Op::Dup);
           emit(Op::Dup);
           emit(Op::PushI, add_const_i(0));
@@ -6619,10 +6616,22 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
     return;
   }
   if (!shader_material) {
-    /* Straight-line stores (matrix/array/rand assigns) are faster as a C tile
-     * kernel than GPU context + SSBO round-trip. GPU is for per-point loops
-     * and Jacobi passes (peeled counted loops over point() of written attrs). */
-    if (!has_loop && !prog.array_pass_peeled) {
+    /* A counted attribute loop may already have become a batched CPU operation in
+     * optimize_program(). The source still contains a loop, but transferring its
+     * attributes to the GPU would only add overhead. */
+    bool has_runtime_loop = false;
+    for (const int pc : prog.code.index_range()) {
+      const Inst &inst = prog.code[pc];
+      if (ELEM(inst.op, Op::Jmp, Op::JmpIfFalse, Op::JmpIfTrue) && inst.imm <= pc) {
+        has_runtime_loop = true;
+        break;
+      }
+    }
+    /* A short optimized loop uses the batched CPU attribute kernel. Longer
+     * unrolled loops can still do substantial per-element work and benefit from
+     * the GPU, even though their bytecode no longer contains a back edge. */
+    const bool cheap_optimized_loop = !has_runtime_loop && prog.code.size() <= 8;
+    if ((!has_loop || cheap_optimized_loop) && !prog.array_pass_peeled) {
       return;
     }
     for (const AttrInfo &a : prog.attrs) {

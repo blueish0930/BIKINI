@@ -504,6 +504,12 @@ class NodeTreeLog {
   LinearAllocator<> allocator_;
   NodesEvalLog *root_log_;
   Vector<NodeTreeLogger *> tree_loggers_;
+  /**
+   * Loggers of the same context from an earlier evaluation, see #NodesEvalLog::set_base_log.
+   * They describe the nodes that #tree_loggers_ has nothing about.
+   */
+  Vector<NodeTreeLogger *> base_tree_loggers_;
+  std::optional<Set<int32_t>> evaluated_node_ids_;
   VectorSet<ComputeContextHash> children_hashes_;
   bool reduced_node_warnings_ = false;
   bool reduced_execution_times_ = false;
@@ -528,7 +534,9 @@ class NodeTreeLog {
   Set<int> evaluated_gizmo_nodes;
   Vector<std::string> all_layer_names;
 
-  NodeTreeLog(NodesEvalLog *root_log, Vector<NodeTreeLogger *> tree_loggers);
+  NodeTreeLog(NodesEvalLog *root_log,
+              Vector<NodeTreeLogger *> tree_loggers,
+              Vector<NodeTreeLogger *> base_tree_loggers = {});
   ~NodeTreeLog();
 
   /**
@@ -563,6 +571,14 @@ class NodeTreeLog {
   void add_child_context_hashes(const NodeTreeLog &other);
 
   ValueLog *find_socket_value_log(const bNodeSocket &query_socket);
+
+ private:
+  /** A logger of this context, preferably one of the latest evaluation. */
+  const NodeTreeLogger *first_logger() const;
+  /** True when the node was not evaluated in the latest evaluation. */
+  bool use_base_log_for_node(int32_t node_id);
+
+ public:
   [[nodiscard]] bool try_convert_primitive_socket_value(const GenericValueLog &value_log,
                                                         const CPPType &dst_type,
                                                         void *dst);
@@ -642,6 +658,8 @@ class NodesEvalLog {
    */
   std::unique_ptr<NodesEvalLog> inspection_overlay_;
   Set<ComputeContextHash> inspection_overlay_contexts_;
+  /** See #set_base_log. */
+  std::shared_ptr<NodesEvalLog> base_log_;
 
  public:
   NodesEvalLog();
@@ -666,6 +684,16 @@ class NodesEvalLog {
                               const ComputeContextHash &root_hash);
   /** Logged contexts that are \a root_hash or nested in it. */
   Set<ComputeContextHash> logged_contexts_in(const ComputeContextHash &root_hash);
+
+  /**
+   * Use the log of an earlier evaluation for the nodes that this evaluation did not run. This
+   * is for evaluations that only compute what a viewer needs: the other nodes are unchanged, and
+   * what was logged for them still holds.
+   *
+   * If \a previous has a base log itself, that one is used: it is the last log of a complete
+   * evaluation.
+   */
+  void set_base_log(std::shared_ptr<NodesEvalLog> previous);
 
   /**
    * Get a thread-local logger for the current node tree.

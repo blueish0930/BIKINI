@@ -58,6 +58,31 @@ static void deg_flush_updates_and_refresh(deg::Depsgraph *deg_graph,
   }
   deg_graph->sync_writeback = DEG_EVALUATE_SYNC_WRITEBACK_NO;
   deg_graph->sync_writeback_callbacks.clear();
+
+  if (!deg_graph->is_running_post_eval) {
+    /* The callbacks may evaluate the depsgraph at other frames. Callbacks added by those
+     * evaluations run in the next round, the evaluations themselves skip this block. */
+    deg_graph->is_running_post_eval = true;
+    for (int round = 0; round < 4; round++) {
+      Vector<std::function<void()>> callbacks;
+      {
+        std::lock_guard lock{deg_graph->post_eval_callbacks_mutex};
+        callbacks = std::move(deg_graph->post_eval_callbacks);
+        deg_graph->post_eval_callbacks.clear();
+      }
+      if (callbacks.is_empty()) {
+        break;
+      }
+      for (std::function<void()> &fn : callbacks) {
+        fn();
+      }
+    }
+    {
+      std::lock_guard lock{deg_graph->post_eval_callbacks_mutex};
+      deg_graph->post_eval_callbacks.clear();
+    }
+    deg_graph->is_running_post_eval = false;
+  }
 }
 
 void DEG_evaluate_on_refresh(Depsgraph *graph, const DepsgraphEvaluateSyncWriteback sync_writeback)
