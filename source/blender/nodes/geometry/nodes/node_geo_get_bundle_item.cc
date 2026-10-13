@@ -236,6 +236,11 @@ class GetBundleItemOperation : public NodeOperation {
       exists_output.set_single_value(true);
     }
   }
+
+  bool uses_asynchronous_execution() const override
+  {
+    return false;
+  }
 };
 
 static NodeOperation *get_compositor_bundle_operation(Context &context, const bNode &node)

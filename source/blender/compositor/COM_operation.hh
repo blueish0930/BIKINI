@@ -95,6 +95,7 @@ class Operation {
 
   /* Get a reference to the output result identified by the given identifier. */
   Result &get_result(StringRef identifier);
+  const Result &get_result(StringRef identifier) const;
 
   /* True if this operation has an output result with the given identifier (avoids crash when
    * dynamic sockets lag behind cooked attribute names, e.g. Point Stamp). */

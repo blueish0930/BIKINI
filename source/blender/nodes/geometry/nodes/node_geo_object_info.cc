@@ -232,6 +232,11 @@ class ObjectInfoOperation : public NodeOperation {
       seed_result.set_single_value(int(DEG_get_original(object)->id.session_uid));
     }
   }
+
+  bool uses_asynchronous_execution() const override
+  {
+    return false;
+  }
 };
 
 static NodeOperation *get_compositor_operation(Context &context, const bNode &node)

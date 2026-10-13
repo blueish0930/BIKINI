@@ -132,9 +132,8 @@ class Context {
   /* Optional status text for Image Process / compositor nodes. */
   virtual void set_info_message(StringRef /*message*/) const {}
 
-  /* Gets called after the evaluation of each compositor operation. See overrides for possible
-   * uses. */
-  virtual void evaluate_operation_post() const;
+  /* Returns true if the context supports canceling during evaluation. */
+  virtual bool supports_canceling() const;
 
   /* Returns true if the compositor evaluation is canceled and that the evaluator should stop
    * executing as soon as possible. */

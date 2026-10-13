@@ -40,7 +40,6 @@ void Operation::evaluate()
   this->execute();
   this->log_data();
   this->release_inputs();
-  this->context().evaluate_operation_post();
 }
 
 Result &Operation::get_input(StringRef identifier) const
@@ -73,6 +72,11 @@ Result &Operation::get_result(StringRef identifier)
 bool Operation::has_result(StringRef identifier) const
 {
   return results_.contains_as(identifier);
+}
+
+const Result &Operation::get_result(StringRef identifier) const
+{
+  return results_.lookup(identifier);
 }
 
 void Operation::map_input_to_result(StringRef identifier, Result *result)

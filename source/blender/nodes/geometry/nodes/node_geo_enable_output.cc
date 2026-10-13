@@ -155,6 +155,11 @@ class EnableOutputOperation : public NodeOperation {
       output.allocate_invalid();
     }
   }
+
+  bool uses_asynchronous_execution() const override
+  {
+    return false;
+  }
 };
 
 static NodeOperation *get_compositor_operation(Context &context, const bNode &node)

@@ -284,6 +284,11 @@ class SeparateBundleOperation : public NodeOperation {
 
     this->allocate_default_remaining_outputs();
   }
+
+  bool uses_asynchronous_execution() const override
+  {
+    return false;
+  }
 };
 
 static NodeOperation *get_compositor_bundle_operation(Context &context, const bNode &node)
