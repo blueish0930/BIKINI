@@ -265,12 +265,12 @@ class AttributeViewer : Overlay {
       case OB_MESH: {
         ResourceHandleRange res_handle = manager.unique_handle(ob_ref);
         {
-          gpu::Batch *batch = DRW_cache_mesh_surface_get(&object);
+          Batch *batch = DRW_cache_mesh_surface_get(&object);
           auto &sub = *instance_sub_;
           sub.push_constant("ucolor", float4(color));
           sub.draw(batch, res_handle);
         }
-        if (gpu::Batch *batch = DRW_cache_mesh_loose_edges_get(&object)) {
+        if (Batch *batch = DRW_cache_mesh_loose_edges_get(&object)) {
           auto &sub = *instance_sub_;
           sub.push_constant("ucolor", float4(color));
           sub.draw(batch, res_handle);
@@ -280,13 +280,13 @@ class AttributeViewer : Overlay {
       case OB_POINTCLOUD: {
         auto &sub = *instance_sub_;
         ResourceHandleRange res_handle = manager.unique_handle(ob_ref);
-        gpu::Batch *batch = pointcloud_sub_pass_setup(sub, ob_ref, res_handle, nullptr);
+        Batch *batch = pointcloud_sub_pass_setup(sub, ob_ref, res_handle, nullptr);
         sub.push_constant("ucolor", float4(color));
         sub.draw(batch, res_handle);
         break;
       }
       case OB_CURVES_LEGACY: {
-        gpu::Batch *batch = DRW_cache_curve_edge_wire_get(&object);
+        Batch *batch = DRW_cache_curve_edge_wire_get(&object);
         auto &sub = *instance_sub_;
         sub.push_constant("ucolor", float4(color));
         ResourceHandleRange res_handle = manager.unique_handle(ob_ref);
@@ -315,7 +315,7 @@ class AttributeViewer : Overlay {
                 mesh.attributes().lookup_meta_data(".viewer"))
         {
           if (attribute_type_supports_viewer_overlay(meta->data_type)) {
-            gpu::Batch *batch = DRW_cache_mesh_surface_viewer_attribute_get(&object);
+            Batch *batch = DRW_cache_mesh_surface_viewer_attribute_get(&object);
             auto &sub = *mesh_sub_;
             sub.push_constant("opacity", opacity);
             sub.draw(batch, manager.unique_handle(ob_ref));
@@ -337,14 +337,14 @@ class AttributeViewer : Overlay {
             ResourceHandleRange res_handle = manager.unique_handle(ob_ref);
             if (pointcloud.totpoint > 0 && pointcloud_vertbuf != nullptr) {
               auto &sub = *pointcloud_sub_;
-              gpu::Batch *batch = pointcloud_sub_pass_setup(sub, ob_ref, res_handle, nullptr);
+              Batch *batch = pointcloud_sub_pass_setup(sub, ob_ref, res_handle, nullptr);
               sub.push_constant("opacity", opacity);
               sub.bind_texture("attribute_tx", pointcloud_vertbuf);
               sub.draw(batch, res_handle);
             }
             if (pointcloud.totpoint > 0 && gsplat_vertbuf != nullptr) {
               auto &sub = *gsplat_sub_;
-              gpu::Batch *batch = gsplat_sub_pass_setup(sub, ob_ref, res_handle, nullptr);
+              Batch *batch = gsplat_sub_pass_setup(sub, ob_ref, res_handle, nullptr);
               sub.push_constant("opacity", opacity);
               sub.bind_texture("attribute_tx", gsplat_vertbuf);
               sub.draw(batch, res_handle);
@@ -361,7 +361,7 @@ class AttributeViewer : Overlay {
                   curves.attributes().lookup_meta_data(".viewer"))
           {
             if (attribute_type_supports_viewer_overlay(meta->data_type)) {
-              gpu::Batch *batch = DRW_cache_curve_edge_wire_viewer_attribute_get(&object);
+              Batch *batch = DRW_cache_curve_edge_wire_viewer_attribute_get(&object);
               auto &sub = *curve_sub_;
               sub.push_constant("opacity", opacity);
               ResourceHandleRange res_handle = manager.unique_handle(ob_ref);
@@ -385,7 +385,7 @@ class AttributeViewer : Overlay {
             if (is_valid) {
               auto &sub = *curves_sub_;
               const char *error = nullptr;
-              gpu::Batch *batch = curves_sub_pass_setup(sub, state.scene, ob_ref.object, error);
+              Batch *batch = curves_sub_pass_setup(sub, state.scene, ob_ref.object, error);
               sub.push_constant("opacity", opacity);
               sub.push_constant("is_point_domain", is_point_domain);
               sub.bind_texture("color_tx", texture);
