@@ -390,7 +390,7 @@ static uint8_t *get_arraystore_data(const BArrayState *state,
                                     const eCustomDataType type)
 {
   size_t state_len;
-  void *data = BLI_array_store_state_data_get_alloc(state, &state_len);
+  uint8_t *data = static_cast<uint8_t *>(BLI_array_store_state_data_get_alloc(state, &state_len));
 
   const int stride = CustomData_sizeof(type);
 
@@ -399,14 +399,14 @@ static uint8_t *get_arraystore_data(const BArrayState *state,
   if (use_rle) {
     /* Store the size in the encoded data (for convenience). */
     size_t data_enc_extra_size = sizeof(size_t);
-    const uint8_t *data_enc = reinterpret_cast<uint8_t *>(data);
+    const uint8_t *data_enc = data;
     size_t data_dec_len;
     memcpy(&data_dec_len, data_enc, sizeof(size_t));
     uint8_t *data_dec = MEM_new_array_uninitialized<uint8_t>(data_dec_len, __func__);
     BLI_array_store_rle_decode(
         data_enc + data_enc_extra_size, state_len - data_enc_extra_size, data_dec, data_dec_len);
-    MEM_delete_void(data);
-    data = static_cast<void *>(data_dec);
+    MEM_delete(data);
+    data = data_dec;
     /* Just for the assert to succeed. */
     state_len = data_dec_len;
   }
@@ -415,7 +415,7 @@ static uint8_t *get_arraystore_data(const BArrayState *state,
   BLI_assert(stride * data_len == state_len);
   UNUSED_VARS_NDEBUG(stride, data_len);
 
-  return static_cast<uint8_t *>(data);
+  return data;
 }
 
 /**
