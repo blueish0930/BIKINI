@@ -99,6 +99,7 @@ static void node_declare(NodeDeclarationBuilder &b)
                                .socket_name_ptr(
                                    &tree->id, *RepeatItemsAccessor::item_srna, &item, "name")
                                .structure_type(StructureType::Dynamic)
+                               .compositor_realization_mode(CompositorInputRealizationMode::None)
                                .custom_draw([i](CustomSocketDrawParams &params) {
                                  socket_items::ui::draw_item_socket_with_remove<RepeatItemsAccessor>(
                                      params, i);
@@ -158,7 +159,7 @@ static int node_shader_fn(GPUMaterial *mat,
 static void node_register()
 {
   static bke::bNodeType ntype;
-  sh_geo_node_type_base(&ntype, "GeometryNodeRepeatInput"_ustr, GEO_NODE_REPEAT_INPUT);
+  common_node_type_base(&ntype, "GeometryNodeRepeatInput"_ustr, GEO_NODE_REPEAT_INPUT);
   ntype.ui_name = "Repeat Input";
   ntype.enum_name_legacy = "REPEAT_INPUT";
   ntype.nclass = NODE_CLASS_INTERFACE;
@@ -231,6 +232,7 @@ static void node_declare(NodeDeclarationBuilder &b)
                              .socket_name_ptr(
                                  &tree->id, *RepeatItemsAccessor::item_srna, &item, "name")
                              .structure_type(StructureType::Dynamic)
+                             .compositor_realization_mode(CompositorInputRealizationMode::None)
                              .custom_draw([i](CustomSocketDrawParams &params) {
                                socket_items::ui::draw_item_socket_with_remove<RepeatItemsAccessor>(
                                    params, i);
@@ -368,7 +370,7 @@ static int node_shader_fn(GPUMaterial *mat,
 static void node_register()
 {
   static bke::bNodeType ntype;
-  sh_geo_node_type_base(&ntype, "GeometryNodeRepeatOutput"_ustr, GEO_NODE_REPEAT_OUTPUT);
+  common_node_type_base(&ntype, "GeometryNodeRepeatOutput"_ustr, GEO_NODE_REPEAT_OUTPUT);
   ntype.ui_name = "Repeat Output";
   ntype.enum_name_legacy = "REPEAT_OUTPUT";
   ntype.nclass = NODE_CLASS_INTERFACE;
