@@ -523,7 +523,7 @@ class EvaluateClosureOperation : public NodeOperation {
       }
       this->add_warning(
           NodeWarningType::Error,
-          fmt::format(fmt::runtime(TIP_("Closure not have output: \"{}\"")), output->name));
+          fmt::format(fmt::runtime(TIP_("Closure does not have output: \"{}\"")), output->name));
     }
     for (const bNodeSocket *input : this->node().input_sockets()) {
       if (!is_socket_available(input)) {
@@ -541,7 +541,7 @@ class EvaluateClosureOperation : public NodeOperation {
       }
       this->add_warning(
           NodeWarningType::Error,
-          fmt::format(fmt::runtime(TIP_("Closure not have input: \"{}\"")), input->name));
+          fmt::format(fmt::runtime(TIP_("Closure does not have input: \"{}\"")), input->name));
     }
   }
 
