@@ -6,22 +6,32 @@
  * \ingroup nodes
  */
 
+#include "NOD_geo_foreach_geometry_element.hh"
 #include "NOD_geometry_nodes_lazy_function.hh"
 #include "NOD_geometry_nodes_output_cache.hh"
 
 #include <chrono>
+
+#include "BLI_enumerable_thread_specific.hh"
+#include "BLI_index_mask.hh"
+#include "BLI_lazy_threading.hh"
+#include "BLI_task.hh"
 
 #include "BKE_anonymous_attribute_make.hh"
 #include "BKE_compute_contexts.hh"
 #include "BKE_curves.hh"
 #include "BKE_geometry_fields.hh"
 #include "BKE_grease_pencil.hh"
+#include "BKE_instances.hh"
+#include "BKE_mesh.hh"
 #include "BKE_node_runtime.hh"
 #include "BKE_node_socket_value.hh"
+#include "BKE_pointcloud.hh"
 
 #include "GEO_extract_elements.hh"
 #include "GEO_foreach_geometry.hh"
 #include "GEO_join_geometries.hh"
+#include "GEO_mesh_copy_selection.hh"
 
 #include "FN_lazy_function_graph_executor.hh"
 
@@ -158,6 +168,13 @@ struct ForeachElementComponent {
   /** Geometry for each iteration. */
   std::optional<Array<SocketValueVariant>> element_geometries;
   /**
+   * Only used when iterating over groups: the elements of every iteration and the ID they
+   * share.
+   */
+  IndexMaskMemory group_memory;
+  Vector<IndexMask, 4> group_masks;
+  Array<SocketValueVariant> group_id_values;
+  /**
    * The set of body evaluation nodes that correspond to this component.
    * This indexes into `lf_body_nodes`.
    */
@@ -238,6 +255,7 @@ class ForeachGeometryElementNodeExecuteWrapper : public lf::GraphExecutorNodeExe
  public:
   const bNode *output_bnode_ = nullptr;
   VectorSet<lf::FunctionNode *> *lf_body_nodes_ = nullptr;
+  bool force_threading_ = false;
 
   void execute_node(const lf::FunctionNode &node,
                     lf::Params &params,
@@ -250,6 +268,14 @@ class ForeachGeometryElementNodeExecuteWrapper : public lf::GraphExecutorNodeExe
       /* The node is not a loop body node, just execute it normally. */
       fn.execute(params, context);
       return;
+    }
+
+    if (force_threading_) {
+      /* An iteration over a group handles a whole piece of geometry, which the evaluator can't
+       * know. Without this, the iterations that wait on this thread only move to other threads
+       * once more than a hundred of them are queued, or once a node in the body uses threads
+       * itself. */
+      lazy_threading::send_hint();
     }
 
     /* Setup context for the loop body evaluation. */
@@ -340,6 +366,8 @@ class LazyFunctionForForeachGeometryElementZone : public LazyFunction {
   const bNode &output_bnode_;
   const ZoneBuildInfo &zone_info_;
   const ZoneBodyFunction &body_fn_;
+  /** Iterate over groups of elements that share a Group ID instead of single elements. */
+  bool group_mode_ = false;
 
   struct ItemIndices {
     /* `outer` refers to sockets on the outside of the zone, and `inner` to the sockets on the
@@ -356,6 +384,9 @@ class LazyFunctionForForeachGeometryElementZone : public LazyFunction {
     ItemIndices inputs;
     ItemIndices main;
     ItemIndices generation;
+    /** Only valid when iterating over groups. */
+    int group_id_lf_outer = -1;
+    int group_id_lf_inner = -1;
   } indices_;
 
   /** An output that is a field reading an anonymous attribute the zone creates. */
@@ -380,7 +411,9 @@ class LazyFunctionForForeachGeometryElementZone : public LazyFunction {
         zone_(zone),
         output_bnode_(*zone.output_node()),
         zone_info_(zone_info),
-        body_fn_(body_fn)
+        body_fn_(body_fn),
+        group_mode_(ForeachGeometryElementIterationMode(output_bnode_.custom1) ==
+                    ForeachGeometryElementIterationMode::Group)
   {
     debug_name_ = "Foreach Geometry Element";
 
@@ -403,11 +436,18 @@ class LazyFunctionForForeachGeometryElementZone : public LazyFunction {
     const int main_items_num = node_storage.main_items.items_num;
     const int generation_items_num = node_storage.generation_items.items_num;
 
-    indices_.inputs.lf_outer = IndexRange::from_begin_size(2, input_items_num);
+    /* The Group ID sockets come before the items. They are unavailable, and therefore have no
+     * lazy-function socket, unless the zone iterates over groups. */
+    const int group_sockets_num = group_mode_ ? 1 : 0;
+    const int inner_static_sockets_num = iteration_domain == AttrDomain::Corner ? 1 : 2;
+    indices_.group_id_lf_outer = 2;
+    indices_.group_id_lf_inner = inner_static_sockets_num;
+    indices_.inputs.lf_outer = IndexRange::from_begin_size(2 + group_sockets_num,
+                                                           input_items_num);
     indices_.inputs.lf_inner = IndexRange::from_begin_size(
-        iteration_domain == AttrDomain::Corner ? 1 : 2, input_items_num);
-    indices_.inputs.bsocket_outer = indices_.inputs.lf_outer;
-    indices_.inputs.bsocket_inner = indices_.inputs.lf_inner;
+        inner_static_sockets_num + group_sockets_num, input_items_num);
+    indices_.inputs.bsocket_outer = IndexRange::from_begin_size(3, input_items_num);
+    indices_.inputs.bsocket_inner = IndexRange::from_begin_size(3, input_items_num);
 
     indices_.main.lf_outer = IndexRange::from_begin_size(1, main_items_num);
     indices_.main.lf_inner = IndexRange::from_begin_size(0, main_items_num);
@@ -645,6 +685,8 @@ class LazyFunctionForForeachGeometryElementZone : public LazyFunction {
     eval_storage.body_execute_wrapper.emplace();
     eval_storage.body_execute_wrapper->output_bnode_ = &output_bnode_;
     eval_storage.body_execute_wrapper->lf_body_nodes_ = &eval_storage.lf_body_nodes;
+    /* Iterations over single elements stay with the evaluator's own threading decisions. */
+    eval_storage.body_execute_wrapper->force_threading_ = group_mode_;
 
     lf_graph.update_node_indices();
     eval_storage.graph_executor.emplace(lf_graph,
@@ -711,6 +753,13 @@ class LazyFunctionForForeachGeometryElementZone : public LazyFunction {
                                             .extract_input<SocketValueVariant>(
                                                 zone_info_.indices.inputs.main[1])
                                             .extract<Field<bool>>();
+    std::optional<Field<int>> group_id_field;
+    if (group_mode_) {
+      group_id_field = params
+                           .extract_input<SocketValueVariant>(
+                               zone_info_.indices.inputs.main[indices_.group_id_lf_outer])
+                           .extract<Field<int>>();
+    }
 
     /* Evaluate the selection and field inputs for all components. */
     int body_nodes_offset = 0;
@@ -736,24 +785,52 @@ class LazyFunctionForForeachGeometryElementZone : public LazyFunction {
         component_info.field_evaluator->add(item_field);
       }
 
+      if (group_id_field) {
+        component_info.field_evaluator->add(*group_id_field);
+      }
+
       /* Evaluate all fields passed to the zone input. */
       component_info.field_evaluator->evaluate();
 
       /* The mask contains all the indices that should be iterated over in the component. */
       const IndexMask mask = component_info.field_evaluator->get_evaluated_selection_as_mask();
+      if (group_mode_ && !mask.is_empty()) {
+        const VArray<int> group_ids = component_info.field_evaluator->get_evaluated<int>(
+            node_storage.input_items.items_num);
+        component_info.group_masks = IndexMask::from_group_ids(
+            mask, group_ids, component_info.group_memory);
+        component_info.group_id_values.reinitialize(component_info.group_masks.size());
+        for (const int group_i : component_info.group_masks.index_range()) {
+          component_info.group_id_values[group_i].emplace<int>(
+              group_ids[component_info.group_masks[group_i].first()]);
+        }
+      }
+      const int iterations_num = group_mode_ ? component_info.group_masks.size() : mask.size();
       component_info.body_nodes_range = IndexRange::from_begin_size(body_nodes_offset,
-                                                                    mask.size());
-      body_nodes_offset += mask.size();
+                                                                    iterations_num);
+      body_nodes_offset += iterations_num;
 
       /* Prepare indices that are passed into each iteration. */
-      component_info.index_values.reinitialize(mask.size());
-      mask.foreach_index_optimized<int>(
-          [&](const int i, const int pos) { component_info.index_values[pos].emplace<int>(i); });
+      component_info.index_values.reinitialize(iterations_num);
+      if (group_mode_) {
+        for (const int group_i : IndexRange(iterations_num)) {
+          component_info.index_values[group_i].emplace<int>(group_i);
+        }
+      }
+      else {
+        mask.foreach_index_optimized<int>([&](const int i, const int pos) {
+          component_info.index_values[pos].emplace<int>(i);
+        });
+      }
 
       if (create_element_geometries) {
         if (std::optional<Array<GeometrySet>> element_geometries =
-                this->try_extract_element_geometries(
-                    eval_storage.main_geometry, id, mask, attribute_filter))
+                group_mode_ ? this->try_extract_group_geometries(eval_storage.main_geometry,
+                                                                 id,
+                                                                 component_info.group_masks,
+                                                                 attribute_filter) :
+                              this->try_extract_element_geometries(
+                                  eval_storage.main_geometry, id, mask, attribute_filter))
         {
           component_info.element_geometries.emplace(element_geometries->size());
           threading::parallel_for(
@@ -772,8 +849,20 @@ class LazyFunctionForForeachGeometryElementZone : public LazyFunction {
         const NodeForeachGeometryElementInputItem &item = node_storage.input_items.items[item_i];
         const eNodeSocketDatatype socket_type = item.socket_type;
         const CPPType &base_cpp_type = *bke::socket_type_to_geo_nodes_base_cpp_type(socket_type);
-        component_info.item_input_values[item_i].reinitialize(mask.size());
+        component_info.item_input_values[item_i].reinitialize(iterations_num);
         const GVArray &values = component_info.field_evaluator->get_evaluated(item_i);
+        if (group_mode_) {
+          /* An iteration gets the value of the first element in its group. */
+          threading::parallel_for(IndexRange(iterations_num), 1024, [&](const IndexRange range) {
+            for (const int group_i : range) {
+              SocketValueVariant &value_variant =
+                  component_info.item_input_values[item_i][group_i];
+              void *buffer = value_variant.allocate_single(base_cpp_type);
+              values.get_to_uninitialized(component_info.group_masks[group_i].first(), buffer);
+            }
+          });
+          continue;
+        }
         mask.foreach_index(
             [&](const int i, const int pos) {
               SocketValueVariant &value_variant = component_info.item_input_values[item_i][pos];
@@ -901,6 +990,128 @@ class LazyFunctionForForeachGeometryElementZone : public LazyFunction {
     return std::nullopt;
   }
 
+  /**
+   * Split a component into one geometry per group. Returns nothing if the component can't be
+   * split on this domain.
+   */
+  std::optional<Array<GeometrySet>> try_extract_group_geometries(
+      const GeometrySet &main_geometry,
+      const ForeachElementComponentID &id,
+      const Span<IndexMask> group_masks,
+      const bke::AttributeFilter &attribute_filter) const
+  {
+    Array<GeometrySet> group_geometries(group_masks.size());
+    switch (id.component_type) {
+      case GeometryComponent::Type::Mesh: {
+        const Mesh &main_mesh = *main_geometry.get_mesh();
+        if (id.domain == AttrDomain::Face) {
+          const Array<Mesh *> meshes = geometry::mesh_copy_face_groups(
+              main_mesh, group_masks, attribute_filter);
+          for (const int i : meshes.index_range()) {
+            group_geometries[i].replace_mesh(meshes[i]);
+          }
+          return group_geometries;
+        }
+        if (!ELEM(id.domain, AttrDomain::Point, AttrDomain::Edge)) {
+          return std::nullopt;
+        }
+        /* TODO: This looks at the whole mesh for every group, which is slow with many groups. */
+        const int domain_size = main_mesh.attributes().domain_size(id.domain);
+        threading::EnumerableThreadSpecific<Array<bool>> selection_per_thread{
+            [&]() { return Array<bool>(domain_size, false); }};
+        threading::parallel_for(group_masks.index_range(), 16, [&](const IndexRange range) {
+          /* Need task isolation because of the thread local variable. */
+          threading::isolate_task([&]() {
+            MutableSpan<bool> selection = selection_per_thread.local();
+            const VArray<bool> selection_varray = VArray<bool>::from_span(selection);
+            for (const int group_i : range) {
+              const IndexMask &mask = group_masks[group_i];
+              index_mask::masked_fill(selection, true, mask);
+              const std::optional<Mesh *> group_mesh = geometry::mesh_copy_selection(
+                  main_mesh, selection_varray, id.domain, attribute_filter);
+              if (group_mesh.has_value()) {
+                group_geometries[group_i].replace_mesh(*group_mesh);
+              }
+              else {
+                /* The group is the whole mesh. */
+                group_geometries[group_i].add(
+                    *main_geometry.get_component(GeometryComponent::Type::Mesh));
+              }
+              index_mask::masked_fill(selection, false, mask);
+            }
+          });
+        });
+        return group_geometries;
+      }
+      case GeometryComponent::Type::PointCloud: {
+        if (id.domain != AttrDomain::Point) {
+          return std::nullopt;
+        }
+        const PointCloud &main_pointcloud = *main_geometry.get_pointcloud();
+        threading::parallel_for(group_masks.index_range(), 16, [&](const IndexRange range) {
+          for (const int group_i : range) {
+            const IndexMask &mask = group_masks[group_i];
+            PointCloud *group_pointcloud = BKE_pointcloud_new_nomain(main_pointcloud.type,
+                                                                      mask.size());
+            bke::gather_attributes(main_pointcloud.attributes(),
+                                   AttrDomain::Point,
+                                   AttrDomain::Point,
+                                   attribute_filter,
+                                   mask,
+                                   group_pointcloud->attributes_for_write());
+            group_geometries[group_i].replace_pointcloud(group_pointcloud);
+          }
+        });
+        return group_geometries;
+      }
+      case GeometryComponent::Type::Curve: {
+        if (!ELEM(id.domain, AttrDomain::Point, AttrDomain::Curve)) {
+          return std::nullopt;
+        }
+        const bke::CurvesGeometry &main_curves = main_geometry.get_curves()->geometry.wrap();
+        threading::parallel_for(group_masks.index_range(), 16, [&](const IndexRange range) {
+          for (const int group_i : range) {
+            const IndexMask &mask = group_masks[group_i];
+            bke::CurvesGeometry group_curves =
+                id.domain == AttrDomain::Point ?
+                    bke::curves_copy_point_selection(main_curves, mask, attribute_filter) :
+                    bke::curves_copy_curve_selection(main_curves, mask, attribute_filter);
+            group_geometries[group_i].replace_curves(
+                bke::curves_new_nomain(std::move(group_curves)));
+          }
+        });
+        return group_geometries;
+      }
+      case GeometryComponent::Type::Instance: {
+        if (id.domain != AttrDomain::Instance) {
+          return std::nullopt;
+        }
+        const bke::Instances &main_instances = *main_geometry.get_instances();
+        threading::parallel_for(group_masks.index_range(), 16, [&](const IndexRange range) {
+          for (const int group_i : range) {
+            const IndexMask &mask = group_masks[group_i];
+            auto group_instances = std::make_unique<bke::Instances>(mask.size());
+            for (const bke::InstanceReference &reference : main_instances.references()) {
+              group_instances->add_reference(reference);
+            }
+            bke::gather_attributes(main_instances.attributes(),
+                                   AttrDomain::Instance,
+                                   AttrDomain::Instance,
+                                   attribute_filter,
+                                   mask,
+                                   group_instances->attributes_for_write());
+            group_instances->remove_unused_references();
+            group_geometries[group_i].replace_instances(group_instances.release());
+          }
+        });
+        return group_geometries;
+      }
+      default:
+        break;
+    }
+    return std::nullopt;
+  }
+
   void build_graph_contents(ForeachGeometryElementEvalStorage &eval_storage,
                             const NodeGeometryForeachGeometryElementOutput &node_storage,
                             Span<lf::GraphInputSocket *> graph_inputs,
@@ -944,6 +1155,10 @@ class LazyFunctionForForeachGeometryElementZone : public LazyFunction {
                   &(*component_info.element_geometries)[i] :
                   &empty_geometry_value;
           lf_body_node.input(body_fn_.indices.inputs.main[1]).set_default_value(element_geometry);
+        }
+        if (group_mode_) {
+          lf_body_node.input(body_fn_.indices.inputs.main[indices_.group_id_lf_inner])
+              .set_default_value(&component_info.group_id_values[i]);
         }
         /* Set main input values for loop body. */
         for (const int item_i : IndexRange(node_storage.input_items.items_num)) {
@@ -1155,12 +1370,25 @@ void LazyFunctionForReduceForeachGeometryElement::handle_main_items_and_geometry
       base_cpp_type->value_initialize_indices(attribute.span.data(), inverted_mask);
 
       /* Copy the values from each iteration into the attribute. */
-      mask.foreach_index([&](const int i, const int pos) {
-        const int lf_param_index = pos * body_main_outputs_num + item_i;
+      const auto get_iteration_value = [&](const int local_body_i) -> const void * {
+        const int body_i = component_info.body_nodes_range[local_body_i];
+        const int lf_param_index = body_i * body_main_outputs_num + item_i;
         SocketValueVariant &value_variant = params.get_input<SocketValueVariant>(lf_param_index);
-        const void *value = value_variant.ensure_type(*base_cpp_type);
-        base_cpp_type->copy_construct(value, attribute.span[i]);
-      });
+        return value_variant.ensure_type(*base_cpp_type);
+      };
+      if (parent_.group_mode_) {
+        /* All elements of a group get the value of their iteration. */
+        for (const int group_i : component_info.group_masks.index_range()) {
+          base_cpp_type->fill_construct_indices(get_iteration_value(group_i),
+                                                attribute.span.data(),
+                                                component_info.group_masks[group_i]);
+        }
+      }
+      else {
+        mask.foreach_index([&](const int i, const int pos) {
+          base_cpp_type->copy_construct(get_iteration_value(pos), attribute.span[i]);
+        });
+      }
 
       attribute.finish();
     }
@@ -1291,7 +1519,13 @@ void LazyFunctionForReduceForeachGeometryElement::handle_generation_items_group(
       bke::AttrType type;
     };
     Vector<NameWithType> attributes_to_propagate;
+    /* The geometry of a group still has the attributes of its elements. There is no single
+     * value per iteration that could be propagated. */
+    const bool propagate_attributes = !parent_.group_mode_;
     src_attributes.foreach_attribute([&](const bke::AttributeIter &iter) {
+      if (!propagate_attributes) {
+        return;
+      }
       if (iter.data_type == bke::AttrType::String) {
         return;
       }
@@ -1305,7 +1539,7 @@ void LazyFunctionForReduceForeachGeometryElement::handle_generation_items_group(
     const IndexMask mask = component_info.field_evaluator->get_evaluated_selection_as_mask();
 
     /* Add attributes for each field on the geometry created by each iteration. */
-    mask.foreach_index([&](const int element_i, const int local_body_i) {
+    const auto handle_iteration = [&](const int element_i, const int local_body_i) {
       const int body_i = component_info.body_nodes_range[local_body_i];
       const int geometry_param_i = body_i * body_main_outputs_num +
                                    parent_.indices_.generation.lf_inner[geometry_item_i];
@@ -1319,7 +1553,7 @@ void LazyFunctionForReduceForeachGeometryElement::handle_generation_items_group(
             GeometryComponent::Type::GreasePencil,
             GeometryComponent::Type::Instance})
       {
-        if (!geometry.has(dst_component_type)) {
+        if (attributes_to_propagate.is_empty() || !geometry.has(dst_component_type)) {
           continue;
         }
         GeometryComponent &dst_component = geometry.get_component_for_write(dst_component_type);
@@ -1407,7 +1641,15 @@ void LazyFunctionForReduceForeachGeometryElement::handle_generation_items_group(
           });
         }
       }
-    });
+    };
+    if (parent_.group_mode_) {
+      for (const int group_i : component_info.group_masks.index_range()) {
+        handle_iteration(-1, group_i);
+      }
+    }
+    else {
+      mask.foreach_index(handle_iteration);
+    }
   }
 
   /* The last geometry contains the edit data from the main geometry. */

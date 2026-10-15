@@ -400,4 +400,38 @@ class MirrorSelectionFilter {
   Set<uint64_t> cells_;
 };
 
+/**
+ * BIKINI: operators that pick a face diagonal (or the next edge position) on their own:
+ * triangulate, fill, beautify, rotate edge. Each side picks independently, so the other
+ * side could get the opposite diagonal and the topology was no longer mirrored.
+ *
+ * Construct before #EDBM_select_expand_mirrored (it records the user's side and the
+ * existing edges), then call #apply after the operator changed the mesh and before
+ * #EDBM_update: where the other side picked a different edge than the mirror of the
+ * user's new edge, its two faces are joined and split along the mirrored edge.
+ */
+class EditMeshMirrorDiagonals {
+ public:
+  EditMeshMirrorDiagonals(Object *ob, BMEditMesh *em, float pair_dist);
+  /**
+   * For tools that do not work on the selection (knife):  side_co gives, per axis, the
+   * sign of the user's side (0 = unknown, that axis is left alone).
+   */
+  EditMeshMirrorDiagonals(Object *ob, BMEditMesh *em, float pair_dist, const float3 &side_co);
+  /** Returns true when the mesh was changed. */
+  bool apply();
+  EditMeshMirrorDiagonals(const EditMeshMirrorDiagonals &) = delete;
+  EditMeshMirrorDiagonals &operator=(const EditMeshMirrorDiagonals &) = delete;
+
+ private:
+  Object *ob_;
+  BMEditMesh *em_;
+  float pair_dist_;
+  float3 side_co_;
+  bool has_side_ = false;
+  void record_edges();
+  /** Existing edges by their (ordered) end verts. These ops never free verts. */
+  Set<std::pair<BMVert *, BMVert *>> old_edges_;
+};
+
 }  // namespace blender

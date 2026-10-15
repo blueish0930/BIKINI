@@ -14,6 +14,8 @@
  *    keeping modifiers above it.
  * 3. Evaluate, copy the object's visual geometry, then restore links + modifiers.
  * Fallback: node input cache, then original mesh datablock.
+ *
+ * The geometry is returned with all its components: mesh, curves, point cloud and instances.
  */
 
 #include "BKE_context.hh"
@@ -21,12 +23,14 @@
 #include "BKE_curves.hh"
 #include "BKE_geometry_set.hh"
 #include "BKE_geometry_set_instances.hh"
+#include "BKE_instances.hh"
 #include "BKE_main.hh"
 #include "BKE_mesh.h"
 #include "BKE_mesh.hh"
 #include "BKE_node.hh"
 #include "BKE_node_runtime.hh"
 #include "BKE_node_tree_update.hh"
+#include "BKE_pointcloud.hh"
 #include "BKE_report.hh"
 #include "BKE_scene.hh"
 
@@ -44,11 +48,13 @@
 #include "DNA_pointcloud_types.h"
 #include "DNA_space_types.h"
 
+#include "ED_geometry_edit.hh"
 #include "ED_node.hh"
 
 #include "GEO_realize_instances.hh"
 
 #include "NOD_geo_edit_elements.hh"
+#include "NOD_geo_elements_component.hh"
 #include "NOD_geo_select_elements.hh"
 
 #include "node_intern.hh"
@@ -65,31 +71,17 @@ static const bNodeSocket *find_geometry_input_socket(const bNode &node)
   return nullptr;
 }
 
-static std::optional<bke::GeometrySet> single_component_geometry(bke::GeometrySet geometry)
+/**
+ * The geometry when it has anything that can be selected or edited. The data is owned by the
+ * result, because the evaluated geometry it comes from does not outlive the next evaluation.
+ */
+static std::optional<bke::GeometrySet> editable_geometry(bke::GeometrySet geometry)
 {
-  if (geometry.is_empty()) {
+  if (!nodes::elements_component_pick(geometry, bke::GeometryComponent::Type::Mesh)) {
     return std::nullopt;
   }
-  if (geometry.has_instances()) {
-    geometry::RealizeInstancesOptions options;
-    geometry = geometry::realize_instances(std::move(geometry), options).geometry;
-  }
-
-  const bool has_mesh = geometry.has_mesh() && geometry.get_mesh()->verts_num > 0;
-  const bool has_curves = geometry.has_curves() && geometry.get_curves()->geometry.point_num > 0;
-  const bool has_points = geometry.has_pointcloud() && geometry.get_pointcloud()->totpoint > 0;
-
-  /* Prefer mesh; otherwise the single non-empty type. */
-  if (has_mesh) {
-    return bke::GeometrySet::from_mesh(BKE_mesh_copy_for_eval(*geometry.get_mesh()));
-  }
-  if (has_curves && !has_points) {
-    return bke::GeometrySet::from_curves(BKE_curves_copy_for_eval(geometry.get_curves()));
-  }
-  if (has_points && !has_curves) {
-    return std::nullopt;
-  }
-  return std::nullopt;
+  geometry.ensure_owns_direct_data();
+  return geometry;
 }
 
 static std::optional<bke::GeometrySet> copy_node_input_cache(const bNodeTree &tree,
@@ -402,7 +394,7 @@ std::optional<bke::GeometrySet> resolve_visual_geometry_for_elements_node(
     if (object_eval) {
       bke::GeometrySet eval_geo = bke::object_get_evaluated_geometry_set(*object_eval);
       if (!eval_geo.is_empty()) {
-        result = single_component_geometry(std::move(eval_geo));
+        result = editable_geometry(std::move(eval_geo));
         if (result) {
           BKE_report(reports,
                      RPT_INFO,
@@ -418,7 +410,7 @@ std::optional<bke::GeometrySet> resolve_visual_geometry_for_elements_node(
   if (!result) {
     std::optional<bke::GeometrySet> raw = copy_node_input_cache(edit_tree, node);
     if (raw && !raw->is_empty()) {
-      result = single_component_geometry(std::move(*raw));
+      result = editable_geometry(std::move(*raw));
       if (result) {
         BKE_report(reports, RPT_INFO, "Using previous-node geometry (node input cache)");
       }
@@ -437,31 +429,72 @@ std::optional<bke::GeometrySet> resolve_visual_geometry_for_elements_node(
     BKE_report(reports,
                RPT_ERROR,
                "Could not get visual geometry. Ensure the Geometry Nodes modifier is enabled, "
-               "the previous node outputs a mesh, and the object is visible in the viewport");
+               "the previous node outputs a mesh, curves, a point cloud or instances, and the "
+               "object is visible in the viewport");
     return std::nullopt;
-  }
-
-  if (!result->has_mesh() && !result->has_curves()) {
-    BKE_report(reports,
-               RPT_ERROR,
-               "Geometry has no usable mesh (or single curve). "
-               "Connect one mesh-producing node");
-    return std::nullopt;
-  }
-
-  if (const Mesh *m = result->get_mesh()) {
-    BKE_reportf(reports,
-                RPT_INFO,
-                "Visual geometry: %d verts, %d edges, %d faces",
-                m->verts_num,
-                m->edges_num,
-                m->faces_num);
-  }
-  else if (const Curves *c = result->get_curves()) {
-    BKE_reportf(reports, RPT_INFO, "Visual geometry: curves (%d points)", c->geometry.point_num);
   }
 
   return result;
+}
+
+bool elements_session_params_from_geometry(const bke::GeometrySet &geometry,
+                                           const bke::GeometryComponent::Type component_type,
+                                           const PointCloud *instance_points,
+                                           const bool elements_as_objects,
+                                           ed::geometry_edit::SessionParams &r_params,
+                                           ElementsSessionData &r_data)
+{
+  using ComponentType = bke::GeometryComponent::Type;
+  r_data.geometry = geometry;
+  r_params.component_type = component_type;
+  r_params.elements_as_objects = elements_as_objects;
+
+  switch (component_type) {
+    case ComponentType::Mesh:
+      r_params.mesh = r_data.geometry.get_mesh();
+      break;
+    case ComponentType::Curve:
+      r_params.curves = r_data.geometry.get_curves();
+      break;
+    case ComponentType::PointCloud:
+      r_params.pointcloud = r_data.geometry.get_pointcloud();
+      break;
+    case ComponentType::Instance: {
+      if (elements_as_objects) {
+        r_params.instances = r_data.geometry.get_instances();
+        break;
+      }
+      /* Instances have no edit mode, a point at the origin of each one is edited instead. */
+      if (instance_points) {
+        r_data.instance_points = bke::GeometrySet::from_pointcloud(
+            BKE_pointcloud_copy_for_eval(instance_points));
+      }
+      else if (const bke::Instances *instances = r_data.geometry.get_instances()) {
+        r_data.instance_points = bke::GeometrySet::from_pointcloud(
+            nodes::elements_instances_to_points(*instances));
+      }
+      r_params.pointcloud = r_data.instance_points.get_pointcloud();
+      break;
+    }
+    default:
+      return false;
+  }
+  if (!r_params.mesh && !r_params.curves && !r_params.pointcloud && !r_params.instances) {
+    return false;
+  }
+
+  /* Everything else is shown for context. The instances themselves too when only their origins
+   * are edited. */
+  bke::GeometrySet rest = r_data.geometry;
+  if (component_type != ComponentType::Instance || elements_as_objects) {
+    rest.remove(component_type);
+  }
+  if (rest.has_mesh() || rest.has_instances()) {
+    geometry::RealizeInstancesOptions options;
+    r_data.reference = geometry::realize_instances(std::move(rest), options).geometry;
+    r_params.reference_mesh = r_data.reference.get_mesh();
+  }
+  return true;
 }
 
 }  // namespace blender::ed::space_node

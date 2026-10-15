@@ -743,7 +743,13 @@ static std::string unknown_func_fix(const StringRef what)
               "  mode 0/\"k\": the k nearest          i[]@pts = nearestpoints(0, 8, \"k\");\n"
               "  mode 1/\"r\": all within a radius     i[]@pts = nearestpoints(0, 0.25, \"r\");\n"
               "  mode 2/\"rk\": at most k in a radius  i[]@pts = nearestpoints(0, 0.25, 8, "
-              "\"rk\");");
+              "\"rk\");\n"
+              "  Optional last vector sets the 3D query position (default: current P): "
+              "i[]@pts = nearestpoints(1, 0.25, \"r\", q);\n"
+              "  Optional group after geo is a bool/int point attribute name; value > 0: "
+              "i[]@pts = nearestpoints(0, \"boundary\", 8, \"k\");\n"
+              "  Empty group means all points; missing group returns []. "
+              "The group reads input geometry, not values written by this node.");
   }
   if (has("ray")) {
     return tr("Rays: raycast(geo, origin, dir, length, is_hit, hit_pos, hit_n, hit_dist).\n"
@@ -3896,7 +3902,8 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
         }
       }
       if ((builtin == Builtin::NearestPoints || builtin == Builtin::NearPoints) && n_in >= 3) {
-        for (int ai = 2; ai <= 3 && ai < n_in; ai++) {
+        /* The mode is one argument further back when there is a group. */
+        for (int ai = 2; ai <= 4 && ai < n_in; ai++) {
           if (e->args[ai] && e->args[ai]->kind == ExprKind::LitString &&
               nearestpoints_name_is_mode(e->args[ai]->name))
           {
@@ -4196,6 +4203,15 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
         }
         compile_expr(arg);
       }
+      /* `nearestpoints(geo, group, ...)`: a string in the second place is a group. */
+      const bool nearestpoints_group = ELEM(builtin, Builtin::NearestPoints, Builtin::NearPoints) &&
+                                       n_in >= 3 && e->args[1] &&
+                                       e->args[1]->type == Type::String;
+      if (nearestpoints_group) {
+        /* The native neighbor-average passes of #hoist_array_passes search all points. */
+        prog.jacobi_smooth = false;
+        prog.jacobi_knn = false;
+      }
       /* `min(arr)` / `max(arr)` reduce an array instead of comparing two values. */
       const bool array_min_max = ELEM(builtin, Builtin::Min, Builtin::Max) && n_in == 1 &&
                                  type_is_array(expr_arg_type(e, 0));
@@ -4262,7 +4278,8 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
         }
       }
       {
-        const StringRef tags = function_param_types(e->name);
+        const StringRef tags = nearestpoints_group ? StringRef("geo,str,num,enum") :
+                                                     function_param_types(e->name);
         if (!tags.is_empty() && n_in > 0 && !array_min_max) {
           StringRef ins[16];
           int n_tag = 0;
@@ -6629,8 +6646,14 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
     }
     /* A short optimized loop uses the batched CPU attribute kernel. Longer
      * unrolled loops can still do substantial per-element work and benefit from
-     * the GPU, even though their bytecode no longer contains a back edge. */
-    const bool cheap_optimized_loop = !has_runtime_loop && prog.code.size() <= 8;
+     * the GPU, even though their bytecode no longer contains a back edge.
+     *
+     * Not when the array executor takes the program: it never reads an attribute, so every
+     * store is one pass over the array with a value that is the same for all elements. A loop
+     * unrolled to a few of those (`@P.z += 0.1` two to sixteen times) is done before the GPU
+     * has received the attribute, let alone returned it. */
+    const bool cheap_optimized_loop = !has_runtime_loop &&
+                                      (prog.code.size() <= 8 || program_can_array_exec(prog));
     if ((!has_loop || cheap_optimized_loop) && !prog.array_pass_peeled) {
       return;
     }

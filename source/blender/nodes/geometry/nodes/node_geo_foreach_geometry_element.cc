@@ -32,6 +32,12 @@ namespace blender {
 
 namespace nodes::node_geo_foreach_geometry_element_cc {
 
+static bool iterates_over_groups(const bNode &output_node)
+{
+  return ForeachGeometryElementIterationMode(output_node.custom1) ==
+         ForeachGeometryElementIterationMode::Group;
+}
+
 /** Shared between zone input and output node. */
 static void node_layout_ex(ui::Layout &layout, bContext *C, PointerRNA *current_node_ptr)
 {
@@ -138,6 +144,11 @@ static void node_declare(NodeDeclarationBuilder &b)
       .propagate_all_geometry()
       .available(output_storage && AttrDomain(output_storage->domain) != AttrDomain::Corner);
 
+  const bool group_mode = output_node && iterates_over_groups(*output_node);
+  b.add_output<decl::Int>("Group ID"_ustr)
+      .description("ID that is shared by all elements of the current iteration")
+      .available(group_mode);
+
   b.add_input<decl::Geometry>("Geometry"_ustr)
       .description("Geometry whose elements are iterated over");
 
@@ -146,6 +157,14 @@ static void node_declare(NodeDeclarationBuilder &b)
       .hide_value()
       .evaluated_geometry_field()
       .description("Selection on the iteration domain");
+
+  b.add_input<decl::Int>("Group ID"_ustr)
+      .hide_value()
+      .evaluated_geometry_field()
+      .description(
+          "Elements with the same ID are handled together in one iteration, which receives "
+          "them as one geometry")
+      .available(group_mode);
 
   if (output_storage) {
     for (const int i : IndexRange(output_storage->input_items.items_num)) {
@@ -185,7 +204,11 @@ static void node_layout(ui::Layout &layout, bContext * /*C*/, PointerRNA *ptr)
   const NodeGeometryForeachGeometryElementInput &storage = node_storage(node);
   bNode *output_node = tree.node_by_id(storage.output_node_id);
 
+  if (!output_node) {
+    return;
+  }
   PointerRNA output_node_ptr = RNA_pointer_create_discrete(ptr->owner_id, RNA_Node, output_node);
+  layout.prop(&output_node_ptr, "iteration_mode", UI_ITEM_NONE, "", ICON_NONE);
   layout.prop(&output_node_ptr, "domain", UI_ITEM_NONE, "", ICON_NONE);
 }
 
@@ -198,11 +221,20 @@ static void node_init(bNodeTree * /*tree*/, bNode *node)
   node->storage = data;
 }
 
-static void node_label(const bNodeTree * /*ntree*/,
-                       const bNode * /*node*/,
+static void node_label(const bNodeTree *ntree,
+                       const bNode *node,
                        char *label,
                        const int label_maxncpy)
 {
+  const bNode *output_node = node;
+  if (node->type_legacy == GEO_NODE_FOREACH_GEOMETRY_ELEMENT_INPUT) {
+    output_node = ntree->node_by_id(node_storage(*node).output_node_id);
+  }
+  if (output_node && iterates_over_groups(*output_node)) {
+    BLI_strncpy_utf8(
+        label, CTX_IFACE_(BLT_I18NCONTEXT_ID_NODETREE, "For Each Group"), label_maxncpy);
+    return;
+  }
   BLI_strncpy_utf8(
       label, CTX_IFACE_(BLT_I18NCONTEXT_ID_NODETREE, "For Each Element"), label_maxncpy);
 }

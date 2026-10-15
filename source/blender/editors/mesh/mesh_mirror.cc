@@ -990,11 +990,44 @@ EditMeshSymmetryHelper::EditMeshSymmetryHelper(Object *ob, uchar htype)
    * verts (the KD-tree still holds the whole visible mesh, so unselected
    * counterparts resolve). Iterating only selected edges/faces is what keeps
    * this cheaper than a full-mesh map. */
+  Array<int> mirr_index(bm_->totvert);
   for (int axis = 0; axis < 3; axis++) {
     if ((mesh_->symmetry & (ME_SYMMETRY_X << axis)) == 0) {
       continue;
     }
-    EDBM_verts_mirror_cache_begin(em_, bm_, axis, true, true, true, use_topology_mirror_);
+    /* BIKINI: keep the pairing in our own array. Without  r_index the cache adds a
+     * temporary layer to the vertex custom-data, which reallocates every vertex block:
+     * vertex crease / bevel weight transforms hold pointers into those blocks, so the
+     * first mirrored update read (and later wrote) freed memory. */
+    EDBM_verts_mirror_cache_begin_ex(em_,
+                                     bm_,
+                                     axis,
+                                     true,
+                                     true,
+                                     true,
+                                     use_topology_mirror_,
+                                     0.00002f /* BM_SEARCH_MAXDIST_MIRR */,
+                                     mirr_index.data());
+    auto mirror_vert = [&](BMVert *v) -> BMVert * {
+      const int j = mirr_index[BM_elem_index_get(v)];
+      return (j >= 0 && j < bm_->totvert) ? BM_vert_at_index(bm_, j) : nullptr;
+    };
+    auto mirror_edge = [&](BMEdge *e) -> BMEdge * {
+      BMVert *v1 = mirror_vert(e->v1);
+      BMVert *v2 = mirror_vert(e->v2);
+      return (v1 && v2 && v1 != v2) ? BM_edge_exists(v1, v2) : nullptr;
+    };
+    auto mirror_face = [&](BMFace *f) -> BMFace * {
+      Array<BMVert *, BM_DEFAULT_NGON_STACK_SIZE> verts(f->len);
+      BMLoop *l = f->l_first;
+      int k = 0;
+      do {
+        if ((verts[k++] = mirror_vert(l->v)) == nullptr) {
+          return nullptr;
+        }
+      } while ((l = l->next) != f->l_first);
+      return BM_face_exists(verts.data(), verts.size());
+    };
 
     if (htype_ & BM_VERT) {
       BMVert *v_curr;
@@ -1003,9 +1036,9 @@ EditMeshSymmetryHelper::EditMeshSymmetryHelper(Object *ob, uchar htype)
         {
           continue;
         }
-        BMVert *v_mirr = EDBM_verts_mirror_get(em_, bm_, v_curr);
+        BMVert *v_mirr = mirror_vert(v_curr);
         if (v_mirr && v_mirr != v_curr) {
-          BMVert *v_mirr_check = EDBM_verts_mirror_get(em_, bm_, v_mirr);
+          BMVert *v_mirr_check = mirror_vert(v_mirr);
           if (v_mirr_check == v_curr) {
             mirror_map_add_partner(vert_to_mirror_map_, v_curr, v_mirr);
           }
@@ -1020,9 +1053,9 @@ EditMeshSymmetryHelper::EditMeshSymmetryHelper(Object *ob, uchar htype)
         {
           continue;
         }
-        BMEdge *e_mirr = EDBM_verts_mirror_get_edge(em_, bm_, e_curr);
+        BMEdge *e_mirr = mirror_edge(e_curr);
         if (e_mirr && e_mirr != e_curr) {
-          BMEdge *e_mirr_check = EDBM_verts_mirror_get_edge(em_, bm_, e_mirr);
+          BMEdge *e_mirr_check = mirror_edge(e_mirr);
           if (e_mirr_check == e_curr) {
             mirror_map_add_partner(edge_to_mirror_map_, e_curr, e_mirr);
           }
@@ -1037,9 +1070,9 @@ EditMeshSymmetryHelper::EditMeshSymmetryHelper(Object *ob, uchar htype)
         {
           continue;
         }
-        BMFace *f_mirr = EDBM_verts_mirror_get_face(em_, bm_, f_curr);
+        BMFace *f_mirr = mirror_face(f_curr);
         if (f_mirr && f_mirr != f_curr) {
-          BMFace *f_mirr_check = EDBM_verts_mirror_get_face(em_, bm_, f_mirr);
+          BMFace *f_mirr_check = mirror_face(f_mirr);
           if (f_mirr_check == f_curr) {
             mirror_map_add_partner(face_to_mirror_map_, f_curr, f_mirr);
           }
@@ -1047,7 +1080,6 @@ EditMeshSymmetryHelper::EditMeshSymmetryHelper(Object *ob, uchar htype)
       }
     }
 
-    EDBM_verts_mirror_cache_end(em_);
   }
 
   /* Verts/edges/faces need XY/XZ/YZ images so a corner still expands under
@@ -2240,6 +2272,214 @@ EditMeshMirrorUserSideScope::~EditMeshMirrorUserSideScope()
   if (has_side_) {
     EDBM_mirror_user_side_restore(ob_, em_, side_co_);
   }
+}
+
+static std::pair<BMVert *, BMVert *> mirror_edge_vert_key(const BMEdge *e)
+{
+  return (e->v1 < e->v2) ? std::pair(e->v1, e->v2) : std::pair(e->v2, e->v1);
+}
+
+EditMeshMirrorDiagonals::EditMeshMirrorDiagonals(Object *ob,
+                                                 BMEditMesh *em,
+                                                 const float pair_dist)
+    : ob_(ob), em_(em), pair_dist_(pair_dist)
+{
+  side_co_ = EDBM_mirror_user_side_capture(ob, em, has_side_);
+  record_edges();
+}
+
+EditMeshMirrorDiagonals::EditMeshMirrorDiagonals(Object *ob,
+                                                 BMEditMesh *em,
+                                                 const float pair_dist,
+                                                 const float3 &side_co)
+    : ob_(ob), em_(em), pair_dist_(pair_dist), side_co_(side_co)
+{
+  has_side_ = side_co != float3(0.0f);
+  record_edges();
+}
+
+void EditMeshMirrorDiagonals::record_edges()
+{
+  if (!has_side_) {
+    return;
+  }
+  old_edges_.reserve(em_->bm->totedge);
+  BMIter iter;
+  BMEdge *e;
+  BM_ITER_MESH (e, &iter, em_->bm, BM_EDGES_OF_MESH) {
+    old_edges_.add(mirror_edge_vert_key(e));
+  }
+}
+
+bool EditMeshMirrorDiagonals::apply()
+{
+  if (!has_side_) {
+    return false;
+  }
+  const Mesh *mesh = id_cast<const Mesh *>(ob_->data);
+  int sym = 0;
+  for (int a = 0; a < 3; a++) {
+    if ((mesh->symmetry & (ME_SYMMETRY_X << a)) && side_co_[a] != 0.0f) {
+      sym |= 1 << a;
+    }
+  }
+  if (sym == 0) {
+    return false;
+  }
+  BMesh *bm = em_->bm;
+
+  /* Axes an edge has to be flipped by to reach the user's side, 0 when it is on it. */
+  auto flip_mask = [&](const BMEdge *e) {
+    const float3 mid = (float3(e->v1->co) + float3(e->v2->co)) * 0.5f;
+    int mask = 0;
+    for (int a = 0; a < 3; a++) {
+      if ((sym & (1 << a)) && mid[a] * side_co_[a] < -1e-4f) {
+        mask |= 1 << a;
+      }
+    }
+    return mask;
+  };
+
+  /* Spatial pairing: the verts did not move, only the edges between them changed. */
+  EditMeshMirrorLookup lookup(em_, false, true, pair_dist_);
+  auto is_new = [&](const BMEdge *edge) {
+    return !old_edges_.contains(mirror_edge_vert_key(edge));
+  };
+  auto is_mirrored = [&](BMEdge *edge) {
+    const int mask = flip_mask(edge);
+    BMVert *a = lookup.vert_axes(edge->v1, mask);
+    BMVert *b = lookup.vert_axes(edge->v2, mask);
+    return a && b && a != b && BM_edge_exists(a, b) != nullptr;
+  };
+
+  /* Mirror images (per mirror copy) of new user-side edges that are missing. */
+  Vector<std::pair<BMVert *, BMVert *>> wanted;
+  BMIter iter;
+  BMEdge *e;
+  BM_ITER_MESH (e, &iter, bm, BM_EDGES_OF_MESH) {
+    if (BM_elem_flag_test(e, BM_ELEM_HIDDEN) || !is_new(e) || flip_mask(e) != 0) {
+      continue;
+    }
+    for (int mask = 1; mask < 8; mask++) {
+      if ((mask & sym) != mask) {
+        continue;
+      }
+      BMVert *a = lookup.vert_axes(e->v1, mask);
+      BMVert *b = lookup.vert_axes(e->v2, mask);
+      if (a && b && a != b && BM_edge_exists(a, b) == nullptr) {
+        wanted.append({a, b});
+      }
+    }
+  }
+
+  /* The other side picked a different edge: the other diagonal of a quad, or another
+   * corner for a knife cut that ends inside a face. */
+  auto face_with_both = [&](BMVert *a, BMVert *b) -> BMFace * {
+    BMIter fiter;
+    BMFace *f;
+    BM_ITER_ELEM (f, &fiter, a, BM_FACES_OF_VERT) {
+      BMLoop *la = BM_face_vert_share_loop(f, a);
+      BMLoop *lb = BM_face_vert_share_loop(f, b);
+      if (la && lb && !BM_loop_is_adjacent(la, lb)) {
+        return f;
+      }
+    }
+    return nullptr;
+  };
+  /* A new, unmatched edge on the other side at  a that only separates two faces. */
+  auto find_stray = [&](BMVert *a, BMVert *b) -> BMEdge * {
+    BMIter eiter;
+    BMEdge *edge;
+    BM_ITER_ELEM (edge, &eiter, a, BM_EDGES_OF_VERT) {
+      if (!BM_edge_is_manifold(edge) || !is_new(edge) || flip_mask(edge) == 0 ||
+          is_mirrored(edge) || BM_edge_other_vert(edge, a) == b)
+      {
+        continue;
+      }
+      BMFace *f1 = edge->l->f;
+      BMFace *f2 = edge->l->radial_next->f;
+      if (BM_face_share_edge_count(f1, f2) != 1) {
+        continue;
+      }
+      return edge;
+    }
+    return nullptr;
+  };
+
+  bool changed = false;
+  for (const auto &[a, b] : wanted) {
+    if (BM_edge_exists(a, b)) {
+      continue;
+    }
+    if (BMFace *f = face_with_both(a, b)) {
+      /* Both verts on one face (knife): add the wanted edge, then drop the stray one. */
+      BMLoop *l_new = nullptr;
+      if (!BM_face_split(bm,
+                         f,
+                         BM_face_vert_share_loop(f, a),
+                         BM_face_vert_share_loop(f, b),
+                         &l_new,
+                         nullptr,
+                         true))
+      {
+        continue;
+      }
+      changed = true;
+      BMEdge *stray = find_stray(a, b);
+      if (stray == nullptr) {
+        stray = find_stray(b, a);
+      }
+      if (stray) {
+        if (l_new && BM_elem_flag_test(stray, BM_ELEM_SELECT)) {
+          BM_edge_select_set(bm, l_new->e, true);
+        }
+        BM_faces_join_pair(bm, stray->l, stray->l->radial_next, true, nullptr);
+      }
+      continue;
+    }
+    /* The verts are on two faces split by the stray edge (quad diagonal): join, re-split.
+     * The stray edge need not touch  a, so look at the edges of the faces around it. */
+    BMEdge *stray = nullptr;
+    {
+      BMIter fiter;
+      BMFace *f;
+      BM_ITER_ELEM (f, &fiter, a, BM_FACES_OF_VERT) {
+        BMLoop *l = f->l_first;
+        do {
+          BMEdge *edge = l->e;
+          if (BM_edge_is_manifold(edge) && is_new(edge) && flip_mask(edge) != 0 &&
+              !is_mirrored(edge) && BM_face_share_edge_count(f, l->radial_next->f) == 1 &&
+              (BM_vert_in_face(b, f) || BM_vert_in_face(b, l->radial_next->f)))
+          {
+            stray = edge;
+            break;
+          }
+        } while ((l = l->next) != f->l_first);
+        if (stray) {
+          break;
+        }
+      }
+    }
+    if (stray == nullptr) {
+      continue;
+    }
+    const bool select = BM_elem_flag_test(stray, BM_ELEM_SELECT);
+    BMFace *joined = BM_faces_join_pair(bm, stray->l, stray->l->radial_next, true, nullptr);
+    if (joined == nullptr) {
+      continue;
+    }
+    changed = true;
+    BMLoop *la = BM_face_vert_share_loop(joined, a);
+    BMLoop *lb = BM_face_vert_share_loop(joined, b);
+    if (la == nullptr || lb == nullptr || BM_loop_is_adjacent(la, lb)) {
+      continue;
+    }
+    BMLoop *l_new = nullptr;
+    if (BM_face_split(bm, joined, la, lb, &l_new, nullptr, true) && l_new && select) {
+      BM_edge_select_set(bm, l_new->e, true);
+    }
+  }
+  return changed;
 }
 
 /** \} */

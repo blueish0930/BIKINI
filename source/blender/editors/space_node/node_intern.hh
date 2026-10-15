@@ -27,6 +27,7 @@ namespace blender {
 
 struct ARegion;
 struct NodeInsertOfsData;
+struct PointCloud;
 struct View2D;
 struct bContext;
 struct bNode;
@@ -45,6 +46,10 @@ extern const char *node_context_dir[];
 
 namespace ed::asset {
 struct AssetItemTree;
+}
+
+namespace ed::geometry_edit {
+struct SessionParams;
 }
 
 /**
@@ -484,6 +489,29 @@ void NODE_OT_paint_reset(wmOperatorType *ot);
  */
 std::optional<bke::GeometrySet> resolve_visual_geometry_for_elements_node(
     bContext *C, SpaceNode &snode, bNode &node, ReportList *reports, Object **r_transform_from);
+
+/** Geometry that a Select Elements / Edit Elements session refers to while it starts. */
+struct ElementsSessionData {
+  bke::GeometrySet geometry;
+  /** One point per instance, when instances are edited. */
+  bke::GeometrySet instance_points;
+  /** The rest of the geometry as a mesh, to show for context. */
+  bke::GeometrySet reference;
+};
+
+/**
+ * Set the data of \a component_type and the reference mesh in the session parameters.
+ * \param instance_points: Points to edit instead of the ones made from the instances, for
+ * instances that have been edited before.
+ * \param elements_as_objects: Select whole curves or instances as one object each.
+ * \return False when the geometry has nothing of the component.
+ */
+bool elements_session_params_from_geometry(const bke::GeometrySet &geometry,
+                                           bke::GeometryComponent::Type component_type,
+                                           const PointCloud *instance_points,
+                                           bool elements_as_objects,
+                                           ed::geometry_edit::SessionParams &r_params,
+                                           ElementsSessionData &r_data);
 
 /* `node_view.cc` */
 

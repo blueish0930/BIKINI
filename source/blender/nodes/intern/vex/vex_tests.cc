@@ -376,6 +376,25 @@ TEST(nodes_vex, counted_position_add_is_array_kernel)
   EXPECT_FALSE(has_loop_jmp);
 }
 
+TEST(nodes_vex, unrolled_uniform_attr_add_stays_on_cpu)
+{
+  /* Two to sixteen trips are unrolled. The program still only adds a constant to an attribute,
+   * which the array executor does faster than the GPU can receive and return that attribute. */
+  for (const int trips : {1, 2, 3, 5, 16, 17, 1000}) {
+    const std::string source = "for (int i = 0; i < " + std::to_string(trips) +
+                               "; i++) { @P.z += 0.1; }\n";
+    const CompileOutput compiled = compile(source);
+    ASSERT_TRUE(bool(compiled.program)) << compiled.error;
+    EXPECT_TRUE(program_can_array_exec(*compiled.program)) << trips;
+    EXPECT_FALSE(compiled.program->gpu_ok) << trips;
+  }
+  /* An unrolled loop with work per element still goes to the GPU. */
+  const CompileOutput varying = compile(
+      "for (int i = 0; i < 4; i++) { @P += sin(@P * 3.0) * 0.01; }\n");
+  ASSERT_TRUE(bool(varying.program)) << varying.error;
+  EXPECT_TRUE(varying.program->gpu_ok) << varying.program->gpu_error;
+}
+
 TEST(nodes_vex, while_attr_cmp_add_is_c_kernel)
 {
   const CompileOutput compiled = compile("while (v@P.x < 2.0) { v@P.x += 0.1; }\n");
@@ -705,6 +724,37 @@ TEST(nodes_vex, nearestpoints_rk_does_not_precompute_knn_table)
   const CompileOutput compiled = compile("i[]@pts = nearestpoints(0, 0.25, 8, \"rk\");\n");
   ASSERT_TRUE(bool(compiled.program)) << compiled.error;
   EXPECT_FALSE(compiled.program->knn_precompute);
+}
+
+TEST(nodes_vex, nearestpoints_group_compiles_without_knn_table)
+{
+  const CompileOutput compiled = compile(
+      "string g = \"boundary\";\n"
+      "i[]@k = nearestpoints(0, \"boundary\", 8, \"k\");\n"
+      "i[]@k2 = nearestpoints(0, g, 8);\n"
+      "i[]@r = nearestpoints(0, \"boundary\", 0.25, \"r\");\n"
+      "i[]@rk = nearestpoints(0, \"boundary\", 0.25, 8, \"rk\");\n"
+      "i[]@rk2 = nearestpoints(0, \"boundary\", 0.25, \"rk\", 8);\n"
+      "i[]@pos = nearestpoints(1, \"boundary\", 4, \"k\", v@P);\n");
+  ASSERT_TRUE(bool(compiled.program)) << compiled.error;
+  /* The table of all points must not answer a search in a group. */
+  EXPECT_FALSE(compiled.program->knn_precompute);
+}
+
+TEST(nodes_vex, nearestpoints_group_keeps_neighbor_average_on_vm)
+{
+  const CompileOutput compiled = compile(
+      "for (int i = 0; i < 4; i++) {\n"
+      "  int[] pts = nearestpoints(0, \"boundary\", 8, \"k\");\n"
+      "  vector sum = {0, 0, 0};\n"
+      "  foreach (int pt; pts) {\n"
+      "    sum += point(0, \"P\", pt);\n"
+      "  }\n"
+      "  v@P = sum / max(len(pts), 1);\n"
+      "}\n");
+  ASSERT_TRUE(bool(compiled.program)) << compiled.error;
+  EXPECT_FALSE(compiled.program->jacobi_smooth);
+  EXPECT_FALSE(compiled.program->jacobi_knn);
 }
 
 TEST(nodes_vex, knn_for_loop_keeps_int_array)

@@ -974,16 +974,20 @@ void geometry_nodes_output_cache_propagate(bNodeTree &ntree)
   /* Viewer preview (Ctrl-Shift or activate) tags only Viewer nodes. Those have no downstream
    * producers; treating them as unknown ANY used to full-invalidate every node_gen. */
   VectorSet<int32_t> producer_seeds;
+  Vector<std::pair<uint32_t, int32_t>> viewer_bumps;
   for (const int32_t id : seed_ids) {
     const bNode *seed = ntree.node_by_id(id);
     if (seed == nullptr) {
       continue;
     }
     if (seed->type_legacy == GEO_NODE_VIEWER) {
+      /* What the viewer itself shows is new, see #GeometryNodesOutputCache::root_nodes_token. */
+      viewer_bumps.append({original_tree_session_uid(ntree), id});
       continue;
     }
     producer_seeds.add(id);
   }
+  apply_gen_bumps(viewer_bumps);
 
   if (producer_seeds.is_empty()) {
     if (seed_ids.is_empty() &&
@@ -2076,6 +2080,24 @@ uint64_t GeometryNodesOutputCache::root_output_token(
   return token == 0 ? 1 : token;
 }
 
+uint64_t GeometryNodesOutputCache::root_nodes_token(const GeometryNodesOutputCacheEvalState &state,
+                                                    const bNodeTree &root_tree,
+                                                    const Span<const bNode *> nodes)
+{
+  /* The root context: no calling node. */
+  GeoNodesUserData user_data;
+  /* Summed, so the order of the nodes does not matter. */
+  uint64_t nodes_token = 0;
+  for (const bNode *node : nodes) {
+    const OutputCacheSite site{&root_tree, node};
+    nodes_token += mix(uint64_t(node->identifier),
+                       combine_state_token(site_state_token(state, user_data, site)));
+  }
+  uint64_t token = mix(0x53494445ull, nodes_token);
+  token = mix(token, state.root_properties_token);
+  return token == 0 ? 1 : token;
+}
+
 bool GeometryNodesOutputCache::restore_root_output(const uint64_t token,
                                                    bke::GeometrySet &r_geometry) const
 {
@@ -2107,10 +2129,28 @@ void GeometryNodesOutputCache::store_root_output(const uint64_t token,
   std::swap(root_output_, root_output);
 }
 
+bool GeometryNodesOutputCache::side_effects_are_logged(const uint64_t token) const
+{
+  std::lock_guard lock{mutex_};
+  const bool is_logged = token != 0 && side_effects_token_ == token;
+  if (debug_enabled()) {
+    fprintf(stderr, "GN_CACHE %s side effects\n", is_logged ? "hit" : "miss");
+    fflush(stderr);
+  }
+  return is_logged;
+}
+
+void GeometryNodesOutputCache::set_logged_side_effects(const uint64_t token)
+{
+  std::lock_guard lock{mutex_};
+  side_effects_token_ = token;
+}
+
 void GeometryNodesOutputCache::clear_root_output()
 {
   std::unique_ptr<RootOutput> root_output;
   std::lock_guard lock{mutex_};
+  side_effects_token_ = 0;
   std::swap(root_output_, root_output);
 }
 

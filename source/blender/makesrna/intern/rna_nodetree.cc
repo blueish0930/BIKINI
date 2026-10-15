@@ -1001,6 +1001,7 @@ static const EnumPropertyItem node_cryptomatte_layer_name_items[] = {
 #  include "NOD_geo_viewer.hh"
 #  include "NOD_geometry.hh"
 #  include "NOD_geometry_nodes_lazy_function.hh"
+#  include "NOD_geometry_nodes_output_cache.hh"
 #  include "NOD_rna_define.hh"
 #  include "NOD_shader.h"
 #  include "NOD_shader_hlsl.hh"
@@ -1789,6 +1790,7 @@ static void rna_NodeTree_active_node_set(PointerRNA *ptr,
     if (node->typeinfo->nclass == NODE_CLASS_OUTPUT && node->type_legacy != CMP_NODE_OUTPUT_FILE) {
       /* If this node becomes the active output, the others of the same type can't be the active
        * output anymore. */
+      const bool was_active_output = (node->flag & NODE_DO_OUTPUT) != 0;
       for (bNode *other_node : ntree->all_nodes()) {
         if (other_node->type_legacy == node->type_legacy) {
           other_node->flag &= ~NODE_DO_OUTPUT;
@@ -1796,7 +1798,18 @@ static void rna_NodeTree_active_node_set(PointerRNA *ptr,
       }
       node->flag |= NODE_DO_OUTPUT;
       bke::node_tree_set_output(*ntree);
-      BKE_ntree_update_tag_active_output_changed(ntree);
+      if (ntree->type != NTREE_GEOMETRY) {
+        BKE_ntree_update_tag_active_output_changed(ntree);
+      }
+      else if (node->type_legacy == GEO_NODE_VIEWER && !was_active_output) {
+        /* Which viewer is active only matters for what is previewed. Without the viewer as seed
+         * this is an edit of unknown scope, after which the whole tree is computed again, see
+         * #geometry_nodes_output_cache_only_viewer_seeds. The viewer that was active before is
+         * not tagged: what it shows stays right for as long as something still looks at it. */
+        nodes::geometry_nodes_output_cache_tag_node(ntree, node);
+        BKE_ntree_update_tag_active_output_changed(ntree);
+      }
+      /* The other output nodes of geometry trees do not use the flag. */
     }
   }
   else {
@@ -10310,6 +10323,23 @@ static void def_geo_foreach_geometry_element_output(BlenderRNA *brna, StructRNA 
 
   rna_def_geo_foreach_geometry_element_generation_items(brna);
   rna_def_geo_foreach_geometry_element_generation_item(brna);
+
+  static const EnumPropertyItem iteration_mode_items[] = {
+      {0, "ELEMENT", 0, "Element", "Run the zone once for every element of the domain"},
+      {1,
+       "GROUP",
+       0,
+       "Group",
+       "Run the zone once for every group of elements that share a Group ID. Each iteration "
+       "receives its whole group as one geometry, and the iterations run on all threads"},
+      {0, nullptr, 0, nullptr, nullptr},
+  };
+
+  prop = RNA_def_property(srna, "iteration_mode", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_sdna(prop, nullptr, "custom1");
+  RNA_def_property_enum_items(prop, iteration_mode_items);
+  RNA_def_property_ui_text(prop, "Mode", "What the zone runs once for");
+  RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_socket_update");
 
   RNA_def_struct_sdna_from(srna, "NodeGeometryForeachGeometryElementOutput", "storage");
 

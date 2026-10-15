@@ -10,6 +10,14 @@
 
 namespace blender::nodes {
 
+/** Stored in #bNode::custom1 of the zone output node. */
+enum class ForeachGeometryElementIterationMode : int16_t {
+  /** One iteration per element of the iteration domain. */
+  Element = 0,
+  /** One iteration per group of elements that share a Group ID. */
+  Group = 1,
+};
+
 struct ForeachGeometryElementInputItemsAccessor
     : public socket_items::SocketItemsAccessorDefaults {
   using ItemT = NodeForeachGeometryElementInputItem;

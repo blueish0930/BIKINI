@@ -632,14 +632,14 @@ void gather_completions(Vector<std::string> &r_owned_names,
       C::Variable,
       K::Function,
       "nearestpoints",
-      "nearestpoints(geo, k_or_r, mode)  mode: k|r|rk",
+      "nearestpoints(geo, k_or_r, mode[, sample_pos])  k|r|rk; group after geo: bool/int point attribute > 0",
       true);
   add("nearpoints",
       "Topology",
       C::Variable,
       K::Function,
       "nearpoints",
-      "nearpoints(geo, k_or_r, mode)  mode: k|r|rk",
+      "nearpoints(geo, k_or_r, mode[, sample_pos])  k|r|rk; group after geo: bool/int point attribute > 0",
       true);
 
   add("raycast",

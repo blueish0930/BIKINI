@@ -310,12 +310,18 @@ static int wrangle_call_help(const StringRef fn, char (*out)[192], const int max
     return n;
   }
   if (fn == "nearestpoints" || fn == "nearpoints") {
-    row("nearestpoints(geo, k_or_r, mode)");
-    row("  mode 0 or \"k\": k nearest (k_or_r is count)");
-    row("  mode 1 or \"r\": all within radius");
-    row("  mode 2 or \"rk\": at most k within r");
-    row("  rk: nearestpoints(geo, r, k, \"rk\")");
-    row("  returns int[] point indices");
+    row("nearestpoints(geo, k_or_r, mode[, sample_pos]) -> int[]");
+    row("  k/0: k nearest points (k_or_r is an int count)");
+    row("  r/1: all points within float radius r");
+    row("  rk/2: at most k points within radius r");
+    row("  rk: nearestpoints(geo, r, k, \"rk\"[, sample_pos])");
+    row("  group: nearestpoints(geo, group, r, \"r\"[, sample_pos])");
+    row("  group = bool/int point attribute name on geo; value > 0");
+    row("  empty group = all; missing group/no matches = empty []");
+    row("  group reads input geometry, not values written by this node");
+    row("  sample_pos = 3D query center; default current P");
+    row("  e.g. nearestpoints(1, rq, \"r\", q): input 2 around q");
+    row("  returns point indices of the searched geometry");
     return n;
   }
   if (fn == "facesedge") {
@@ -1548,6 +1554,8 @@ static void node_layout(ui::Layout &layout, bContext * /*C*/, PointerRNA *ptr)
 
   ui::Block *block = layout.block();
   const int64_t buttons_before = block ? block->buttons_ptrs.size() : 0;
+  /* Same code size as in every other Wrangle node and in the editor window. */
+  storage.textbox_state.font_scale = ui::wrangle_editor_font_scale();
   layout.textbox_with_state(ptr, "code", &storage.textbox_state, std::nullopt);
   if (block) {
     for (int64_t i = buttons_before; i < block->buttons_ptrs.size(); i++) {
@@ -1911,7 +1919,7 @@ struct WrangleEditPopupArg {
   char status[256] = {};
   int find_from = 0;
   bool pinned = false;
-  /** Editor font size in points. 0 means "initialize from stored scale". */
+  /** Editor font size in points, for the size field in the header. */
   float font_pt = 0.0f;
 };
 
@@ -1966,21 +1974,8 @@ static ui::Block *wrangle_edit_popup(bContext *C, ARegion *region, void *arg_v)
     return nullptr;
   }
   NodeGeometryWrangle &storage = node_storage(*arg->node);
-  if (arg->editor_state.visible_lines < 20) {
-    arg->editor_state.visible_lines = 26;
-  }
-  if (arg->editor_state.font_scale > 0.05f) {
-    storage.textbox_state.font_scale = arg->editor_state.font_scale;
-  }
-  else if (storage.textbox_state.font_scale > 0.05f) {
-    arg->editor_state.font_scale = storage.textbox_state.font_scale;
-  }
-  if (arg->editor_state.width > 0) {
-    storage.textbox_state.width = arg->editor_state.width;
-  }
-  else if (storage.textbox_state.width > 0) {
-    arg->editor_state.width = storage.textbox_state.width;
-  }
+  /* Font and window size are shared by every Wrangle node. */
+  ui::wrangle_editor_state_load(arg->editor_state);
 
   const uiStyle *style = ui::style_get_dpi();
   ui::Block *block = ui::block_begin(C, region, "wrangle_code_editor", ui::EmbossType::Emboss);
@@ -2010,13 +2005,7 @@ static ui::Block *wrangle_edit_popup(bContext *C, ARegion *region, void *arg_v)
   header.label(IFACE_("Wrangle"), ICON_NODETREE);
   {
     const float base_pt = std::max(1.0f, style->widget.points);
-    if (arg->font_pt < 1.0f) {
-      const float scale = arg->editor_state.font_scale > 0.05f ? arg->editor_state.font_scale :
-                                                                1.0f;
-      arg->font_pt = std::clamp(base_pt * scale, 8.0f, 36.0f);
-    }
-    arg->editor_state.font_scale = std::clamp(arg->font_pt / base_pt, 0.5f, 4.0f);
-    storage.textbox_state.font_scale = arg->editor_state.font_scale;
+    arg->font_pt = std::clamp(base_pt * arg->editor_state.font_scale, 8.0f, 36.0f);
     ui::Button *size_but = ui::uiDefButV(block,
                                         ui::ButtonType::Num,
                                         IFACE_("Size"),
@@ -2031,8 +2020,7 @@ static ui::Block *wrangle_edit_popup(bContext *C, ARegion *region, void *arg_v)
     ui::button_number_step_size_set(size_but, 1.0f);
     ui::button_number_precision_set(size_but, 0.0f);
     ui::button_func_set(size_but, [arg, base_pt](bContext &C) {
-      arg->editor_state.font_scale = std::clamp(arg->font_pt / base_pt, 0.5f, 4.0f);
-      node_storage(*arg->node).textbox_state.font_scale = arg->editor_state.font_scale;
+      ui::wrangle_editor_font_scale_set(arg->font_pt / base_pt);
       if (ARegion *popup = CTX_wm_region_popup(&C)) {
         ED_region_tag_refresh_ui(popup);
         ED_region_tag_redraw(popup);
@@ -2184,16 +2172,7 @@ static ui::Block *wrangle_edit_popup(bContext *C, ARegion *region, void *arg_v)
 
 static void wrangle_edit_popup_free(void *arg_v)
 {
-  WrangleEditPopupArg *arg = static_cast<WrangleEditPopupArg *>(arg_v);
-  if (arg && arg->node) {
-    if (arg->editor_state.font_scale > 0.05f) {
-      node_storage(*arg->node).textbox_state.font_scale = arg->editor_state.font_scale;
-    }
-    if (arg->editor_state.width > 0) {
-      node_storage(*arg->node).textbox_state.width = arg->editor_state.width;
-    }
-  }
-  MEM_delete(arg);
+  MEM_delete(static_cast<WrangleEditPopupArg *>(arg_v));
 }
 
 static bool node_insert_link(bke::NodeInsertLinkParams &params)
@@ -2232,10 +2211,6 @@ static wmOperatorStatus wrangle_edit_invoke(bContext *C, wmOperator *op, const w
   WrangleEditPopupArg *arg = MEM_new<WrangleEditPopupArg>(__func__);
   arg->node = static_cast<bNode *>(node_ptr.data);
   arg->ntree = reinterpret_cast<bNodeTree *>(node_ptr.owner_id);
-  arg->editor_state.visible_lines = 26;
-  const float stored = node_storage(*arg->node).textbox_state.font_scale;
-  arg->editor_state.font_scale = stored > 0.05f ? std::clamp(stored, 0.5f, 4.0f) : 1.0f;
-  arg->editor_state.width = node_storage(*arg->node).textbox_state.width;
   ui::popup_block_invoke(C, wrangle_edit_popup, arg, wrangle_edit_popup_free);
   return OPERATOR_CANCELLED;
 }

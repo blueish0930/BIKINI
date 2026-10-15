@@ -5,12 +5,14 @@
 /** \file
  * \ingroup ed_node
  *
- * Edit Elements node → free Mesh Edit Mode on a temporary object.
- * Esc/Enter/Tab writes the full resulting mesh into the node (#bNode.id).
+ * Edit Elements node → free Edit Mode on a temporary object for one component of the geometry:
+ * mesh, curves, point cloud, or the instances as one point each.
+ * Esc/Enter/Tab writes the full result into the node (#bNode.id).
  */
 
 #include "BKE_compute_contexts.hh"
 #include "BKE_context.hh"
+#include "BKE_curves.h"
 #include "BKE_geometry_set.hh"
 #include "BKE_lib_id.hh"
 #include "BKE_main.hh"
@@ -21,6 +23,7 @@
 #include "BKE_node_runtime.hh"
 #include "BKE_node_tree_update.hh"
 #include "BKE_object.hh"
+#include "BKE_pointcloud.hh"
 #include "BKE_report.hh"
 #include "BKE_scene.hh"
 
@@ -35,9 +38,12 @@
 #include "DEG_depsgraph.hh"
 #include "DEG_depsgraph_query.hh"
 
+#include "DNA_curves_types.h"
+#include "DNA_mesh_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_node_types.h"
 #include "DNA_object_types.h"
+#include "DNA_pointcloud_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_space_types.h"
 #include "DNA_windowmanager_types.h"
@@ -48,6 +54,7 @@
 #include "ED_screen.hh"
 
 #include "NOD_geo_edit_elements.hh"
+#include "NOD_geo_elements_component.hh"
 #include "NOD_geometry_nodes_execute.hh"
 #include "NOD_geometry_nodes_lazy_function.hh"
 
@@ -100,46 +107,88 @@ static bNode *find_single_selected_edit_elements_node(bNodeTree &ntree)
 }
 
 /**
- * Prefer stored full edit mesh when re-entering; otherwise visual geometry
- * (input cache → object visual geo — like Visual Geometry to Objects).
+ * Fill the session parameters with the component to edit. A stored result is edited further,
+ * otherwise the visual geometry at the node is the start (input cache → object visual geo, like
+ * Visual Geometry to Objects).
  */
-static std::optional<bke::GeometrySet> resolve_edit_geometry(bContext *C,
-                                                             SpaceNode &snode,
-                                                             bNode &node,
-                                                             ReportList *reports,
-                                                             Object **r_transform_from)
+static bool resolve_edit_geometry(bContext *C,
+                                  SpaceNode &snode,
+                                  bNode &node,
+                                  ReportList *reports,
+                                  geometry_edit::SessionParams &r_params,
+                                  ElementsSessionData &r_data)
 {
-  *r_transform_from = nullptr;
+  using ComponentType = bke::GeometryComponent::Type;
+  const ID *stored = nodes::edit_elements_get_result(node);
 
-  /* Continue editing previously saved full mesh. */
-  if (const Mesh *stored = nodes::edit_elements_get_mesh(node)) {
-    if (stored->verts_num > 0) {
-      const std::optional<ObjectAndModifier> om =
-          find_object_and_nodes_modifier_for_geometry_edit(C, snode);
-      if (om) {
-        *r_transform_from = const_cast<Object *>(om->object);
-      }
-      BKE_reportf(reports,
-                  RPT_INFO,
-                  "Edit Elements: continue from stored mesh (%d verts)",
-                  stored->verts_num);
-      return bke::GeometrySet::from_mesh(BKE_mesh_copy_for_eval(*stored));
+  /* The geometry at the node, that is with the stored result when there is one. Without a
+   * result it is what is edited, with one it only shows the rest of the geometry. */
+  Object *transform_from = nullptr;
+  std::optional<bke::GeometrySet> geometry = resolve_visual_geometry_for_elements_node(
+      C, snode, node, stored ? nullptr : reports, &transform_from);
+  if (transform_from == nullptr) {
+    if (const std::optional<ObjectAndModifier> object_and_modifier =
+            find_object_and_nodes_modifier_for_geometry_edit(C, snode))
+    {
+      transform_from = const_cast<Object *>(object_and_modifier->object);
     }
   }
-
-  std::optional<bke::GeometrySet> geo = resolve_visual_geometry_for_elements_node(
-      C, snode, node, reports, r_transform_from);
-  if (!geo) {
-    return std::nullopt;
+  r_params.host_object = transform_from;
+  if (transform_from) {
+    r_params.object_to_world = transform_from->object_to_world();
   }
-  if (!geo->has_mesh() || geo->get_mesh()->verts_num == 0) {
+
+  if (stored) {
+    /* Continue with exactly what is stored, also when the node could not be evaluated. */
+    const ComponentType component_type = nodes::edit_elements_result_component_type(node);
+    bke::GeometrySet edit_geometry = geometry ? *geometry : bke::GeometrySet();
+    const PointCloud *instance_points = nullptr;
+    switch (component_type) {
+      case ComponentType::Mesh:
+        edit_geometry.replace_mesh(
+            BKE_mesh_copy_for_eval(*reinterpret_cast<const Mesh *>(stored)));
+        break;
+      case ComponentType::Curve:
+        edit_geometry.replace_curves(
+            BKE_curves_copy_for_eval(reinterpret_cast<const Curves *>(stored)));
+        break;
+      case ComponentType::PointCloud:
+        edit_geometry.replace_pointcloud(
+            BKE_pointcloud_copy_for_eval(reinterpret_cast<const PointCloud *>(stored)));
+        break;
+      case ComponentType::Instance:
+        /* The points keep the instance they come from, so they are not made again. */
+        instance_points = reinterpret_cast<const PointCloud *>(stored);
+        break;
+      default:
+        break;
+    }
+    if (!elements_session_params_from_geometry(
+            edit_geometry, component_type, instance_points, false, r_params, r_data))
+    {
+      BKE_report(reports, RPT_ERROR, "The stored edit result of the node is empty, reset it");
+      return false;
+    }
+    return true;
+  }
+
+  if (!geometry) {
+    return false;
+  }
+  const NodeGeometryEditElements &storage = *static_cast<const NodeGeometryEditElements *>(
+      node.storage);
+  const std::optional<ComponentType> component_type = nodes::elements_component_pick(
+      *geometry, ComponentType(storage.component_type));
+  if (!component_type ||
+      !elements_session_params_from_geometry(
+          *geometry, *component_type, nullptr, false, r_params, r_data))
+  {
     BKE_report(reports,
                RPT_ERROR,
-               "Edit Elements Enter needs a mesh (one geometry type). "
-               "Connect a mesh-producing previous node");
-    return std::nullopt;
+               "The Geometry input has no mesh, curves, point cloud or instances to edit");
+    return false;
   }
-  return geo;
+  return true;
 }
 
 static bool commit_to_node_from_bridge(bContext *C)
@@ -154,29 +203,37 @@ static bool commit_to_node_from_bridge(bContext *C)
     return false;
   }
 
-  Mesh *result_mesh = nullptr;
-  if (!geometry_edit::session_commit_mesh(C, &result_mesh) || !result_mesh) {
+  /* The session forgets its component when it is committed. */
+  const bke::GeometryComponent::Type component_type = geometry_edit::session_component_type();
+  ID *result = nullptr;
+  if (!geometry_edit::session_commit_result(C, &result) || !result) {
     return false;
   }
-
-  bNode *node = find_node_by_identifier(*b_copy.ntree, b_copy.node_identifier);
-  if (!node || !nodes::is_edit_elements_node(*node)) {
-    BKE_id_free(CTX_data_main(C), result_mesh);
-    return false;
-  }
-
-  /* Replace any previous edit mesh / legacy positions with the free-edit result. */
-  nodes::edit_elements_set_mesh(*node, result_mesh);
 
   Main *bmain = CTX_data_main(C);
-  if (!bmain) {
+  bNode *node = find_node_by_identifier(*b_copy.ntree, b_copy.node_identifier);
+  if (!node || !nodes::is_edit_elements_node(*node) || !bmain) {
+    id_us_min(result);
+    if (bmain) {
+      BKE_id_delete(bmain, result);
+    }
     return false;
   }
+
+  /* Replace any previous edit result / legacy positions with the free-edit result. The node
+   * takes its own user, the one from the commit is not needed anymore. */
+  ID *old_result = node->id;
+  nodes::edit_elements_set_result(*node, result, component_type);
+  id_us_min(result);
+  if (old_result && old_result != result && old_result->us == 0) {
+    BKE_id_delete(bmain, old_result);
+  }
+
   bNodeTree &tree = node->owner_tree();
   BKE_ntree_update_tag_node_property(&tree, node);
   BKE_main_ensure_invariants(*bmain, tree.id);
   DEG_id_tag_update(&tree.id, ID_RECALC_NTREE_OUTPUT);
-  DEG_id_tag_update(&result_mesh->id, ID_RECALC_GEOMETRY);
+  DEG_id_tag_update(result, ID_RECALC_GEOMETRY);
   WM_main_add_notifier(NC_NODE | NA_EDITED, &tree);
   WM_main_add_notifier(NC_OBJECT | ND_MODIFIER, nullptr);
   return true;
@@ -202,53 +259,33 @@ static wmOperatorStatus edit_elements_edit_invoke(bContext *C,
     return OPERATOR_PASS_THROUGH | OPERATOR_CANCELLED;
   }
 
-  Object *transform_from = nullptr;
-  std::optional<bke::GeometrySet> geometry_opt = resolve_edit_geometry(
-      C, *snode, *node, op->reports, &transform_from);
-  if (!geometry_opt) {
+  geometry_edit::SessionParams params;
+  ElementsSessionData session_data;
+  if (!resolve_edit_geometry(C, *snode, *node, op->reports, params, session_data)) {
     return OPERATOR_CANCELLED;
   }
-  const Mesh *mesh = geometry_opt->get_mesh();
-  if (!mesh) {
-    BKE_report(op->reports, RPT_ERROR, "Edit Elements input has no mesh");
-    return OPERATOR_CANCELLED;
-  }
+  params.ntree = &ntree;
+  params.node_identifier = node->identifier;
+  params.kind = geometry_edit::SessionKind::MeshEdit;
 
-  float4x4 object_to_world = float4x4::identity();
-  if (transform_from) {
-    object_to_world = transform_from->object_to_world();
-  }
-
-  /* resolve_edit_geometry already returns a owned mesh copy ready for the session seed. */
-  Mesh *seed_mesh = BKE_mesh_copy_for_eval(*mesh);
-  if (!seed_mesh) {
-    BKE_report(op->reports, RPT_ERROR, "Edit Elements: failed to copy input mesh");
+  if (!geometry_edit::session_begin(C, params, op->reports)) {
     return OPERATOR_CANCELLED;
   }
-
-  if (!geometry_edit::session_begin(C,
-                                    &ntree,
-                                    node->identifier,
-                                    transform_from,
-                                    *seed_mesh,
-                                    object_to_world,
-                                    bke::AttrDomain::Point,
-                                    {},
-                                    geometry_edit::SessionKind::MeshEdit,
-                                    op->reports))
-  {
-    BKE_id_free(nullptr, seed_mesh);
-    return OPERATOR_CANCELLED;
-  }
-  BKE_id_free(nullptr, seed_mesh);
 
   edit_bridge().active = true;
   edit_bridge().ntree = &ntree;
   edit_bridge().node_identifier = node->identifier;
 
-  WM_global_report(RPT_INFO,
-                   "Edit Elements: free Mesh Edit Mode — all tools allowed. "
-                   "Esc / Enter / Tab saves the full mesh into the node");
+  if (params.component_type == bke::GeometryComponent::Type::Instance) {
+    WM_global_report(RPT_INFO,
+                     "Edit Elements: one point per instance — move, duplicate or delete them. "
+                     "Esc / Enter / Tab saves the instances into the node");
+  }
+  else {
+    WM_global_report(RPT_INFO,
+                     "Edit Elements: free Edit Mode — all tools allowed. "
+                     "Esc / Enter / Tab saves the result into the node");
+  }
 
   WM_event_add_modal_handler(C, op);
   return OPERATOR_RUNNING_MODAL;
@@ -300,12 +337,13 @@ static bool edit_elements_edit_poll(bContext *C)
 
 void NODE_OT_edit_elements_edit(wmOperatorType *ot)
 {
-  ot->name = "Edit Elements Mesh";
+  ot->name = "Edit Elements";
   ot->idname = "NODE_OT_edit_elements_edit";
   ot->description =
-      "Enter free Mesh Edit Mode on a temporary copy of the cooked input geometry. "
-      "All edit tools are allowed (extrude, knife, delete, …). "
-      "Esc / Enter / Tab writes the full resulting mesh into the Edit Elements node";
+      "Enter free Edit Mode on a temporary copy of the cooked input geometry: its mesh, "
+      "curves, point cloud, or instances as one point each. All edit tools are allowed "
+      "(extrude, knife, delete, …). "
+      "Esc / Enter / Tab writes the full result into the Edit Elements node";
 
   ot->invoke = edit_elements_edit_invoke;
   ot->modal = edit_elements_edit_modal;
@@ -349,7 +387,12 @@ static wmOperatorStatus edit_elements_reset_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
-  nodes::edit_elements_set_mesh(*node, nullptr); /* also clears legacy positions */
+  ID *old_result = node->id;
+  /* Also clears legacy positions. */
+  nodes::edit_elements_set_result(*node, nullptr, bke::GeometryComponent::Type::Mesh);
+  if (old_result && old_result->us == 0) {
+    BKE_id_delete(CTX_data_main(C), old_result);
+  }
   nodes::edit_elements_clear_cache(*snode->edittree, *node);
   if (snode->edittree) {
     nodes::edit_elements_clear_cache(*DEG_get_original(snode->edittree), *node);
@@ -368,7 +411,7 @@ void NODE_OT_edit_elements_reset(wmOperatorType *ot)
 {
   ot->name = "Reset Edit Elements";
   ot->idname = "NODE_OT_edit_elements_reset";
-  ot->description = "Clear stored edit mesh / positions and runtime geometry cache";
+  ot->description = "Clear stored edit result / positions and runtime geometry cache";
 
   ot->exec = edit_elements_reset_exec;
   /* No poll so draw_buttons always paints the Reset button; exec validates the node. */

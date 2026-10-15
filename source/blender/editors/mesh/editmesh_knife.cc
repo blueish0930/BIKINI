@@ -9,6 +9,7 @@
  */
 
 #include <algorithm>
+#include <optional>
 #include <fmt/format.h>
 
 #include "MEM_guardedalloc.h"
@@ -3370,6 +3371,40 @@ static void knife_mirror_repair_loose_ends(KnifeTool_OpData *kcd, BMesh *bm, int
   }
 }
 
+/**
+ * BIKINI: side of each symmetry plane the user's own cut is on (+-1), from the cut verts
+ * that are not mirror copies. 0 where the cut has points on both sides or none.
+ */
+static float3 knife_user_cut_side(KnifeTool_OpData *kcd, const int ob_index, const Mesh *mesh)
+{
+  bool pos[3] = {false, false, false};
+  bool neg[3] = {false, false, false};
+  BLI_mempool_iter iter;
+  BLI_mempool_iternew(kcd->kverts, &iter);
+  for (KnifeVert *kfv = static_cast<KnifeVert *>(BLI_mempool_iterstep(&iter)); kfv;
+       kfv = static_cast<KnifeVert *>(BLI_mempool_iterstep(&iter)))
+  {
+    if (kfv->is_invalid || kfv->is_mirror || !kfv->is_cut || kfv->ob_index != ob_index) {
+      continue;
+    }
+    for (int a = 0; a < 3; a++) {
+      if (kfv->co[a] > 1e-4f) {
+        pos[a] = true;
+      }
+      else if (kfv->co[a] < -1e-4f) {
+        neg[a] = true;
+      }
+    }
+  }
+  float3 side(0.0f);
+  for (int a = 0; a < 3; a++) {
+    if ((mesh->symmetry & (ME_SYMMETRY_X << a)) && pos[a] != neg[a]) {
+      side[a] = pos[a] ? 1.0f : -1.0f;
+    }
+  }
+  return side;
+}
+
 static void knife_make_cuts(KnifeTool_OpData *kcd, int ob_index)
 {
   Object *ob = kcd->objects[ob_index];
@@ -3386,6 +3421,17 @@ static void knife_make_cuts(KnifeTool_OpData *kcd, int ob_index)
   /* BIKINI: append mirrored cuts to the graph before consuming it. */
   kcd->cur_symmetry = (id_cast<Mesh *>(ob->data)->symmetry != 0);
   knife_mirror_apply(kcd, ob_index);
+
+  /* BIKINI: a cut that starts or ends inside a face is joined to one of the face's
+   * corners, and the mirrored cut picked its corner on its own. Record the mesh now and
+   * match the mirror side's choice to the user's once the cuts are made. */
+  std::optional<EditMeshMirrorDiagonals> mirror_diagonals;
+  if (kcd->cur_symmetry) {
+    const float3 side = knife_user_cut_side(kcd, ob_index, id_cast<Mesh *>(ob->data));
+    if (side != float3(0.0f)) {
+      mirror_diagonals.emplace(ob, BKE_editmesh_from_object(ob), 0.0f, side);
+    }
+  }
 
   /* Put list of cutting edges for a face into fhash, keyed by face. */
   BLI_mempool_iternew(kcd->kedges, &iter);
@@ -3468,6 +3514,10 @@ static void knife_make_cuts(KnifeTool_OpData *kcd, int ob_index)
   }
 
   knife_mirror_repair_loose_ends(kcd, bm, ob_index);
+
+  if (mirror_diagonals) {
+    mirror_diagonals->apply();
+  }
 }
 
 static bool knife_co_on_user_side(const Mesh *mesh, const float3 &ref, const float co[3])

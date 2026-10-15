@@ -1039,6 +1039,8 @@ static void node_layout(ui::Layout &layout, bContext * /*C*/, PointerRNA *ptr)
 
   ui::Block *block = layout.block();
   const int64_t buttons_before = block ? block->buttons_ptrs.size() : 0;
+  /* Same code size as in every other Wrangle node and in the editor window. */
+  storage.textbox_state.font_scale = ui::wrangle_editor_font_scale();
   layout.textbox_with_state(ptr, "code", &storage.textbox_state, std::nullopt);
   wrangle_apply_code_editor_flags(block, buttons_before);
   const char *code = storage.code ? storage.code : "";
@@ -1877,21 +1879,8 @@ static ui::Block *wrangle_edit_popup(bContext *C, ARegion *region, void *arg_v)
     return gone;
   }
   NodeShaderWrangle &storage = node_storage(*live_node);
-  if (arg->editor_state.visible_lines < 20) {
-    arg->editor_state.visible_lines = 26;
-  }
-  if (arg->editor_state.font_scale > 0.05f) {
-    storage.textbox_state.font_scale = arg->editor_state.font_scale;
-  }
-  else if (storage.textbox_state.font_scale > 0.05f) {
-    arg->editor_state.font_scale = storage.textbox_state.font_scale;
-  }
-  if (arg->editor_state.width > 0) {
-    storage.textbox_state.width = arg->editor_state.width;
-  }
-  else if (storage.textbox_state.width > 0) {
-    arg->editor_state.width = storage.textbox_state.width;
-  }
+  /* Font and window size are shared by every Wrangle node. */
+  ui::wrangle_editor_state_load(arg->editor_state);
 
   const uiStyle *style = ui::style_get_dpi();
   ui::Block *block = ui::block_begin(C, region, "shader_wrangle_code_editor", ui::EmbossType::Emboss);
@@ -1920,13 +1909,7 @@ static ui::Block *wrangle_edit_popup(bContext *C, ARegion *region, void *arg_v)
   header.label(IFACE_("Wrangle"), ICON_NODETREE);
   {
     const float base_pt = std::max(1.0f, style->widget.points);
-    if (arg->font_pt < 1.0f) {
-      const float scale = arg->editor_state.font_scale > 0.05f ? arg->editor_state.font_scale :
-                                                                1.0f;
-      arg->font_pt = std::clamp(base_pt * scale, 8.0f, 36.0f);
-    }
-    arg->editor_state.font_scale = std::clamp(arg->font_pt / base_pt, 0.5f, 4.0f);
-    storage.textbox_state.font_scale = arg->editor_state.font_scale;
+    arg->font_pt = std::clamp(base_pt * arg->editor_state.font_scale, 8.0f, 36.0f);
     ui::Button *size_but = ui::uiDefButV(block,
                                         ui::ButtonType::Num,
                                         IFACE_("Size"),
@@ -1941,10 +1924,7 @@ static ui::Block *wrangle_edit_popup(bContext *C, ARegion *region, void *arg_v)
     ui::button_number_step_size_set(size_but, 1.0f);
     ui::button_number_precision_set(size_but, 0.0f);
     ui::button_func_set(size_but, [arg, base_pt](bContext &C) {
-      arg->editor_state.font_scale = std::clamp(arg->font_pt / base_pt, 0.5f, 4.0f);
-      if (bNode *n = wrangle_live_edit_node(arg)) {
-        node_storage(*n).textbox_state.font_scale = arg->editor_state.font_scale;
-      }
+      ui::wrangle_editor_font_scale_set(arg->font_pt / base_pt);
       if (ARegion *popup = CTX_wm_region_popup(&C)) {
         ED_region_tag_refresh_ui(popup);
         ED_region_tag_redraw(popup);
@@ -1991,18 +1971,7 @@ static ui::Block *wrangle_edit_popup(bContext *C, ARegion *region, void *arg_v)
 
 static void wrangle_edit_popup_free(void *arg_v)
 {
-  WrangleEditPopupArg *arg = static_cast<WrangleEditPopupArg *>(arg_v);
-  if (arg) {
-    if (bNode *n = wrangle_live_edit_node(arg)) {
-      if (arg->editor_state.font_scale > 0.05f) {
-        node_storage(*n).textbox_state.font_scale = arg->editor_state.font_scale;
-      }
-      if (arg->editor_state.width > 0) {
-        node_storage(*n).textbox_state.width = arg->editor_state.width;
-      }
-    }
-  }
-  MEM_delete(arg);
+  MEM_delete(static_cast<WrangleEditPopupArg *>(arg_v));
 }
 
 static wmOperatorStatus wrangle_edit_invoke(bContext *C, wmOperator *op, const wmEvent * /*event*/)
@@ -2016,10 +1985,6 @@ static wmOperatorStatus wrangle_edit_invoke(bContext *C, wmOperator *op, const w
   arg->node = static_cast<bNode *>(node_ptr.data);
   arg->ntree = reinterpret_cast<bNodeTree *>(node_ptr.owner_id);
   arg->node_identifier = arg->node ? arg->node->identifier : 0;
-  arg->editor_state.visible_lines = 26;
-  const float stored = node_storage(*arg->node).textbox_state.font_scale;
-  arg->editor_state.font_scale = stored > 0.05f ? std::clamp(stored, 0.5f, 4.0f) : 1.0f;
-  arg->editor_state.width = node_storage(*arg->node).textbox_state.width;
   ui::popup_block_invoke(C, wrangle_edit_popup, arg, wrangle_edit_popup_free);
   return OPERATOR_CANCELLED;
 }

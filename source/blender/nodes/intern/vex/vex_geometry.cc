@@ -2056,6 +2056,13 @@ struct TopoUser;
 struct MeshTopoCache;
 const bke::GeometrySet *geo_at(TopoUser *u, int gi);
 
+/** See #TopoUser::group_trees_id. */
+static uint64_t new_group_trees_id()
+{
+  static std::atomic<uint64_t> next_id = 1;
+  return next_id.fetch_add(1, std::memory_order_relaxed);
+}
+
 struct TopoUser {
   bke::GeometrySet *owner = nullptr;
   Span<const bke::GeometrySet *> geos;
@@ -2065,6 +2072,14 @@ struct TopoUser {
   std::optional<bke::AttributeAccessor> attrs;
   Span<float3> positions;
   KDTree<float3> *kdtrees[8] = {};
+  /**
+   * Trees of `nearestpoints(geo, "group", ...)` by attribute name, one map per geometry input.
+   * A null tree is a group without points. Only used with #mutex locked, see #group_tree_for.
+   */
+  using GroupTreeMap = Map<std::string, KDTree<float3> *>;
+  Vector<GroupTreeMap> group_trees;
+  /** Changes when the trees are freed, the threads then forget the trees that they remember. */
+  std::atomic<uint64_t> group_trees_id{new_group_trees_id()};
   Array<int> v2e_off;
   Array<int> v2e_idx;
   Array<int> e2c_off;
@@ -2202,7 +2217,11 @@ struct TopoUser {
     if (v2e_ok || !mesh) {
       return;
     }
-    v2e = bke::mesh::build_vert_to_edge_map(mesh->edges(), mesh->verts_num, v2e_off, v2e_idx);
+    /* The build runs parallel loops. Without isolation this thread can steal another chunk of
+     * the program while it waits for them and lock #mutex a second time, which throws. */
+    threading::isolate_task([&]() {
+      v2e = bke::mesh::build_vert_to_edge_map(mesh->edges(), mesh->verts_num, v2e_off, v2e_idx);
+    });
     v2e_ok = true;
   }
   void ensure_e2c()
@@ -2214,17 +2233,27 @@ struct TopoUser {
     if (e2c_ok || !mesh) {
       return;
     }
-    e2c = bke::mesh::build_edge_to_corner_map(
-        mesh->corner_edges(), mesh->edges_num, e2c_off, e2c_idx);
+    threading::isolate_task([&]() {
+      e2c = bke::mesh::build_edge_to_corner_map(
+          mesh->corner_edges(), mesh->edges_num, e2c_off, e2c_idx);
+    });
     e2c_ok = true;
   }
-  void prewarm_topology()
+  /**
+   * The two maps of this struct are built for every node execution, so only build the ones that
+   * the program reads. Whatever is not built here is still built on first use.
+   */
+  void prewarm_topology(const bool need_v2e, const bool need_e2c)
   {
     if (!mesh) {
       return;
     }
-    ensure_v2e();
-    ensure_e2c();
+    if (need_v2e) {
+      ensure_v2e();
+    }
+    if (need_e2c) {
+      ensure_e2c();
+    }
     (void)mesh->vert_to_face_map();
     (void)mesh->vert_to_corner_map();
     (void)mesh->corner_to_face_map();
@@ -2243,6 +2272,22 @@ struct TopoUser {
     if (kdtrees[slot]) {
       return kdtrees[slot];
     }
+    const Span<float3> pos = search_positions(gi);
+    if (pos.is_empty()) {
+      return nullptr;
+    }
+    KDTree<float3> *tree = kdtree_new<float3>(uint(pos.size()));
+    for (const int i : pos.index_range()) {
+      kdtree_insert<float3>(tree, i, pos[i]);
+    }
+    /* Large trees are built in parallel, see #ensure_v2e for why that is isolated. */
+    threading::isolate_task([&]() { kdtree_balance(tree); });
+    kdtrees[slot] = tree;
+    return tree;
+  }
+  /** The point positions that the searches in geometry input \a gi run on. */
+  Span<float3> search_positions(const int gi)
+  {
     Span<float3> pos;
     /* Geo 0 must use the span bound on this TopoUser. After
      * `positions_for_write()` the GeometrySet pointer is unique, but the
@@ -2267,16 +2312,112 @@ struct TopoUser {
     if (pos.is_empty()) {
       pos = positions;
     }
-    if (pos.is_empty()) {
-      return nullptr;
+    return pos;
+  }
+  /** The attributes of the component that #search_positions takes the positions from. */
+  std::optional<bke::AttributeAccessor> search_attributes(const int gi)
+  {
+    if (gi <= 0 && !positions.is_empty()) {
+      return attrs;
     }
-    KDTree<float3> *tree = kdtree_new<float3>(uint(pos.size()));
-    for (const int i : pos.index_range()) {
-      kdtree_insert<float3>(tree, i, pos[i]);
+    if (const bke::GeometrySet *g = geo_at(this, gi)) {
+      if (const Mesh *m = g->get_mesh()) {
+        return m->attributes();
+      }
+      if (const PointCloud *pc = g->get_pointcloud()) {
+        return pc->attributes();
+      }
+      if (const Curves *c = g->get_curves()) {
+        return c->geometry.wrap().attributes();
+      }
     }
-    kdtree_balance(tree);
-    kdtrees[slot] = tree;
+    return std::nullopt;
+  }
+  /**
+   * The tree of the points of geometry input \a gi whose attribute \a group is above zero. The
+   * indices in it are those of the whole geometry. Null when there is no such point, or no such
+   * attribute. The attribute is read as it is stored on the geometry, what the running program
+   * writes to it is not part of the group yet.
+   */
+  KDTree<float3> *group_tree_for(const int gi, const StringRef group)
+  {
+    /* The inputs that #geo_at does not know are the wrangled geometry. */
+    const int geo = (gi > 0 && gi < geos.size()) ? gi : 0;
+    /* Every thread remembers the trees that it has asked for. A script can use any number of
+     * groups, a different one for every point, and only the first search of a thread in a group
+     * waits for #mutex. */
+    struct ThreadTrees {
+      uint64_t id = 0;
+      Vector<GroupTreeMap> trees;
+    };
+    thread_local ThreadTrees local;
+    const uint64_t id = group_trees_id.load(std::memory_order_acquire);
+    if (local.id != id) {
+      local.trees.clear();
+      local.id = id;
+    }
+    if (geo >= local.trees.size()) {
+      local.trees.resize(geo + 1);
+    }
+    GroupTreeMap &local_trees = local.trees[geo];
+    if (KDTree<float3> *const *found = local_trees.lookup_ptr_as(group)) {
+      return *found;
+    }
+    std::string name(group.data(), size_t(group.size()));
+    std::lock_guard lock(mutex);
+    if (geo >= group_trees.size()) {
+      group_trees.resize(geo + 1);
+    }
+    if (KDTree<float3> *const *found = group_trees[geo].lookup_ptr(name)) {
+      local_trees.add_new(std::move(name), *found);
+      return *found;
+    }
+    KDTree<float3> *tree = nullptr;
+    /* Reading the attribute and balancing the tree can run parallel loops, see #ensure_v2e for
+     * why that is isolated. */
+    threading::isolate_task([&]() {
+      const Span<float3> pos = search_positions(gi);
+      const std::optional<bke::AttributeAccessor> attributes = search_attributes(gi);
+      if (pos.is_empty() || !attributes) {
+        return;
+      }
+      /* Boolean and integer attributes keep their sign as a float. */
+      const bke::AttributeReader<float> reader = attributes->lookup<float>(
+          group, bke::AttrDomain::Point);
+      if (!reader || reader.varray.size() != pos.size()) {
+        return;
+      }
+      const VArraySpan<float> values(reader.varray);
+      Vector<int> members;
+      for (const int i : pos.index_range()) {
+        if (values[i] > 0.0f) {
+          members.append(i);
+        }
+      }
+      if (members.is_empty()) {
+        return;
+      }
+      tree = kdtree_new<float3>(uint(members.size()));
+      for (const int i : members) {
+        kdtree_insert<float3>(tree, i, pos[i]);
+      }
+      kdtree_balance(tree);
+    });
+    group_trees[geo].add_new(name, tree);
+    local_trees.add_new(std::move(name), tree);
     return tree;
+  }
+  void free_group_trees()
+  {
+    for (const GroupTreeMap &trees : group_trees) {
+      for (KDTree<float3> *tree : trees.values()) {
+        if (tree) {
+          kdtree_free(tree);
+        }
+      }
+    }
+    group_trees.clear();
+    group_trees_id.store(new_group_trees_id(), std::memory_order_release);
   }
   void ensure_kdtree()
   {
@@ -2290,6 +2431,7 @@ struct TopoUser {
         kdtrees[i] = nullptr;
       }
     }
+    free_group_trees();
     knn_ok = false;
     knn_off = {};
     knn_idx = {};
@@ -2632,7 +2774,11 @@ struct MeshTopoCache {
     if (v2e_ok.load(std::memory_order_relaxed)) {
       return;
     }
-    v2e = bke::mesh::build_vert_to_edge_map(mesh->edges(), mesh->verts_num, v2e_off, v2e_idx);
+    /* Isolated for the same reason as in #TopoUser::ensure_v2e: the build is parallel and the
+     * waiting thread must not re-enter this function through a stolen chunk. */
+    threading::isolate_task([&]() {
+      v2e = bke::mesh::build_vert_to_edge_map(mesh->edges(), mesh->verts_num, v2e_off, v2e_idx);
+    });
     v2e_ok.store(true, std::memory_order_release);
   }
 
@@ -2645,8 +2791,10 @@ struct MeshTopoCache {
     if (e2f_ok.load(std::memory_order_relaxed)) {
       return;
     }
-    e2f = bke::mesh::build_edge_to_face_map(
-        mesh->faces(), mesh->corner_edges(), mesh->edges_num, e2f_off, e2f_idx);
+    threading::isolate_task([&]() {
+      e2f = bke::mesh::build_edge_to_face_map(
+          mesh->faces(), mesh->corner_edges(), mesh->edges_num, e2f_off, e2f_idx);
+    });
     e2f_ok.store(true, std::memory_order_release);
   }
 
@@ -2659,8 +2807,10 @@ struct MeshTopoCache {
     if (e2c_ok.load(std::memory_order_relaxed)) {
       return;
     }
-    e2c = bke::mesh::build_edge_to_corner_map(
-        mesh->corner_edges(), mesh->edges_num, e2c_off, e2c_idx);
+    threading::isolate_task([&]() {
+      e2c = bke::mesh::build_edge_to_corner_map(
+          mesh->corner_edges(), mesh->edges_num, e2c_off, e2c_idx);
+    });
     e2c_ok.store(true, std::memory_order_release);
   }
 };
@@ -2672,6 +2822,7 @@ TopoUser::~TopoUser()
       kdtree_free(tree);
     }
   }
+  free_group_trees();
 }
 
 MeshTopoCache &mesh_topo(TopoUser *u, const int gi, const Mesh *mesh);
@@ -3628,8 +3779,9 @@ void spatial_ensure_faces(TopoUser *u, TopoUser::SpatialAccel &a)
     return;
   }
   if (a.mesh && a.mesh->faces_num > 0) {
-    /* Same kdop tree as the Geometry Proximity node. */
-    a.faces = a.mesh->bvh_corner_tris();
+    /* Same kdop tree as the Geometry Proximity node. The BVH build is parallel, so it is isolated
+     * while #TopoUser::mutex is held (see #TopoUser::ensure_v2e). */
+    threading::isolate_task([&]() { a.faces = a.mesh->bvh_corner_tris(); });
   }
   a.faces_ok = true;
 }
@@ -3644,7 +3796,7 @@ void spatial_ensure_verts(TopoUser *u, TopoUser::SpatialAccel &a)
     return;
   }
   if (a.mesh) {
-    a.verts = &a.mesh->bvh_verts();
+    threading::isolate_task([&]() { a.verts = &a.mesh->bvh_verts(); });
   }
   a.verts_ok = true;
 }
@@ -3659,7 +3811,7 @@ void spatial_ensure_edges(TopoUser *u, TopoUser::SpatialAccel &a)
     return;
   }
   if (a.mesh) {
-    a.edges = &a.mesh->bvh_edges();
+    threading::isolate_task([&]() { a.edges = &a.mesh->bvh_edges(); });
   }
   a.edges_ok = true;
 }
@@ -3674,7 +3826,7 @@ void spatial_ensure_points(TopoUser *u, TopoUser::SpatialAccel &a)
     return;
   }
   if (a.pc) {
-    a.points = &a.pc->bvh_tree();
+    threading::isolate_task([&]() { a.points = &a.pc->bvh_tree(); });
   }
   a.points_ok = true;
 }
@@ -4928,7 +5080,15 @@ Value geo_builtin_fn(void *user,
        *   mode 1/"r":  all within radius
        *   mode 2/"rk": at most k within radius
        * Signatures for rk: nearestpoints(geo, r, k, "rk") or nearestpoints(geo, r, "rk", k).
-       * Optional last arg is sample position. */
+       * Optional last arg is sample position.
+       * A string as the second argument is a group: nearestpoints(geo, group, k_or_r, mode) only
+       * finds the points whose bool/int attribute of that name is above zero. */
+      const bool has_group = args.size() >= 3 && args[1].type == Type::String;
+      const StringRef group = has_group ? value_string(args[1], env) : StringRef();
+      /* The arguments without the group. */
+      const auto arg = [&](const int i) -> const Value & {
+        return args[(has_group && i >= 1) ? i + 1 : i];
+      };
       int geo = 0;
       int k = 8;
       float radius = 1.0f;
@@ -4936,7 +5096,7 @@ Value geo_builtin_fn(void *user,
       float3 pos = (env.index >= 0 && env.index < u->positions.size()) ? u->positions[env.index] :
                                                                          float3(0.0f);
       bool custom_pos = false;
-      const int narg = int(args.size());
+      const int narg = int(args.size()) - (has_group ? 1 : 0);
       auto is_str = [](const Value &v) { return v.type == Type::String; };
       auto is_vec = [](const Value &v) {
         return v.type == Type::Vector || v.type == Type::Color;
@@ -4951,61 +5111,63 @@ Value geo_builtin_fn(void *user,
         }
         return m != 0 ? 1 : 0;
       };
-      if (narg >= 4 && (is_str(args[3]) || (args[3].type == Type::Int && args[3].as_int() == 2 &&
-                                           !is_str(args[2]))))
+      if (narg >= 4 && (is_str(arg(3)) || (arg(3).type == Type::Int && arg(3).as_int() == 2 &&
+                                           !is_str(arg(2)))))
       {
-        geo = args[0].as_int();
-        radius = args[1].as_float();
-        k = std::max(args[2].as_int(), 0);
-        mode = mode_of(args[3]);
+        geo = arg(0).as_int();
+        radius = arg(1).as_float();
+        k = std::max(arg(2).as_int(), 0);
+        mode = mode_of(arg(3));
         if (narg >= 5) {
-          pos = args[4].as_vec();
+          pos = arg(4).as_vec();
           custom_pos = true;
         }
       }
-      else if (narg >= 4 && ((is_str(args[2]) && mode_of(args[2]) == 2) ||
-                             (args[2].type == Type::Int && args[2].as_int() == 2)) &&
-               !is_vec(args[3]))
+      else if (narg >= 4 && ((is_str(arg(2)) && mode_of(arg(2)) == 2) ||
+                             (arg(2).type == Type::Int && arg(2).as_int() == 2)) &&
+               !is_vec(arg(3)))
       {
-        geo = args[0].as_int();
-        radius = args[1].as_float();
+        geo = arg(0).as_int();
+        radius = arg(1).as_float();
         mode = 2;
-        k = std::max(args[3].as_int(), 0);
+        k = std::max(arg(3).as_int(), 0);
         if (narg >= 5) {
-          pos = args[4].as_vec();
+          pos = arg(4).as_vec();
           custom_pos = true;
         }
       }
       else if (narg >= 3) {
-        geo = args[0].as_int();
-        k = std::max(args[1].as_int(), 0);
-        radius = args[1].as_float();
-        mode = mode_of(args[2]);
+        geo = arg(0).as_int();
+        k = std::max(arg(1).as_int(), 0);
+        radius = arg(1).as_float();
+        mode = mode_of(arg(2));
         if (narg >= 4) {
-          pos = args[3].as_vec();
+          pos = arg(3).as_vec();
           custom_pos = true;
         }
       }
       else if (narg == 2) {
-        geo = args[0].as_int();
-        k = std::max(args[1].as_int(), 0);
-        radius = args[1].as_float();
-        if (args[1].type == Type::Float) {
+        geo = arg(0).as_int();
+        k = std::max(arg(1).as_int(), 0);
+        radius = arg(1).as_float();
+        if (arg(1).type == Type::Float) {
           mode = 1;
         }
       }
       else if (narg == 1) {
-        k = std::max(args[0].as_int(), 0);
-        radius = args[0].as_float();
-        if (args[0].type == Type::Float) {
+        k = std::max(arg(0).as_int(), 0);
+        radius = arg(0).as_float();
+        if (arg(0).type == Type::Float) {
           mode = 1;
         }
       }
       k = std::max(k, 0);
       const int skip_id = (geo <= 0) ? env.index : -1;
+      /* An empty name is no group, like in Houdini. */
+      const bool filtered = !group.is_empty();
       /* Same neighbors every call at current P: index a CSR table built once. */
-      if (mode == 0 && !custom_pos && u->knn_ok && geo == u->knn_geo && k == u->knn_k &&
-          env.index >= 0 && env.index + 1 < u->knn_off.size())
+      if (mode == 0 && !custom_pos && !filtered && u->knn_ok && geo == u->knn_geo &&
+          k == u->knn_k && env.index >= 0 && env.index + 1 < u->knn_off.size())
       {
         const int a = u->knn_off[env.index];
         const int b = u->knn_off[env.index + 1];
@@ -5014,7 +5176,7 @@ Value geo_builtin_fn(void *user,
           return value_from_int_span(u->knn_idx.as_span().slice(a, n));
         }
       }
-      KDTree<float3> *tree = u->tree_for(geo);
+      KDTree<float3> *tree = filtered ? u->group_tree_for(geo, group) : u->tree_for(geo);
       if (!tree) {
         return empty_int_arr();
       }
@@ -5851,7 +6013,7 @@ void c_fill_topo_attr(TopoUser &u,
     return;
   }
   const Mesh &mesh = *u.mesh;
-  u.prewarm_topology();
+  u.prewarm_topology(true, false);
   mask.foreach_index(
       [&](const int64_t i) {
         const int elem = int(i);
@@ -7282,7 +7444,8 @@ ExecOutput run_on_accessor(const Program &program,
   if (program_uses_call(program, Builtin::NearestPoints) ||
       program_uses_call(program, Builtin::NearPoints))
   {
-    topo.ensure_kdtree();
+    /* The k-d tree is built by the first search, for the geometry that it searches. Building the
+     * one of this geometry here is wasted when the program only searches another input. */
     const int knn_k = program.knn_precompute ? program.knn_k :
                       program.jacobi_knn     ? program.jacobi_knn_k :
                                                0;
@@ -7300,7 +7463,11 @@ ExecOutput run_on_accessor(const Program &program,
     }
   }
   if (program_uses_topology(program)) {
-    topo.prewarm_topology();
+    const bool deletes = program_uses_call(program, Builtin::DeleteGeometry);
+    topo.prewarm_topology(deletes || program_uses_call(program, Builtin::EdgesOfVertex) ||
+                              program_uses_call(program, Builtin::Neighbours) ||
+                              program_uses_call(program, Builtin::PointNeighbours),
+                          deletes);
   }
   prewarm_spatial(topo, program);
 

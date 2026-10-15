@@ -191,6 +191,65 @@ static MeshLaplacianCOO emit_coo(const Map<int64_t, float> &entries, const int64
   return coo;
 }
 
+/**
+ * The entries of a custom matrix. Gives the same result as #build_laplacian_L followed by
+ * #emit_coo, but without the hash map: the entries usually come row by row, then only the few
+ * entries of each row have to be sorted.
+ */
+static MeshLaplacianCOO custom_coo(const MeshLaplacianOptions &options, const int n)
+{
+  BLI_assert(options.custom_rows.size() == options.custom_weights.size());
+  BLI_assert(options.custom_cols.size() == options.custom_weights.size());
+  Vector<COOTriple> triples;
+  triples.reserve(options.custom_weights.size());
+  bool rows_sorted = true;
+  for (const int i : options.custom_weights.index_range()) {
+    const int row = options.custom_rows[i];
+    const int col = options.custom_cols[i];
+    const float weight = options.custom_weights[i];
+    if (row < 0 || row >= n || col < 0 || col >= n || weight == 0.0f) {
+      continue;
+    }
+    rows_sorted &= triples.is_empty() || triples.last().row <= row;
+    triples.append(COOTriple{row, col, weight});
+  }
+  /* Stable sorts keep duplicates in their given order, so they add up in that order. */
+  if (!rows_sorted) {
+    std::stable_sort(triples.begin(), triples.end(), [](const COOTriple &a, const COOTriple &b) {
+      return a.row < b.row;
+    });
+  }
+  MeshLaplacianCOO coo;
+  coo.weights.reserve(triples.size());
+  coo.rows.reserve(triples.size());
+  coo.cols.reserve(triples.size());
+  for (int64_t begin = 0; begin < triples.size();) {
+    int64_t end = begin + 1;
+    while (end < triples.size() && triples[end].row == triples[begin].row) {
+      end++;
+    }
+    const MutableSpan<COOTriple> row = triples.as_mutable_span().slice(begin, end - begin);
+    std::stable_sort(row.begin(), row.end(), [](const COOTriple &a, const COOTriple &b) {
+      return a.col < b.col;
+    });
+    for (int64_t i = 0; i < row.size();) {
+      float weight = row[i].weight;
+      int64_t next = i + 1;
+      for (; next < row.size() && row[next].col == row[i].col; next++) {
+        weight += row[next].weight;
+      }
+      if (weight != 0.0f) {
+        coo.rows.append(row[i].row);
+        coo.cols.append(row[i].col);
+        coo.weights.append(weight);
+      }
+      i = next;
+    }
+    begin = end;
+  }
+  return coo;
+}
+
 }  // namespace
 
 MeshLaplacianCOO mesh_laplacian_build(const Span<float3> positions,
@@ -207,12 +266,16 @@ MeshLaplacianCOO mesh_laplacian_build(const Span<float3> positions,
     return empty;
   }
 
-  const int64_t n64 = n;
-  Map<int64_t, float> L = build_laplacian_L(positions, corner_verts, faces_num, options);
-
   const bool use_mass = options.use_mass;
   const bool diffuse = options.build_diffusion;
   const float t = options.diffusion_t;
+
+  if (options.mode == MeshLaplacianWeightMode::Custom && !use_mass && !diffuse) {
+    return custom_coo(options, n);
+  }
+
+  const int64_t n64 = n;
+  Map<int64_t, float> L = build_laplacian_L(positions, corner_verts, faces_num, options);
 
   Array<float> mass;
   if (use_mass) {

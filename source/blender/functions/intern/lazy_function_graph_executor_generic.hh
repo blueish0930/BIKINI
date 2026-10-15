@@ -415,6 +415,13 @@ class GenericGraphExecutor {
       Vector<const FunctionNode *> side_effect_nodes;
       if (self_.side_effect_provider_ != nullptr) {
         side_effect_nodes = self_.side_effect_provider_->get_nodes_with_side_effects(context);
+        /* A node of another graph would run with the state of an unrelated node. */
+        const Span<const Node *> graph_nodes = self_.graph_.nodes();
+        side_effect_nodes.remove_if([&](const FunctionNode *node) {
+          const int node_index = node->index_in_graph();
+          return !graph_nodes.index_range().contains(node_index) ||
+                 graph_nodes[node_index] != node;
+        });
         for (const FunctionNode *node : side_effect_nodes) {
           BLI_assert(self_.graph_.nodes().contains(node));
           const int node_index = node->index_in_graph();

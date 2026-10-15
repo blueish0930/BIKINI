@@ -777,4 +777,57 @@ Button *uiDefButTextBoxR(Block *block,
   return but;
 }
 
+/* -------------------------------------------------------------------- */
+/** \name Wrangle Editor Window
+ * \{ */
+
+constexpr int wrangle_editor_default_lines = 26;
+constexpr int wrangle_editor_min_lines = 8;
+constexpr int wrangle_editor_max_lines = 200;
+
+float wrangle_editor_font_scale()
+{
+  /* Preferences saved before this was added read as zero. */
+  if (U.wrangle_editor_font_scale > 0.05f) {
+    return std::clamp(U.wrangle_editor_font_scale, 0.5f, 4.0f);
+  }
+  return 1.0f;
+}
+
+void wrangle_editor_font_scale_set(const float scale)
+{
+  const float value = std::clamp(scale, 0.5f, 4.0f);
+  if (U.wrangle_editor_font_scale != value) {
+    U.wrangle_editor_font_scale = value;
+    U.runtime.is_dirty = true;
+  }
+}
+
+void wrangle_editor_state_load(TextboxState &state)
+{
+  state.font_scale = wrangle_editor_font_scale();
+  state.visible_lines = U.wrangle_editor_lines > 0 ?
+                            std::clamp<int>(U.wrangle_editor_lines,
+                                            wrangle_editor_min_lines,
+                                            wrangle_editor_max_lines) :
+                            wrangle_editor_default_lines;
+  state.width = int(std::round(float(U.wrangle_editor_width) * UI_SCALE_FAC));
+}
+
+void wrangle_editor_size_set(const int width, const int visible_lines)
+{
+  /* Stored without the interface scale, so the window keeps its proportions when that changes. */
+  const short stored_width = short(
+      std::clamp(int(std::round(float(width) / UI_SCALE_FAC)), 0, 2800));
+  const short stored_lines = short(
+      std::clamp(visible_lines, wrangle_editor_min_lines, wrangle_editor_max_lines));
+  if (U.wrangle_editor_width != stored_width || U.wrangle_editor_lines != stored_lines) {
+    U.wrangle_editor_width = stored_width;
+    U.wrangle_editor_lines = stored_lines;
+    U.runtime.is_dirty = true;
+  }
+}
+
+/** \} */
+
 }  // namespace blender::ui

@@ -1438,6 +1438,16 @@ Button *uiDefButR_prop(Block *block,
 int textbox_but_height(const TextboxState &state);
 
 /**
+ * Font and size of the Wrangle code editor window. They are kept in the preferences instead of
+ * the node, so the window looks the same whichever node it is opened for.
+ */
+float wrangle_editor_font_scale();
+void wrangle_editor_font_scale_set(float scale);
+/** Set the font scale, width and line count of \a state; the scroll position is left alone. */
+void wrangle_editor_state_load(TextboxState &state);
+void wrangle_editor_size_set(int width, int visible_lines);
+
+/**
  * Create a multi-line text-box for editing an RNA property.
  */
 Button *uiDefButTextBoxR(Block *block,

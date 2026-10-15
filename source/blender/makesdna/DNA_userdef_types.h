@@ -1320,6 +1320,15 @@ struct UserDef {
   eUserpref_VideoDecodingDevice video_decoding_device = USER_VIDEO_DECODING_DEVICE_AUTOMATIC;
 
   float collection_instance_empty_size = 1.0f;
+
+  /**
+   * Wrangle code editor window, the same for every Wrangle node: font scale, width (without the
+   * interface scale, 0 = default) and number of text lines.
+   */
+  float wrangle_editor_font_scale = 1.0f;
+  short wrangle_editor_width = 0;
+  short wrangle_editor_lines = 26;
+
   eTextEdit_Flags text_flag = {};
 
   eUserpref_Save_Modified_Images save_modified_images = USER_SAVE_MODIFIED_IMAGES_ASK;

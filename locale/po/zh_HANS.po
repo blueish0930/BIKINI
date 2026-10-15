@@ -176033,8 +176033,8 @@ msgstr "点邻居用 pointneighbours(geo, index)；面邻居用 faceneighbours(g
 msgid "The closest point of a surface: geometry_proximity(geo, \"face\", sample, hit_pos, dist).\n  Example: vector hit; float d; geometry_proximity(1, \"face\", v@P, hit, d);"
 msgstr "靠近采样用 geometry_proximity(geo, \"face\", 采样点, 命中位置, 距离)。\n  例: vector hit; float d; geometry_proximity(1, \"face\", v@P, hit, d);"
 
-msgid "Nearest points: nearestpoints(geo, k_or_r, mode), it returns int[].\n  mode 0/\"k\": the k nearest          i[]@pts = nearestpoints(0, 8, \"k\");\n  mode 1/\"r\": all within a radius     i[]@pts = nearestpoints(0, 0.25, \"r\");\n  mode 2/\"rk\": at most k in a radius  i[]@pts = nearestpoints(0, 0.25, 8, \"rk\");"
-msgstr "近邻只有 nearestpoints(geo, k_or_r, mode)，返回 int[]。\n  mode 0/\"k\": k 近邻         i[]@pts = nearestpoints(0, 8, \"k\");\n  mode 1/\"r\": 半径内全部      i[]@pts = nearestpoints(0, 0.25, \"r\");\n  mode 2/\"rk\": 半径内最多 k 个 i[]@pts = nearestpoints(0, 0.25, 8, \"rk\");"
+msgid "Nearest points: nearestpoints(geo, k_or_r, mode), it returns int[].\n  mode 0/\"k\": the k nearest          i[]@pts = nearestpoints(0, 8, \"k\");\n  mode 1/\"r\": all within a radius     i[]@pts = nearestpoints(0, 0.25, \"r\");\n  mode 2/\"rk\": at most k in a radius  i[]@pts = nearestpoints(0, 0.25, 8, \"rk\");\n  Only the points of a group (a bool/int attribute above zero): i[]@pts = nearestpoints(0, \"boundary\", 8, \"k\");"
+msgstr "近邻只有 nearestpoints(geo, k_or_r, mode)，返回 int[]。\n  mode 0/\"k\": k 近邻         i[]@pts = nearestpoints(0, 8, \"k\");\n  mode 1/\"r\": 半径内全部      i[]@pts = nearestpoints(0, 0.25, \"r\");\n  mode 2/\"rk\": 半径内最多 k 个 i[]@pts = nearestpoints(0, 0.25, 8, \"rk\");\n  只找某个组里的点（bool/int 属性大于 0）: i[]@pts = nearestpoints(0, \"boundary\", 8, \"k\");"
 
 msgid "Rays: raycast(geo, origin, dir, length, is_hit, hit_pos, hit_n, hit_dist).\n  All hits: ray hits[] = raycastall(...), then rayishit(hits[i]) / rayhitpos(hits[i]).\n  Example: int hit; vector hp, hn; float hd; raycast(0, v@P, {0,0,-1}, 10, hit, hp, hn, hd);"
 msgstr "射线用 raycast(geo, origin, dir, length, is_hit, hit_pos, hit_n, hit_dist)。\n  全部命中: ray hits[] = raycastall(...)，再用 rayishit(hits[i]) / rayhitpos(hits[i]) 读每条射线。\n  例: int hit; vector hp, hn; float hd; raycast(0, v@P, {0,0,-1}, 10, hit, hp, hn, hd);"
@@ -181312,3 +181312,129 @@ msgstr "同时移除被融并边上之后仅连接两条边的顶点"
 
 msgid "Vertices are kept if the direction changes by more than this angle from one of their two edges to the other, which preserves the corners of the joined faces"
 msgstr "如果从顶点的一条边到另一条边的方向变化超过此角度，则保留该顶点，以保留合并后的面的拐角"
+
+msgid "For Each Group"
+msgstr "For Each 遍历群组"
+
+msgid "What the zone runs once for"
+msgstr "区域每次运行所针对的对象"
+
+msgid "Run the zone once for every element of the domain"
+msgstr "对域中的每个元素运行一次区域"
+
+msgid "Run the zone once for every group of elements that share a Group ID. Each iteration receives its whole group as one geometry, and the iterations run on all threads"
+msgstr "对共享同一群组 ID 的每组元素运行一次区域。每次迭代会将整组元素作为一个几何体接收，各次迭代在所有线程上运行"
+
+msgid "ID that is shared by all elements of the current iteration"
+msgstr "当前迭代中所有元素共享的 ID"
+
+msgid "Elements with the same ID are handled together in one iteration, which receives them as one geometry"
+msgstr "ID 相同的元素会在同一次迭代中一起处理，并作为一个几何体传入"
+
+msgid "Geometry to select on. Mesh, curves, point cloud and instances each have their own selection"
+msgstr "要在其上选择的几何。网格、曲线、点云和实例各有自己的选择"
+
+msgid "The input geometry with the selection stored on it"
+msgstr "存储了选择的输入几何"
+
+msgid "The interactively selected elements, stored as an attribute on the geometry so that it follows the elements through later nodes. Press Enter with only this node selected to edit the selection in the 3D Viewport; Esc confirms and exits"
+msgstr "交互选中的元素，作为属性存储在几何上，因此会跟随元素经过后续节点。仅选中此节点时按 Enter 可在 3D 视图中编辑选择；Esc 确认并退出"
+
+msgid "Select mesh vertices, curve control points or points of a point cloud"
+msgstr "选择网格顶点、曲线控制点或点云的点"
+
+msgid "Select instances"
+msgstr "选择实例"
+
+msgid "Geometry component whose selection is edited in the 3D Viewport. When the geometry has no elements of it, the first component that has any is edited instead"
+msgstr "在 3D 视图中编辑其选择的几何组件。若几何中没有该组件的元素，则改为编辑第一个有元素的组件"
+
+msgid "Kind of element that is selected when the selection is edited"
+msgstr "编辑选择时所选元素的类型"
+
+msgid "Geometry whose mesh, curves, point cloud or instances Enter opens for editing"
+msgstr "按 Enter 时打开其网格、曲线、点云或实例进行编辑的几何"
+
+msgid "The input geometry with the edited component replaced by the stored result, if any"
+msgstr "输入几何，其中被编辑的组件已替换为存储的结果（如有）"
+
+msgid "Geometry component that is edited in the 3D Viewport. When the geometry has no elements of it, the first component that has any is edited instead"
+msgstr "在 3D 视图中编辑的几何组件。若几何中没有该组件的元素，则改为编辑第一个有元素的组件"
+
+msgid "The edited instances are not in the input geometry anymore"
+msgstr "被编辑的实例已不在输入几何中"
+
+msgid "Enter free Edit Mode on a temporary copy of the cooked input (Enter): mesh, curves, point cloud, or instances as one point each. All edit tools are allowed; Esc/Enter/Tab writes the result into the node. Also search: Edit Mesh, Free Edit, Capture Mesh Edit"
+msgstr "在求值后输入的临时副本上进入自由编辑模式（Enter）：网格、曲线、点云，或每个实例一个点。允许所有编辑工具；Esc/Enter/Tab 把结果写入节点。亦可搜索：编辑网格、自由编辑、捕获网格编辑"
+
+msgid "Nothing to edit in the Geometry input of the node"
+msgstr "节点的几何输入中没有可编辑的内容"
+
+msgid "The geometry component cannot be selected on this domain"
+msgstr "该几何组件无法在此域上选择"
+
+msgid "Select Elements: selection only (gizmos off). Esc/Enter/Tab confirm"
+msgstr "选择元素：仅选择（关闭 Gizmo）。Esc/Enter/Tab 确认"
+
+msgid "Component the points are on, the other domains belong to one component only"
+msgstr "点所在的组件，其他域只属于一种组件"
+
+msgid "The stored edit result of the node is empty, reset it"
+msgstr "节点存储的编辑结果为空，请重置"
+
+msgid "The Geometry input has no mesh, curves, point cloud or instances to edit"
+msgstr "几何输入中没有可编辑的网格、曲线、点云或实例"
+
+msgid "Edit Elements: one point per instance — move, duplicate or delete them. Esc / Enter / Tab saves the instances into the node"
+msgstr "编辑元素：每个实例一个点 — 可移动、复制或删除。Esc / Enter / Tab 将实例保存到节点"
+
+msgid "Edit Elements: free Edit Mode — all tools allowed. Esc / Enter / Tab saves the result into the node"
+msgstr "编辑元素：自由编辑模式 — 允许所有工具。Esc / Enter / Tab 将结果保存到节点"
+
+msgid "Enter free Edit Mode on a temporary copy of the cooked input geometry: its mesh, curves, point cloud, or instances as one point each. All edit tools are allowed (extrude, knife, delete, …). Esc / Enter / Tab writes the full result into the Edit Elements node"
+msgstr "在求值后输入几何的临时副本上进入自由编辑模式：其网格、曲线、点云，或每个实例一个点。允许所有编辑工具（挤出、切刀、删除等）。Esc / Enter / Tab 把完整结果写入编辑元素节点"
+
+msgid "Clear stored edit result / positions and runtime geometry cache"
+msgstr "清除存储的编辑结果 / 位置以及运行时几何缓存"
+
+msgid "Could not get visual geometry. Ensure the Geometry Nodes modifier is enabled, the previous node outputs a mesh, curves, a point cloud or instances, and the object is visible in the viewport"
+msgstr "无法获取可视几何。请确保几何节点修改器已启用、上一个节点输出网格、曲线、点云或实例，并且物体在视图中可见"
+
+msgid "The Geometry input has nothing that this selection mode selects"
+msgstr "几何输入中没有此选择模式可选择的内容"
+
+msgid "Too many instances to show each one as an object, select their origins instead"
+msgstr "实例过多，无法把每个实例显示为一个物体，请改为选择它们的原点"
+
+msgid "Too many curves to show each one as an object, select them in Edit Mode instead"
+msgstr "曲线过多，无法把每条曲线显示为一个物体，请改为在编辑模式中选择"
+
+msgid "Select Elements: select the objects, each one is a curve or an instance. Esc/Enter/Tab confirm"
+msgstr "选择元素：选择物体，每个物体是一条曲线或一个实例。Esc/Enter/Tab 确认"
+
+msgid "Select on the Select Elements node's cooked input geometry in the 3D Viewport: in native Edit Mode, or as one object per curve or instance. Esc / Enter / Tab confirms selection into the node"
+msgstr "在 3D 视图中对选择元素节点求值后的输入几何进行选择：使用原生编辑模式，或把每条曲线、每个实例作为一个物体。Esc / Enter / Tab 将选择确认到节点"
+
+msgid "Store a selection on the geometry that is made in the 3D Viewport on a temporary copy of the evaluated input: points, edges and faces in Edit Mode, whole curves and instances as one object each. With only this node selected, press Enter to select; Esc confirms"
+msgstr "把在 3D 视图中对求值后输入的临时副本所做的选择存储到几何上：点、边、面在编辑模式中选择，整条曲线和实例各作为一个物体选择。仅选中此节点时按 Enter 进行选择；Esc 确认"
+
+msgid "What is selected when the selection is edited in the 3D Viewport"
+msgstr "在 3D 视图中编辑选择时所选择的内容"
+
+msgid "Select the vertices of the mesh in Edit Mode. Without a mesh, the control points of the curves or the points of the point cloud"
+msgstr "在编辑模式中选择网格顶点。没有网格时，选择曲线的控制点或点云的点"
+
+msgid "Select mesh edges in Edit Mode"
+msgstr "在编辑模式中选择网格边"
+
+msgid "Select mesh faces in Edit Mode"
+msgstr "在编辑模式中选择网格面"
+
+msgid "Select whole curves. Every curve is a temporary object that is selected in Object Mode"
+msgstr "选择整条曲线。每条曲线是一个临时物体，在物体模式中选择"
+
+msgid "Select the points of the point cloud in Edit Mode"
+msgstr "在编辑模式中选择点云的点"
+
+msgid "Select instances. Every instance is a temporary object that is selected in Object Mode"
+msgstr "选择实例。每个实例是一个临时物体，在物体模式中选择"

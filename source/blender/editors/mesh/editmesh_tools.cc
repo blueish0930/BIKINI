@@ -3148,6 +3148,7 @@ static wmOperatorStatus edbm_edge_rotate_selected_exec(bContext *C, wmOperator *
   for (Object *obedit : objects) {
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
     EditMeshMirrorUserSideScope mirror_side_scope(obedit, em);
+    EditMeshMirrorDiagonals mirror_diagonals(obedit, em, EDBM_mirror_pair_threshold(scene));
     EDBM_select_expand_mirrored(obedit, em, EDBM_mirror_pair_threshold(scene));
     BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
     int tot = 0;
@@ -3210,6 +3211,8 @@ static wmOperatorStatus edbm_edge_rotate_selected_exec(bContext *C, wmOperator *
     if (!EDBM_op_finish(bm, &bmop, op, true)) {
       continue;
     }
+
+    mirror_diagonals.apply();
 
     EDBMUpdate_Params params{};
     params.calc_looptris = true;
@@ -3306,6 +3309,16 @@ static wmOperatorStatus edbm_hide_exec(bContext *C, wmOperator *op)
     /* Only if symmetry is enabled. */
     EDBM_select_mirrored_extend_all(obedit, em);
 #endif
+
+    /* BIKINI: with mesh symmetry on, hide (or for Shift+H keep visible) the mirrored
+     * counterparts too, but only when the whole selection is on one side. An inverted
+     * selection covers both sides, and mirroring it is the problem described above. */
+    EditMeshMirrorUserSideScope mirror_side_scope(obedit, em);
+    bool one_side = false;
+    EDBM_mirror_user_side_capture(obedit, em, one_side);
+    if (one_side) {
+      EDBM_select_expand_mirrored(obedit, em, EDBM_mirror_pair_threshold(scene));
+    }
 
     if (EDBM_mesh_hide(bm, em->selectmode, unselected)) {
       EDBMUpdate_Params params{};
@@ -3406,6 +3419,10 @@ static wmOperatorStatus edbm_normals_make_consistent_exec(bContext *C, wmOperato
   const Vector<Object *> objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(
       *bmain, scene, view_layer, CTX_wm_view3d(C));
   for (Object *obedit : objects) {
+    BMEditMesh *em = BKE_editmesh_from_object(obedit);
+    /* BIKINI: recalculate the mirrored faces as well. */
+    EditMeshMirrorUserSideScope mirror_side_scope(obedit, em);
+    EDBM_select_expand_mirrored(obedit, em, EDBM_mirror_pair_threshold(scene));
     BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
 
     if (bm->totfacesel == 0) {
@@ -5705,9 +5722,16 @@ static void edbm_apply_island_sel(BMEditMesh *em, const MirrorIslandSel &sel)
 }
 
 template<typename Fn>
-static bool edbm_exec_mirror_islands(Object *ob, BMEditMesh *em, Fn &&fn)
+static bool edbm_exec_mirror_islands(Object *ob,
+                                     BMEditMesh *em,
+                                     Fn &&fn,
+                                     const bool match_diagonals = false)
 {
   EditMeshMirrorUserSideScope mirror_side_scope(ob, em);
+  std::optional<EditMeshMirrorDiagonals> mirror_diagonals;
+  if (match_diagonals) {
+    mirror_diagonals.emplace(ob, em, 0.0f);
+  }
   edbm_tag_selected_verts(em->bm);
   EDBM_select_expand_mirrored(ob, em);
   const MirrorIslandSel user = edbm_island_from_vert_tag(em, true);
@@ -5733,6 +5757,14 @@ static bool edbm_exec_mirror_islands(Object *ob, BMEditMesh *em, Fn &&fn)
   any |= fn();
   edbm_apply_island_sel(em, other);
   any |= fn();
+
+  if (mirror_diagonals && mirror_diagonals->apply()) {
+    EDBMUpdate_Params params{};
+    params.calc_looptris = true;
+    params.calc_normals = false;
+    params.is_destructive = true;
+    EDBM_update(id_cast<Mesh *>(ob->data), &params);
+  }
 
   BMIter iter;
   BMFace *f;
@@ -5804,9 +5836,11 @@ static wmOperatorStatus edbm_fill_exec(bContext *C, wmOperator *op)
     if (em->bm->totedgesel != 0) {
       has_selected_edges = true;
     }
-    if (edbm_exec_mirror_islands(obedit, em, [&]() {
-          return edbm_fill_for_em(obedit, em, op, use_beauty);
-        }))
+    if (edbm_exec_mirror_islands(
+            obedit,
+            em,
+            [&]() { return edbm_fill_for_em(obedit, em, op, use_beauty); },
+            true))
     {
       has_faces_filled = true;
     }
@@ -6354,6 +6388,7 @@ static wmOperatorStatus edbm_fill_holes_exec(bContext *C, wmOperator *op)
   for (Object *obedit : objects) {
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
     EditMeshMirrorUserSideScope mirror_side_scope(obedit, em);
+    EditMeshMirrorDiagonals mirror_diagonals(obedit, em, EDBM_mirror_pair_threshold(scene));
     EDBM_select_expand_mirrored(obedit, em, EDBM_mirror_pair_threshold(scene));
     BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
 
@@ -6366,6 +6401,8 @@ static wmOperatorStatus edbm_fill_holes_exec(bContext *C, wmOperator *op)
     {
       continue;
     }
+
+    mirror_diagonals.apply();
 
     EDBMUpdate_Params params{};
     params.calc_looptris = true;
@@ -6423,6 +6460,7 @@ static wmOperatorStatus edbm_beautify_fill_exec(bContext *C, wmOperator *op)
   for (Object *obedit : objects) {
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
     EditMeshMirrorUserSideScope mirror_side_scope(obedit, em);
+    EditMeshMirrorDiagonals mirror_diagonals(obedit, em, EDBM_mirror_pair_threshold(scene));
     EDBM_select_expand_mirrored(obedit, em, EDBM_mirror_pair_threshold(scene));
     BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
 
@@ -6451,6 +6489,8 @@ static wmOperatorStatus edbm_beautify_fill_exec(bContext *C, wmOperator *op)
     {
       continue;
     }
+
+    mirror_diagonals.apply();
 
     EDBMUpdate_Params params{};
     params.calc_looptris = true;
@@ -6608,6 +6648,7 @@ static wmOperatorStatus edbm_quads_convert_to_tris_exec(bContext *C, wmOperator 
   for (Object *obedit : objects) {
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
     EditMeshMirrorUserSideScope mirror_side_scope(obedit, em);
+    EditMeshMirrorDiagonals mirror_diagonals(obedit, em, EDBM_mirror_pair_threshold(scene));
     EDBM_select_expand_mirrored(obedit, em, EDBM_mirror_pair_threshold(scene));
     BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
 
@@ -6644,6 +6685,7 @@ static wmOperatorStatus edbm_quads_convert_to_tris_exec(bContext *C, wmOperator 
       continue;
     }
 
+    mirror_diagonals.apply();
     BM_custom_loop_normals_from_vector_layer(bm, false);
 
     EDBMUpdate_Params params{};

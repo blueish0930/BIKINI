@@ -4177,7 +4177,10 @@ static bool code_editor_toggle_comment(Button *but, TextEdit &text_edit)
   return true;
 }
 
-static bool code_editor_adjust_font(ButtonTextBox *textbox, const float factor, const bool reset)
+static bool code_editor_adjust_font(ButtonTextBox *textbox,
+                                    HandleButtonData *data,
+                                    const float factor,
+                                    const bool reset)
 {
   if (textbox == nullptr || textbox->state == nullptr) {
     return false;
@@ -4190,6 +4193,14 @@ static bool code_editor_adjust_font(ButtonTextBox *textbox, const float factor, 
         textbox_code_font_scale(textbox) * factor, 0.5f, 4.0f);
   }
   textbox->wrap_cache.reset();
+  if (wrangle_node_from_button(textbox)) {
+    /* Every Wrangle node shows its code in the same size. */
+    wrangle_editor_font_scale_set(textbox->state->font_scale);
+    if (block_is_popup_any(textbox->block)) {
+      /* The editor window shows the size in its header. */
+      ED_region_tag_refresh_ui(data->region);
+    }
+  }
   return true;
 }
 
@@ -5464,7 +5475,7 @@ static int do_but_textedit(
       case EVT_PLUSKEY:
       case EVT_EQUALKEY:
         if (but_is_code_editor(but) && (event->modifier & (KM_CTRL | KM_OSKEY)) && textbox) {
-          code_editor_adjust_font(textbox, 1.1f, false);
+          code_editor_adjust_font(textbox, data, 1.1f, false);
           ED_region_tag_redraw(data->region);
           retval = WM_UI_HANDLER_BREAK;
         }
@@ -5472,7 +5483,7 @@ static int do_but_textedit(
       case EVT_PADMINUS:
       case EVT_MINUSKEY:
         if (but_is_code_editor(but) && (event->modifier & (KM_CTRL | KM_OSKEY)) && textbox) {
-          code_editor_adjust_font(textbox, 1.0f / 1.1f, false);
+          code_editor_adjust_font(textbox, data, 1.0f / 1.1f, false);
           ED_region_tag_redraw(data->region);
           retval = WM_UI_HANDLER_BREAK;
         }
@@ -5480,7 +5491,7 @@ static int do_but_textedit(
       case EVT_PAD0:
       case EVT_ZEROKEY:
         if (but_is_code_editor(but) && (event->modifier & (KM_CTRL | KM_OSKEY)) && textbox) {
-          code_editor_adjust_font(textbox, 1.0f, true);
+          code_editor_adjust_font(textbox, data, 1.0f, true);
           ED_region_tag_redraw(data->region);
           retval = WM_UI_HANDLER_BREAK;
         }
@@ -6583,7 +6594,7 @@ static int do_but_TEXTBOX(bContext *C,
       if (ELEM(event->type, WHEELUPMOUSE, WHEELDOWNMOUSE)) {
         if ((event->modifier & KM_CTRL) && (textbox->flag & BUT_CODE_EDITOR)) {
           code_editor_adjust_font(
-              textbox, (event->type == WHEELUPMOUSE) ? 1.1f : (1.0f / 1.1f), false);
+              textbox, data, (event->type == WHEELUPMOUSE) ? 1.1f : (1.0f / 1.1f), false);
           ED_region_tag_redraw(data->region);
           return WM_UI_HANDLER_BREAK;
         }
@@ -6758,6 +6769,10 @@ static int do_but_TEXTBOX(bContext *C,
           if (textbox->state->width != new_w) {
             textbox->state->width = new_w;
             changed = true;
+          }
+          if (changed && wrangle_node_from_button(textbox)) {
+            /* The Wrangle editor window has one size for every node. */
+            wrangle_editor_size_set(textbox->state->width, textbox->state->visible_lines);
           }
         }
 

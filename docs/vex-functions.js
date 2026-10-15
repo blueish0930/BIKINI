@@ -923,16 +923,20 @@ window.VEX_FUNCS = [
     ex: "f@d = rayhitdist(r);" }),
   F({ id: "nearestpoints", cat: "sample", name: "nearestpoints",
     sigs: [
-      "nearestpoints(geo, k, \"k\") -> int[]",
-      "nearestpoints(geo, r, \"r\") -> int[]",
-      "nearestpoints(geo, r, k, \"rk\") -> int[]",
-      "nearestpoints(geo, k_or_r) -> int[]"
+      "nearestpoints(geo, k, \"k\"[, sample_pos]) -> int[]",
+      "nearestpoints(geo, r, \"r\"[, sample_pos]) -> int[]",
+      "nearestpoints(geo, r, k, \"rk\"[, sample_pos]) -> int[]",
+      "nearestpoints(geo, k_or_r) -> int[]",
+      "nearestpoints(geo, group, k_or_r, mode[, sample_pos]) -> int[]",
+      "nearestpoints(geo, group, r, k, \"rk\"[, sample_pos]) -> int[]"
     ],
     params: [
-      P("geo", "in", "int", "可省略，默认 0。", "Optional, default 0."),
+      P("geo", "in", "int", "可省略，默认 0。带 group 时必须写。", "Optional, default 0. Required when a group is given."),
+      P("group", "in", "string", "可选。geo 上一个 bool/int 点属性的名字，只在属性值大于 0 的点里查找。空字符串表示不过滤。属性不存在或没有点在组里时返回空数组。", "Optional. Name of a bool/int point attribute of geo: only the points where it is above zero are found. An empty string means no filter. The result is empty when the attribute does not exist or no point is in the group."),
       P("k", "in", "int", "近邻个数。int 参数走 k 模式。", "Neighbor count. An int argument means k-mode."),
       P("r", "in", "float", "半径。float 参数走 r 模式。", "Radius. A float argument means r-mode."),
-      P("mode", "in", "enum")
+      P("mode", "in", "enum"),
+      P("sample_pos", "in", "vector", "可选的三维查询中心，必须放在最后；省略时使用当前元素的 P。r 模式会查找距离该位置不超过 r 的点。", "Optional 3D query position, always last; defaults to the current element's P. In r-mode, finds points within distance r of this position.")
     ],
     ret: "int[]",
     enums: [{ name: "mode", values: [
@@ -940,8 +944,8 @@ window.VEX_FUNCS = [
       { v: "1 / \"r\" / \"rnn\" / \"radius\"", zh: "半径内全部", en: "All in radius" },
       { v: "2 / \"rk\" / \"kr\" / \"maxk\"", zh: "半径内最多 k 个", en: "At most k in radius" }
     ]}],
-    zh: "点位置 KD 树查询。可选最后再加 sample_pos，默认 v@P。", en: "Point KD-tree query. Optional sample_pos last; default v@P.",
-    ex: "int[] pts = nearestpoints(0, 8, \"k\");\nvector sum = {0, 0, 0};\nforeach (int pt; pts) {\n    sum += point(0, \"P\", pt);\n}\nif (len(pts) > 0) {\n    v@P = mix(v@P, sum / float(len(pts)), 0.5);\n}\n\nint[] inr = nearestpoints(0, chf(\"radius\"), \"r\");\nint[] rk = nearestpoints(0, chf(\"radius\"), chi(\"k\"), \"rk\");" }),
+    zh: "点位置 KD 树查询。可选最后再加 sample_pos，默认 v@P。第二个参数写字符串时是组过滤：只返回该组里的点（索引仍是整个几何体的点索引），组按进入节点时几何体上存的属性值读取，本节点里刚写的值不算。", en: "Point KD-tree query. Optional sample_pos last; default v@P. A string as the second argument is a group filter: only points of that group are returned (the indices are still point indices of the whole geometry). The group is read from the attribute as stored on the geometry entering the node, values written by the same node do not count.",
+    ex: "int[] pts = nearestpoints(0, 8, \"k\");\nvector sum = {0, 0, 0};\nforeach (int pt; pts) {\n    sum += point(0, \"P\", pt);\n}\nif (len(pts) > 0) {\n    v@P = mix(v@P, sum / float(len(pts)), 0.5);\n}\n\nint[] inr = nearestpoints(0, chf(\"radius\"), \"r\");\nint[] rk = nearestpoints(0, chf(\"radius\"), chi(\"k\"), \"rk\");\n\n// 在第二输入中，以 q 为中心查询半径内的点\nvector q = {0.5, 0.5, 0};\nint cand[] = nearestpoints(1, chf(\"radius\"), \"r\", q);\n\n// 只在 boundary 组（i@boundary > 0）里找 8 个最近点\nint[] bnd = nearestpoints(0, \"boundary\", 8, \"k\");\nint[] bnd_r = nearestpoints(0, \"boundary\", chf(\"radius\"), \"r\");" }),
 
   /* ---- Geo ---- */
   F({ id: "npoints", cat: "geo", name: "npoints",

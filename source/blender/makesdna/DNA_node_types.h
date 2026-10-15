@@ -4154,14 +4154,10 @@ struct NodeGeometryDebug {
 };
 
 /**
- * Interactive geometry selection stored on a Geometry Nodes "Select Elements" node.
- * Indices refer to the chosen #domain on the single realized geometry component
- * (mesh or curves — never both at once).
+ * Selection on one geometry component of a Geometry Nodes "Select Elements" node.
  */
-struct NodeGeometrySelectElements {
-  DNA_DEFINE_CXX_METHODS(NodeGeometrySelectElements)
-
-  /** #AttrDomain: Point / Edge / Face for mesh; Point / Curve for curves. */
+struct NodeGeometrySelectElementsSelection {
+  /** #AttrDomain the indices are on. */
   int8_t domain = 0;
   char _pad[3] = {};
   int indices_num = 0;
@@ -4170,18 +4166,43 @@ struct NodeGeometrySelectElements {
 };
 
 /**
+ * Interactive geometry selection stored on a Geometry Nodes "Select Elements" node.
+ * Every component of the realized input geometry (mesh, curves, point cloud, instances) has its
+ * own selection, the indices refer to the elements of that component at this node.
+ */
+struct NodeGeometrySelectElements {
+  DNA_DEFINE_CXX_METHODS(NodeGeometrySelectElements)
+
+  /** #AttrDomain that is selected on when the selection is edited the next time. */
+  int8_t domain = 0;
+  /** #GeometryComponent::Type that is edited the next time. */
+  int8_t component_type = 0;
+  char _pad[2] = {};
+  /** Selection of files from before every component had its own, moved to #selections. */
+  int indices_num = 0;
+  int *indices = nullptr;
+  /** Indexed by mesh, curves, point cloud, instances. */
+  NodeGeometrySelectElementsSelection selections[4];
+};
+
+/**
  * Storage for Geometry Nodes "Edit Elements".
  *
- * Full free-edit results are stored as a Mesh datablock on #bNode.id.
+ * The edited component is stored as a data-block on #bNode.id (#Mesh, #Curves or #PointCloud;
+ * instances are stored as one point per instance with the index of the instance it comes from).
  * #positions / #positions_num remain for loading older files that only stored
- * absolute vertex positions (applied when counts match and no Mesh is on #bNode.id).
+ * absolute vertex positions (applied when counts match and nothing is on #bNode.id).
  */
 struct NodeGeometryEditElements {
   DNA_DEFINE_CXX_METHODS(NodeGeometryEditElements)
 
   int positions_num = 0;
-  char _pad[4] = {};
-  /** Legacy object-local positions (length #positions_num). Prefer Mesh on #bNode.id. */
+  /** #GeometryComponent::Type that is edited the next time. */
+  int8_t component_type = 0;
+  /** #GeometryComponent::Type that the data-block on #bNode.id replaces. */
+  int8_t result_component_type = 0;
+  char _pad[2] = {};
+  /** Legacy object-local positions (length #positions_num). Prefer the data on #bNode.id. */
   float (*positions)[3] = nullptr;
 };
 

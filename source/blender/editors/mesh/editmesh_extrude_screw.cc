@@ -14,6 +14,8 @@
 #include "BKE_layer.hh"
 #include "BKE_report.hh"
 
+#include "BLI_kdtree.hh"
+#include "BLI_math_bits.hh"
 #include "BLI_math_matrix_c.hh"
 #include "BLI_math_rotation_c.hh"
 #include "BLI_math_vector_c.hh"
@@ -29,11 +31,138 @@
 
 #include "mesh_intern.hh" /* own include */
 
+#include <algorithm>
+
 namespace blender {
 
 /* -------------------------------------------------------------------- */
 /** \name Screw Operator
  * \{ */
+
+/**
+ * BIKINI: Screw needs one string of connected verts, so with mesh symmetry it is not
+ * given the mirrored selection and only built the user's side. Copy what it made onto
+ * every mirror side and weld the copy to that side's profile. Screwing each side on its
+ * own would not mirror: the screw direction comes from the order of the profile's two
+ * end verts, which a mirror copy does not keep.
+ */
+static void edbm_screw_mirror_result(BMesh *bm, const int symmetry, const Set<BMVert *> &old_verts)
+{
+  BM_mesh_elem_hflag_disable_all(bm, BM_ALL_NOLOOP, BM_ELEM_TAG, false);
+  BMIter iter;
+  BMVert *v;
+  BMEdge *e;
+  BMFace *f;
+  bool any_new = false;
+  BM_ITER_MESH (v, &iter, bm, BM_VERTS_OF_MESH) {
+    if (!old_verts.contains(v)) {
+      BM_elem_flag_enable(v, BM_ELEM_TAG);
+      any_new = true;
+    }
+  }
+  if (!any_new) {
+    return;
+  }
+  /* Everything the new verts belong to, including the profile it was spun from. */
+  BM_ITER_MESH (f, &iter, bm, BM_FACES_OF_MESH) {
+    BMLoop *l = f->l_first;
+    do {
+      if (BM_elem_flag_test(l->v, BM_ELEM_TAG)) {
+        BM_elem_flag_enable(f, BM_ELEM_TAG);
+        break;
+      }
+    } while ((l = l->next) != f->l_first);
+  }
+  BM_ITER_MESH (e, &iter, bm, BM_EDGES_OF_MESH) {
+    if (BM_elem_flag_test(e->v1, BM_ELEM_TAG) || BM_elem_flag_test(e->v2, BM_ELEM_TAG)) {
+      BM_elem_flag_enable(e, BM_ELEM_TAG);
+    }
+  }
+  BM_ITER_MESH (f, &iter, bm, BM_FACES_OF_MESH) {
+    if (BM_elem_flag_test(f, BM_ELEM_TAG)) {
+      BMLoop *l = f->l_first;
+      do {
+        BM_elem_flag_enable(l->e, BM_ELEM_TAG);
+      } while ((l = l->next) != f->l_first);
+    }
+  }
+  BM_ITER_MESH (e, &iter, bm, BM_EDGES_OF_MESH) {
+    if (BM_elem_flag_test(e, BM_ELEM_TAG)) {
+      BM_elem_flag_enable(e->v1, BM_ELEM_TAG);
+      BM_elem_flag_enable(e->v2, BM_ELEM_TAG);
+    }
+  }
+
+  /* The mirror copy of the profile lands on the other side's profile: weld it there. */
+  Vector<BMVert *> old_list;
+  BM_ITER_MESH (v, &iter, bm, BM_VERTS_OF_MESH) {
+    if (old_verts.contains(v)) {
+      old_list.append(v);
+    }
+  }
+  KDTree<float3> *tree = kdtree_new<float3>(std::max(1, int(old_list.size())));
+  for (const int i : old_list.index_range()) {
+    kdtree_insert<float3>(tree, i, old_list[i]->co);
+  }
+  kdtree_balance<float3>(tree);
+  const float weld_dist = 1e-4f;
+
+  for (int mask = 1; mask < 8; mask++) {
+    if ((mask & symmetry) != mask) {
+      continue;
+    }
+    BMOperator dupop;
+    BMO_op_initf(bm, &dupop, BMO_FLAG_DEFAULTS, "duplicate geom=%hvef", BM_ELEM_TAG);
+    BMO_op_exec(bm, &dupop);
+    Vector<BMVert *> dup_verts;
+    Vector<BMFace *> dup_faces;
+    BMOIter siter;
+    BMElem *ele;
+    BMO_ITER (ele, &siter, dupop.slots_out, "geom.out", BM_ALL_NOLOOP) {
+      /* Copies keep the source flags: untag so the next copy does not include them. */
+      BM_elem_flag_disable(ele, BM_ELEM_SELECT | BM_ELEM_TAG);
+      if (ele->head.htype == BM_VERT) {
+        dup_verts.append(reinterpret_cast<BMVert *>(ele));
+      }
+      else if (ele->head.htype == BM_FACE) {
+        dup_faces.append(reinterpret_cast<BMFace *>(ele));
+      }
+    }
+    BMO_op_finish(bm, &dupop);
+
+    for (BMVert *dv : dup_verts) {
+      for (int a = 0; a < 3; a++) {
+        if (mask & (1 << a)) {
+          dv->co[a] = -dv->co[a];
+        }
+      }
+    }
+    if (count_bits_i(mask) % 2) {
+      for (BMFace *df : dup_faces) {
+        BM_face_normal_flip(bm, df);
+      }
+    }
+
+    BMOperator weldop;
+    BMO_op_init(bm, &weldop, BMO_FLAG_DEFAULTS, "weld_verts");
+    BMOpSlot *slot_targetmap = BMO_slot_get(weldop.slots_in, "targetmap");
+    bool any_weld = false;
+    for (BMVert *dv : dup_verts) {
+      KDTreeNearest<float3> nearest;
+      const int i = kdtree_find_nearest<float3>(tree, dv->co, &nearest);
+      if (i != -1 && nearest.dist <= weld_dist) {
+        BMO_slot_map_elem_insert(&weldop, slot_targetmap, dv, old_list[i]);
+        any_weld = true;
+      }
+    }
+    if (any_weld) {
+      BMO_op_exec(bm, &weldop);
+    }
+    BMO_op_finish(bm, &weldop);
+  }
+  kdtree_free<float3>(tree);
+  BM_mesh_elem_hflag_disable_all(bm, BM_ALL_NOLOOP, BM_ELEM_TAG, false);
+}
 
 static wmOperatorStatus edbm_screw_exec(bContext *C, wmOperator *op)
 {
@@ -104,6 +233,28 @@ static wmOperatorStatus edbm_screw_exec(bContext *C, wmOperator *op)
       continue;
     }
 
+    /* BIKINI: remember the mesh before the spin to mirror what it adds, see
+     * #edbm_screw_mirror_result. Only axes the selection is on one side of. */
+    BMEditMesh *em = BKE_editmesh_from_object(obedit);
+    bool one_side = false;
+    const float3 side_co = EDBM_mirror_user_side_capture(obedit, em, one_side);
+    int mirror_mask = 0;
+    Set<BMVert *> old_verts;
+    if (one_side) {
+      const Mesh *mesh = id_cast<const Mesh *>(obedit->data);
+      for (int a = 0; a < 3; a++) {
+        if ((mesh->symmetry & (ME_SYMMETRY_X << a)) && side_co[a] != 0.0f) {
+          mirror_mask |= 1 << a;
+        }
+      }
+      if (mirror_mask) {
+        old_verts.reserve(bm->totvert);
+        BM_ITER_MESH (eve, &iter, bm, BM_VERTS_OF_MESH) {
+          old_verts.add(eve);
+        }
+      }
+    }
+
     copy_v3_v3(nor, obedit->object_to_world().ptr()[2]);
 
     /* calculate dvec */
@@ -141,6 +292,10 @@ static wmOperatorStatus edbm_screw_exec(bContext *C, wmOperator *op)
 
     if (!EDBM_op_finish(bm, &spinop, op, true)) {
       continue;
+    }
+
+    if (mirror_mask) {
+      edbm_screw_mirror_result(bm, mirror_mask, old_verts);
     }
 
     EDBMUpdate_Params params{};

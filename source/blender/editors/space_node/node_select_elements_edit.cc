@@ -8,7 +8,9 @@
  * Select Elements node → selection session (Houdini-style path).
  *
  * - Resolve cooked Geometry from the node's Geometry input (upstream cook).
- * - Spawn a temporary mesh object and enter **native Mesh Edit Mode**.
+ * - Spawn a temporary object for one component of it (mesh, curves, point cloud) and enter
+ *   its **native Edit Mode**. Whole curves and instances become one temporary object each
+ *   instead, which are selected in Object Mode.
  * - Selection-only: topology changes are undone; no modeling.
  * - Esc / Enter / Tab confirms and writes indices to the node.
  */
@@ -75,6 +77,7 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "NOD_geo_elements_component.hh"
 #include "NOD_geo_select_elements.hh"
 #include "NOD_geometry_nodes_execute.hh"
 #include "NOD_geometry_nodes_lazy_function.hh"
@@ -119,36 +122,37 @@ static bNode *find_single_selected_select_elements_node(bNodeTree &ntree)
   return node;
 }
 
-/**
- * Upstream visual geometry (input cache → object visual geo → original mesh).
- * Enter session needs a mesh component.
- */
-static std::optional<bke::GeometrySet> resolve_edit_geometry(bContext *C,
-                                                             SpaceNode &snode,
-                                                             bNode &node,
-                                                             ReportList *reports,
-                                                             Object **r_transform_from)
-{
-  std::optional<bke::GeometrySet> geo = resolve_visual_geometry_for_elements_node(
-      C, snode, node, reports, r_transform_from);
-  if (!geo) {
-    return std::nullopt;
-  }
-  if (!geo->has_mesh() || geo->get_mesh()->verts_num == 0) {
-    BKE_report(reports,
-               RPT_ERROR,
-               "Select Elements Enter needs a mesh (one geometry type). "
-               "Connect a mesh-producing previous node");
-    return std::nullopt;
-  }
-  return geo;
-}
-
 /** \} */
 
 /* -------------------------------------------------------------------- */
 /** \name Enter Geometry Edit Session from Select Elements
  * \{ */
+
+/**
+ * The component the mode of the node selects on. Points are on more than one component: the
+ * preferred one is used when the geometry has it, otherwise the first one that has points.
+ */
+static std::optional<bke::GeometryComponent::Type> pick_select_component(
+    const bke::GeometrySet &geometry, const NodeGeometrySelectElements &storage)
+{
+  using ComponentType = bke::GeometryComponent::Type;
+  const ComponentType preferred = ComponentType(storage.component_type);
+  if (nodes::elements_component_size(geometry, preferred) > 0) {
+    return preferred;
+  }
+  if (bke::AttrDomain(storage.domain) == bke::AttrDomain::Point &&
+      ELEM(preferred, ComponentType::Mesh, ComponentType::Curve))
+  {
+    for (const ComponentType type :
+         {ComponentType::Mesh, ComponentType::Curve, ComponentType::PointCloud})
+    {
+      if (nodes::elements_component_size(geometry, type) > 0) {
+        return type;
+      }
+    }
+  }
+  return std::nullopt;
+}
 
 /** Maps Geometry Edit session back to the Select Elements node for commit. */
 struct SelectElementsSessionBridge {
@@ -175,6 +179,8 @@ static bool commit_to_node_from_bridge(bContext *C)
     return false;
   }
 
+  /* The session forgets its component when it is committed. */
+  const bke::GeometryComponent::Type component_type = geometry_edit::session_component_type();
   bke::AttrDomain domain = bke::AttrDomain::Point;
   Vector<int> indices;
   if (!geometry_edit::session_commit_selection(C, domain, indices)) {
@@ -186,7 +192,14 @@ static bool commit_to_node_from_bridge(bContext *C)
     return false;
   }
 
-  nodes::select_elements_set_indices(*node, domain, indices);
+  nodes::select_elements_set_indices(*node, component_type, domain, indices);
+  /* The mode of the node follows the 1/2/3 shortcuts of a mesh session. */
+  NodeGeometrySelectElements &storage = *static_cast<NodeGeometrySelectElements *>(node->storage);
+  if (component_type == bke::GeometryComponent::Type::Mesh &&
+      storage.component_type == int8_t(component_type))
+  {
+    storage.domain = int8_t(domain);
+  }
 
   Main *bmain = CTX_data_main(C);
   if (!bmain) {
@@ -222,43 +235,74 @@ static wmOperatorStatus select_elements_edit_invoke(bContext *C,
   }
 
   Object *transform_from = nullptr;
-  std::optional<bke::GeometrySet> geometry_opt = resolve_edit_geometry(
+  std::optional<bke::GeometrySet> geometry_opt = resolve_visual_geometry_for_elements_node(
       C, *snode, *node, op->reports, &transform_from);
   if (!geometry_opt) {
     return OPERATOR_CANCELLED;
   }
-  const bke::GeometrySet &geometry = *geometry_opt;
 
-  const Mesh *mesh = geometry.get_mesh();
-  if (!mesh) {
+  using ComponentType = bke::GeometryComponent::Type;
+  const NodeGeometrySelectElements &storage =
+      *static_cast<const NodeGeometrySelectElements *>(node->storage);
+  const std::optional<ComponentType> component_type = pick_select_component(*geometry_opt,
+                                                                            storage);
+  if (!component_type) {
     BKE_report(op->reports,
                RPT_ERROR,
-               "Select Elements input has no mesh "
-               "(connect Geometry from previous node's cook output)");
+               "The Geometry input has nothing that this selection mode selects");
+    return OPERATOR_CANCELLED;
+  }
+  /* The stored domain belongs to the preferred component. */
+  const bke::AttrDomain domain = *component_type == ComponentType(storage.component_type) ?
+                                     nodes::elements_component_sanitize_domain(
+                                         *component_type, bke::AttrDomain(storage.domain)) :
+                                     nodes::elements_component_sanitize_domain(
+                                         *component_type, bke::AttrDomain::Point);
+
+  /* Whole curves and instances are selected as one object each. */
+  bool elements_as_objects = false;
+  if (*component_type == ComponentType::Instance) {
+    elements_as_objects = geometry_opt->get_instances()->instances_num() <=
+                          geometry_edit::session_max_element_objects;
+    if (!elements_as_objects) {
+      BKE_report(op->reports,
+                 RPT_INFO,
+                 "Too many instances to show each one as an object, select their origins instead");
+    }
+  }
+  else if (*component_type == ComponentType::Curve && domain == bke::AttrDomain::Curve) {
+    elements_as_objects = geometry_opt->get_curves()->geometry.curve_num <=
+                          geometry_edit::session_max_element_objects;
+    if (!elements_as_objects) {
+      BKE_report(op->reports,
+                 RPT_INFO,
+                 "Too many curves to show each one as an object, select them in Edit Mode instead");
+    }
+  }
+
+  geometry_edit::SessionParams params;
+  ElementsSessionData session_data;
+  if (!elements_session_params_from_geometry(
+          *geometry_opt, *component_type, nullptr, elements_as_objects, params, session_data))
+  {
+    BKE_report(op->reports,
+               RPT_ERROR,
+               "The Geometry input has nothing that this selection mode selects");
     return OPERATOR_CANCELLED;
   }
 
-  const NodeGeometrySelectElements &storage =
-      *static_cast<const NodeGeometrySelectElements *>(node->storage);
-  const bke::AttrDomain domain = bke::AttrDomain(storage.domain);
-  const Span<int> indices(storage.indices, storage.indices_num);
-
-  float4x4 object_to_world = float4x4::identity();
+  params.ntree = &ntree;
+  params.node_identifier = node->identifier;
+  params.host_object = transform_from;
   if (transform_from) {
-    object_to_world = transform_from->object_to_world();
+    params.object_to_world = transform_from->object_to_world();
   }
+  params.kind = geometry_edit::SessionKind::SelectOnly;
+  params.domain = domain;
+  params.seed_indices = nodes::select_elements_get_indices(
+      *node, *component_type, params.seed_domain);
 
-  if (!geometry_edit::session_begin(C,
-                                    &ntree,
-                                    node->identifier,
-                                    transform_from,
-                                    *mesh,
-                                    object_to_world,
-                                    domain,
-                                    indices,
-                                    geometry_edit::SessionKind::SelectOnly,
-                                    op->reports))
-  {
+  if (!geometry_edit::session_begin(C, params, op->reports)) {
     return OPERATOR_CANCELLED;
   }
 
@@ -266,9 +310,20 @@ static wmOperatorStatus select_elements_edit_invoke(bContext *C,
   bridge().ntree = &ntree;
   bridge().node_identifier = node->identifier;
 
-  WM_global_report(RPT_INFO,
-                   "Select Elements: selection only (gizmos off). "
-                   "Mesh select tools · 1/2/3 domain · Esc/Enter/Tab confirm");
+  if (elements_as_objects) {
+    WM_global_report(RPT_INFO,
+                     "Select Elements: select the objects, each one is a curve or an instance. "
+                     "Esc/Enter/Tab confirm");
+  }
+  else if (*component_type == bke::GeometryComponent::Type::Mesh) {
+    WM_global_report(RPT_INFO,
+                     "Select Elements: selection only (gizmos off). "
+                     "Mesh select tools · 1/2/3 domain · Esc/Enter/Tab confirm");
+  }
+  else {
+    WM_global_report(RPT_INFO,
+                     "Select Elements: selection only (gizmos off). Esc/Enter/Tab confirm");
+  }
 
   WM_event_add_modal_handler(C, op);
   return OPERATOR_RUNNING_MODAL;
@@ -304,7 +359,11 @@ static wmOperatorStatus select_elements_edit_modal(bContext *C,
     return OPERATOR_FINISHED;
   }
 
-  if (event->val == KM_PRESS) {
+  /* Curves switch between points and splines with their own 1/2 shortcuts. */
+  const bool is_mesh = geometry_edit::session_component_type() ==
+                       bke::GeometryComponent::Type::Mesh;
+
+  if (event->val == KM_PRESS && is_mesh) {
     /* Domain shortcuts (also pass native 1/2/3 via toolsettings when we set domain). */
     if (event->type == EVT_ONEKEY && (event->modifier & (KM_CTRL | KM_SHIFT | KM_ALT)) == 0) {
       geometry_edit::session_set_domain(bke::AttrDomain::Point);
@@ -327,7 +386,17 @@ static wmOperatorStatus select_elements_edit_modal(bContext *C,
       }
       return OPERATOR_RUNNING_MODAL;
     }
+  }
 
+  /* Global undo in Object Mode would take the objects of the session away. */
+  if (event->val == KM_PRESS && event->type == EVT_ZKEY && (event->modifier & KM_CTRL) &&
+      geometry_edit::session_selects_objects())
+  {
+    WM_global_report(RPT_WARNING, "Select Elements: selection only");
+    return OPERATOR_RUNNING_MODAL;
+  }
+
+  if (event->val == KM_PRESS) {
     /* Block modeling / transform / delete — selection session only. */
     const bool no_mod = (event->modifier & (KM_CTRL | KM_SHIFT | KM_ALT | KM_OSKEY)) == 0;
     const bool ctrl = (event->modifier & KM_CTRL) != 0;
@@ -403,8 +472,9 @@ void NODE_OT_select_elements_edit(wmOperatorType *ot)
   ot->name = "Edit Select Elements";
   ot->idname = "NODE_OT_select_elements_edit";
   ot->description =
-      "Enter native Edit Mode on the Select Elements node's cooked input mesh "
-      "(selection only). Esc / Enter / Tab confirms selection into the node";
+      "Select on the Select Elements node's cooked input geometry in the 3D Viewport: in "
+      "native Edit Mode, or as one object per curve or instance. "
+      "Esc / Enter / Tab confirms selection into the node";
 
   ot->invoke = select_elements_edit_invoke;
   ot->modal = select_elements_edit_modal;
@@ -458,11 +528,35 @@ static wmOperatorStatus select_elements_set_indices_exec(bContext *C, wmOperator
     return OPERATOR_CANCELLED;
   }
 
-  const int domain_i = RNA_enum_get(op->ptr, "domain");
+  const bke::AttrDomain domain = bke::AttrDomain(RNA_enum_get(op->ptr, "domain"));
   const std::string csv = RNA_string_get(op->ptr, "indices");
   Vector<int> indices = parse_indices_csv(csv.c_str());
 
-  nodes::select_elements_set_indices(*node, bke::AttrDomain(domain_i), indices);
+  /* Only points exist on more than one component. */
+  bke::GeometryComponent::Type component_type = bke::GeometryComponent::Type(
+      RNA_enum_get(op->ptr, "component_type"));
+  switch (domain) {
+    case bke::AttrDomain::Edge:
+    case bke::AttrDomain::Face:
+      component_type = bke::GeometryComponent::Type::Mesh;
+      break;
+    case bke::AttrDomain::Curve:
+      component_type = bke::GeometryComponent::Type::Curve;
+      break;
+    case bke::AttrDomain::Instance:
+      component_type = bke::GeometryComponent::Type::Instance;
+      break;
+    default:
+      if (component_type == bke::GeometryComponent::Type::Instance) {
+        component_type = bke::GeometryComponent::Type::Mesh;
+      }
+      break;
+  }
+
+  nodes::select_elements_set_indices(*node, component_type, domain, indices);
+  NodeGeometrySelectElements &storage = *static_cast<NodeGeometrySelectElements *>(node->storage);
+  storage.component_type = int8_t(component_type);
+  storage.domain = int8_t(domain);
 
   Main *bmain = CTX_data_main(C);
   BKE_ntree_update_tag_node_property(snode->edittree, node);
@@ -497,9 +591,23 @@ void NODE_OT_select_elements_set_indices(wmOperatorType *ot)
       {int(bke::AttrDomain::Edge), "EDGE", 0, "Edge", ""},
       {int(bke::AttrDomain::Face), "FACE", 0, "Face", ""},
       {int(bke::AttrDomain::Curve), "CURVE", 0, "Spline", ""},
+      {int(bke::AttrDomain::Instance), "INSTANCE", 0, "Instance", ""},
       {0, nullptr, 0, nullptr, nullptr},
   };
   RNA_def_enum(ot->srna, "domain", domain_items, int(bke::AttrDomain::Point), "Domain", "");
+  static const EnumPropertyItem component_items[] = {
+      {int(bke::GeometryComponent::Type::Mesh), "MESH", 0, "Mesh", ""},
+      {int(bke::GeometryComponent::Type::Curve), "CURVE", 0, "Curve", ""},
+      {int(bke::GeometryComponent::Type::PointCloud), "POINTCLOUD", 0, "Point Cloud", ""},
+      {int(bke::GeometryComponent::Type::Instance), "INSTANCES", 0, "Instances", ""},
+      {0, nullptr, 0, nullptr, nullptr},
+  };
+  RNA_def_enum(ot->srna,
+               "component_type",
+               component_items,
+               int(bke::GeometryComponent::Type::Mesh),
+               "Component",
+               "Component the points are on, the other domains belong to one component only");
   /* Non-empty default + positive maxlen avoids rna.define ERROR on empty string. */
   RNA_def_string(ot->srna, "indices", " ", 1024, "Indices", "Comma-separated element indices");
 }
@@ -544,7 +652,7 @@ static wmOperatorStatus select_elements_reset_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
-  nodes::select_elements_set_indices(*node, bke::AttrDomain::Point, {});
+  nodes::select_elements_clear_indices(*node);
   nodes::select_elements_clear_cache(*snode->edittree, *node);
   if (snode->edittree) {
     nodes::select_elements_clear_cache(*DEG_get_original(snode->edittree), *node);

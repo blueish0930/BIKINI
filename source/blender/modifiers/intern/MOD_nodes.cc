@@ -988,6 +988,56 @@ static void find_side_effect_nodes(const NodesModifierData &nmd,
   find_side_effect_nodes_for_guide_geometry(nmd, ctx, *wm, r_side_effect_nodes);
 }
 
+/**
+ * Token of what the side-effect nodes compute, see
+ * #GeometryNodesOutputCache::root_nodes_token. Only known when all of them are in the root tree
+ * and do nothing but log values (viewers, gizmos, guides). Zero otherwise (nodes in zones and
+ * groups, bakes, element selections): those are computed in every evaluation.
+ */
+static uint64_t root_log_nodes_token(const bNodeTree &tree,
+                                     const nodes::GeometryNodesLazyFunctionGraphInfo &lf_graph_info,
+                                     const nodes::GeoNodesSideEffectNodes &side_effect_nodes,
+                                     const ComputeContextHash &root_context_hash,
+                                     const nodes::GeometryNodesOutputCacheEvalState &eval_state)
+{
+  if (!side_effect_nodes.iterations_by_iteration_zone.is_empty()) {
+    return 0;
+  }
+  if (side_effect_nodes.nodes_by_context.size() != 1) {
+    return 0;
+  }
+  const Span<const lf::FunctionNode *> lf_nodes = side_effect_nodes.nodes_by_context.lookup(
+      root_context_hash);
+  if (lf_nodes.is_empty()) {
+    return 0;
+  }
+  Vector<const bNode *> log_nodes;
+  Set<const lf::FunctionNode *> lf_log_nodes;
+  for (const auto item : lf_graph_info.mapping.possible_side_effect_node_map.items()) {
+    if (!lf_nodes.contains(item.value)) {
+      continue;
+    }
+    const bNode *node = tree.node_by_id(item.key);
+    if (node == nullptr) {
+      return 0;
+    }
+    if (!(node->type_legacy == GEO_NODE_VIEWER ||
+          node->is_type("GeometryNodeGuideGeometry"_ustr) ||
+          nodes::gizmos::is_builtin_gizmo_node(*node)))
+    {
+      return 0;
+    }
+    log_nodes.append(node);
+    lf_log_nodes.add(item.value);
+  }
+  for (const lf::FunctionNode *lf_node : lf_nodes) {
+    if (!lf_log_nodes.contains(lf_node)) {
+      return 0;
+    }
+  }
+  return nodes::GeometryNodesOutputCache::root_nodes_token(eval_state, tree, log_nodes);
+}
+
 /** True when a node editor shows the tree of the modifier. */
 static bool node_tree_is_open_in_editor(const NodesModifierData &nmd_orig,
                                         const ModifierEvalContext &ctx)
@@ -2320,14 +2370,41 @@ static void modifyGeometry(ModifierData *md,
                      1;
     }
   }
+  uint64_t side_effects_token = 0;
+  if (output_token != 0 && has_side_effect_nodes) {
+    side_effects_token = root_log_nodes_token(
+        tree, *lf_graph_info, side_effect_nodes, modifier_compute_context.hash(), *output_cache_eval);
+    if (side_effects_token != 0) {
+      side_effects_token = get_default_hash(side_effects_token, output_token) | 1;
+    }
+  }
   bke::GeometrySet previous_output;
   const bool reuse_output = output_token != 0 &&
                             nmd->runtime->output_cache->restore_root_output(output_token,
                                                                             previous_output);
+  /* Many evaluations change nothing for the viewer either: a node was added that needs the
+   * modifier to be updated but is not connected yet (bake, simulation, gizmo, ...). The values
+   * the viewer logged are still right then, and computing them again can take as long as the
+   * whole tree. */
+  bool keep_log = false;
   if (reuse_output) {
     if (has_side_effect_nodes) {
-      nodes::execute_geometry_nodes_on_geometry(
-          tree, properties_ptr, modifier_compute_context, call_data, std::move(geometry_set), true);
+      keep_log = nmd_orig->runtime->eval_log != nullptr &&
+                 nmd->runtime->output_cache->side_effects_are_logged(side_effects_token);
+      if (!keep_log) {
+        nodes::execute_geometry_nodes_on_geometry(tree,
+                                                  properties_ptr,
+                                                  modifier_compute_context,
+                                                  call_data,
+                                                  std::move(geometry_set),
+                                                  true);
+        nmd->runtime->output_cache->set_logged_side_effects(
+            time_shift_params.had_miss() ? 0 : side_effects_token);
+      }
+    }
+    else {
+      /* The log made below only keeps what the last full evaluation logged. */
+      nmd->runtime->output_cache->set_logged_side_effects(0);
     }
     geometry_set = std::move(previous_output);
   }
@@ -2337,13 +2414,14 @@ static void modifyGeometry(ModifierData *md,
     /* Not when a Time Shift node passed its input through, that is not the final result. */
     if (output_token != 0 && !time_shift_params.had_miss()) {
       nmd->runtime->output_cache->store_root_output(output_token, geometry_set);
+      nmd->runtime->output_cache->set_logged_side_effects(side_effects_token);
     }
     else {
       nmd->runtime->output_cache->clear_root_output();
     }
   }
 
-  if (logging_enabled(ctx)) {
+  if (logging_enabled(ctx) && !keep_log) {
     if (nmd->runtime && nmd->runtime->time_shift_cache && call_data.eval_log) {
       time_shift_log_fill_times(
           *call_data.eval_log, *nmd->runtime->time_shift_cache, tree, modifier_compute_context);

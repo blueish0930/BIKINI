@@ -55,11 +55,23 @@ void select_elements_clear_cache(const bNodeTree &tree, const bNode &node);
 void select_elements_free_all_caches();
 
 /**
- * Replace stored selection on the node.
- * \param domain AttrDomain of the selection (Point/Edge/Face or Curve).
- * \param indices Unique element indices on that domain.
+ * Replace the stored selection of one geometry component on the node.
+ * \param component_type: Mesh, Curve, PointCloud or Instance.
+ * \param domain: Domain of the selection on that component.
+ * \param indices: Unique element indices on that domain.
  */
-void select_elements_set_indices(bNode &node, bke::AttrDomain domain, Span<int> indices);
+void select_elements_set_indices(bNode &node,
+                                 bke::GeometryComponent::Type component_type,
+                                 bke::AttrDomain domain,
+                                 Span<int> indices);
+
+/** The stored selection of one geometry component and the domain it is on. */
+Span<int> select_elements_get_indices(const bNode &node,
+                                      bke::GeometryComponent::Type component_type,
+                                      bke::AttrDomain &r_domain);
+
+/** Remove the stored selection of every geometry component. */
+void select_elements_clear_indices(bNode &node);
 
 /** True when the node is a Select Elements node. */
 bool is_select_elements_node(const bNode &node);

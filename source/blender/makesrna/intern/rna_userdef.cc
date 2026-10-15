@@ -5886,6 +5886,27 @@ static void rna_def_userdef_edit(BlenderRNA *brna)
       "Automatically close relevant character pairs when typing in the text editor");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_TEXT, nullptr);
 
+  /* Wrangle Editor */
+
+  prop = RNA_def_property(srna, "wrangle_editor_font_scale", PROP_FLOAT, PROP_NONE);
+  RNA_def_property_range(prop, 0.5f, 4.0f);
+  RNA_def_property_ui_text(prop,
+                           "Wrangle Editor Font Scale",
+                           "Size of the code in every Wrangle node, relative to the interface "
+                           "font");
+  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_NODE, nullptr);
+
+  prop = RNA_def_property(srna, "wrangle_editor_width", PROP_INT, PROP_PIXEL);
+  RNA_def_property_range(prop, 0, 2800);
+  RNA_def_property_ui_text(prop,
+                           "Wrangle Editor Width",
+                           "Width of the Wrangle code editor window, 0 for the default width");
+
+  prop = RNA_def_property(srna, "wrangle_editor_lines", PROP_INT, PROP_NONE);
+  RNA_def_property_range(prop, 8, 200);
+  RNA_def_property_ui_text(
+      prop, "Wrangle Editor Lines", "Height of the Wrangle code editor window in text lines");
+
   /* Undo */
 
   prop = RNA_def_property(srna, "undo_steps", PROP_INT, PROP_NONE);

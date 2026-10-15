@@ -6,7 +6,7 @@
  * \ingroup nodes
  *
  * Helpers for Geometry Nodes "Edit Elements": cache cooked input geometry and
- * write a full interactive edit-result mesh back to the node (#bNode.id).
+ * write the interactively edited component back to the node (#bNode.id).
  */
 
 #pragma once
@@ -20,7 +20,7 @@
 
 #include "DNA_node_types.h"
 
-struct Mesh;
+struct ID;
 
 namespace blender::nodes {
 
@@ -50,16 +50,21 @@ void edit_elements_clear_cache(const bNodeTree &tree, const bNode &node);
 void edit_elements_free_all_caches();
 
 /**
- * Store a full edit-result mesh on the node (#bNode.id as Mesh).
- * Clears any legacy position array. Takes a user ref on the Mesh.
+ * Store the edited component on the node (#bNode.id): a #Mesh, #Curves or #PointCloud. Edited
+ * instances are a #PointCloud with one point per instance, see #elements_instances_to_points.
+ * Clears any legacy position array. Takes a user ref on the data-block, null removes the result.
  */
-void edit_elements_set_mesh(bNode &node, Mesh *mesh);
+void edit_elements_set_result(bNode &node,
+                              ID *result,
+                              bke::GeometryComponent::Type component_type);
 
-/** Mesh currently stored on the node, or null. */
-const Mesh *edit_elements_get_mesh(const bNode &node);
-Mesh *edit_elements_get_mesh(bNode &node);
+/** Data-block with the edited component stored on the node, or null. */
+const ID *edit_elements_get_result(const bNode &node);
 
-/** @deprecated Legacy position-only storage. Prefer #edit_elements_set_mesh. */
+/** Component that the stored result replaces, only meaningful when there is a result. */
+bke::GeometryComponent::Type edit_elements_result_component_type(const bNode &node);
+
+/** @deprecated Legacy position-only storage. Prefer #edit_elements_set_result. */
 void edit_elements_set_positions(bNode &node, Span<float3> positions);
 
 bool is_edit_elements_node(const bNode &node);

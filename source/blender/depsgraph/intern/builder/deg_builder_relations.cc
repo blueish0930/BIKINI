@@ -3105,7 +3105,6 @@ void DepsgraphRelationBuilder::build_nodetree(bNodeTree *ntree)
                  "Preprocess -> Output",
                  RELATION_FLAG_NO_FLUSH);
   }
-  const Set<const bNode *> nodes_affecting_output = bke::node_tree_nodes_affecting_output(*ntree);
   /* nodetree's nodes... */
   for (bNode *bnode : ntree->all_nodes()) {
     build_idproperties(bnode->prop);
@@ -3204,14 +3203,17 @@ void DepsgraphRelationBuilder::build_nodetree(bNodeTree *ntree)
       bNodeTree *group_ntree = id_cast<bNodeTree *>(id);
       const bool recursive_call = nodetree_build_stack_.contains(group_ntree);
       build_nodetree(group_ntree);
-      /* Unused nested groups (not connected to Group Output / Viewer) must not
-       * flush NTREE_OUTPUT onto the parent. Ctrl+G of unused nodes would
-       * otherwise recook the whole modifier. */
-      if (recursive_call || !nodes_affecting_output.contains(bnode)) {
+      if (recursive_call) {
         continue;
       }
+      /* Also for a group node that nothing in this tree uses: a viewer inside the group still
+       * shows what it computes. Whether the result of the modifier has to be computed again is
+       * decided when it is evaluated, see #GeometryNodesOutputCache::root_output_token. */
       ComponentKey group_output_key(&group_ntree->id, NodeType::NTREE_OUTPUT);
       add_relation(group_output_key, ntree_output_key, "Group Node");
+      /* The lazy-function graph of this tree embeds the graph of every group it calls, so it has
+       * to be rebuilt whenever one of them is. Otherwise a viewer inside the group is looked up
+       * in the new graph of the group while the old one is still the one that is evaluated. */
       if (group_ntree->type == NTREE_GEOMETRY) {
         OperationKey group_preprocess_key(&group_ntree->id,
                                           NodeType::NTREE_GEOMETRY_PREPROCESS,

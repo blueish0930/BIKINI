@@ -262,6 +262,19 @@ class GeometryNodesOutputCache : NonCopyable, NonMovable {
   void store_root_output(uint64_t token, const bke::GeometrySet &geometry);
   void clear_root_output();
 
+  /**
+   * Token of everything the given nodes of the root tree depend on, like #root_output_token.
+   * Used for side-effect nodes: while it stays the same, what they logged is still right.
+   */
+  static uint64_t root_nodes_token(const GeometryNodesOutputCacheEvalState &state,
+                                   const bNodeTree &root_tree,
+                                   Span<const bNode *> nodes);
+
+  /** True when the log of the modifier holds what the side-effect nodes compute in this state. */
+  bool side_effects_are_logged(uint64_t token) const;
+  /** Remember the state the side-effect nodes were logged in. Zero when the log lacks them. */
+  void set_logged_side_effects(uint64_t token);
+
   enum class Lookup {
     Miss,
     Hit,
@@ -346,6 +359,8 @@ class GeometryNodesOutputCache : NonCopyable, NonMovable {
   std::unique_ptr<ContentHasher> content_hasher_;
 
   std::unique_ptr<RootOutput> root_output_;
+  /** See #set_logged_side_effects. */
+  uint64_t side_effects_token_ = 0;
 };
 
 /** Identifies the node whose outputs are cached at one call site. */
