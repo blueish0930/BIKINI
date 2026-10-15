@@ -128,7 +128,8 @@ static bool composite_node_tree_socket_type_valid(bke::bNodeTreeType * /*ntreety
                                                                SOCK_FONT,
                                                                SOCK_BUNDLE,
                                                                SOCK_COLOR_RAMP,
-                                                               SOCK_CURVE);
+                                                               SOCK_CURVE,
+                                                               SOCK_CLOSURE);
 }
 
 /**
