@@ -15,6 +15,7 @@ namespace blender {
 struct ID;
 struct Object;
 struct bNodeTree;
+struct bNode;
 
 namespace nodes {
 
@@ -84,6 +85,9 @@ struct EvalDependencies {
 
   friend bool operator==(const EvalDependencies &a, const EvalDependencies &b) = default;
 };
+
+/** Direct socket/data dependencies, excluding the contents of a referenced node group. */
+EvalDependencies gather_node_eval_dependencies(const bNode &node);
 
 /**
  * Finds all evaluation dependencies for the given node. This does not include dependencies that

@@ -193,9 +193,10 @@ static void add_eval_dependencies_from_socket(const bNodeSocket &socket, EvalDep
   }
 }
 
-static void add_eval_dependencies_from_node_data(const bNodeTree &tree, EvalDependencies &deps)
+static void add_eval_dependencies_from_node_data(const Span<const bNode *> nodes,
+                                                 EvalDependencies &deps)
 {
-  for (const bNode *node : tree.all_nodes()) {
+  for (const bNode *node : nodes) {
     if (node == nullptr || node->is_muted()) {
       continue;
     }
@@ -263,6 +264,37 @@ static void add_own_transform_dependencies(const bNodeTree &tree, EvalDependenci
   deps.needs_own_transform |= needs_own_transform;
 }
 
+EvalDependencies gather_node_eval_dependencies(const bNode &node)
+{
+  EvalDependencies deps;
+  /* Muted nodes still forward their inputs through internal links. */
+  for (const bNodeSocket *socket : node.input_sockets()) {
+    add_eval_dependencies_from_socket(*socket, deps);
+  }
+  for (const bNodeSocket *socket : node.output_sockets()) {
+    add_eval_dependencies_from_socket(*socket, deps);
+  }
+  add_eval_dependencies_from_node_data({&node}, deps);
+  if (!node.is_muted()) {
+    if (node.is_type("GeometryNodeSelfObject"_ustr) ||
+        node.is_type("GeometryNodeDeformCurvesOnSurface"_ustr))
+    {
+      deps.needs_own_transform = true;
+    }
+    if (node.storage && node.is_type("GeometryNodeObjectInfo"_ustr)) {
+      deps.needs_own_transform |=
+          static_cast<const NodeGeometryObjectInfo *>(node.storage)->transform_space ==
+          GEO_NODE_TRANSFORM_SPACE_RELATIVE;
+    }
+    if (node.storage && node.is_type("GeometryNodeCollectionInfo"_ustr)) {
+      deps.needs_own_transform |=
+          static_cast<const NodeGeometryCollectionInfo *>(node.storage)->transform_space ==
+          GEO_NODE_TRANSFORM_SPACE_RELATIVE;
+    }
+  }
+  return deps;
+}
+
 static bool needs_scene_render_params(const bNodeTree &ntree)
 {
   for (const bNode *node : ntree.nodes_by_type("GeometryNodeCameraInfo"_ustr)) {
@@ -308,7 +340,7 @@ static void gather_geometry_nodes_eval_dependencies(
                          has_enabled_nodes_of_type(ntree, "CompositorNodeMovieClip"_ustr) ||
                          has_enabled_nodes_of_type(ntree, "CompositorNodeKeyingScreen"_ustr);
 
-  add_eval_dependencies_from_node_data(ntree, deps);
+  add_eval_dependencies_from_node_data(ntree.all_nodes(), deps);
   add_own_transform_dependencies(ntree, deps);
 
   for (const bNode *node : ntree.group_nodes()) {

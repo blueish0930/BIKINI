@@ -1069,6 +1069,8 @@ struct GeometryNodesOutputCacheEvalState {
   /** Root tree: all modifier settings, including the names of output attributes. */
   uint64_t root_properties_token = 0;
   uint64_t ids_token = 0;
+  /** Root nodes only depend on data-blocks that can reach them. */
+  Map<int32_t, uint64_t> root_ids_tokens;
   uint64_t time_token = 0;
   uint64_t camera_token = 0;
   uint64_t animation_token = 0;
@@ -1446,29 +1448,10 @@ static uint64_t object_token(const Object &object,
 }
 
 /** Hash the state of every data-block the modifier depends on, as evaluated in this depsgraph. */
-static uint64_t compute_ids_token(const bNodeTree &root_tree,
+static uint64_t compute_ids_token(const EvalDependencies &deps,
                                   const GeometryNodesOutputCache::PrepareParams &params,
                                   GeometryNodesOutputCache::ContentHasher &hasher)
 {
-  /* Use the list the original tree keeps. Collecting it from the evaluated tree does not work:
-   * dependencies are keyed by session uid, which evaluated data-blocks do not have. */
-  EvalDependencies deps;
-  const bNodeTree *tree_orig = reinterpret_cast<const bNodeTree *>(DEG_get_original(&root_tree.id));
-  if (tree_orig != nullptr && tree_orig->runtime != nullptr &&
-      tree_orig->runtime->eval_dependencies != nullptr)
-  {
-    deps.merge(*tree_orig->runtime->eval_dependencies);
-  }
-  if (params.properties != nullptr) {
-    IDP_foreach_property(const_cast<IDProperty *>(params.properties),
-                         IDP_TYPE_FILTER_ID,
-                         [&](IDProperty *property) {
-                           if (ID *id = IDP_ID_get(property)) {
-                             deps.add_generic_id_full(const_cast<ID *>(DEG_get_original(id)));
-                           }
-                         });
-  }
-
   /* Map iteration order is not stable across rebuilds, so sort by session uid. */
   Vector<std::pair<uint32_t, uint64_t>> parts;
   parts.reserve(deps.ids.size());
@@ -1524,6 +1507,86 @@ static uint64_t compute_ids_token(const bNodeTree &root_tree,
     token = mix(token, hash_bytes(&transform, sizeof(float4x4)));
   }
   return token;
+}
+
+/** Keep depsgraph relations conservative (including viewers), but scope output cache keys to
+ * the nodes that can affect each result. A newly added, unconnected group must not change the
+ * data-block token of every existing branch just because it introduces another dependency. */
+static void compute_scoped_ids_tokens(
+    const bNodeTree &root_tree,
+    const GeometryNodesOutputCache::PrepareParams &params,
+    GeometryNodesOutputCache::ContentHasher &hasher,
+    GeometryNodesOutputCacheEvalState &state)
+{
+  EvalDependencies input_deps;
+  if (params.properties != nullptr) {
+    IDP_foreach_property(const_cast<IDProperty *>(params.properties),
+                        IDP_TYPE_FILTER_ID,
+                        [&](IDProperty *property) {
+                          if (ID *id = IDP_ID_get(property)) {
+                            input_deps.add_generic_id_full(const_cast<ID *>(DEG_get_original(id)));
+                          }
+                        });
+  }
+  const bNodeTree &original = *DEG_get_original(&root_tree);
+  EvalDependencies all_deps = input_deps;
+  if (original.runtime->eval_dependencies) {
+    all_deps.merge(*original.runtime->eval_dependencies);
+  }
+  /* Nested cache sites retain the conservative key: their inputs may receive data-block
+   * handles from a caller. The root has the complete dependency paths and can be scoped. */
+  state.ids_token = compute_ids_token(all_deps, params, hasher);
+  const uint64_t input_token = compute_ids_token(input_deps, params, hasher);
+  Map<const bNodeTree *, uint64_t> group_tokens;
+  Set<const bNodeTree *> visiting;
+  const auto visit_tree = [&](auto &&self, const bNodeTree &tree) -> uint64_t {
+    if (const uint64_t *known = group_tokens.lookup_ptr(&tree)) {
+      return *known;
+    }
+    if (!visiting.add(&tree)) {
+      /* Recursive groups may read any of the tree's dependencies. */
+      return state.ids_token;
+    }
+    tree.ensure_topology_cache();
+    Map<int32_t, uint64_t> tokens;
+    for (const bNode *node : tree.all_nodes()) {
+      tokens.add(node->identifier, 0);
+    }
+    for (const bNode *node : tree.all_nodes()) {
+      const EvalDependencies deps = gather_node_eval_dependencies(*node);
+      uint64_t part = 0;
+      if (!deps.ids.is_empty() || deps.needs_own_transform) {
+        part = compute_ids_token(deps, params, hasher);
+      }
+      if (!node->is_muted()) {
+        if (const bNodeTree *group = nested_group_tree(*node)) {
+          const uint64_t child = self(self, *group);
+          if (child != 0) {
+            part = mix(part, child);
+          }
+        }
+      }
+      if (part == 0) {
+        continue;
+      }
+      part = mix(uint64_t(node->identifier), part);
+      foreach_downstream(tree, {node}, [&](const bNode &downstream) {
+        tokens.lookup(downstream.identifier) += part;
+      });
+    }
+    const bNode *output = tree.group_output_node();
+    const uint64_t result = output ? tokens.lookup(output->identifier) : 0;
+    if (&tree == &original) {
+      for (auto item : tokens.items()) {
+        item.value = mix(input_token, item.value);
+      }
+      state.root_ids_tokens = std::move(tokens);
+    }
+    visiting.remove(&tree);
+    group_tokens.add(&tree, result);
+    return result;
+  };
+  visit_tree(visit_tree, original);
 }
 
 static uint64_t compute_camera_token(const GeometryNodesOutputCache::PrepareParams &params,
@@ -1708,7 +1771,7 @@ std::shared_ptr<const GeometryNodesOutputCacheEvalState> GeometryNodesOutputCach
     state->root_input_tokens = compute_root_input_tokens(root_tree, params, *content_hasher_);
     compute_root_context_tokens(root_tree, state->root_input_tokens, *state);
     if (classifier.seen_flags & DEP_IDS) {
-      state->ids_token = compute_ids_token(root_tree, params, *content_hasher_);
+      compute_scoped_ids_tokens(root_tree, params, *content_hasher_, *state);
     }
     if (classifier.seen_flags & DEP_CAMERA) {
       state->camera_token = compute_camera_token(params, *content_hasher_);
@@ -2034,7 +2097,9 @@ static GeometryNodesOutputCache::StateToken site_state_token(
     }
   }
   if (flags & DEP_IDS) {
-    token.ids = state.ids_token;
+    token.ids = ref.tree_session_uid == state.root_tree_uid ?
+                    state.root_ids_tokens.lookup_default(ref.node_id, state.ids_token) :
+                    state.ids_token;
   }
   if (flags & DEP_TIME) {
     token.time = state.time_token;
