@@ -55,7 +55,7 @@ static void node_declare(NodeDeclarationBuilder &b)
 
   /* Must stay first: light-iteration wiring uses input socket 0 as LightIndex. */
   b.add_input<decl::Int>("LightIndex"_ustr).available(is_gpu_internal);
-  b.add_input<decl::String>("Name"_ustr).is_attribute_name();
+  b.add_input<decl::String>("Name"_ustr).is_attribute_name().optional_label();
   b.add_output<decl::Color>("Color"_ustr);
   b.add_output<decl::Vector>("Vector"_ustr);
   b.add_output<decl::Float>("Factor"_ustr, "Fac"_ustr);

@@ -5148,7 +5148,8 @@ Value call_builtin(const Builtin id,
       }
       return a;
     }
-    case Builtin::ArrayFind: {
+    case Builtin::ArrayFind:
+    case Builtin::ArrayFindFirst: {
       /* Indices of every item that equals the value, in order. */
       const Value &arr = arg(0);
       const Value &value = arg(1);
@@ -5203,6 +5204,9 @@ Value call_builtin(const Builtin id,
             result.append(i);
           }
         }
+      }
+      if (id == Builtin::ArrayFindFirst) {
+        return Value::from_int(result.is_empty() ? -1 : result.first());
       }
       return value_from_int_array(std::move(result));
     }

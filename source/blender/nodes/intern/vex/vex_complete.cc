@@ -567,7 +567,13 @@ void gather_completions(Vector<std::string> &r_owned_names,
   add("sort", "Array", C::Variable, K::Function, "sort", "sort(arr)", true);
   add("sum", "Array", C::Variable, K::Function, "sum", "sum(arr)", true);
   add("unique", "Array", C::Variable, K::Function, "unique", "unique(arr)  -> new array", true);
-  add("find", "Array", C::Variable, K::Function, "find", "find(arr, value)  -> int[] indices", true);
+  add("find",
+      "Array",
+      C::Variable,
+      K::Function,
+      "find",
+      "int i = find(arr, value)  -> first index or -1\nint i[] = find(arr, value)  -> all indices",
+      true);
   add("union", "Array", C::Variable, K::Function, "union", "union(a, b)  values in a or b", true);
   add("subtract",
       "Array",

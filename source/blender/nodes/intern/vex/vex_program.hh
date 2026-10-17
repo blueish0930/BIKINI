@@ -602,6 +602,8 @@ enum class Builtin : uint16_t {
   ArrayUnique,
   /** `find(arr, value)`: indices of all matching items. */
   ArrayFind,
+  /** `int i = find(arr, value)`: index of the first matching item, -1 when there is none. */
+  ArrayFindFirst,
   /** `slice(arr, start, end, step)`: part of an array, negative indices count from the end. */
   ArraySlice,
   /** Set operations on two arrays, the result has no duplicates. */

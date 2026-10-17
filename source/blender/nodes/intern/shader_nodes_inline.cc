@@ -241,6 +241,13 @@ struct SocketValue {
           return value ? std::make_optional(PrimitiveSocketValue{value->value}) : std::nullopt;
         }
         case SOCK_COLOR_RAMP: {
+          /* The hidden input only overrides the node editor when linked. Its socket default
+           * is a separate ramp, not the ramp edited in the node body. */
+          if ((socket.flag & SOCK_HIDE_VALUE) &&
+              socket.owner_node().is_type("ShaderNodeValToRGB"_ustr))
+          {
+            return PrimitiveSocketValue{static_cast<ColorBand *>(socket.owner_node().storage)};
+          }
           const auto *ramp = socket.default_value_typed<bNodeSocketValueColorRamp>();
           if (ramp == nullptr || ramp->band == nullptr) {
             return std::nullopt;
@@ -248,6 +255,13 @@ struct SocketValue {
           return PrimitiveSocketValue{ramp->band};
         }
         case SOCK_CURVE: {
+          if ((socket.flag & SOCK_HIDE_VALUE) &&
+              (socket.owner_node().is_type("ShaderNodeVectorCurve"_ustr) ||
+               socket.owner_node().is_type("ShaderNodeRGBCurve"_ustr) ||
+               socket.owner_node().is_type("ShaderNodeFloatCurve"_ustr)))
+          {
+            return PrimitiveSocketValue{static_cast<CurveMapping *>(socket.owner_node().storage)};
+          }
           const auto *curve = socket.default_value_typed<bNodeSocketValueCurve>();
           if (curve == nullptr || curve->curve == nullptr) {
             return std::nullopt;

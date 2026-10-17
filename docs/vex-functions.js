@@ -626,13 +626,13 @@ window.VEX_FUNCS = [
     ret: "同类型数组", zh: "交集：同时在 a 和 b 里的值。结果是新数组，每个值只出现一次，保持 a 里的顺序。a 和 b 不会被修改。", en: "Intersection: the values that are in both a and b. The result is a new array with each value once, in the order of a. a and b are not modified.",
     ex: "// 和 0 号点共有的邻居\nint mine[] = pointneighbours(0, i@index);\nint other[] = pointneighbours(0, 0);\nint shared[] = intersect(mine, other);\ni@shared = len(shared);" }),
   F({ id: "find", cat: "array", name: "find",
-    sigs: ["find(arr, value) -> int[]"],
+    sigs: ["int find(arr, value)", "int[] find(arr, value)"],
     params: [
       P("arr", "in", "int[]|float[]|vector[]|string[]"),
       P("value", "in", "int|float|vector|string", "要找的值。string 数组只能找 string。", "The value to look for. A string array can only be searched for a string.")
     ],
-    ret: "int[]", zh: "返回数组里所有等于 value 的元素的下标（从 0 开始，按出现顺序）。没找到时返回空数组，所以可以用 <code>len(find(arr, x)) &gt; 0</code> 判断是否包含。float 和 vector 按完全相等比较。", en: "Indices of every item that equals value (zero based, in order). The result is empty when nothing matches, so <code>len(find(arr, x)) &gt; 0</code> tests whether the array contains x. Floats and vectors compare exactly.",
-    ex: "int ids[] = array(5, 7, 5, 9);\nint idx[] = find(ids, 5);   // {0, 2}\ni@count = len(idx);\n\n// 是否包含\nif (len(find(ids, 9)) > 0) {\n    i@has_nine = 1;\n}" }),
+    ret: "int | int[]", zh: "返回值的类型由接收它的变量决定。赋给 int（或 float、bool、<code>i@attr</code>）时返回第一个等于 value 的元素的下标，没找到返回 -1。赋给 int 数组时返回所有等于 value 的元素的下标（从 0 开始，按出现顺序），没找到时返回空数组。没有接收变量时（如 <code>len(find(arr, x))</code>、<code>foreach</code>、<code>if</code> 条件）按数组处理。float 和 vector 按完全相等比较。", en: "What it returns depends on what it is assigned to. Assigned to an int (or a float, bool or <code>i@attr</code>), it is the index of the first item that equals value, or -1 when nothing matches. Assigned to an int array, it is the indices of every matching item (zero based, in order), empty when nothing matches. Without a destination (<code>len(find(arr, x))</code>, <code>foreach</code>, an <code>if</code> condition) it is the array. Floats and vectors compare exactly.",
+    ex: "int ids[] = array(5, 7, 5, 9);\n\n// 第一个下标，没找到为 -1\nint first = find(ids, 5);    // 0\nint none = find(ids, 4);     // -1\n\n// 所有下标\nint all[] = find(ids, 5);    // {0, 2}\ni@count = len(all);\n\n// 是否包含\nint nine = find(ids, 9);\nif (nine >= 0) {\n    i@has_nine = 1;\n}" }),
   F({ id: "slice", cat: "array", name: "slice",
     sigs: [
       "slice(arr, start) -> new array",

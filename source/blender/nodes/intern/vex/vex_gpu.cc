@@ -608,6 +608,16 @@ WrangleArr wr_arr_find(WrangleArr a, WrangleArr probe, int stride, int mode)
   return r;
 }
 
+int wr_arr_find_first(WrangleArr a, WrangleArr probe, int stride, int mode)
+{
+  for (int i = 0; i < a.count; i++) {
+    if (wr_arr_item_eq(a, i, probe, 0, stride, mode)) {
+      return i;
+    }
+  }
+  return -1;
+}
+
 WrangleArr wr_arr_slice(
     WrangleArr a, int start_arg, int end_arg, bool has_end, int step, int stride)
 {

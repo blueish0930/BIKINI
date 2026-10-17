@@ -4480,6 +4480,12 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
                               "find: a string array needs a string to search for");
           return Type::Void;
         }
+        /* `int i = find(arr, value);` is the first index (or -1), `int i[] = find(...)` all of
+         * them. */
+        if (ELEM(hint, Type::Int, Type::Float, Type::Bool)) {
+          builtin = Builtin::ArrayFindFirst;
+          call_id = int(builtin);
+        }
       }
       if (builtin == Builtin::ArraySlice) {
         if (n_in < 2 || n_in > 4 || !type_is_array(expr_arg_type(e, 0))) {
@@ -4683,6 +4689,9 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
           break;
         case Builtin::ArrayFind:
           e->type = Type::IntArray;
+          break;
+        case Builtin::ArrayFindFirst:
+          e->type = Type::Int;
           break;
         case Builtin::ArrayUnion:
         case Builtin::ArraySubtract:
@@ -7516,6 +7525,28 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
         return r;
       }
       case ExprKind::VecLit: {
+        if (type_is_array(hint)) {
+          /* `int a[] = {1, 3, 5, 3};` is a list like `array(...)`, not a vector, also when it has
+           * four items or fewer. The declared type decides how the items are stored. */
+          if (ELEM(hint, Type::StringArray, Type::RayArray)) {
+            bad("GPU: unsupported array type");
+            r.s = "wr_arr_new(0)";
+            r.type = Type::IntArray;
+            return r;
+          }
+          const GpuArrayKind array_kind = gpu_array_kind(hint);
+          if (int(e->args.size()) > array_kind.capacity) {
+            bad("GPU: the array is longer than the GPU arrays");
+          }
+          std::string s = "wr_arr_new(" + std::to_string(array_kind.kind) + ")";
+          for (int i = 0; i < int(e->args.size()) && i < array_kind.capacity; i++) {
+            s = std::string(array_kind.set) + "(" + s + ", " + std::to_string(i) + ", " +
+                cast_to(em(e->args[i], array_kind.elem), array_kind.elem) + ")";
+          }
+          r.s = s;
+          r.type = hint;
+          return r;
+        }
         if (type_is_matrix(hint) || e->args.size() > 4) {
           if (type_is_matrix(hint) && e->args.size() == 1) {
             r.s = cast_to(em(e->args[0], Type::Float), hint);
@@ -7894,15 +7925,17 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
           }
           if (fn == "find") {
             const GpuVal value = arg(1, kind.elem);
+            /* `int i = find(arr, value);` is the first index (or -1). */
+            const bool first = ELEM(hint, Type::Int, Type::Float, Type::Bool);
+            const std::string helper = first ? "wr_arr_find_first(" : "wr_arr_find(";
             if (array_type == Type::IntArray && value.type == Type::Float) {
               /* `find(ints, 7.0)` compares as floats. */
-              r.s = "wr_arr_find(" + a0.s + ", wr_arr_set_f(wr_arr_new(1), 0, " + value.s +
-                    "), 1, 2)";
+              r.s = helper + a0.s + ", wr_arr_set_f(wr_arr_new(1), 0, " + value.s + "), 1, 2)";
             }
             else {
-              r.s = "wr_arr_find(" + a0.s + ", " + probe(value) + ", " + stride + ", " + mode + ")";
+              r.s = helper + a0.s + ", " + probe(value) + ", " + stride + ", " + mode + ")";
             }
-            r.type = Type::IntArray;
+            r.type = first ? Type::Int : Type::IntArray;
             return r;
           }
           if (fn == "slice") {
