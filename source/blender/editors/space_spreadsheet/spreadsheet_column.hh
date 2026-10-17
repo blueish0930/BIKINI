@@ -28,6 +28,11 @@ struct SpreadsheetColumnRuntime {
   /** Coordinates of the left and right edges of the column in view space. */
   int left_x = 0;
   int right_x = 0;
+  /**
+   * False when the last redraw skipped the column (no data or hidden by the attribute filter).
+   * The coordinates above are stale then and must not be used for hit testing.
+   */
+  bool is_drawn = false;
 };
 
 SpreadsheetColumnID *spreadsheet_column_id_new();

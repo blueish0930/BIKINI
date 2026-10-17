@@ -530,6 +530,7 @@ static void spreadsheet_main_region_draw(const bContext *C, ARegion *region)
   int x = spreadsheet_layout.index_column_width;
 
   for (SpreadsheetColumn *column : Span{table->columns, table->num_columns}) {
+    column->runtime->is_drawn = false;
     std::unique_ptr<ColumnValues> values_ptr = data_source->get_column_values(*column->id);
     if (!values_ptr) {
       continue;
@@ -562,6 +563,7 @@ static void spreadsheet_main_region_draw(const bContext *C, ARegion *region)
     column->runtime->left_x = x;
     x += width_in_pixels;
     column->runtime->right_x = x;
+    column->runtime->is_drawn = true;
 
     spreadsheet_column_assign_runtime_data(column, column_type, values->name());
   }

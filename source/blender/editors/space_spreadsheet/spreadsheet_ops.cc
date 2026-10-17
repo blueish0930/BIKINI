@@ -296,6 +296,12 @@ static bool is_hovering_header_row(const SpaceSpreadsheet &sspreadsheet,
          cursor_re.y <= region_height;
 }
 
+/** Columns that are on screen; others (unavailable, hidden by the attribute filter) can't be hit. */
+static bool column_is_drawn(const SpreadsheetColumn &column)
+{
+  return !(column.flag & SPREADSHEET_COLUMN_FLAG_UNAVAILABLE) && column.runtime->is_drawn;
+}
+
 SpreadsheetColumn *find_hovered_column_edge(SpaceSpreadsheet &sspreadsheet,
                                             ARegion &region,
                                             const int2 &cursor_re)
@@ -306,7 +312,7 @@ SpreadsheetColumn *find_hovered_column_edge(SpaceSpreadsheet &sspreadsheet,
   }
   const float cursor_x_view = ui::view2d_region_to_view_x(&region.v2d, cursor_re.x);
   for (SpreadsheetColumn *column : Span{table->columns, table->num_columns}) {
-    if (column->flag & SPREADSHEET_COLUMN_FLAG_UNAVAILABLE) {
+    if (!column_is_drawn(*column)) {
       continue;
     }
     if (std::abs(cursor_x_view - column->runtime->right_x) < SPREADSHEET_EDGE_ACTION_ZONE) {
@@ -326,7 +332,7 @@ SpreadsheetColumn *find_hovered_column(SpaceSpreadsheet &sspreadsheet,
   }
   const float cursor_x_view = ui::view2d_region_to_view_x(&region.v2d, cursor_re.x);
   for (SpreadsheetColumn *column : Span{table->columns, table->num_columns}) {
-    if (column->flag & SPREADSHEET_COLUMN_FLAG_UNAVAILABLE) {
+    if (!column_is_drawn(*column)) {
       continue;
     }
     if (cursor_x_view > column->runtime->left_x && cursor_x_view <= column->runtime->right_x) {
@@ -530,7 +536,7 @@ struct ReorderColumnData {
 static std::optional<int> find_first_available_column_index(const SpreadsheetTable &table)
 {
   for (int i = 0; i < table.num_columns; i++) {
-    if (!(table.columns[i]->flag & SPREADSHEET_COLUMN_FLAG_UNAVAILABLE)) {
+    if (column_is_drawn(*table.columns[i])) {
       return i;
     }
   }
@@ -540,7 +546,7 @@ static std::optional<int> find_first_available_column_index(const SpreadsheetTab
 static std::optional<int> find_last_available_column_index(const SpreadsheetTable &table)
 {
   for (int i = table.num_columns - 1; i >= 0; i--) {
-    if (!(table.columns[i]->flag & SPREADSHEET_COLUMN_FLAG_UNAVAILABLE)) {
+    if (column_is_drawn(*table.columns[i])) {
       return i;
     }
   }

@@ -499,6 +499,10 @@ bool spreadsheet_attribute_is_visible(const SpaceSpreadsheet &sspreadsheet,
   if (pattern.is_empty()) {
     return true;
   }
+  /* The Viewer node's columns are what the user is looking at, never filter them away. */
+  if (id_name == ".viewer" || id_name.startswith(".viewer_")) {
+    return true;
+  }
 
   bool any_include = false;
   bool include_match = false;
