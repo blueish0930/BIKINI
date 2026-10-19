@@ -63,6 +63,12 @@ struct Resources {
     float4 selected_edge_col = (select_edge) ? theme.colors.edge_mode_select :
                                                theme.colors.edge_select;
     color = flag_test(edit.vert_edge_flag, EDGE_SELECTED) ? selected_edge_col : color;
+    /* BIKINI: mirror-side highlight. Alpha 0 disables it (user toggle) so a selected
+     * counterpart falls back to the normal selection color instead of disappearing. */
+    color = (flag_test(edit.face_uv_flag, EDGE_MIRROR_SELECTED) &&
+             theme.colors.mirror_select.a > 0.0f) ?
+                float4(theme.colors.mirror_select.rgb, 1.0f) :
+                color;
     color = flag_test(edit.vert_edge_flag, EDGE_ACTIVE) ? theme.colors.edit_mesh_active : color;
     color.a = 1.0f;
     return color;
@@ -75,7 +81,12 @@ struct Resources {
     float4 selected_edge_col = (select_edge) ? theme.colors.edge_mode_select :
                                                theme.colors.edge_select;
     bool edge_selected = flag_test(edit.vert_edge_flag, (VERT_ACTIVE | VERT_SELECTED));
-    float4 color = (edge_selected) ? selected_edge_col : theme.colors.wire_edit;
+    bool edge_mirror = flag_test(edit.vert_edge_flag, VERT_MIRROR_SELECTED) &&
+                       theme.colors.mirror_select.a > 0.0f;
+    /* One end mirror, the other not: the rasterizer interpolates, so incident edges
+     * fall off from the highlight color to the wire (or the user's selection). */
+    float4 color = (edge_mirror) ? float4(theme.colors.mirror_select.rgb, 1.0f) :
+                                   ((edge_selected) ? selected_edge_col : theme.colors.wire_edit);
     color.a = 1.0f;
     return color;
   }
@@ -85,6 +96,12 @@ struct Resources {
     const UniformData &theme = uni.uniform_buf;
     if (flag_test(edit.vert_edge_flag, VERT_ACTIVE)) {
       return float4(theme.colors.edit_mesh_active.xyz, 1.0f);
+    }
+    /* BIKINI: mirror-side highlight (overrides plain selection). */
+    if (flag_test(edit.vert_edge_flag, VERT_MIRROR_SELECTED) &&
+        theme.colors.mirror_select.a > 0.0f)
+    {
+      return float4(theme.colors.mirror_select.rgb, 1.0f);
     }
     if (flag_test(edit.vert_edge_flag, VERT_SELECTED)) {
       return theme.colors.vert_select;
@@ -102,6 +119,7 @@ struct Resources {
     bool face_freestyle = flag_test(edit.face_uv_flag, FACE_FREESTYLE);
     bool face_selected = flag_test(edit.face_uv_flag, FACE_SELECTED);
     bool face_active = flag_test(edit.face_uv_flag, FACE_ACTIVE);
+    bool face_mirror = flag_test(edit.face_uv_flag, FACE_MIRROR_SELECTED);
     bool face_retopo = (retopology_offset > 0.0f);
     float4 selected_face_col = (select_face) ? theme.colors.face_mode_select :
                                                theme.colors.face_select;
@@ -109,6 +127,10 @@ struct Resources {
     color = face_retopo ? theme.colors.face_retopology : color;
     color = face_freestyle ? theme.colors.face_freestyle : color;
     color = face_selected ? selected_face_col : color;
+    /* BIKINI: mirror-side highlight (overrides plain selection). */
+    color = (face_mirror && theme.colors.mirror_select.a > 0.0f) ?
+                float4(theme.colors.mirror_select.rgb, selected_face_col.a) :
+                color;
     if (select_face && face_active) {
       color = mix(selected_face_col, theme.colors.edit_mesh_active, 0.5f);
       color.a = selected_face_col.a;
@@ -119,7 +141,8 @@ struct Resources {
     }
     else {
       /* Don't always fill 'theme.colors.face'. */
-      color.a = (select_face || face_selected || face_active || face_freestyle || face_retopo) ?
+      color.a = (select_face || face_selected || face_active || face_freestyle || face_retopo ||
+                 face_mirror) ?
                     color.a :
                     0.0f;
     }
@@ -218,15 +241,15 @@ void vert_main([[resource_table]] const Resources &srt,
   out_pos = view.point_view_to_homogenous(vs_P);
   /* Offset Z position for retopology overlay. */
   out_pos.z += get_homogenous_z_offset(view.winmat, vs_P.z, out_pos.w, srt.retopology_offset);
-  /* Make selected and active vertex always on top. */
-  if (flag_test(edit.vert_edge_flag, VERT_SELECTED)) {
-    out_pos.z -= 5e-7f * abs(out_pos.w);
-  }
-  if (flag_test(edit.vert_edge_flag, VERT_ACTIVE)) {
-    out_pos.z -= 5e-7f * abs(out_pos.w);
+  /* BIKINI: extra polygon-offset units for highlighted overlay so it stays in front of the
+   * mesh at any zoom. Applied *before* the occlusion test (the pass offset used to run after,
+   * so far-away highlights were faded and then covered by the surface). */
+  float z_bias = srt.ndc_offset;
+  if (flag_test(edit.vert_edge_flag, VERT_SELECTED | VERT_ACTIVE | VERT_MIRROR_SELECTED)) {
+    z_bias += 3.0f;
   }
   /* NDC offset to avoid Z fighting. */
-  out_pos.z -= srt.ndc_offset_factor * srt.ndc_offset;
+  out_pos.z -= srt.ndc_offset_factor * z_bias;
 
   v_out.vertex_crease = edit.vertex_crease;
   v_out.color = srt.vertex_color(edit);
@@ -374,10 +397,6 @@ struct EditEdge {
     /* Offset Z position for retopology overlay. */
     vert.hs_P.z += get_homogenous_z_offset(
         view.winmat, vs_P.z, vert.hs_P.w, res.retopology_offset);
-    if (vert.color.a > 0.0f) {
-      vert.hs_P.z -= 5e-7f * abs(vert.hs_P.w);
-    }
-    vert.hs_P.z -= res.ndc_offset_factor * res.ndc_offset;
 
     if (use_vertex_selection) {
       vert.color = res.edge_vertex_color(edit);
@@ -388,6 +407,20 @@ struct EditEdge {
       vert.select_override = true;
     }
     vert.color_outer = res.edge_color_outer(edit);
+
+    /* BIKINI: highlighted edges get extra polygon-offset units (see vertex shader). */
+    float z_bias = res.ndc_offset;
+    if (vert.color_outer.a > 0.0f) {
+      z_bias += 0.5f;
+    }
+    if (flag_test(edit.vert_edge_flag,
+                  VERT_SELECTED | VERT_ACTIVE | VERT_MIRROR_SELECTED | EDGE_SELECTED |
+                      EDGE_ACTIVE) ||
+        flag_test(edit.face_uv_flag, EDGE_MIRROR_SELECTED))
+    {
+      z_bias += 2.5f;
+    }
+    vert.hs_P.z -= res.ndc_offset_factor * z_bias;
     vert.color = res.facing_coloring(vert.color, vs_N, view.view_incident_vector(vs_P));
 
     return vert;
@@ -647,8 +680,12 @@ void vert_main([[resource_table]] const Resources &srt,
   /* Apply depth bias to overlay in order to prevent z-fighting on Apple Silicon GPUs. */
   out_pos.z -= 5e-5f;
 #endif
-  /* NDC offset to avoid Z fighting. */
-  out_pos.z -= srt.ndc_offset_factor * srt.ndc_offset;
+  /* NDC offset to avoid Z fighting, more for highlighted faces (BIKINI). */
+  float z_bias = srt.ndc_offset;
+  if (flag_test(edit.face_uv_flag, FACE_SELECTED | FACE_ACTIVE | FACE_MIRROR_SELECTED)) {
+    z_bias += 1.5f;
+  }
+  out_pos.z -= srt.ndc_offset_factor * z_bias;
 
   v_out.color = srt.face_color(edit);
   v_out.color.a *= srt.alpha;
@@ -712,6 +749,7 @@ void vert_main([[resource_table]] const Resources &srt,
   uint id = srt.resources.get(inst_index).resource_id<1>();
   ObjectMatrices model = srt.models.get(id);
   ViewMatrices view = srt.views.get(0);
+  EditVertData edit = srt.unpack_vert_data(v_in.data);
 
   float3 ws_P = model.point_object_to_world(v_in.pos);
   float3 vs_P = view.point_world_to_view(ws_P);
@@ -720,10 +758,16 @@ void vert_main([[resource_table]] const Resources &srt,
   out_pos.z += get_homogenous_z_offset(view.winmat, vs_P.z, out_pos.w, srt.retopology_offset);
   /* Bias Face-dot Z position in clip-space. */
   out_pos.z -= (view.winmat[3][3] == 0.0f) ? 0.00035f : 1e-6f;
-  /* NDC offset to avoid Z fighting. */
-  out_pos.z -= srt.ndc_offset_factor * srt.ndc_offset;
+  /* NDC offset to avoid Z fighting (one extra unit, BIKINI). */
+  out_pos.z -= srt.ndc_offset_factor * (srt.ndc_offset + 1.0f);
 
   v_out.color = srt.facedot_color(v_in.norAndFlag.w);
+  /* BIKINI: active (w < 0) keeps the active color. Mirror overrides selection orange. */
+  if (flag_test(edit.face_uv_flag, FACE_MIRROR_SELECTED) &&
+      theme.colors.mirror_select.a > 0.0f && v_in.norAndFlag.w >= 0.0f)
+  {
+    v_out.color = float4(theme.colors.mirror_select.rgb, 1.0f);
+  }
   /* Occluded geometry fading. */
   v_out.color.a *= srt.test_occlusion(out_pos) ? srt.alpha : 1.0f;
 
