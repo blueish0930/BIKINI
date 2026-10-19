@@ -65,7 +65,7 @@ struct Resources {
     color = flag_test(edit.vert_edge_flag, EDGE_SELECTED) ? selected_edge_col : color;
     /* BIKINI: mirror-side highlight. Alpha 0 disables it (user toggle) so a selected
      * counterpart falls back to the normal selection color instead of disappearing. */
-    color = (flag_test(edit.face_uv_flag, EDGE_MIRROR_SELECTED) &&
+    color = (flag_test(edit.face_uv_flag, uint(EDGE_MIRROR_SELECTED)) &&
              theme.colors.mirror_select.a > 0.0f) ?
                 float4(theme.colors.mirror_select.rgb, 1.0f) :
                 color;
@@ -81,7 +81,7 @@ struct Resources {
     float4 selected_edge_col = (select_edge) ? theme.colors.edge_mode_select :
                                                theme.colors.edge_select;
     bool edge_selected = flag_test(edit.vert_edge_flag, (VERT_ACTIVE | VERT_SELECTED));
-    bool edge_mirror = flag_test(edit.vert_edge_flag, VERT_MIRROR_SELECTED) &&
+    bool edge_mirror = flag_test(edit.vert_edge_flag, uint(VERT_MIRROR_SELECTED)) &&
                        theme.colors.mirror_select.a > 0.0f;
     /* One end mirror, the other not: the rasterizer interpolates, so incident edges
      * fall off from the highlight color to the wire (or the user's selection). */
@@ -98,7 +98,7 @@ struct Resources {
       return float4(theme.colors.edit_mesh_active.xyz, 1.0f);
     }
     /* BIKINI: mirror-side highlight (overrides plain selection). */
-    if (flag_test(edit.vert_edge_flag, VERT_MIRROR_SELECTED) &&
+    if (flag_test(edit.vert_edge_flag, uint(VERT_MIRROR_SELECTED)) &&
         theme.colors.mirror_select.a > 0.0f)
     {
       return float4(theme.colors.mirror_select.rgb, 1.0f);
@@ -119,7 +119,7 @@ struct Resources {
     bool face_freestyle = flag_test(edit.face_uv_flag, FACE_FREESTYLE);
     bool face_selected = flag_test(edit.face_uv_flag, FACE_SELECTED);
     bool face_active = flag_test(edit.face_uv_flag, FACE_ACTIVE);
-    bool face_mirror = flag_test(edit.face_uv_flag, FACE_MIRROR_SELECTED);
+    bool face_mirror = flag_test(edit.face_uv_flag, uint(FACE_MIRROR_SELECTED));
     bool face_retopo = (retopology_offset > 0.0f);
     float4 selected_face_col = (select_face) ? theme.colors.face_mode_select :
                                                theme.colors.face_select;
@@ -245,7 +245,9 @@ void vert_main([[resource_table]] const Resources &srt,
    * mesh at any zoom. Applied *before* the occlusion test (the pass offset used to run after,
    * so far-away highlights were faded and then covered by the surface). */
   float z_bias = srt.ndc_offset;
-  if (flag_test(edit.vert_edge_flag, VERT_SELECTED | VERT_ACTIVE | VERT_MIRROR_SELECTED)) {
+  if (flag_test(edit.vert_edge_flag, VERT_SELECTED | VERT_ACTIVE) ||
+      flag_test(edit.vert_edge_flag, uint(VERT_MIRROR_SELECTED)))
+  {
     z_bias += 3.0f;
   }
   /* NDC offset to avoid Z fighting. */
@@ -414,9 +416,9 @@ struct EditEdge {
       z_bias += 0.5f;
     }
     if (flag_test(edit.vert_edge_flag,
-                  VERT_SELECTED | VERT_ACTIVE | VERT_MIRROR_SELECTED | EDGE_SELECTED |
-                      EDGE_ACTIVE) ||
-        flag_test(edit.face_uv_flag, EDGE_MIRROR_SELECTED))
+                  VERT_SELECTED | VERT_ACTIVE | EDGE_SELECTED | EDGE_ACTIVE) ||
+        flag_test(edit.vert_edge_flag, uint(VERT_MIRROR_SELECTED)) ||
+        flag_test(edit.face_uv_flag, uint(EDGE_MIRROR_SELECTED)))
     {
       z_bias += 2.5f;
     }
@@ -684,7 +686,9 @@ void vert_main([[resource_table]] const Resources &srt,
 #endif
   /* NDC offset to avoid Z fighting, more for highlighted faces (BIKINI). */
   float z_bias = srt.ndc_offset;
-  if (flag_test(edit.face_uv_flag, FACE_SELECTED | FACE_ACTIVE | FACE_MIRROR_SELECTED)) {
+  if (flag_test(edit.face_uv_flag, FACE_SELECTED | FACE_ACTIVE) ||
+      flag_test(edit.face_uv_flag, uint(FACE_MIRROR_SELECTED)))
+  {
     z_bias += 1.5f;
   }
   out_pos.z -= srt.ndc_offset_factor * z_bias;
@@ -765,7 +769,7 @@ void vert_main([[resource_table]] const Resources &srt,
 
   v_out.color = srt.facedot_color(v_in.norAndFlag.w);
   /* BIKINI: active (w < 0) keeps the active color. Mirror overrides selection orange. */
-  if (flag_test(edit.face_uv_flag, FACE_MIRROR_SELECTED) &&
+  if (flag_test(edit.face_uv_flag, uint(FACE_MIRROR_SELECTED)) &&
       theme.colors.mirror_select.a > 0.0f && v_in.norAndFlag.w >= 0.0f)
   {
     v_out.color = float4(theme.colors.mirror_select.rgb, 1.0f);
