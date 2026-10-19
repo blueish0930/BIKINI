@@ -535,10 +535,8 @@ static void draw_expression_string_socket(CustomSocketDrawParams &params)
                                       0,
                                       TIP_("Expression — browse ops by category; Enter inserts syntax only"));
 
-  /* Same allocation pattern as attribute search: free_arg=true, free_fn=nullptr. */
-  ExpressionCompleteData *data = static_cast<ExpressionCompleteData *>(
-      MEM_new_uninitialized(sizeof(ExpressionCompleteData), __func__));
-  *data = ExpressionCompleteData{};
+  /* Owned by the button, which frees it with #MEM_delete. */
+  ExpressionCompleteData *data = MEM_new<ExpressionCompleteData>(__func__);
   data->node = &params.node;
   data->socket = &params.socket;
   data->owner_id = params.socket_ptr.owner_id;
@@ -554,8 +552,6 @@ static void draw_expression_string_socket(CustomSocketDrawParams &params)
                          nullptr,
                          expression_search_update_fn,
                          data,
-                         true,
-                         nullptr,
                          expression_search_exec_fn,
                          nullptr);
   button_func_complete_set(but, expression_autocomplete_fn, data);

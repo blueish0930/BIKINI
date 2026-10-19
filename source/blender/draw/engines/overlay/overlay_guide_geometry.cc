@@ -34,6 +34,7 @@ namespace blender::draw::overlay {
 
 GuideGeometry::~GuideGeometry()
 {
+  draw_batches_.clear();
   owned_batches_.clear();
 }
 
@@ -93,6 +94,7 @@ static gpu::Batch *make_batch(GPUPrimType prim, const Span<float3> positions, gp
 
 void GuideGeometry::discard_batches()
 {
+  draw_batches_.clear();
   if (!GPU_is_init()) {
     owned_batches_.clear();
     return;
@@ -104,6 +106,7 @@ void GuideGeometry::discard_batches()
 }
 
 static void submit_batch(Vector<gpu::Batch *> &owned,
+                         Vector<std::unique_ptr<Batch>> &wrappers,
                          PassSimple &occluded,
                          PassSimple &xray,
                          Manager &manager,
@@ -120,9 +123,10 @@ static void submit_batch(Vector<gpu::Batch *> &owned,
     return;
   }
   owned.append(batch);
+  wrappers.append(std::make_unique<Batch>(batch, false));
   PassSimple::Sub &sub = (use_xray ? xray : occluded).sub("guide_v5");
   sub.push_constant("ucolor", color);
-  sub.draw(batch, ResourceHandleRange(manager.resource_handle(transform)));
+  sub.draw(wrappers.last().get(), ResourceHandleRange(manager.resource_handle(transform)));
 }
 
 void GuideGeometry::object_sync(Manager &manager,
@@ -175,6 +179,7 @@ void GuideGeometry::object_sync(Manager &manager,
             float4 solid_color = guide.color;
             solid_color.w *= 0.28f;
             submit_batch(owned_batches_,
+                         draw_batches_,
                          occluded_ps_,
                          xray_ps_,
                          manager,
@@ -197,6 +202,7 @@ void GuideGeometry::object_sync(Manager &manager,
           }
           if (valid_edges == 0) {
             submit_batch(owned_batches_,
+                         draw_batches_,
                          occluded_ps_,
                          xray_ps_,
                          manager,
@@ -214,6 +220,7 @@ void GuideGeometry::object_sync(Manager &manager,
               }
             }
             submit_batch(owned_batches_,
+                         draw_batches_,
                          occluded_ps_,
                          xray_ps_,
                          manager,
@@ -243,6 +250,7 @@ void GuideGeometry::object_sync(Manager &manager,
           }
           if (segment_num == 0) {
             submit_batch(owned_batches_,
+                         draw_batches_,
                          occluded_ps_,
                          xray_ps_,
                          manager,
@@ -268,6 +276,7 @@ void GuideGeometry::object_sync(Manager &manager,
               }
             }
             submit_batch(owned_batches_,
+                         draw_batches_,
                          occluded_ps_,
                          xray_ps_,
                          manager,
@@ -282,6 +291,7 @@ void GuideGeometry::object_sync(Manager &manager,
 
         if (!guide.point_positions.is_empty()) {
           submit_batch(owned_batches_,
+                       draw_batches_,
                        occluded_ps_,
                        xray_ps_,
                        manager,

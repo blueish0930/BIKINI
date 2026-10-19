@@ -1254,8 +1254,6 @@ static void draw_uv_map_socket(CustomSocketDrawParams &params)
                          nullptr,
                          uv_corner_search_update,
                          data,
-                         true,
-                         nullptr,
                          uv_corner_search_exec,
                          nullptr);
 }

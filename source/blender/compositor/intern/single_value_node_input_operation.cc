@@ -184,10 +184,6 @@ void SingleValueNodeInputOperation::execute()
        * <std::string> throws bad_variant_access (Point Stamp crash on Bake). */
       result.set_single_value(std::string(""));
       break;
-    case SOCK_CLOSURE:
-      /* Closures are unused float placeholders in Image Process COM. */
-      result.set_single_value(0.0f);
-      break;
     default:
       BLI_assert_unreachable();
       break;

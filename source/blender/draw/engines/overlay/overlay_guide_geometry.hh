@@ -11,6 +11,8 @@
 
 #pragma once
 
+#include <memory>
+
 #include "overlay_base.hh"
 
 namespace blender::draw::overlay {
@@ -20,6 +22,8 @@ class GuideGeometry : Overlay {
   PassSimple occluded_ps_ = {"guide_geometry_occluded"};
   PassSimple xray_ps_ = {"guide_geometry_xray"};
   Vector<gpu::Batch *> owned_batches_;
+  /** Non-owning #draw::Batch wrappers of #owned_batches_, which the passes reference. */
+  Vector<std::unique_ptr<Batch>> draw_batches_;
 
  public:
   ~GuideGeometry();
