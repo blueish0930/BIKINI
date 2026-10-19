@@ -12,7 +12,7 @@
 #include "bmesh.hh"
 
 #include "BLI_array.hh"
-#include "BLI_kdtree.hh"
+#include "BLI_kdtree_new.hh"
 #include "BLI_math_vector_c.hh"
 #include "BLI_math_vector_types.hh"
 
@@ -293,18 +293,20 @@ struct MirrorHighlightMaps {
     edge_hl = Array<bool>(bm.totedge, false);
     face_hl = Array<bool>(bm.totface, false);
 
-    KDTree<float3> *tree = kdtree_new<float3>(bm.totvert);
+    Array<float3> vert_positions(bm.totvert);
+    Vector<int> visible_verts;
     {
       BMIter iter;
       BMVert *v;
       int i;
       BM_ITER_MESH_INDEX (v, &iter, &bm, BM_VERTS_OF_MESH, i) {
+        vert_positions[i] = v->co;
         if (!BM_elem_flag_test(v, BM_ELEM_HIDDEN)) {
-          kdtree_insert<float3>(tree, i, float3(v->co));
+          visible_verts.append(i);
         }
       }
-      kdtree_balance(tree);
     }
+    const KDTreeNew<float3> tree(vert_positions, visible_verts.as_span());
 
     auto flip_co = [&](float3 co, const int mask) {
       for (int a = 0; a < 3; a++) {
@@ -320,16 +322,17 @@ struct MirrorHighlightMaps {
       if (len_squared_v3v3(src, query) <= maxdist * maxdist) {
         return nullptr; /* On-plane / self, not a counterpart. */
       }
-      KDTreeNearest<float3> nearest[2];
-      const int found = kdtree_find_nearest_n<float3>(tree, query, nearest, 2);
-      if (found < 1 || nearest[0].dist > maxdist) {
+      KDTreeNew<float3>::Nearest nearest[2];
+      const int found = tree.find_nearest_n(query, MutableSpan(nearest, 2));
+      const float maxdist_sq = maxdist * maxdist;
+      if (found < 1 || nearest[0].distance_sq > maxdist_sq) {
         return nullptr;
       }
       BMVert *w = BM_vert_at_index(&bm, nearest[0].index);
       if (w == nullptr || len_squared_v3v3(w->co, src) <= maxdist * maxdist) {
         return nullptr;
       }
-      if (found > 1 && nearest[1].dist <= maxdist) {
+      if (found > 1 && nearest[1].distance_sq <= maxdist_sq) {
         return nullptr; /* Ambiguous cluster. */
       }
       return w;
@@ -421,8 +424,6 @@ struct MirrorHighlightMaps {
         }
       }
     }
-
-    kdtree_free<float3>(tree);
 
     if (mr.eve_act) {
       active_co = mr.eve_act->co;

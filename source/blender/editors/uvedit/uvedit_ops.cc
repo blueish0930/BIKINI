@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <optional>
 
 #include "MEM_guardedalloc.h"
 
@@ -23,7 +24,6 @@
 #include "BLI_array.hh"
 #include "BLI_bounds.hh"
 #include "BLI_enum_flags.hh"
-#include "BLI_kdtree.hh"
 #include "BLI_kdtree_new.hh"
 #include "BLI_set.hh"
 #include "BLI_math_base.hh"
@@ -1543,7 +1543,9 @@ struct UVMirrorIndex {
   BMesh *bm = nullptr;
   BMUVOffsets offsets{};
   Array<BMLoop *> loops;
-  KDTree<float3> *tree = nullptr;
+  /** UVs of the visible loops when the index was created, which #tree references. */
+  Array<float2> uv_positions;
+  std::optional<KDTreeNew<float2>> tree;
   EditMeshMirrorLookup *topo = nullptr;
   int mesh_symmetry = 0;
 };
@@ -1629,7 +1631,8 @@ UVMirrorIndex *ED_uvedit_mirror_index_create(const ToolSettings *ts, BMEditMesh 
   index->offsets = offsets;
   index->loops = Array<BMLoop *>(bm->totloop, nullptr);
   index->mesh_symmetry = int(mesh->symmetry) & (ME_SYMMETRY_X | ME_SYMMETRY_Y | ME_SYMMETRY_Z);
-  index->tree = kdtree_new<float3>(bm->totloop);
+  index->uv_positions = Array<float2>(bm->totloop, float2(0.0f));
+  Vector<int> visible_loops;
 
   BMIter fiter, liter;
   BMFace *f;
@@ -1642,10 +1645,11 @@ UVMirrorIndex *ED_uvedit_mirror_index_create(const ToolSettings *ts, BMEditMesh 
       const int i = BM_elem_index_get(l);
       index->loops[i] = l;
       const float *uv = BM_ELEM_CD_GET_FLOAT_P(l, offsets.uv);
-      kdtree_insert<float3>(index->tree, i, float3(uv[0], uv[1], 0.0f));
+      index->uv_positions[i] = float2(uv[0], uv[1]);
+      visible_loops.append(i);
     }
   }
-  kdtree_balance<float3>(index->tree);
+  index->tree.emplace(index->uv_positions, visible_loops.as_span());
 
   if (settings.use_topology && index->mesh_symmetry != 0) {
     const float maxdist = (ts->mesh_mirror_threshold > 0.0f) ? ts->mesh_mirror_threshold : 0.00002f;
@@ -1659,9 +1663,6 @@ void ED_uvedit_mirror_index_free(UVMirrorIndex *index)
 {
   if (index == nullptr) {
     return;
-  }
-  if (index->tree != nullptr) {
-    kdtree_free<float3>(index->tree);
   }
   if (index->topo != nullptr) {
     MEM_delete(index->topo);
@@ -1717,7 +1718,7 @@ static bool uv_mirror_partners_spatial(const UVMirrorIndex *index,
                                        Set<BMLoop *> &seen,
                                        const FunctionRef<void(BMLoop *partner, int axis_mask)> fn)
 {
-  if (index->tree == nullptr) {
+  if (!index->tree) {
     return false;
   }
   struct Hit {
@@ -1726,17 +1727,16 @@ static bool uv_mirror_partners_spatial(const UVMirrorIndex *index,
     float dist_sq;
   };
   Vector<Hit> hits;
-  kdtree_range_search_cb<float3>(
-      index->tree,
-      float3(query[0], query[1], 0.0f),
+  index->tree->foreach_in_radius(
+      float2(query[0], query[1]),
       index->settings.threshold,
-      [&](const int i, const float3 &co, const float dist_sq) -> bool {
+      [&](const int i, const float dist_sq) {
         BMLoop *loop = (i >= 0 && i < index->loops.size()) ? index->loops[i] : nullptr;
         if (loop == nullptr || loop == src || seen.contains(loop)) {
-          return true;
+          return;
         }
+        const float2 &co = index->uv_positions[i];
         hits.append({i, {co.x, co.y}, dist_sq});
-        return true;
       });
   if (hits.is_empty()) {
     return false;
@@ -1804,7 +1804,7 @@ int ED_uvedit_mirror_partners(const UVMirrorIndex *index,
   if (on_v) {
     free_axis &= ~int(ME_UV_SYMMETRY_V);
   }
-  if (free_axis == 0 || index->tree == nullptr) {
+  if (free_axis == 0 || !index->tree) {
     return flags;
   }
 

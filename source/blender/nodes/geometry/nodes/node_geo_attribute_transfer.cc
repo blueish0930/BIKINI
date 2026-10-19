@@ -18,9 +18,11 @@
  *   [Kernel] Type, Smooth Distance
  */
 
+#include <optional>
+
 #include "BLI_cache_mutex.hh"
 #include "BLI_generic_array.hh"
-#include "BLI_kdtree.hh"
+#include "BLI_kdtree_new.hh"
 #include "BLI_math_base.hh"
 #include "BLI_math_quaternion.hh"
 
@@ -442,7 +444,8 @@ class AttributeTransferFunction : public mf::MultiFunction {
   mf::Signature signature_;
 
   mutable CacheMutex mutex_;
-  mutable KDTree<float3> *tree_ = nullptr;
+  /* References the positions in #source_, which owns its data. */
+  mutable std::optional<KDTreeNew<float3>> tree_;
   mutable GArray<> sample_values_;
   mutable bool prepared_ = false;
   mutable bool ok_ = false;
@@ -463,11 +466,6 @@ class AttributeTransferFunction : public mf::MultiFunction {
     builder.single_input<float3>("Sample Position");
     builder.single_output("Value", value_field_.cpp_type());
     this->set_signature(&signature_);
-  }
-
-  ~AttributeTransferFunction() override
-  {
-    kdtree_free(tree_);
   }
 
   void prepare_for_execution() const override
@@ -499,11 +497,7 @@ class AttributeTransferFunction : public mf::MultiFunction {
       sample_values_ = GArray<>(type, n);
       evaluated.materialize(sample_values_.data());
 
-      tree_ = kdtree_new<float3>(uint(n));
-      for (const int i : positions.index_range()) {
-        kdtree_insert<float3>(tree_, i, positions[i]);
-      }
-      kdtree_balance<float3>(tree_);
+      tree_.emplace(positions);
       ok_ = true;
     });
   }
@@ -515,7 +509,7 @@ class AttributeTransferFunction : public mf::MultiFunction {
     GMutableSpan dst = params.uninitialized_single_output(1, "Value");
     const CPPType &type = dst.type();
 
-    if (!ok_ || tree_ == nullptr || sample_values_.is_empty()) {
+    if (!ok_ || !tree_ || sample_values_.is_empty()) {
       type.value_initialize_indices(dst.data(), mask);
       return;
     }
@@ -535,8 +529,7 @@ class AttributeTransferFunction : public mf::MultiFunction {
 
           /* Radius 0: Houdini-style nearest neighbor. */
           if (radius <= 0.0f) {
-            KDTreeNearest<float3> nearest;
-            const int index = kdtree_find_nearest<float3>(tree_, query, &nearest);
+            const int index = tree_->find_nearest(query);
             if (index >= 0) {
               dst_typed[i] = values[index];
             }
@@ -549,24 +542,19 @@ class AttributeTransferFunction : public mf::MultiFunction {
           float acc[4] = {};
           float wsum = 0.0f;
 
-          kdtree_range_search_cb<float3>(
-              tree_,
-              query,
-              radius,
-              [&](const int index, const float3 & /*co*/, const float dist_sq) {
-                const float dist = math::sqrt(dist_sq);
-                const float w = kernel_weight(kernel_type_, dist, radius);
-                if (w <= 0.0f) {
-                  return true;
-                }
-                float ch[4];
-                Channels::load(values[index], MutableSpan<float>(ch, c));
-                for (int k = 0; k < c; k++) {
-                  acc[k] += w * ch[k];
-                }
-                wsum += w;
-                return true;
-              });
+          tree_->foreach_in_radius(query, radius, [&](const int index, const float dist_sq) {
+            const float dist = math::sqrt(dist_sq);
+            const float w = kernel_weight(kernel_type_, dist, radius);
+            if (w <= 0.0f) {
+              return;
+            }
+            float ch[4];
+            Channels::load(values[index], MutableSpan<float>(ch, c));
+            for (int k = 0; k < c; k++) {
+              acc[k] += w * ch[k];
+            }
+            wsum += w;
+          });
 
           if (wsum <= 0.0f) {
             dst_typed[i] = T();

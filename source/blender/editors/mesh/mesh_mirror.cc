@@ -8,6 +8,7 @@
  * Mirror calculation for edit-mode and object mode.
  */
 
+#include <cmath>
 #include <optional>
 
 #include "MEM_guardedalloc.h"
@@ -21,7 +22,6 @@
 #include "BKE_mesh_types.hh"
 
 #include "BLI_array.hh"
-#include "BLI_kdtree.hh"
 #include "BLI_kdtree_new.hh"
 #include "BLI_listbase.hh"
 #include "BLI_map.hh"
@@ -396,7 +396,9 @@ struct EditMeshMirrorLookup::Impl {
   bool use_topology = false;
   bool respecthide = true;
   float maxdist = 0.00002f;
-  KDTree<float3> *tree = nullptr;
+  /** Vertex positions when the tree was built, which #tree references. */
+  Array<float3> positions;
+  std::optional<KDTreeNew<float3>> tree;
   MirrTopoStore_t topo{nullptr, -1, -1, false};
   /* Per axis-mask 1..7: -2 unknown, -1 none, >=0 partner index (self if on plane).
    * Allocated on first use, most lookups only ever touch one mask. */
@@ -575,6 +577,8 @@ void EditMeshMirrorLookup::Impl::tree_build(const MirrorSelectionFilter &filter,
     return;
   }
   this->sparse = true;
+  this->tree.reset();
+  this->positions.reinitialize(this->bm->totvert);
   this->hops = Array<int8_t>(this->bm->totvert, int8_t(-1));
   for (const BMVert *v_source : sources) {
     this->hops[BM_elem_index_get(v_source)] = 0;
@@ -584,6 +588,7 @@ void EditMeshMirrorLookup::Impl::tree_build(const MirrorSelectionFilter &filter,
   BMVert *v;
   int i;
   BM_ITER_MESH_INDEX (v, &iter, this->bm, BM_VERTS_OF_MESH, i) {
+    this->positions[i] = v->co;
     if (this->respecthide && BM_elem_flag_test(v, BM_ELEM_HIDDEN)) {
       continue;
     }
@@ -594,31 +599,27 @@ void EditMeshMirrorLookup::Impl::tree_build(const MirrorSelectionFilter &filter,
       candidates.append(i);
     }
   }
-  this->tree = kdtree_new<float3>(max_ii(1, int(candidates.size())));
-  for (const int index : candidates) {
-    kdtree_insert<float3>(this->tree, index, BM_vert_at_index(this->bm, index)->co);
-  }
-  kdtree_balance<float3>(this->tree);
+  this->tree.emplace(this->positions, candidates.as_span());
 }
 
 void EditMeshMirrorLookup::Impl::tree_build_full()
 {
-  if (this->tree) {
-    kdtree_free<float3>(this->tree);
-  }
+  this->tree.reset();
   this->sparse = false;
   this->hops = {};
-  this->tree = kdtree_new<float3>(this->bm->totvert);
+  this->positions.reinitialize(this->bm->totvert);
+  Vector<int> indices;
   BMIter iter;
   BMVert *v;
   int i;
   BM_ITER_MESH_INDEX (v, &iter, this->bm, BM_VERTS_OF_MESH, i) {
+    this->positions[i] = v->co;
     if (this->respecthide && BM_elem_flag_test(v, BM_ELEM_HIDDEN)) {
       continue;
     }
-    kdtree_insert<float3>(this->tree, i, v->co);
+    indices.append(i);
   }
-  kdtree_balance<float3>(this->tree);
+  this->tree.emplace(this->positions, indices.as_span());
 }
 
 EditMeshMirrorLookup::EditMeshMirrorLookup(BMEditMesh *em,
@@ -686,9 +687,6 @@ EditMeshMirrorLookup::~EditMeshMirrorLookup()
   if (impl_ == nullptr) {
     return;
   }
-  if (impl_->tree) {
-    kdtree_free<float3>(impl_->tree);
-  }
   ED_mesh_mirrtopo_free(&impl_->topo);
   MEM_delete(impl_);
 }
@@ -710,7 +708,7 @@ BMVert *EditMeshMirrorLookup::Impl::compute(BMVert *v, const int axis_mask)
     return v_mirr;
   }
 
-  if (this->tree == nullptr) {
+  if (!this->tree) {
     return nullptr;
   }
 
@@ -740,14 +738,14 @@ BMVert *EditMeshMirrorLookup::Impl::compute(BMVert *v, const int axis_mask)
     return v;
   }
 
-  KDTreeNearest<float3> nearest[16];
-  const int found = kdtree_find_nearest_n<float3>(this->tree, query, nearest, 16);
+  KDTreeNew<float3>::Nearest nearest[16];
+  const int found = this->tree->find_nearest_n(query, MutableSpan(nearest, 16));
   /* Skip the source vert (it is often nearest when close to the plane). */
   BMVert *best = nullptr;
   float cluster_dist = -1.0f;
   int ties = 0;
   for (int n = 0; n < found; n++) {
-    if (nearest[n].dist > this->maxdist) {
+    if (std::sqrt(nearest[n].distance_sq) > this->maxdist) {
       break;
     }
     BMVert *w = BM_vert_at_index(this->bm, nearest[n].index);
@@ -758,11 +756,11 @@ BMVert *EditMeshMirrorLookup::Impl::compute(BMVert *v, const int axis_mask)
       continue;
     }
     if (cluster_dist < 0.0f) {
-      cluster_dist = nearest[n].dist;
+      cluster_dist = std::sqrt(nearest[n].distance_sq);
       best = w;
       ties = 1;
     }
-    else if (nearest[n].dist > cluster_dist + 1e-5f) {
+    else if (std::sqrt(nearest[n].distance_sq) > cluster_dist + 1e-5f) {
       break;
     }
     else {
@@ -785,13 +783,13 @@ BMVert *EditMeshMirrorLookup::Impl::compute(BMVert *v, const int axis_mask)
     }
     back_query[a] = -back_query[a];
   }
-  KDTreeNearest<float3> back_n[16];
-  const int back_found = kdtree_find_nearest_n<float3>(this->tree, back_query, back_n, 16);
+  KDTreeNew<float3>::Nearest back_n[16];
+  const int back_found = this->tree->find_nearest_n(back_query, MutableSpan(back_n, 16));
   BMVert *back = nullptr;
   float back_dist = -1.0f;
   int back_ties = 0;
   for (int n = 0; n < back_found; n++) {
-    if (back_n[n].dist > this->maxdist) {
+    if (std::sqrt(back_n[n].distance_sq) > this->maxdist) {
       break;
     }
     BMVert *w = BM_vert_at_index(this->bm, back_n[n].index);
@@ -802,11 +800,11 @@ BMVert *EditMeshMirrorLookup::Impl::compute(BMVert *v, const int axis_mask)
       continue;
     }
     if (back_dist < 0.0f) {
-      back_dist = back_n[n].dist;
+      back_dist = std::sqrt(back_n[n].distance_sq);
       back = w;
       back_ties = 1;
     }
-    else if (back_n[n].dist > back_dist + 1e-5f) {
+    else if (std::sqrt(back_n[n].distance_sq) > back_dist + 1e-5f) {
       break;
     }
     else {

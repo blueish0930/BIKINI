@@ -14,7 +14,8 @@
 #include "BKE_layer.hh"
 #include "BKE_report.hh"
 
-#include "BLI_kdtree.hh"
+#include "BLI_array.hh"
+#include "BLI_kdtree_new.hh"
 #include "BLI_math_bits.hh"
 #include "BLI_math_matrix_c.hh"
 #include "BLI_math_rotation_c.hh"
@@ -100,11 +101,12 @@ static void edbm_screw_mirror_result(BMesh *bm, const int symmetry, const Set<BM
       old_list.append(v);
     }
   }
-  KDTree<float3> *tree = kdtree_new<float3>(std::max(1, int(old_list.size())));
+  /* Snapshot of the profile positions, which the tree references. */
+  Array<float3> old_positions(old_list.size());
   for (const int i : old_list.index_range()) {
-    kdtree_insert<float3>(tree, i, old_list[i]->co);
+    old_positions[i] = old_list[i]->co;
   }
-  kdtree_balance<float3>(tree);
+  const KDTreeNew<float3> tree(old_positions);
   const float weld_dist = 1e-4f;
 
   for (int mask = 1; mask < 8; mask++) {
@@ -148,9 +150,9 @@ static void edbm_screw_mirror_result(BMesh *bm, const int symmetry, const Set<BM
     BMOpSlot *slot_targetmap = BMO_slot_get(weldop.slots_in, "targetmap");
     bool any_weld = false;
     for (BMVert *dv : dup_verts) {
-      KDTreeNearest<float3> nearest;
-      const int i = kdtree_find_nearest<float3>(tree, dv->co, &nearest);
-      if (i != -1 && nearest.dist <= weld_dist) {
+      float dist_sq;
+      const int i = tree.find_nearest(float3(dv->co), &dist_sq);
+      if (i != -1 && dist_sq <= weld_dist * weld_dist) {
         BMO_slot_map_elem_insert(&weldop, slot_targetmap, dv, old_list[i]);
         any_weld = true;
       }
@@ -160,7 +162,6 @@ static void edbm_screw_mirror_result(BMesh *bm, const int symmetry, const Set<BM
     }
     BMO_op_finish(bm, &weldop);
   }
-  kdtree_free<float3>(tree);
   BM_mesh_elem_hflag_disable_all(bm, BM_ALL_NOLOOP, BM_ELEM_TAG, false);
 }
 

@@ -7,6 +7,8 @@
  */
 
 #include <algorithm>
+#include <cmath>
+#include <optional>
 
 #include "MEM_guardedalloc.h"
 
@@ -15,7 +17,7 @@
 #include "DNA_object_types.h"
 
 #include "BLI_array.hh"
-#include "BLI_kdtree.hh"
+#include "BLI_kdtree_new.hh"
 #include "BLI_listbase.hh"
 #include "BLI_math_matrix_c.hh"
 #include "BLI_math_vector_c.hh"
@@ -1374,7 +1376,8 @@ void EDBM_verts_mirror_cache_begin_ex(BMEditMesh *em,
   const float maxdist_sq = square_f(maxdist);
 
   /* one or the other is used depending if topo is enabled */
-  KDTree<float3> *tree = nullptr;
+  Array<float3> positions;
+  std::optional<KDTreeNew<float3>> tree;
   MirrTopoStore_t mesh_topo_store = {nullptr, -1, -1, false};
   /* Tracks verts that already have a mutual mirror partner, so coincident verts (e.g. an
    * in-place extrusion overlapping its source surface) get consistent 1:1 pairings instead
@@ -1411,32 +1414,18 @@ void EDBM_verts_mirror_cache_begin_ex(BMEditMesh *em,
      * the tree: on a dense mesh building it costs far more than the lookups. */
     const MirrorSelectionFilter filter(
         bm, use_select ? (1u << (1 << axis)) : 0, 2.0f * maxdist + 1e-6f, respecthide);
-    if (filter.is_active()) {
-      Vector<int> candidates;
-      BM_ITER_MESH_INDEX (v, &iter, bm, BM_VERTS_OF_MESH, i) {
-        if (respecthide && BM_elem_flag_test(v, BM_ELEM_HIDDEN)) {
-          continue;
-        }
-        if (filter.test(v->co)) {
-          candidates.append(i);
-        }
+    positions.reinitialize(bm->totvert);
+    Vector<int> candidates;
+    BM_ITER_MESH_INDEX (v, &iter, bm, BM_VERTS_OF_MESH, i) {
+      positions[i] = v->co;
+      if (respecthide && BM_elem_flag_test(v, BM_ELEM_HIDDEN)) {
+        continue;
       }
-      tree = kdtree_new<float3>(max_ii(1, int(candidates.size())));
-      for (const int index : candidates) {
-        kdtree_insert<float3>(tree, index, BM_vert_at_index(bm, index)->co);
+      if (!filter.is_active() || filter.test(v->co)) {
+        candidates.append(i);
       }
     }
-    else {
-      tree = kdtree_new<float3>(bm->totvert);
-      BM_ITER_MESH_INDEX (v, &iter, bm, BM_VERTS_OF_MESH, i) {
-        if (respecthide && BM_elem_flag_test(v, BM_ELEM_HIDDEN)) {
-          continue;
-        }
-
-        kdtree_insert<float3>(tree, i, v->co);
-      }
-    }
-    kdtree_balance<float3>(tree);
+    tree.emplace(positions, candidates.as_span());
     paired = MEM_new_array_zeroed<bool>(bm->totvert, __func__);
   }
 
@@ -1497,15 +1486,15 @@ void EDBM_verts_mirror_cache_begin_ex(BMEditMesh *em,
 
         v_mirr = nullptr;
         const bool v_sel = BM_elem_flag_test_bool(v, BM_ELEM_SELECT);
-        KDTreeNearest<float3> nearest[16];
-        const int nearest_len = kdtree_find_nearest_n<float3>(tree, co, nearest, 16);
+        KDTreeNew<float3>::Nearest nearest[16];
+        const int nearest_len = tree->find_nearest_n(float3(co), MutableSpan(nearest, 16));
 
         bool have_sel_match = false;
         int cluster_count = 0;
         int sel_cluster_count = 0;
         float cluster_dist = 0.0f;
         for (int n = 0; n < nearest_len; n++) {
-          if (square_f(nearest[n].dist) >= maxdist_sq) {
+          if (nearest[n].distance_sq >= maxdist_sq) {
             break;
           }
           if (paired[nearest[n].index]) {
@@ -1516,9 +1505,9 @@ void EDBM_verts_mirror_cache_begin_ex(BMEditMesh *em,
             continue;
           }
           if (cluster_count == 0) {
-            cluster_dist = nearest[n].dist;
+            cluster_dist = std::sqrt(nearest[n].distance_sq);
           }
-          else if (nearest[n].dist > cluster_dist + 1e-5f) {
+          else if (std::sqrt(nearest[n].distance_sq) > cluster_dist + 1e-5f) {
             break;
           }
           cluster_count++;
@@ -1534,7 +1523,7 @@ void EDBM_verts_mirror_cache_begin_ex(BMEditMesh *em,
         /* Candidates sharing the best score, as many as `nearest` can hold. */
         BMVert *v_tied[16];
         for (int n = 0; n < nearest_len; n++) {
-          if (square_f(nearest[n].dist) >= maxdist_sq) {
+          if (nearest[n].distance_sq >= maxdist_sq) {
             break;
           }
           if (paired[nearest[n].index]) {
@@ -1544,7 +1533,7 @@ void EDBM_verts_mirror_cache_begin_ex(BMEditMesh *em,
           if (v_test == v || len_squared_v3v3(v->co, v_test->co) < maxdist_sq) {
             continue;
           }
-          if (nearest[n].dist > cluster_dist + 1e-5f) {
+          if (std::sqrt(nearest[n].distance_sq) > cluster_dist + 1e-5f) {
             break;
           }
           const bool test_sel = BM_elem_flag_test_bool(v_test, BM_ELEM_SELECT);
@@ -1657,7 +1646,6 @@ void EDBM_verts_mirror_cache_begin_ex(BMEditMesh *em,
     ED_mesh_mirrtopo_free(&mesh_topo_store);
   }
   else {
-    kdtree_free<float3>(tree);
     MEM_delete(paired);
   }
 }

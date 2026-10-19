@@ -49,7 +49,7 @@
 #include "BLI_execution_mode.hh"
 #include "BLI_index_mask.hh"
 #include "BLI_implicit_sharing.hh"
-#include "BLI_kdtree.hh"
+#include "BLI_kdtree_new.hh"
 #include "BLI_map.hh"
 #include "BLI_math_base.hh"
 #include "BLI_math_vector.hh"
@@ -2063,6 +2063,21 @@ static uint64_t new_group_trees_id()
   return next_id.fetch_add(1, std::memory_order_relaxed);
 }
 
+/**
+ * A point search tree with its own copy of the positions: the program can write positions and
+ * reallocate them while it runs, and the searches keep using the positions the tree was built on.
+ */
+struct VexPointTree : NonMovable, NonCopyable {
+  Array<float3> positions;
+  KDTreeNew<float3> tree;
+
+  VexPointTree(const Span<float3> positions_, const Span<int> indices)
+      : positions(positions_), tree(positions, indices)
+  {
+  }
+  explicit VexPointTree(const Span<float3> positions_) : positions(positions_), tree(positions) {}
+};
+
 struct TopoUser {
   bke::GeometrySet *owner = nullptr;
   Span<const bke::GeometrySet *> geos;
@@ -2071,12 +2086,12 @@ struct TopoUser {
   const bke::CurvesGeometry *curves = nullptr;
   std::optional<bke::AttributeAccessor> attrs;
   Span<float3> positions;
-  KDTree<float3> *kdtrees[8] = {};
+  VexPointTree *kdtrees[8] = {};
   /**
    * Trees of `nearestpoints(geo, "group", ...)` by attribute name, one map per geometry input.
    * A null tree is a group without points. Only used with #mutex locked, see #group_tree_for.
    */
-  using GroupTreeMap = Map<std::string, KDTree<float3> *>;
+  using GroupTreeMap = Map<std::string, VexPointTree *>;
   Vector<GroupTreeMap> group_trees;
   /** Changes when the trees are freed, the threads then forget the trees that they remember. */
   std::atomic<uint64_t> group_trees_id{new_group_trees_id()};
@@ -2262,7 +2277,7 @@ struct TopoUser {
     (void)mesh->faces();
     (void)mesh->edges();
   }
-  KDTree<float3> *tree_for(const int gi)
+  VexPointTree *tree_for(const int gi)
   {
     const int slot = (gi >= 0 && gi < 8) ? gi : 0;
     if (kdtrees[slot]) {
@@ -2276,12 +2291,9 @@ struct TopoUser {
     if (pos.is_empty()) {
       return nullptr;
     }
-    KDTree<float3> *tree = kdtree_new<float3>(uint(pos.size()));
-    for (const int i : pos.index_range()) {
-      kdtree_insert<float3>(tree, i, pos[i]);
-    }
+    VexPointTree *tree = nullptr;
     /* Large trees are built in parallel, see #ensure_v2e for why that is isolated. */
-    threading::isolate_task([&]() { kdtree_balance(tree); });
+    threading::isolate_task([&]() { tree = MEM_new<VexPointTree>(__func__, pos); });
     kdtrees[slot] = tree;
     return tree;
   }
@@ -2339,7 +2351,7 @@ struct TopoUser {
    * attribute. The attribute is read as it is stored on the geometry, what the running program
    * writes to it is not part of the group yet.
    */
-  KDTree<float3> *group_tree_for(const int gi, const StringRef group)
+  VexPointTree *group_tree_for(const int gi, const StringRef group)
   {
     /* The inputs that #geo_at does not know are the wrangled geometry. */
     const int geo = (gi > 0 && gi < geos.size()) ? gi : 0;
@@ -2360,7 +2372,7 @@ struct TopoUser {
       local.trees.resize(geo + 1);
     }
     GroupTreeMap &local_trees = local.trees[geo];
-    if (KDTree<float3> *const *found = local_trees.lookup_ptr_as(group)) {
+    if (VexPointTree *const *found = local_trees.lookup_ptr_as(group)) {
       return *found;
     }
     std::string name(group.data(), size_t(group.size()));
@@ -2368,12 +2380,12 @@ struct TopoUser {
     if (geo >= group_trees.size()) {
       group_trees.resize(geo + 1);
     }
-    if (KDTree<float3> *const *found = group_trees[geo].lookup_ptr(name)) {
+    if (VexPointTree *const *found = group_trees[geo].lookup_ptr(name)) {
       local_trees.add_new(std::move(name), *found);
       return *found;
     }
-    KDTree<float3> *tree = nullptr;
-    /* Reading the attribute and balancing the tree can run parallel loops, see #ensure_v2e for
+    VexPointTree *tree = nullptr;
+    /* Reading the attribute and building the tree can run parallel loops, see #ensure_v2e for
      * why that is isolated. */
     threading::isolate_task([&]() {
       const Span<float3> pos = search_positions(gi);
@@ -2397,11 +2409,7 @@ struct TopoUser {
       if (members.is_empty()) {
         return;
       }
-      tree = kdtree_new<float3>(uint(members.size()));
-      for (const int i : members) {
-        kdtree_insert<float3>(tree, i, pos[i]);
-      }
-      kdtree_balance(tree);
+      tree = MEM_new<VexPointTree>(__func__, pos, members.as_span());
     });
     group_trees[geo].add_new(name, tree);
     local_trees.add_new(std::move(name), tree);
@@ -2410,10 +2418,8 @@ struct TopoUser {
   void free_group_trees()
   {
     for (const GroupTreeMap &trees : group_trees) {
-      for (KDTree<float3> *tree : trees.values()) {
-        if (tree) {
-          kdtree_free(tree);
-        }
+      for (VexPointTree *tree : trees.values()) {
+        MEM_delete(tree);
       }
     }
     group_trees.clear();
@@ -2426,10 +2432,8 @@ struct TopoUser {
   void invalidate_spatial()
   {
     for (int i = 0; i < 8; i++) {
-      if (kdtrees[i]) {
-        kdtree_free(kdtrees[i]);
-        kdtrees[i] = nullptr;
-      }
+      MEM_delete(kdtrees[i]);
+      kdtrees[i] = nullptr;
     }
     free_group_trees();
     knn_ok = false;
@@ -2817,10 +2821,8 @@ struct MeshTopoCache {
 
 TopoUser::~TopoUser()
 {
-  for (KDTree<float3> *tree : kdtrees) {
-    if (tree) {
-      kdtree_free(tree);
-    }
+  for (VexPointTree *tree : kdtrees) {
+    MEM_delete(tree);
   }
   free_group_trees();
 }
@@ -5176,7 +5178,7 @@ Value geo_builtin_fn(void *user,
           return value_from_int_span(u->knn_idx.as_span().slice(a, n));
         }
       }
-      KDTree<float3> *tree = filtered ? u->group_tree_for(geo, group) : u->tree_for(geo);
+      const VexPointTree *tree = filtered ? u->group_tree_for(geo, group) : u->tree_for(geo);
       if (!tree) {
         return empty_int_arr();
       }
@@ -5193,14 +5195,13 @@ Value geo_builtin_fn(void *user,
         ids.append(index);
       };
       if (mode == 1) {
-        KDTreeNearest<float3> *found = nullptr;
-        const int nfound = kdtree_range_search<float3>(tree, pos, &found, radius);
+        Vector<KDTreeNew<float3>::Nearest> found;
+        const int nfound = tree->tree.find_in_radius(pos, radius, found);
         Vector<int> ids;
         ids.reserve(std::max(nfound, 0));
         for (int i = 0; i < nfound; i++) {
           skip_append(ids, found[i].index, -1);
         }
-        MEM_SAFE_DELETE(found);
         return value_from_int_array(std::move(ids));
       }
       if (mode == 2) {
@@ -5209,23 +5210,23 @@ Value geo_builtin_fn(void *user,
         }
         /* Large k: range-search then keep the closest k. Small k: k-nearest then dist <= r. */
         if (k > 256) {
-          KDTreeNearest<float3> *found = nullptr;
-          const int nfound = kdtree_range_search<float3>(tree, pos, &found, radius);
+          Vector<KDTreeNew<float3>::Nearest> found;
+          const int nfound = tree->tree.find_in_radius(pos, radius, found);
           Vector<int> ids;
           ids.reserve(std::min(std::max(nfound, 0), k));
           for (int i = 0; i < nfound; i++) {
             skip_append(ids, found[i].index, k);
           }
-          MEM_SAFE_DELETE(found);
           return value_from_int_array(std::move(ids));
         }
         const int want = k + (skip_id >= 0 ? 1 : 0);
-        Array<KDTreeNearest<float3>> nearest(want);
-        const int nfound = kdtree_find_nearest_n<float3>(tree, pos, nearest.data(), uint(want));
+        Array<KDTreeNew<float3>::Nearest> nearest(want);
+        const int nfound = tree->tree.find_nearest_n(pos, nearest);
+        const float radius_sq = radius * radius;
         Vector<int> ids;
         ids.reserve(k);
         for (int i = 0; i < nfound && ids.size() < k; i++) {
-          if (nearest[i].dist > radius) {
+          if (nearest[i].distance_sq > radius_sq) {
             break;
           }
           skip_append(ids, nearest[i].index, k);
@@ -5236,8 +5237,8 @@ Value geo_builtin_fn(void *user,
         return empty_int_arr();
       }
       const int want = k + (skip_id >= 0 ? 1 : 0);
-      Array<KDTreeNearest<float3>> nearest(want);
-      const int nfound = kdtree_find_nearest_n<float3>(tree, pos, nearest.data(), uint(want));
+      Array<KDTreeNew<float3>::Nearest> nearest(want);
+      const int nfound = tree->tree.find_nearest_n(pos, nearest);
       Vector<int> ids;
       ids.reserve(k);
       for (int i = 0; i < nfound && ids.size() < k; i++) {
@@ -6336,7 +6337,7 @@ bool get_knn_neighbor_table(TopoUser &u,
     r_idx = cache.idx;
     return cache.off.size() == n + 1 && !cache.idx.is_empty();
   }
-  KDTree<float3> *tree = u.tree_for(geo);
+  const VexPointTree *tree = u.tree_for(geo);
   Span<float3> pos = u.positions;
   if (pos.size() < n || tree == nullptr || n <= 0 || k_in <= 0) {
     cache = {};
@@ -6353,11 +6354,10 @@ bool get_knn_neighbor_table(TopoUser &u,
   Array<int> packed(n * std::max(k, 1));
   Array<int> counts(n, 0);
   threading::parallel_for(IndexRange(n), 256, [&](const IndexRange range) {
-    Array<KDTreeNearest<float3>> nearest(std::max(want, 1));
+    Array<KDTreeNew<float3>::Nearest> nearest(std::max(want, 1));
     for (const int64_t i64 : range) {
       const int i = int(i64);
-      const int found = kdtree_find_nearest_n<float3>(
-          tree, pos[i], nearest.data(), uint(want));
+      const int found = tree->tree.find_nearest_n(pos[i], nearest);
       int c = 0;
       int *out = packed.data() + i * k;
       for (int j = 0; j < found && c < k; j++) {
