@@ -472,8 +472,9 @@ def keyconfig_update(keyconfig_data, keyconfig_version):
                         item_prop["properties"][fill_color_override_test_path_index] = (
                             "fill_color_override_test_path", new_fill_color_override_test_path)
 
-    # Official 5.3.29, remapped past BIKINI 29-50.
-    if keyconfig_version < (5, 3, 51):
+    # Official 5.3.29 (5.3 release branch). BIKINI used 5.3.29-48 for its own versioning,
+    # so run it for every key-map older than 5.4.
+    if keyconfig_version < (5, 4, 0):
         if not has_copy:
             keyconfig_data = copy.deepcopy(keyconfig_data)
             has_copy = True

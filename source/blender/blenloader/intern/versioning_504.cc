@@ -11,6 +11,8 @@
 #include "DNA_ID.h"
 #include "DNA_brush_types.h"
 #include "DNA_mesh_types.h"
+#include "DNA_screen_types.h"
+#include "DNA_space_types.h"
 
 #include "BLI_listbase.hh"
 #include "BLI_sys_types.hh"
@@ -41,6 +43,29 @@ void do_versions_after_linking_504(FileData * /*fd*/, Main * /*bmain*/)
 
 void blo_do_versions_504(FileData * /*fd*/, Library * /*lib*/, Main *bmain)
 {
+  /* Official 503.28 (5.3 release branch): some old files have node editors without a sidebar
+   * region. BIKINI used 503.27-48 for its own versioning, so run it for every file older than
+   * 5.4. Adding the region is skipped when it already exists. */
+  if (!MAIN_VERSION_FILE_ATLEAST(bmain, 504, 0)) {
+    for (bScreen &screen : bmain->screens) {
+      for (ScrArea &area : screen.areabase) {
+        for (SpaceLink &space : area.spacedata) {
+          if (space.spacetype != SPACE_NODE) {
+            continue;
+          }
+          ListBaseT<ARegion> *regionbase = (&space == area.spacedata.first_) ? &area.regionbase :
+                                                                               &space.regionbase;
+          if (ARegion *new_sidebar = do_versions_add_region_if_not_found(
+                  regionbase, RGN_TYPE_UI, "node editor sidebar", RGN_TYPE_HEADER))
+          {
+            new_sidebar->alignment = RGN_ALIGN_RIGHT;
+            new_sidebar->flag |= RGN_FLAG_HIDDEN;
+          }
+        }
+      }
+    }
+  }
+
   /* Disable "Set Background Value" input to keep old behavior of Deactivate Voxels node. */
   if (!MAIN_VERSION_FILE_ATLEAST(bmain, 504, 1)) {
     for (bNodeTree &tree : bmain->nodetrees) {
