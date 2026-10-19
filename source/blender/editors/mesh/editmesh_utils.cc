@@ -1377,7 +1377,7 @@ void EDBM_verts_mirror_cache_begin_ex(BMEditMesh *em,
 
   /* one or the other is used depending if topo is enabled */
   Array<float3> positions;
-  std::optional<KDTreeNew<float3>> tree;
+  std::optional<KDTree<float3>> tree;
   MirrTopoStore_t mesh_topo_store = {nullptr, -1, -1, false};
   /* Tracks verts that already have a mutual mirror partner, so coincident verts (e.g. an
    * in-place extrusion overlapping its source surface) get consistent 1:1 pairings instead
