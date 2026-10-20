@@ -60,7 +60,7 @@ static bool attribute_search_item_add(SearchItems *items, const GeometryAttribut
 void attribute_search_add_items(StringRef str,
                                 const bool can_create_attribute,
                                 Span<const GeometryAttributeInfo *> infos,
-                                SearchItems *seach_items,
+                                SearchItems *search_items,
                                 const bool is_first)
 {
   static GeometryAttributeInfo dummy_info;
@@ -77,7 +77,7 @@ void attribute_search_add_items(StringRef str,
     if (!contained) {
       dummy_info.name = str;
       search_item_add(
-          seach_items, str, &dummy_info, can_create_attribute ? ICON_ADD : ICON_NONE, 0, 0);
+          search_items, str, &dummy_info, can_create_attribute ? ICON_ADD : ICON_NONE, 0, 0);
     }
   }
 
@@ -85,7 +85,7 @@ void attribute_search_add_items(StringRef str,
     /* Allow clearing the text field when the string is empty, but not on the first pass,
      * or opening an attribute field for the first time would show this search item. */
     dummy_info.name = str;
-    search_item_add(seach_items, str, &dummy_info, ICON_X, 0, 0);
+    search_item_add(search_items, str, &dummy_info, ICON_X, 0, 0);
   }
 
   /* Don't filter when the menu is first opened, but still run the search
@@ -103,7 +103,7 @@ void attribute_search_add_items(StringRef str,
   const Vector<const GeometryAttributeInfo *> filtered_items = search.query(string);
 
   for (const GeometryAttributeInfo *item : filtered_items) {
-    if (!attribute_search_item_add(seach_items, *item)) {
+    if (!attribute_search_item_add(search_items, *item)) {
       break;
     }
   }
