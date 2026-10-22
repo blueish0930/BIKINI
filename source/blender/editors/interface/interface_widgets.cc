@@ -2771,14 +2771,6 @@ static void draw_code_box(
   immUnbindProgram();
 }
 
-/* Text selection uses a lower opacity than the item color.
- * See #163741 for details. */
-static void widget_text_selection_color(const uiWidgetColors *wcol, uchar color[4])
-{
-  copy_v4_v4_uchar(color, wcol->item);
-  color[3] = 51;
-}
-
 
 static void widget_draw_textbox(const uiFontStyle *fstyle,
                                 const uiWidgetColors *wcol,
@@ -2979,9 +2971,7 @@ static void widget_draw_textbox(const uiFontStyle *fstyle,
       const uint pos = GPU_vertformat_attr_add(
           immVertexFormat(), "pos", gpu::VertAttrType::SFLOAT_32_32);
       immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
-      uchar selection_color[4];
-      widget_text_selection_color(wcol, selection_color);
-      immUniformColor4ubv(selection_color);
+      immUniformColor4ubv(wcol->item);
       const StringRef line = lines[selection.line];
       const int sel_start = std::max<int>(0, int(selection.start - line.begin()));
       const int sel_end = std::max(sel_start, int(selection.end - line.begin()));
@@ -3927,9 +3917,7 @@ static void widget_draw_text(const uiFontStyle *fstyle,
       uint pos = GPU_vertformat_attr_add(
           immVertexFormat(), "pos", gpu::VertAttrType::SFLOAT_32_32);
       immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
-      uchar selection_color[4];
-      widget_text_selection_color(wcol, selection_color);
-      immUniformColor4ubv(selection_color);
+      immUniformColor4ubv(wcol->item);
       const auto boxes = BLF_str_selection_boxes(
           fstyle->uifont_id,
           drawstr + but->ofs,
