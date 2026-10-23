@@ -471,9 +471,12 @@ static void do_versions_theme(const UserDef *userdef, bTheme *btheme)
     FROM_DEFAULT_V4_UCHAR(tui.wcol_state.error);
   }
 
-  if (!USER_VERSION_ATLEAST(503, 31)) {
+  if (!USER_VERSION_ATLEAST(504, 0)) {
+    /* Official 503.31 (5.3 release branch): text selection color. BIKINI used 503.27-48 for its
+     * own versioning, so run it for all preferences older than 5.4. */
     FROM_DEFAULT_V4_UCHAR(tui.wcol_list_item.item);
   }
+
   /**
    * Always bump subversion in BKE_blender_version.h when adding versioning
    * code here, and wrap it inside a USER_VERSION_ATLEAST check.
