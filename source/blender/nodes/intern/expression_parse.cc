@@ -4,6 +4,7 @@
 
 #include <fmt/format.h>
 #include <iostream>
+#include <optional>
 
 #include "NOD_expression_parse.hh"
 
