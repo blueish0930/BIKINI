@@ -306,7 +306,7 @@ struct MirrorHighlightMaps {
         }
       }
     }
-    const KDTreeNew<float3> tree(vert_positions, visible_verts.as_span());
+    const KDTree<float3> tree(vert_positions, visible_verts.as_span());
 
     auto flip_co = [&](float3 co, const int mask) {
       for (int a = 0; a < 3; a++) {
@@ -322,7 +322,7 @@ struct MirrorHighlightMaps {
       if (len_squared_v3v3(src, query) <= maxdist * maxdist) {
         return nullptr; /* On-plane / self, not a counterpart. */
       }
-      KDTreeNew<float3>::Nearest nearest[2];
+      KDTree<float3>::Nearest nearest[2];
       const int found = tree.find_nearest_n(query, MutableSpan(nearest, 2));
       const float maxdist_sq = maxdist * maxdist;
       if (found < 1 || nearest[0].distance_sq > maxdist_sq) {

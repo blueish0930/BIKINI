@@ -106,7 +106,7 @@ static void edbm_screw_mirror_result(BMesh *bm, const int symmetry, const Set<BM
   for (const int i : old_list.index_range()) {
     old_positions[i] = old_list[i]->co;
   }
-  const KDTreeNew<float3> tree(old_positions);
+  const KDTree<float3> tree(old_positions);
   const float weld_dist = 1e-4f;
 
   for (int mask = 1; mask < 8; mask++) {

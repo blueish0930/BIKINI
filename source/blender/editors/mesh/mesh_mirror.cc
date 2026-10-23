@@ -398,7 +398,7 @@ struct EditMeshMirrorLookup::Impl {
   float maxdist = 0.00002f;
   /** Vertex positions when the tree was built, which #tree references. */
   Array<float3> positions;
-  std::optional<KDTreeNew<float3>> tree;
+  std::optional<KDTree<float3>> tree;
   MirrTopoStore_t topo{nullptr, -1, -1, false};
   /* Per axis-mask 1..7: -2 unknown, -1 none, >=0 partner index (self if on plane).
    * Allocated on first use, most lookups only ever touch one mask. */
@@ -738,7 +738,7 @@ BMVert *EditMeshMirrorLookup::Impl::compute(BMVert *v, const int axis_mask)
     return v;
   }
 
-  KDTreeNew<float3>::Nearest nearest[16];
+  KDTree<float3>::Nearest nearest[16];
   const int found = this->tree->find_nearest_n(query, MutableSpan(nearest, 16));
   /* Skip the source vert (it is often nearest when close to the plane). */
   BMVert *best = nullptr;
@@ -783,7 +783,7 @@ BMVert *EditMeshMirrorLookup::Impl::compute(BMVert *v, const int axis_mask)
     }
     back_query[a] = -back_query[a];
   }
-  KDTreeNew<float3>::Nearest back_n[16];
+  KDTree<float3>::Nearest back_n[16];
   const int back_found = this->tree->find_nearest_n(back_query, MutableSpan(back_n, 16));
   BMVert *back = nullptr;
   float back_dist = -1.0f;

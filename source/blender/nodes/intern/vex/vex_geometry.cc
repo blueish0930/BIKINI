@@ -2069,7 +2069,7 @@ static uint64_t new_group_trees_id()
  */
 struct VexPointTree : NonMovable, NonCopyable {
   Array<float3> positions;
-  KDTreeNew<float3> tree;
+  KDTree<float3> tree;
 
   VexPointTree(const Span<float3> positions_, const Span<int> indices)
       : positions(positions_), tree(positions, indices)
@@ -5195,7 +5195,7 @@ Value geo_builtin_fn(void *user,
         ids.append(index);
       };
       if (mode == 1) {
-        Vector<KDTreeNew<float3>::Nearest> found;
+        Vector<KDTree<float3>::Nearest> found;
         const int nfound = tree->tree.find_in_radius(pos, radius, found);
         Vector<int> ids;
         ids.reserve(std::max(nfound, 0));
@@ -5210,7 +5210,7 @@ Value geo_builtin_fn(void *user,
         }
         /* Large k: range-search then keep the closest k. Small k: k-nearest then dist <= r. */
         if (k > 256) {
-          Vector<KDTreeNew<float3>::Nearest> found;
+          Vector<KDTree<float3>::Nearest> found;
           const int nfound = tree->tree.find_in_radius(pos, radius, found);
           Vector<int> ids;
           ids.reserve(std::min(std::max(nfound, 0), k));
@@ -5220,7 +5220,7 @@ Value geo_builtin_fn(void *user,
           return value_from_int_array(std::move(ids));
         }
         const int want = k + (skip_id >= 0 ? 1 : 0);
-        Array<KDTreeNew<float3>::Nearest> nearest(want);
+        Array<KDTree<float3>::Nearest> nearest(want);
         const int nfound = tree->tree.find_nearest_n(pos, nearest);
         const float radius_sq = radius * radius;
         Vector<int> ids;
@@ -5237,7 +5237,7 @@ Value geo_builtin_fn(void *user,
         return empty_int_arr();
       }
       const int want = k + (skip_id >= 0 ? 1 : 0);
-      Array<KDTreeNew<float3>::Nearest> nearest(want);
+      Array<KDTree<float3>::Nearest> nearest(want);
       const int nfound = tree->tree.find_nearest_n(pos, nearest);
       Vector<int> ids;
       ids.reserve(k);
@@ -6354,7 +6354,7 @@ bool get_knn_neighbor_table(TopoUser &u,
   Array<int> packed(n * std::max(k, 1));
   Array<int> counts(n, 0);
   threading::parallel_for(IndexRange(n), 256, [&](const IndexRange range) {
-    Array<KDTreeNew<float3>::Nearest> nearest(std::max(want, 1));
+    Array<KDTree<float3>::Nearest> nearest(std::max(want, 1));
     for (const int64_t i64 : range) {
       const int i = int(i64);
       const int found = tree->tree.find_nearest_n(pos[i], nearest);

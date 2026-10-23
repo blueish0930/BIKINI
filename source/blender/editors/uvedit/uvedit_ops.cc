@@ -1545,7 +1545,7 @@ struct UVMirrorIndex {
   Array<BMLoop *> loops;
   /** UVs of the visible loops when the index was created, which #tree references. */
   Array<float2> uv_positions;
-  std::optional<KDTreeNew<float2>> tree;
+  std::optional<KDTree<float2>> tree;
   EditMeshMirrorLookup *topo = nullptr;
   int mesh_symmetry = 0;
 };

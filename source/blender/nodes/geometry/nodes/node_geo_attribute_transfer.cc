@@ -445,7 +445,7 @@ class AttributeTransferFunction : public mf::MultiFunction {
 
   mutable CacheMutex mutex_;
   /* References the positions in #source_, which owns its data. */
-  mutable std::optional<KDTreeNew<float3>> tree_;
+  mutable std::optional<KDTree<float3>> tree_;
   mutable GArray<> sample_values_;
   mutable bool prepared_ = false;
   mutable bool ok_ = false;

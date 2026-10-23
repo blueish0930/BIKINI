@@ -145,7 +145,7 @@ static void fill_face_domain(const Mesh &src_mesh,
   for (auto &attribute : bke::retrieve_attributes_for_transfer(
            src_attributes, dst_attributes, {bke::AttrDomain::Face}, attribute_filter))
   {
-    bke::attribute_math::gather(attribute.src, dst_to_src_face, attribute.dst.span);
+    array_utils::gather(attribute.src, dst_to_src_face, attribute.dst.span);
     attribute.dst.finish();
   }
 }

@@ -82,7 +82,7 @@ static Span<float3> positions_from_geometry(const GeometrySet &geometry)
   return {};
 }
 
-static void execute_k_nearest(const KDTreeNew<float3> &tree,
+static void execute_k_nearest(const KDTree<float3> &tree,
                               const int target_size,
                               const Span<float3> source_positions,
                               const int k,
@@ -90,7 +90,7 @@ static void execute_k_nearest(const KDTreeNew<float3> &tree,
 {
   const int search_count = std::min(k, target_size);
   threading::parallel_for(source_positions.index_range(), 128, [&](const IndexRange range) {
-    Vector<KDTreeNew<float3>::Nearest, 16> nearest(search_count);
+    Vector<KDTree<float3>::Nearest, 16> nearest(search_count);
     for (const int source_i : range) {
       const int found = tree.find_nearest_n(source_positions[source_i], nearest);
       const int64_t offset = int64_t(source_i) * k;
@@ -104,16 +104,16 @@ static void execute_k_nearest(const KDTreeNew<float3> &tree,
   });
 }
 
-static void execute_radius(const KDTreeNew<float3> &tree,
+static void execute_radius(const KDTree<float3> &tree,
                            const Span<float3> source_positions,
                            const float radius,
                            Vector<int> &r_indices,
                            Vector<int> &r_source_indices)
 {
-  Vector<KDTreeNew<float3>::Nearest> nearest;
+  Vector<KDTree<float3>::Nearest> nearest;
   for (const int source_i : source_positions.index_range()) {
     tree.find_in_radius(source_positions[source_i], radius, nearest);
-    for (const KDTreeNew<float3>::Nearest &neighbor : nearest) {
+    for (const KDTree<float3>::Nearest &neighbor : nearest) {
       r_indices.append(neighbor.index);
       r_source_indices.append(source_i);
     }
@@ -134,7 +134,7 @@ static void node_geo_exec(GeoNodeExecParams params)
     return;
   }
 
-  const KDTreeNew<float3> tree(target_positions);
+  const KDTree<float3> tree(target_positions);
   const Mode mode = Mode(params.node().custom1);
   if (mode == Mode::KNearest) {
     const int k = params.extract_input<int>("K"_ustr);

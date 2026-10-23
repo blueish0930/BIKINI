@@ -2502,7 +2502,7 @@ static int sort_verts_by_dist_cb(void *co_p, const void *cur_a_p, const void *cu
  * committed polyline onto the intact mesh. Do not use EditMeshMirrorLookup / topology-mirror
  * unique-hit — that misses or hits a neighbor on a torus, so the cyan path is right and the
  * actual cut is not. */
-static BMVert *knife_spatial_vert(const KDTreeNew<float3> *tree, BMesh *bm, const float co[3])
+static BMVert *knife_spatial_vert(const KDTree<float3> *tree, BMesh *bm, const float co[3])
 {
   if (tree == nullptr) {
     return nullptr;
@@ -2522,12 +2522,12 @@ static BMVert *knife_spatial_vert(const KDTreeNew<float3> *tree, BMesh *bm, cons
   return v;
 }
 
-static BMEdge *knife_spatial_edge(const KDTreeNew<float3> *tree, BMesh *bm, const float co[3])
+static BMEdge *knife_spatial_edge(const KDTree<float3> *tree, BMesh *bm, const float co[3])
 {
   if (tree == nullptr) {
     return nullptr;
   }
-  KDTreeNew<float3>::Nearest nearest[12];
+  KDTree<float3>::Nearest nearest[12];
   const int found = tree->find_nearest_n(float3(co), MutableSpan(nearest, 12));
   BMEdge *best = nullptr;
   float best_d = 1e9f;
@@ -2564,7 +2564,7 @@ static BMEdge *knife_spatial_edge(const KDTreeNew<float3> *tree, BMesh *bm, cons
 }
 
 static BMEdge *knife_spatial_edge_from_pair(
-    const KDTreeNew<float3> *tree, BMesh *bm, const float a[3], const float b[3], const int axis)
+    const KDTree<float3> *tree, BMesh *bm, const float a[3], const float b[3], const int axis)
 {
   float fa[3], fb[3];
   copy_v3_v3(fa, a);
@@ -2615,7 +2615,7 @@ static void knife_project_co_to_face(float co[3], BMFace *f)
   madd_v3_v3fl(co, no, -d);
 }
 
-static BMFace *knife_spatial_face(const KDTreeNew<float3> *tree, BMesh *bm, BMFace *f, const int axis)
+static BMFace *knife_spatial_face(const KDTree<float3> *tree, BMesh *bm, BMFace *f, const int axis)
 {
   if (f == nullptr) {
     return nullptr;
@@ -2803,12 +2803,12 @@ static BMFace *knife_shared_face_of_edges(BMEdge *e1, BMEdge *e2)
 }
 
 /** Face that actually contains `co`, searching faces around the nearest verts. */
-static BMFace *knife_face_at_point(const KDTreeNew<float3> *tree, BMesh *bm, const float co[3])
+static BMFace *knife_face_at_point(const KDTree<float3> *tree, BMesh *bm, const float co[3])
 {
   if (tree == nullptr || bm == nullptr) {
     return nullptr;
   }
-  KDTreeNew<float3>::Nearest nearest[16];
+  KDTree<float3>::Nearest nearest[16];
   const int found = tree->find_nearest_n(float3(co), MutableSpan(nearest, 16));
   BMFace *best = nullptr;
   float best_d = 1e9f;
@@ -2849,7 +2849,7 @@ static BMFace *knife_face_at_point(const KDTreeNew<float3> *tree, BMesh *bm, con
 static BMFace *knife_mirror_cut_face(KnifeEdge *kfe,
                                      KnifeVert *v1_mirr,
                                      KnifeVert *v2_mirr,
-                                     const KDTreeNew<float3> *tree,
+                                     const KDTree<float3> *tree,
                                      BMesh *bm,
                                      const int axis)
 {
@@ -3037,8 +3037,8 @@ static void knife_mirror_apply(KnifeTool_OpData *kcd, int ob_index)
       }
     }
   }
-  const KDTreeNew<float3> vert_tree(vert_positions, visible_verts.as_span());
-  const KDTreeNew<float3> *tree = &vert_tree;
+  const KDTree<float3> vert_tree(vert_positions, visible_verts.as_span());
+  const KDTree<float3> *tree = &vert_tree;
 
   Set<KnifeVert *> need;
   for (KnifeEdge *kfe : kedges) {

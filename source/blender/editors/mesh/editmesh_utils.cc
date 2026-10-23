@@ -1486,7 +1486,7 @@ void EDBM_verts_mirror_cache_begin_ex(BMEditMesh *em,
 
         v_mirr = nullptr;
         const bool v_sel = BM_elem_flag_test_bool(v, BM_ELEM_SELECT);
-        KDTreeNew<float3>::Nearest nearest[16];
+        KDTree<float3>::Nearest nearest[16];
         const int nearest_len = tree->find_nearest_n(float3(co), MutableSpan(nearest, 16));
 
         bool have_sel_match = false;

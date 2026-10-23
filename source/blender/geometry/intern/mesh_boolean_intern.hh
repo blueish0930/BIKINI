@@ -53,7 +53,7 @@ void interpolate_corner_attributes(bke::MutableAttributeAccessor output_attrs,
                                    Span<int> out_to_in_corner_map,
                                    Span<int> out_to_in_face_map);
 
-/** Similar to #attribute_math::gather, but for -1 values in the map, store the default value. */
+/** Similar to #array_utils::gather, but for -1 values in the map, store the default value. */
 void copy_attribute_using_map(GSpan src, Span<int> out_to_in_map, GMutableSpan dst);
 
 /**

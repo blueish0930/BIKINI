@@ -7,6 +7,7 @@
 #include "DNA_object_types.h"
 
 #include "BLI_array.hh"
+#include "BLI_array_utils.hh"
 #include "BLI_listbase.hh"
 #include "BLI_map.hh"
 #include "BLI_math_vector.hh"
@@ -247,7 +248,7 @@ static void fill_face_attributes(const Mesh &src_mesh,
     if (!dst) {
       return;
     }
-    bke::attribute_math::gather(src, src_faces, dst.span);
+    array_utils::gather(src, src_faces, dst.span);
     dst.finish();
   });
 }
