@@ -275,8 +275,14 @@ static VArray<float3> computed_normals(
 static void prewarm_element_samples(const Program &program, ElemUser &user)
 {
   user.element_samples.clear();
+  /* The caches are built in place and never move afterwards: `direct` points into `values` and
+   * the owned arrays, which can keep small data in an inline buffer (a one-element attribute is a
+   * single-value virtual array stored inside the #GVArray), so moving a cache would leave those
+   * pointers on the moved-from object. */
+  user.element_samples.reserve(program.element_samples.size());
   for (const Program::ElementSample &sample : program.element_samples) {
-    ElemUser::ElementSampleCache cache;
+    user.element_samples.append_as();
+    ElemUser::ElementSampleCache &cache = user.element_samples.last();
     cache.geo = sample.geo;
     cache.domain = sample.domain;
     cache.name = sample.name;
@@ -285,7 +291,6 @@ static void prewarm_element_samples(const Program &program, ElemUser &user)
       geo = user.geos[sample.geo];
     }
     if (geo == nullptr) {
-      user.element_samples.append(std::move(cache));
       continue;
     }
     bke::AttrDomain domain = bke::AttrDomain::Point;
@@ -358,7 +363,6 @@ static void prewarm_element_samples(const Program &program, ElemUser &user)
       }
     }
     if (!values) {
-      user.element_samples.append(std::move(cache));
       continue;
     }
     cache.values = std::move(values);
@@ -448,7 +452,6 @@ static void prewarm_element_samples(const Program &program, ElemUser &user)
     {
       cache.direct.size = 0;
     }
-    user.element_samples.append(std::move(cache));
   }
 }
 
@@ -1156,21 +1159,10 @@ Value eval_ramp_fn(void *user, const StringRef name, const RampKind kind, const 
 }
 
 struct BindState {
+  /* Also owns the converted read buffers and write buffers: AttrRT keeps raw pointers into them, so
+   * they must never move (a small Array keeps its data inline). */
   ResourceScope scope;
   Vector<bke::GSpanAttributeWriter *> writers;
-  Vector<Array<float>> rf;
-  Vector<Array<int>> ri;
-  Vector<Array<bool>> rb;
-  Vector<Array<float3>> rv;
-  Vector<Array<float2>> r2;
-  Vector<Array<float4>> rv4;
-  Vector<Array<ColorGeometry4f>> rc;
-  Vector<Array<math::Quaternion>> rq;
-  Vector<Array<bke::WrangleArrayValue>> rarr;
-  Vector<Array<bke::WrangleArrayValue>> warr;
-  Vector<Array<MStringProperty>> rs;
-  Vector<Array<MStringProperty>> ws;
-  Vector<Array<float4x4>> rmats;
   Array<AttrRT> rt;
   struct CopyBack {
     const void *src = nullptr;
@@ -1373,8 +1365,7 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
             a.rarr = span.data();
             break;
           }
-          state.warr.append({});
-          Array<bke::WrangleArrayValue> &buf = state.warr.last();
+          Array<bke::WrangleArrayValue> &buf = state.scope.construct<Array<bke::WrangleArrayValue>>();
           buf.reinitialize(domain_size);
           memcpy(buf.data(), span.data(), sizeof(bke::WrangleArrayValue) * size_t(domain_size));
           a.warr = buf.data();
@@ -1388,8 +1379,7 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
         }
         case Type::String: {
           MutableSpan<MStringProperty> span = writer.span.typed<MStringProperty>();
-          state.ws.append({});
-          Array<MStringProperty> &buf = state.ws.last();
+          Array<MStringProperty> &buf = state.scope.construct<Array<MStringProperty>>();
           buf.reinitialize(domain_size);
           if (span.data() && domain_size > 0) {
             memcpy(buf.data(), span.data(), sizeof(MStringProperty) * size_t(domain_size));
@@ -1414,8 +1404,7 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
       bke::GAttributeReader reader = attributes.lookup(info.name, domain);
       if (!reader) {
         if (use_normals && attr_name_is_normal(info.name) && info.type == Type::Vector) {
-          state.rv.append({});
-          Array<float3> &buf = state.rv.last();
+          Array<float3> &buf = state.scope.construct<Array<float3>>();
           buf.reinitialize(domain_size);
           normals.materialize(buf.as_mutable_span());
           a.rv = buf.data();
@@ -1432,15 +1421,16 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
       }
       /* Below, a buffer whose attribute could not be converted is filled with a default instead
        * of being left uninitialized. */
-      const GVArray &varray = reader.varray;
+      /* Kept in the bind scope: a pointer from get_internal_span() must outlive this loop, and a
+       * single-value array (a one-element domain) keeps its value inside the #GVArray. */
+      const GVArray &varray = state.scope.add_value(std::move(reader.varray));
       switch (info.type) {
         case Type::Bool: {
           if (varray.type().is<bool>() && varray.is_span()) {
             a.rb = varray.get_internal_span().typed<bool>().data();
             break;
           }
-          state.rb.append({});
-          Array<bool> &buf = state.rb.last();
+          Array<bool> &buf = state.scope.construct<Array<bool>>();
           buf.reinitialize(domain_size);
           if (varray.type().is<bool>()) {
             varray.typed<bool>().materialize(mask, buf);
@@ -1456,8 +1446,7 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
             a.ri = varray.get_internal_span().typed<int>().data();
             break;
           }
-          state.ri.append({});
-          Array<int> &buf = state.ri.last();
+          Array<int> &buf = state.scope.construct<Array<int>>();
           buf.reinitialize(domain_size);
           if (varray.type().is<int>()) {
             varray.typed<int>().materialize(mask, buf);
@@ -1473,8 +1462,7 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
             a.rv = varray.get_internal_span().typed<float3>().data();
             break;
           }
-          state.rv.append({});
-          Array<float3> &buf = state.rv.last();
+          Array<float3> &buf = state.scope.construct<Array<float3>>();
           buf.reinitialize(domain_size);
           if (varray.type().is<float3>()) {
             varray.typed<float3>().materialize(mask, buf);
@@ -1490,8 +1478,7 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
             a.r2 = varray.get_internal_span().typed<float2>().data();
             break;
           }
-          state.r2.append({});
-          Array<float2> &buf = state.r2.last();
+          Array<float2> &buf = state.scope.construct<Array<float2>>();
           buf.reinitialize(domain_size);
           if (varray.type().is<float2>()) {
             varray.typed<float2>().materialize(mask, buf);
@@ -1507,8 +1494,7 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
             a.r4 = varray.get_internal_span().typed<float4>().data();
             break;
           }
-          state.rv4.append({});
-          Array<float4> &buf = state.rv4.last();
+          Array<float4> &buf = state.scope.construct<Array<float4>>();
           buf.reinitialize(domain_size);
           if (varray.type().is<float4>()) {
             varray.typed<float4>().materialize(mask, buf);
@@ -1525,8 +1511,7 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
                 varray.get_internal_span().typed<ColorGeometry4f>().data());
             break;
           }
-          state.rc.append({});
-          Array<ColorGeometry4f> &buf = state.rc.last();
+          Array<ColorGeometry4f> &buf = state.scope.construct<Array<ColorGeometry4f>>();
           buf.reinitialize(domain_size);
           if (varray.type().is<ColorGeometry4f>()) {
             varray.typed<ColorGeometry4f>().materialize(mask, buf);
@@ -1542,8 +1527,7 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
             a.rq = varray.get_internal_span().typed<math::Quaternion>().data();
             break;
           }
-          state.rq.append({});
-          Array<math::Quaternion> &buf = state.rq.last();
+          Array<math::Quaternion> &buf = state.scope.construct<Array<math::Quaternion>>();
           buf.reinitialize(domain_size);
           if (varray.type().is<math::Quaternion>()) {
             varray.typed<math::Quaternion>().materialize(mask, buf);
@@ -1559,8 +1543,7 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
             a.rm = varray.get_internal_span().typed<float4x4>().data();
             break;
           }
-          state.rmats.append({});
-          Array<float4x4> &buf = state.rmats.last();
+          Array<float4x4> &buf = state.scope.construct<Array<float4x4>>();
           buf.reinitialize(domain_size);
           if (varray.type().is<float4x4>()) {
             varray.typed<float4x4>().materialize(mask, buf);
@@ -1590,8 +1573,7 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
               a.rarr = varray.get_internal_span().typed<bke::WrangleArrayValue>().data();
             }
             else {
-              state.rarr.append({});
-              Array<bke::WrangleArrayValue> &buf = state.rarr.last();
+              Array<bke::WrangleArrayValue> &buf = state.scope.construct<Array<bke::WrangleArrayValue>>();
               buf.reinitialize(domain_size);
               varray.typed<bke::WrangleArrayValue>().materialize(mask, buf);
               a.rarr = buf.data();
@@ -1605,8 +1587,7 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
               a.rs = varray.get_internal_span().typed<MStringProperty>().data();
             }
             else {
-              state.rs.append({});
-              Array<MStringProperty> &buf = state.rs.last();
+              Array<MStringProperty> &buf = state.scope.construct<Array<MStringProperty>>();
               buf.reinitialize(domain_size);
               varray.typed<MStringProperty>().materialize(mask, buf);
               a.rs = buf.data();
@@ -1620,8 +1601,7 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
             a.rf = varray.get_internal_span().typed<float>().data();
             break;
           }
-          state.rf.append({});
-          Array<float> &buf = state.rf.last();
+          Array<float> &buf = state.scope.construct<Array<float>>();
           buf.reinitialize(domain_size);
           if (varray.type().is<float>()) {
             varray.typed<float>().materialize(mask, buf);
