@@ -93,6 +93,13 @@ Mesh *cgal_convex_hull_3(Span<float3> /*points*/, std::string &r_error)
   r_error = "Built without CGAL (WITH_CGAL=OFF)";
   return BKE_mesh_new_nomain(0, 0, 0, 0);
 }
+bool cgal_convex_hull_polygons(Span<float3> /*points*/,
+                               Vector<int> & /*r_vert_src*/,
+                               Vector<int> & /*r_face_offsets*/,
+                               Vector<int> & /*r_corner_verts*/)
+{
+  return false;
+}
 Mesh *cgal_alpha_shape_3(
     Span<float3>, float, bool, int, float &r_alpha_used, std::string &r_error)
 {
@@ -1978,6 +1985,22 @@ Mesh *cgal_convex_hull_3(Span<float3> points, std::string &r_error)
     shade_all_sharp(*mesh);
   }
   return mesh;
+}
+
+bool cgal_convex_hull_polygons(Span<float3> points,
+                               Vector<int> &r_vert_src,
+                               Vector<int> &r_face_offsets,
+                               Vector<int> &r_corner_verts)
+{
+  const cgal_bridge::MeshResult result = cgal_bridge::convex_hull_3_polygons(
+      points.cast<float>().data(), int(points.size()));
+  if (!result.ok) {
+    return false;
+  }
+  r_vert_src = Vector<int>(Span<int>(result.vert_src0.data(), result.vert_src0.size()));
+  r_face_offsets = Vector<int>(Span<int>(result.face_offsets.data(), result.face_offsets.size()));
+  r_corner_verts = Vector<int>(Span<int>(result.corner_verts.data(), result.corner_verts.size()));
+  return true;
 }
 
 Mesh *cgal_alpha_shape_3(Span<float3> points,

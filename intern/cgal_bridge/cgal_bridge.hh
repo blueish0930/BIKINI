@@ -131,6 +131,11 @@ struct MeshIn {
 
 /* --- Points --- */
 MeshResult convex_hull_3(const float *positions, int points_num);
+/**
+ * Convex hull with every set of exactly coplanar triangles merged into one polygon.
+ * vert_src0 is the input point of every hull vertex. Not ok for flat or degenerate input.
+ */
+MeshResult convex_hull_3_polygons(const float *positions, int points_num);
 MeshResult alpha_shape_3(const float *positions,
                          int points_num,
                          double alpha,

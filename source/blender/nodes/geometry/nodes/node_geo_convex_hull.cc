@@ -20,6 +20,10 @@
 #  include "RBI_hull_api.h"
 #endif
 
+#ifdef WITH_CGAL
+#  include "GEO_cgal.hh"
+#endif
+
 namespace blender::nodes::node_geo_convex_hull_cc {
 
 static void node_declare(NodeDeclarationBuilder &b)
@@ -129,6 +133,54 @@ static Mesh *hull_from_bullet(const Mesh *mesh, Span<float3> coords)
   return result;
 }
 
+#  ifdef WITH_CGAL
+/**
+ * Exact hull. Bullet's can come out non-convex for dense point sets (faces with input points
+ * above them and points inside the hull kept as vertices), so it is only the fallback.
+ * Null for flat or degenerate points.
+ */
+static Mesh *hull_from_cgal(const Mesh *mesh, Span<float3> coords)
+{
+  Vector<int> vert_src;
+  Vector<int> face_offsets;
+  Vector<int> corner_verts;
+  if (!geometry::cgal_convex_hull_polygons(coords, vert_src, face_offsets, corner_verts)) {
+    return nullptr;
+  }
+  const int verts_num = vert_src.size();
+  const int faces_num = face_offsets.size() - 1;
+  const int corners_num = corner_verts.size();
+  Mesh *result;
+  if (mesh) {
+    result = BKE_mesh_new_nomain_from_template(mesh, verts_num, 0, faces_num, corners_num);
+  }
+  else {
+    result = BKE_mesh_new_nomain(verts_num, 0, faces_num, corners_num);
+    BKE_id_material_eval_ensure_default_slot(&result->id);
+  }
+  bke::mesh_smooth_set(*result, false);
+
+  MutableSpan<float3> dst_positions = result->vert_positions_for_write();
+  for (const int i : IndexRange(verts_num)) {
+    dst_positions[i] = coords[vert_src[i]];
+  }
+  result->face_offsets_for_write().copy_from(face_offsets);
+  result->corner_verts_for_write().copy_from(corner_verts);
+  bke::mesh_calc_edges(*result, false, false);
+  return result;
+}
+#  endif
+
+static Mesh *hull_mesh(const Mesh *mesh, Span<float3> coords)
+{
+#  ifdef WITH_CGAL
+  if (Mesh *result = hull_from_cgal(mesh, coords)) {
+    return result;
+  }
+#  endif
+  return hull_from_bullet(mesh, coords);
+}
+
 static Mesh *compute_hull(const GeometrySet &geometry_set)
 {
   int span_count = 0;
@@ -174,7 +226,7 @@ static Mesh *compute_hull(const GeometrySet &geometry_set)
   /* If there is only one positions virtual array and it is already contiguous, avoid copying
    * all of the positions and instead pass the span directly to the convex hull function. */
   if (span_count == 1 && count == 1) {
-    return hull_from_bullet(geometry_set.get_mesh(), positions_span);
+    return hull_mesh(geometry_set.get_mesh(), positions_span);
   }
 
   Array<float3> positions(total_num);
@@ -201,7 +253,7 @@ static Mesh *compute_hull(const GeometrySet &geometry_set)
     offset += array.size();
   }
 
-  return hull_from_bullet(geometry_set.get_mesh(), positions);
+  return hull_mesh(geometry_set.get_mesh(), positions);
 }
 
 static void convex_hull_grease_pencil(GeometrySet &geometry_set)
@@ -221,7 +273,7 @@ static void convex_hull_grease_pencil(GeometrySet &geometry_set)
     if (positions_span.is_empty()) {
       continue;
     }
-    mesh_by_layer[layer_index] = hull_from_bullet(nullptr, positions_span);
+    mesh_by_layer[layer_index] = hull_mesh(nullptr, positions_span);
   }
 
   if (mesh_by_layer.is_empty()) {

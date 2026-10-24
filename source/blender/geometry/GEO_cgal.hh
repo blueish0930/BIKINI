@@ -27,6 +27,15 @@ Mesh *cgal_triangle_mesh_from_buffers(Span<float3> positions, Span<int> corner_v
 
 /* Points */
 Mesh *cgal_convex_hull_3(Span<float3> points, std::string &r_error);
+/**
+ * Exact convex hull with exactly coplanar triangles merged into polygons, as buffers:
+ * \a r_vert_src is the index in \a points of every hull vertex. False without CGAL or for flat or
+ * degenerate points.
+ */
+bool cgal_convex_hull_polygons(Span<float3> points,
+                               Vector<int> &r_vert_src,
+                               Vector<int> &r_face_offsets,
+                               Vector<int> &r_corner_verts);
 Mesh *cgal_alpha_shape_3(Span<float3> points,
                          float alpha,
                          bool use_optimal_alpha,
