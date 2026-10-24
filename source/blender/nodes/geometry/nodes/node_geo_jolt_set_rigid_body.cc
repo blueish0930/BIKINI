@@ -72,7 +72,7 @@ static const EnumPropertyItem body_type_items[] = {
      "KINEMATIC",
      0,
      N_("Kinematic"),
-     N_("Moved by the node graph; pushes dynamics")},
+     N_("Follows the animation / node graph; pushes dynamics. Same as Animated")},
     {int(BodyType::Dynamic), "DYNAMIC", 0, N_("Dynamic"), N_("Simulated under gravity / forces")},
     {0, nullptr, 0, nullptr, nullptr},
 };
@@ -168,6 +168,13 @@ static void node_declare(NodeDeclarationBuilder &b)
       .default_value(BodyType::Dynamic)
       .optional_label()
       .description("Static, kinematic, or dynamic rigid body");
+  b.add_input<decl::Bool>("Animated"_ustr)
+      .default_value(false)
+      .evaluated_geometry_field()
+      .description(
+          "Follow the animation as a kinematic body while true. Keyframe it (or use a field "
+          "like Frame < 50) to hand the body over to the simulation. Inside a Simulation Zone "
+          "use Jolt Follow Animation to bring the animated transforms in");
   b.add_input<decl::Menu>("Shape"_ustr)
       .static_items(shape_type_items)
       .default_value(ShapeType::BoundingBox)
@@ -311,6 +318,7 @@ static void write_attrs(bke::MutableAttributeAccessor attributes,
                         const int size,
                         const fn::FieldContext &context,
                         const Field<bool> &selection_field,
+                        const Field<bool> &animated_field,
                         const int body_type,
                         const int shape_type,
                         const int dofs,
@@ -334,20 +342,28 @@ static void write_attrs(bke::MutableAttributeAccessor attributes,
   evaluator.add(density_field);
   evaluator.add(friction_field);
   evaluator.add(restitution_field);
+  evaluator.add(animated_field);
   evaluator.evaluate();
   const IndexMask selection = evaluator.get_evaluated_selection_as_mask();
 
-  bke::SpanAttributeWriter<int> body_all = attributes.lookup_or_add_for_write_span<int>(
-      attr::body_type, domain);
-  bke::SpanAttributeWriter<int> shape_all = attributes.lookup_or_add_for_write_span<int>(
-      attr::shape_type, domain);
-  if (body_all) {
-    body_all.span.fill(body_type);
-    body_all.finish();
+  /* First tagging stamps every element (Compound pieces outside the selection must not fall
+   * back to a bounding box). Once the attributes exist only the selection changes, so a second
+   * node can turn some bodies kinematic / static without retagging the rest. */
+  if (!attributes.contains(attr::body_type)) {
+    bke::SpanAttributeWriter<int> body_all = attributes.lookup_or_add_for_write_span<int>(
+        attr::body_type, domain);
+    if (body_all) {
+      body_all.span.fill(body_type);
+      body_all.finish();
+    }
   }
-  if (shape_all) {
-    shape_all.span.fill(shape_type);
-    shape_all.finish();
+  if (!attributes.contains(attr::shape_type)) {
+    bke::SpanAttributeWriter<int> shape_all = attributes.lookup_or_add_for_write_span<int>(
+        attr::shape_type, domain);
+    if (shape_all) {
+      shape_all.span.fill(shape_type);
+      shape_all.finish();
+    }
   }
   if (selection.is_empty()) {
     return;
@@ -356,6 +372,7 @@ static void write_attrs(bke::MutableAttributeAccessor attributes,
   const VArray<float> densities = evaluator.get_evaluated<float>(1);
   const VArray<float> frictions = evaluator.get_evaluated<float>(2);
   const VArray<float> restitutions = evaluator.get_evaluated<float>(3);
+  const VArray<bool> animated = evaluator.get_evaluated<bool>(4);
 
   auto span_i = [&](StringRef name) {
     return attributes.lookup_or_add_for_write_span<int>(name, domain);
@@ -394,7 +411,7 @@ static void write_attrs(bke::MutableAttributeAccessor attributes,
 
   selection.foreach_index([&](const int i) {
     if (body_w) {
-      body_w.span[i] = body_type;
+      body_w.span[i] = animated[i] ? int(BodyType::Kinematic) : body_type;
     }
     if (shape_w) {
       shape_w.span[i] = shape_type;
@@ -534,6 +551,7 @@ static void node_geo_exec(GeoNodeExecParams params)
   const ShapeType shape_type = params.extract_input<ShapeType>("Shape"_ustr);
   const int dofs = int(params.extract_input<DOFType>("DOFs"_ustr));
   const Field<bool> selection = params.extract_input<Field<bool>>("Selection"_ustr);
+  const Field<bool> animated = params.extract_input<Field<bool>>("Animated"_ustr);
   const std::string name_prefix = params.extract_input<std::string>("Name Prefix"_ustr);
   const Field<float3> size_field = params.extract_input<Field<float3>>("Size"_ustr);
   const Field<float> density_field = params.extract_input<Field<float>>("Density"_ustr);
@@ -568,6 +586,7 @@ static void node_geo_exec(GeoNodeExecParams params)
                 n,
                 context,
                 selection,
+                animated,
                 body_type,
                 int(shape_type),
                 dofs,
@@ -591,6 +610,7 @@ static void node_geo_exec(GeoNodeExecParams params)
                 points->totpoint,
                 context,
                 selection,
+                animated,
                 body_type,
                 int(shape_type),
                 dofs,

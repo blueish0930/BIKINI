@@ -59,9 +59,14 @@ static const EnumPropertyItem joint_type_items[] = {
      "DISTANCE",
      0,
      N_("Distance"),
-     N_("Keep two points a distance apart (optional min/max + spring)")},
+     N_("Body A's origin to Anchor (or Anchor to Anchor 2): rod at the current distance, or "
+        "a rope up to Max Limit (Min..Max, optional spring)")},
     {int(JointType::Point), "POINT", 0, N_("Point"), N_("Ball joint: share one world point")},
-    {int(JointType::Hinge), "HINGE", 0, N_("Hinge"), N_("One rotation axis (door / wheel axle)")},
+    {int(JointType::Hinge),
+     "HINGE",
+     0,
+     N_("Hinge"),
+     N_("One rotation axis (door / wheel axle). Min = Max = free")},
     {int(JointType::Cone), "CONE", 0, N_("Cone"), N_("Point + swing limited to a cone")},
     {int(JointType::Slider),
      "SLIDER",
@@ -77,12 +82,14 @@ static const EnumPropertyItem joint_type_items[] = {
      "SIX_DOF",
      0,
      N_("Six DOF"),
-     N_("Per-axis translation / rotation limits")},
+     N_("Slides along and turns about Axis (Min/Max Limit = travel, Twist Min/Max = angle, "
+        "equal = free). The other axes are locked")},
     {int(JointType::Path),
      "PATH",
      0,
      N_("Path"),
-     N_("Slide along a Hermite path (Path geometry or Anchor→Axis)")},
+     N_("Body A slides along a path owned by Body B or the world (Path geometry or "
+        "Anchor→Axis)")},
     {int(JointType::Gear),
      "GEAR",
      0,
@@ -97,7 +104,8 @@ static const EnumPropertyItem joint_type_items[] = {
      "PULLEY",
      0,
      N_("Pulley"),
-     N_("Two bodies, two world attachment points (rope / block-and-tackle)")},
+     N_("Rope from Anchor (on A) over Anchor + Axis and Anchor 2 + Axis down to Anchor 2 "
+        "(on B). Max Limit = rope length (0 = current)")},
     {int(JointType::Vehicle),
      "VEHICLE",
      0,
@@ -230,26 +238,47 @@ static void node_declare(NodeDeclarationBuilder &b)
   b.add_input<decl::Vector>("Anchor 2"_ustr)
       .default_value(float3(0.0f, 0.0f, 0.0f))
       .subtype(PROP_TRANSLATION)
-      .description("Second world point (pulley body B / gear B hinge)")
-      .usage_by_menu("Type"_ustr, Array<int>{int(JointType::Pulley), int(JointType::Gear)});
+      .description("Second point: pulley / distance on Body B, gear B hinge, rack slider")
+      .usage_by_menu("Type"_ustr,
+                     Array<int>{int(JointType::Pulley),
+                                int(JointType::Gear),
+                                int(JointType::RackAndPinion),
+                                int(JointType::Distance)});
 
   b.add_input<decl::Float>("Min Limit"_ustr)
       .default_value(0.0f)
-      .description("Hinge/slider min (rad or m). Distance min. Cone unused")
+      .description("Hinge / slider / six-DOF minimum (rad or m). Distance / pulley minimum "
+                   "length. Min = Max = no limit")
       .usage_by_menu("Type"_ustr,
                      Array<int>{int(JointType::Distance),
                                 int(JointType::Hinge),
                                 int(JointType::Slider),
-                                int(JointType::SwingTwist)});
+                                int(JointType::SixDOF),
+                                int(JointType::Pulley)});
   b.add_input<decl::Float>("Max Limit"_ustr)
       .default_value(0.0f)
-      .description("Hinge/slider max. Cone half-angle (rad). Distance max")
+      .description("Hinge / slider / six-DOF maximum. Cone / swing half-angle (rad). "
+                   "Distance / pulley maximum length (0 = current length)")
       .usage_by_menu("Type"_ustr,
                      Array<int>{int(JointType::Distance),
                                 int(JointType::Hinge),
                                 int(JointType::Cone),
                                 int(JointType::Slider),
-                                int(JointType::SwingTwist)});
+                                int(JointType::SwingTwist),
+                                int(JointType::SixDOF),
+                                int(JointType::Pulley)});
+  b.add_input<decl::Float>("Twist Min"_ustr)
+      .default_value(0.0f)
+      .subtype(PROP_ANGLE)
+      .description("Rotation about Axis, minimum. Twist Min = Twist Max = free")
+      .usage_by_menu("Type"_ustr,
+                     Array<int>{int(JointType::SwingTwist), int(JointType::SixDOF)});
+  b.add_input<decl::Float>("Twist Max"_ustr)
+      .default_value(0.0f)
+      .subtype(PROP_ANGLE)
+      .description("Rotation about Axis, maximum")
+      .usage_by_menu("Type"_ustr,
+                     Array<int>{int(JointType::SwingTwist), int(JointType::SixDOF)});
 
   b.add_input<decl::Float>("Ratio"_ustr)
       .default_value(1.0f)
@@ -274,7 +303,8 @@ static void node_declare(NodeDeclarationBuilder &b)
       .static_items(motor_items)
       .default_value(MotorState::Off)
       .optional_label()
-      .description("Hinge/slider/vehicle motor: off, velocity, or position")
+      .description("Hinge / slider / vehicle motor: off, velocity, or position. Motor values "
+                   "may be animated")
       .usage_by_menu("Type"_ustr,
                      Array<int>{int(JointType::Hinge),
                                 int(JointType::Slider),
@@ -412,6 +442,8 @@ static void node_geo_exec(GeoNodeExecParams params)
   const float3 anchor2 = params.extract_input<float3>("Anchor 2"_ustr);
   const float min_limit = params.extract_input<float>("Min Limit"_ustr);
   const float max_limit = params.extract_input<float>("Max Limit"_ustr);
+  const float twist_min = params.extract_input<float>("Twist Min"_ustr);
+  const float twist_max = params.extract_input<float>("Twist Max"_ustr);
   const float ratio = params.extract_input<float>("Ratio"_ustr);
   const float frequency = params.extract_input<float>("Frequency"_ustr);
   const float damping = params.extract_input<float>("Damping"_ustr);
@@ -483,8 +515,8 @@ static void node_geo_exec(GeoNodeExecParams params)
   write_v(attr::anchor2, anchor2);
   write_f(attr::min_limit, min_limit);
   write_f(attr::max_limit, max_limit);
-  write_f(attr::min_limit2, 0.0f);
-  write_f(attr::max_limit2, 0.0f);
+  write_f(attr::min_limit2, twist_min);
+  write_f(attr::max_limit2, twist_max);
   write_f(attr::ratio, ratio);
   write_f(attr::frequency, frequency);
   write_f(attr::damping, damping);

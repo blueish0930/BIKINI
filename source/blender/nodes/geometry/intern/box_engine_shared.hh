@@ -30,6 +30,12 @@
 
 #include "GEO_realize_instances.hh"
 
+#include "BKE_compute_contexts.hh"
+#include "DEG_depsgraph_query.hh"
+#include "DNA_object_types.h"
+#include "NOD_geometry_exec.hh"
+#include "NOD_geometry_nodes_lazy_function.hh"
+
 #include <algorithm>
 #include <cstring>
 #include <fmt/format.h>
@@ -506,6 +512,47 @@ inline void fill_triangle_mesh_from_mesh(const Mesh &mesh,
       r_indices.append(corner_verts[face[k + 1]]);
     }
   }
+}
+
+/**
+ * True when the node runs inside a Simulation Zone. The input geometry is then the simulation
+ * state: what the previous step wrote, a cached frame, or the zone input on the first frame.
+ */
+inline bool in_simulation_zone(const GeoNodeExecParams &params)
+{
+  const GeoNodesUserData *user_data = params.user_data();
+  if (!user_data) {
+    return false;
+  }
+  for (const ComputeContext *c = user_data->compute_context; c; c = c->parent()) {
+    if (dynamic_cast<const bke::SimulationZoneComputeContext *>(c)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Key of a persistent physics world. Uses the original object (evaluated copies have
+ * session_uid 0, which made every object share one world) and the compute context, so the
+ * same node in two group instances or two modifiers gets its own world.
+ */
+inline std::string solver_cache_key(const GeoNodeExecParams &params, const StringRef prefix)
+{
+  const Object *self = params.self_object();
+  const Object *orig = self ? DEG_get_original(self) : nullptr;
+  const uint32_t uid = orig ? orig->id.session_uid : 0;
+  uint64_t h1 = 0;
+  uint64_t h2 = 0;
+  if (const GeoNodesUserData *user_data = params.user_data()) {
+    if (user_data->compute_context) {
+      const ComputeContextHash &hash = user_data->compute_context->hash();
+      h1 = hash.v1;
+      h2 = hash.v2;
+    }
+  }
+  return fmt::format(
+      "{}:{}:{:016x}{:016x}:{}", std::string(prefix), uid, h1, h2, params.node().identifier);
 }
 
 }  // namespace blender::nodes::box_engine

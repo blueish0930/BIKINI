@@ -84,6 +84,8 @@ constexpr StringRefNull prev_position = "prev_position";
 constexpr StringRefNull prev_rotation = "prev_rotation";
 constexpr StringRefNull has_prev = "has_prev";
 constexpr StringRefNull radius = "radius";
+/** Point domain only. Instances carry rotation in their transform. */
+constexpr StringRefNull rotation = "rotation";
 constexpr StringRefNull linear_damping = "linear_damping";
 constexpr StringRefNull angular_damping = "angular_damping";
 constexpr StringRefNull sensor = "sensor";
@@ -571,9 +573,12 @@ static void read_bodies_points(const PointCloud &points, Vector<BodyRead> &r_bod
   const VArray<int> dofs = get_int(attributes, attr::allowed_dofs, domain, 0);
   const VArray<bool> sensors = get_bool(attributes, attr::sensor, domain, false);
   const VArray<bool> ccds = get_bool(attributes, attr::ccd, domain, false);
+  const VArray<math::Quaternion> rotations = *attributes.lookup_or_default<math::Quaternion>(
+      attr::rotation, domain, math::Quaternion::identity());
   for (const int i : IndexRange(n)) {
     BodyRead &b = r_bodies[i];
     b.position = positions[i];
+    b.rotation = rotations[i];
     b.angular_velocity = ang[i];
     b.mass = masses[i];
     b.inertia = inertias[i];
@@ -931,9 +936,13 @@ static void node_geo_exec(GeoNodeExecParams params)
   const int vel_steps = std::max(params.extract_input<int>("Velocity Steps"_ustr), 2);
   const int pos_steps = std::max(params.extract_input<int>("Position Steps"_ustr), 1);
   const bool ccd = params.extract_input<bool>("CCD"_ustr);
-  const Object *self = params.self_object();
-  const unsigned int uid = self ? self->id.session_uid : 0;
-  const std::string cache_ns = fmt::format("jolt:{}:{}", uid, params.node().identifier);
+  const std::string cache_ns = box_engine::solver_cache_key(params, "jolt");
+  const bool in_zone = box_engine::in_simulation_zone(params);
+  if (!in_zone) {
+    params.error_message_add(
+        NodeWarningType::Info,
+        TIP_("Not in a Simulation Zone: state lives in a hidden world and is not cached"));
+  }
 
   if (geometry_set.is_empty()) {
     params.set_output("Geometry"_ustr, std::move(geometry_set));
@@ -1167,6 +1176,7 @@ static void node_geo_exec(GeoNodeExecParams params)
   settings.ccd = ccd ? 1 : 0;
   settings.topology_hash = hash_topology(bodies, joints);
   settings.cache_key = cache_ns.c_str();
+  settings.state_from_input = in_zone ? 1 : 0;
   settings.scene_time = 0.0f;
   if (const Depsgraph *depsgraph = params.depsgraph()) {
     settings.scene_time = float(DEG_get_ctime(depsgraph));
@@ -1277,6 +1287,15 @@ static void node_geo_exec(GeoNodeExecParams params)
                                       new_prev_pos);
       {
         bke::MutableAttributeAccessor attributes = points->attributes_for_write();
+        bke::SpanAttributeWriter<math::Quaternion> rot_w =
+            attributes.lookup_or_add_for_write_only_span<math::Quaternion>(attr::rotation,
+                                                                          bke::AttrDomain::Point);
+        if (rot_w) {
+          for (int i = 0; i < n; i++) {
+            rot_w.span[i] = new_rots[i];
+          }
+          rot_w.finish();
+        }
         bke::SpanAttributeWriter<math::Quaternion> prev_rot_w =
             attributes.lookup_or_add_for_write_only_span<math::Quaternion>(attr::prev_rotation,
                                                                           bke::AttrDomain::Point);

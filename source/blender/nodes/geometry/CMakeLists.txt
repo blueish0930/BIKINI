@@ -516,6 +516,7 @@ set(SRC
   nodes/node_geo_box_engine_solver.cc
   nodes/node_geo_box_engine_set_rigid_body.cc
   nodes/node_geo_box_engine_set_constraint.cc
+  nodes/node_geo_jolt_follow_animation.cc
   nodes/node_geo_jolt_solver.cc
   nodes/node_geo_jolt_set_rigid_body.cc
   nodes/node_geo_jolt_set_constraint.cc

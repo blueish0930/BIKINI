@@ -507,21 +507,23 @@ static BodyID invalid_if_world(int index, const std::vector<BodyID> &ids)
 
 static void apply_motor(TwoBodyConstraint *c, int type, const JoltConstraintDesc &d)
 {
-  if (!c || d.motor_state == JOLT_MOTOR_OFF) {
+  if (!c) {
     return;
   }
   const EMotorState state = (d.motor_state == JOLT_MOTOR_POSITION) ? EMotorState::Position :
-                                                                     EMotorState::Velocity;
+                            (d.motor_state == JOLT_MOTOR_VELOCITY) ? EMotorState::Velocity :
+                                                                     EMotorState::Off;
   const float force = d.motor_force > 0.0f ? d.motor_force : 1.0e6f;
   switch (type) {
     case JOLT_CONSTRAINT_HINGE: {
       auto *h = static_cast<HingeConstraint *>(c);
-      h->GetMotorSettings().SetForceLimit(force);
+      /* Hinge motors are angular: the limit is a torque. */
+      h->GetMotorSettings().SetTorqueLimit(force);
       h->SetMotorState(state);
       if (state == EMotorState::Velocity) {
         h->SetTargetAngularVelocity(d.motor_target);
       }
-      else {
+      else if (state == EMotorState::Position) {
         h->SetTargetAngle(d.motor_target);
       }
       break;
@@ -533,7 +535,7 @@ static void apply_motor(TwoBodyConstraint *c, int type, const JoltConstraintDesc
       if (state == EMotorState::Velocity) {
         s->SetTargetVelocity(d.motor_target);
       }
-      else {
+      else if (state == EMotorState::Position) {
         s->SetTargetPosition(d.motor_target);
       }
       break;
@@ -551,15 +553,30 @@ struct Engine {
   std::vector<BodyID> bodies;
   std::vector<std::string> names;
   std::vector<uint64_t> shape_fp;
+  /** Motion type requested by the graph (Jolt may have forced a mesh shape to static). */
+  std::vector<int> req_motion;
+  /** Pose / velocity the last step handed back to Geometry Nodes, per body slot. */
+  std::vector<JoltVec3> out_pos;
+  std::vector<JoltQuat> out_rot;
+  std::vector<JoltVec3> out_lv;
+  std::vector<JoltVec3> out_av;
+  std::vector<char> has_out;
   std::vector<Ref<Constraint>> constraints;
   std::vector<Ref<VehicleConstraint>> vehicles;
+  /** Main constraint per input constraint index, for motor updates. */
+  std::vector<Ref<Constraint>> constraint_by_index;
+  std::vector<Ref<VehicleConstraint>> vehicle_by_index;
+  /**
+   * Body A / B world transforms when a constraint was first created. Constraint anchors are
+   * given in that (rest) space, so re-creating a constraint after bodies moved maps them along.
+   */
+  std::unordered_map<std::string, std::pair<RMat44, RMat44>> constraint_ref;
   uint64 topology = 0;
   uint64 constraint_fp = 0;
   int n_bodies = 0;
   int n_constraints = 0;
-  std::vector<JoltVec3> last_pos;
-  std::vector<int> graph_driven;
   float last_scene_time = -1.0e30f;
+  uint64 last_use = 0;
 
   void clear_constraints_only()
   {
@@ -579,6 +596,8 @@ struct Engine {
     }
     vehicles.clear();
     constraints.clear();
+    constraint_by_index.clear();
+    vehicle_by_index.clear();
     constraint_fp = 0;
   }
 
@@ -596,8 +615,12 @@ struct Engine {
     bodies.clear();
     names.clear();
     shape_fp.clear();
-    last_pos.clear();
-    graph_driven.clear();
+    req_motion.clear();
+    out_pos.clear();
+    out_rot.clear();
+    out_lv.clear();
+    out_av.clear();
+    has_out.clear();
     n_bodies = 0;
     n_constraints = 0;
     topology = 0;
@@ -607,6 +630,7 @@ struct Engine {
   void clear()
   {
     reset_bodies();
+    constraint_ref.clear();
     physics.reset();
   }
 
@@ -617,25 +641,9 @@ struct Engine {
 };
 
 static std::unordered_map<std::string, std::unique_ptr<Engine>> g_engines;
-
-static bool positions_match(const Engine &eng, int n, const JoltBodyDesc *bodies)
-{
-  if (int(eng.last_pos.size()) != n) {
-    return false;
-  }
-  float err = 0.0f;
-  const int stride = std::max(n / 64, 1);
-  for (int i = 0; i < n; i += stride) {
-    if (eng.graph_driven.size() == uint(n) && eng.graph_driven[uint(i)]) {
-      continue;
-    }
-    const float dx = eng.last_pos[uint(i)].x - bodies[i].position.x;
-    const float dy = eng.last_pos[uint(i)].y - bodies[i].position.y;
-    const float dz = eng.last_pos[uint(i)].z - bodies[i].position.z;
-    err = std::max(err, dx * dx + dy * dy + dz * dz);
-  }
-  return err < 0.0025f; /* 5 cm */
-}
+static uint64 g_use_counter = 0;
+/** Worlds kept alive at once (one per solver node and evaluation context). */
+constexpr size_t k_max_engines = 32;
 
 static void fill_mass_if_mesh(BodyCreationSettings &settings, const JoltBodyDesc &b, const Shape *shape)
 {
@@ -644,7 +652,7 @@ static void fill_mass_if_mesh(BodyCreationSettings &settings, const JoltBodyDesc
   {
     return;
   }
-  if (settings.mMotionType != EMotionType::Dynamic) {
+  if (!settings.HasMassProperties()) {
     return;
   }
   const float hx = std::max(b.shape_size.x, 0.05f);
@@ -660,7 +668,8 @@ static void fill_mass_if_mesh(BodyCreationSettings &settings, const JoltBodyDesc
 
 static void apply_mass(BodyCreationSettings &settings, const JoltBodyDesc &b, const Shape *shape)
 {
-  if (settings.mMotionType != EMotionType::Dynamic) {
+  /* Also for static / kinematic bodies that may become dynamic later. */
+  if (!settings.HasMassProperties()) {
     return;
   }
   MassProperties mp;
@@ -713,7 +722,7 @@ static uint32 quant_mm(float x)
 
 static uint64_t shape_fp_of(const JoltBodyDesc &b)
 {
-  uint64_t h = uint64_t(uint32_t(b.shape_type)) | (uint64_t(uint32_t(b.motion_type)) << 8);
+  uint64_t h = uint64_t(uint32_t(b.shape_type));
   h = mix64(h, uint64_t(uint32_t(b.nverts)));
   h = mix64(h, uint64_t(uint32_t(b.nindices)));
   h = mix64(h, uint64_t(uint32_t(b.nislands)));
@@ -734,14 +743,43 @@ static uint64_t shape_fp_of(const JoltBodyDesc &b)
   return h;
 }
 
+static uint64_t mix_vec(uint64_t h, const JoltVec3 &v)
+{
+  h = mix64(h, quant_mm(v.x));
+  h = mix64(h, quant_mm(v.y));
+  return mix64(h, quant_mm(v.z));
+}
+
+/** Everything that is baked into a constraint at creation. Motor values are applied live. */
 static uint64_t constraints_fp(int n, const JoltConstraintDesc *c)
 {
   uint64_t h = uint64_t(uint32_t(n));
   for (int i = 0; i < n; i++) {
-    h = h * 1000003ull ^ uint64_t(uint32_t(c[i].type));
-    h = h * 1000003ull ^ uint64_t(uint32_t(c[i].body_a));
-    h = h * 1000003ull ^ uint64_t(uint32_t(c[i].body_b));
-    h = h * 1000003ull ^ uint64_t(uint32_t(c[i].npath));
+    const JoltConstraintDesc &d = c[i];
+    h = mix64(h, uint64_t(uint32_t(d.type)));
+    h = mix64(h, uint64_t(uint32_t(d.body_a)));
+    h = mix64(h, uint64_t(uint32_t(d.body_b)));
+    h = mix64(h, uint64_t(uint32_t(d.npath)));
+    h = mix_vec(h, d.anchor);
+    h = mix_vec(h, d.anchor2);
+    h = mix_vec(h, d.axis);
+    h = mix_vec(h, d.axis2);
+    h = mix64(h, quant_mm(d.min_limit));
+    h = mix64(h, quant_mm(d.max_limit));
+    h = mix64(h, quant_mm(d.min_limit2));
+    h = mix64(h, quant_mm(d.max_limit2));
+    h = mix64(h, quant_mm(d.ratio));
+    h = mix64(h, quant_mm(d.frequency));
+    h = mix64(h, quant_mm(d.damping));
+    h = mix64(h, quant_mm(d.wheel_radius));
+    h = mix64(h, quant_mm(d.wheel_width));
+    h = mix64(h, quant_mm(d.suspension_min));
+    h = mix64(h, quant_mm(d.suspension_max));
+    h = mix64(h, uint64_t(uint32_t(d.num_wheels)));
+    if (d.path_xyz && d.npath > 0) {
+      h = mix64(h, quant_mm(d.path_xyz[0]));
+      h = mix64(h, quant_mm(d.path_xyz[d.npath * 3 - 1]));
+    }
   }
   return h;
 }
@@ -767,6 +805,11 @@ static ShapeRefC shape_for_desc(const JoltBodyDesc &b, EMotionType &motion)
   return shape;
 }
 
+static ObjectLayer layer_for(const EMotionType motion)
+{
+  return (motion == EMotionType::Static) ? LAYER_NON_MOVING : LAYER_MOVING;
+}
+
 static BodyID spawn_body(Engine &eng,
                          const JoltStepSettings &st,
                          const JoltBodyDesc &b,
@@ -774,8 +817,10 @@ static BodyID spawn_body(Engine &eng,
 {
   EMotionType motion = motion_from_int(b.motion_type);
   ShapeRefC shape = shape_for_desc(b, motion);
-  const ObjectLayer layer = (motion == EMotionType::Static) ? LAYER_NON_MOVING : LAYER_MOVING;
-  BodyCreationSettings settings(shape.GetPtr(), rv3(b.position), quat(b.rotation), motion, layer);
+  BodyCreationSettings settings(
+      shape.GetPtr(), rv3(b.position), quat(b.rotation), motion, layer_for(motion));
+  /* Lets the graph switch Static / Kinematic / Dynamic later without a new BodyID. */
+  settings.mAllowDynamicOrKinematic = !shape->MustBeStatic();
   settings.mFriction = std::max(b.friction, 0.0f);
   settings.mRestitution = std::max(b.restitution, 0.0f);
   settings.mLinearDamping = std::max(b.linear_damping, 0.0f);
@@ -876,89 +921,44 @@ static bool ensure_world(Engine &eng, int n_bodies)
   return true;
 }
 
-static bool rebuild(Engine &eng,
-                    const JoltStepSettings &st,
-                    int n_bodies,
-                    const JoltBodyDesc *bodies,
-                    int n_constraints,
-                    const JoltConstraintDesc *constraints,
-                    char *error,
-                    int error_max)
+static RMat44 body_world_tf(BodyInterface &bi, const BodyID id)
 {
-  if (eng.physics) {
-    eng.reset_bodies();
-  }
-  else {
-    ensure_world(eng, n_bodies);
-  }
-  bool has_kinematic = false;
-  for (int i = 0; i < n_bodies; i++) {
-    if (bodies[i].motion_type == JOLT_MOTION_KINEMATIC) {
-      has_kinematic = true;
-      break;
-    }
-  }
-  apply_physics_quality(*eng.physics, st, has_kinematic);
-  eng.physics->SetGravity(v3(st.gravity));
+  return id.IsInvalid() ? RMat44::sIdentity() : bi.GetWorldTransform(id);
+}
 
+static std::string constraint_key(const Engine &eng,
+                                  const JoltConstraintDesc &d,
+                                  std::unordered_map<std::string, int> &seen)
+{
+  auto name = [&](const int idx) -> std::string {
+    return (idx >= 0 && idx < int(eng.names.size())) ? eng.names[uint(idx)] :
+                                                        std::string("<world>");
+  };
+  const std::string k = std::to_string(d.type) + "|" + name(d.body_a) + "|" + name(d.body_b);
+  const int n = seen[k]++;
+  return k + "|" + std::to_string(n);
+}
+
+static bool has_range(const float min, const float max)
+{
+  return max > min;
+}
+
+/**
+ * Create all constraints. Anchors and axes are world space in the pose the bodies had when a
+ * constraint was first seen (normally the rest pose); `constraint_ref` maps them onto the
+ * current poses so re-creating constraints mid-simulation does not yank bodies.
+ */
+static void add_constraints(Engine &eng,
+                            const int n_bodies,
+                            const JoltBodyDesc *bodies,
+                            const int n_constraints,
+                            const JoltConstraintDesc *constraints)
+{
   BodyInterface &bi = eng.physics->GetBodyInterface();
-  eng.bodies.resize(uint(n_bodies));
-  eng.names.resize(uint(n_bodies));
-  eng.shape_fp.resize(uint(n_bodies));
-  eng.graph_driven.resize(uint(n_bodies));
-
-  const float kdt = st.dt > 1.0e-6f ? st.dt : (1.0f / 24.0f);
-  for (int i = 0; i < n_bodies; i++) {
-    const JoltBodyDesc &b = bodies[i];
-    JoltBodyDesc spawn = b;
-    const std::string key = key_of(b, i);
-    const bool kinematic = b.motion_type == JOLT_MOTION_KINEMATIC;
-    if (kinematic) {
-      /* Sweep uses only this frame's geometry: prev_* attributes, else velocity. */
-      RVec3 p0 = rv3(b.position);
-      Quat q0 = quat(b.rotation);
-      if (b.has_prev) {
-        p0 = rv3(b.prev_position);
-        q0 = quat(b.prev_rotation);
-      }
-      else {
-        const Vec3 lv = v3(b.linear_velocity);
-        const Vec3 av = v3(b.angular_velocity);
-        if (lv.LengthSq() > 1.0e-12f) {
-          p0 = rv3(b.position) - RVec3(lv * kdt);
-        }
-        const float ang = av.Length();
-        if (ang > 1.0e-6f) {
-          const Quat dq = Quat::sRotation(av / ang, ang * kdt);
-          q0 = dq.Conjugated() * quat(b.rotation);
-        }
-      }
-      spawn.position = {float(p0.GetX()), float(p0.GetY()), float(p0.GetZ())};
-      spawn.rotation = jq(q0);
-    }
-    /* Always activate: inactive bodies do not receive gravity. */
-    const EActivation act = EActivation::Activate;
-    const BodyID id = spawn_body(eng, st, spawn, act);
-    if (id.IsInvalid()) {
-      if (error && error_max > 0) {
-        std::snprintf(error, uint(error_max), "Jolt: out of bodies at index %d", i);
-      }
-      return false;
-    }
-    if (kinematic) {
-      Quat q_dst = quat(b.rotation);
-      const Quat q_cur = bi.GetRotation(id);
-      if (q_cur.Dot(q_dst) < 0.0f) {
-        q_dst = -q_dst;
-      }
-      bi.ActivateBody(id);
-      bi.MoveKinematic(id, rv3(b.position), q_dst, kdt);
-    }
-    eng.bodies[uint(i)] = id;
-    eng.names[uint(i)] = key;
-    eng.shape_fp[uint(i)] = shape_fp_of(b);
-    eng.graph_driven[uint(i)] = kinematic ? 1 : 0;
-  }
+  eng.constraint_by_index.assign(size_t(std::max(n_constraints, 0)), Ref<Constraint>());
+  eng.vehicle_by_index.assign(size_t(std::max(n_constraints, 0)), Ref<VehicleConstraint>());
+  std::unordered_map<std::string, int> seen;
 
   auto add_two = [&](const TwoBodyConstraintSettings &s, int a, int b) -> TwoBodyConstraint * {
     const BodyID ida = invalid_if_world(a, eng.bodies);
@@ -976,129 +976,187 @@ static bool rebuild(Engine &eng,
 
   for (int i = 0; i < n_constraints; i++) {
     const JoltConstraintDesc &d = constraints[i];
+    const BodyID ida = invalid_if_world(d.body_a, eng.bodies);
+    const BodyID idb = invalid_if_world(d.body_b, eng.bodies);
+    const RMat44 ta = body_world_tf(bi, ida);
+    const RMat44 tb = body_world_tf(bi, idb);
+    const std::string key = constraint_key(eng, d, seen);
+    auto ref_it = eng.constraint_ref.find(key);
+    if (ref_it == eng.constraint_ref.end()) {
+      ref_it = eng.constraint_ref.emplace(key, std::make_pair(ta, tb)).first;
+    }
+    const RMat44 ta0 = ref_it->second.first;
+    const RMat44 tb0 = ref_it->second.second;
+    const RMat44 xa = ta * ta0.InversedRotationTranslation();
+    const RMat44 xb = tb * tb0.InversedRotationTranslation();
+    auto PA = [&](RVec3Arg p) { return xa * p; };
+    auto PB = [&](RVec3Arg p) { return xb * p; };
+    auto VA = [&](Vec3Arg v) { return xa.Multiply3x3(v).Normalized(); };
+    auto VB = [&](Vec3Arg v) { return xb.Multiply3x3(v).Normalized(); };
+
     const Vec3 axis = safe_axis(d.axis, Vec3::sAxisX());
-    const Vec3 nrm = safe_axis(d.axis2, perp_axis(axis));
+    Vec3 nrm = safe_axis(d.axis2, perp_axis(axis));
+    /* Hinge / slider / twist frames need a normal perpendicular to the axis. */
+    nrm = nrm - axis * axis.Dot(nrm);
+    nrm = nrm.LengthSq() > 1.0e-8f ? nrm.Normalized() : perp_axis(axis);
     const RVec3 p1 = rv3(d.anchor);
-    const RVec3 p2 = (d.anchor2.x != 0 || d.anchor2.y != 0 || d.anchor2.z != 0) ? rv3(d.anchor2) :
-                                                                                  p1;
+    const bool has_anchor2 = d.anchor2.x != 0 || d.anchor2.y != 0 || d.anchor2.z != 0;
+    const RVec3 p2 = has_anchor2 ? rv3(d.anchor2) : p1;
+    TwoBodyConstraint *main = nullptr;
     switch (d.type) {
       case JOLT_CONSTRAINT_FIXED: {
         FixedConstraintSettings s;
         s.mSpace = EConstraintSpace::WorldSpace;
         s.mAutoDetectPoint = true;
-        add_two(s, d.body_a, d.body_b);
+        main = add_two(s, d.body_a, d.body_b);
         break;
       }
       case JOLT_CONSTRAINT_DISTANCE: {
         DistanceConstraintSettings s;
         s.mSpace = EConstraintSpace::WorldSpace;
-        s.mPoint1 = p1;
-        s.mPoint2 = p2;
-        if (d.min_limit >= 0.0f) {
-          s.mMinDistance = d.min_limit;
+        /* No Anchor 2: rod from Body A's origin to Anchor (on Body B or the world).
+         * With Anchor 2: from Anchor (on A) to Anchor 2 (on B / world). */
+        if (has_anchor2) {
+          s.mPoint1 = PA(p1);
+          s.mPoint2 = PB(p2);
         }
-        if (d.max_limit >= 0.0f) {
+        else {
+          s.mPoint1 = PA(ta0.GetTranslation());
+          s.mPoint2 = PB(p1);
+        }
+        /* Max > 0: rope up to Max (Min..Max). Only Min: rod of that length.
+         * Both 0: rod at the current distance (-1 = Jolt auto). */
+        if (d.max_limit > 0.0f) {
           s.mMaxDistance = d.max_limit;
+          s.mMinDistance = std::clamp(d.min_limit, 0.0f, d.max_limit);
+        }
+        else if (d.min_limit > 0.0f) {
+          s.mMinDistance = d.min_limit;
+          s.mMaxDistance = d.min_limit;
         }
         if (d.frequency > 0.0f) {
           s.mLimitsSpringSettings.mFrequency = d.frequency;
           s.mLimitsSpringSettings.mDamping = std::max(d.damping, 0.0f);
         }
-        add_two(s, d.body_a, d.body_b);
+        main = add_two(s, d.body_a, d.body_b);
         break;
       }
       case JOLT_CONSTRAINT_POINT: {
         PointConstraintSettings s;
         s.mSpace = EConstraintSpace::WorldSpace;
-        s.mPoint1 = p1;
-        s.mPoint2 = p1;
-        add_two(s, d.body_a, d.body_b);
+        s.mPoint1 = PA(p1);
+        s.mPoint2 = PB(p1);
+        main = add_two(s, d.body_a, d.body_b);
         break;
       }
       case JOLT_CONSTRAINT_HINGE: {
         HingeConstraintSettings s;
         s.mSpace = EConstraintSpace::WorldSpace;
-        s.mPoint1 = p1;
-        s.mPoint2 = p1;
-        s.mHingeAxis1 = axis;
-        s.mHingeAxis2 = axis;
-        s.mNormalAxis1 = nrm;
-        s.mNormalAxis2 = nrm;
-        if (d.min_limit > -3.1415f || d.max_limit < 3.1415f) {
-          s.mLimitsMin = std::min(d.min_limit, 0.0f);
-          s.mLimitsMax = std::max(d.max_limit, 0.0f);
+        s.mPoint1 = PA(p1);
+        s.mPoint2 = PB(p1);
+        s.mHingeAxis1 = VA(axis);
+        s.mHingeAxis2 = VB(axis);
+        s.mNormalAxis1 = VA(nrm);
+        s.mNormalAxis2 = VB(nrm);
+        /* Min == Max (default 0, 0) = free swing. */
+        if (has_range(d.min_limit, d.max_limit)) {
+          s.mLimitsMin = std::clamp(d.min_limit, -JPH_PI, 0.0f);
+          s.mLimitsMax = std::clamp(d.max_limit, 0.0f, JPH_PI);
         }
-        if (d.motor_state != JOLT_MOTOR_OFF) {
-          s.mMotorSettings.SetForceLimit(d.motor_force > 0.0f ? d.motor_force : 1.0e6f);
-        }
-        TwoBodyConstraint *c = add_two(s, d.body_a, d.body_b);
-        apply_motor(c, d.type, d);
+        main = add_two(s, d.body_a, d.body_b);
+        apply_motor(main, d.type, d);
         break;
       }
       case JOLT_CONSTRAINT_CONE: {
         ConeConstraintSettings s;
         s.mSpace = EConstraintSpace::WorldSpace;
-        s.mPoint1 = p1;
-        s.mPoint2 = p1;
-        s.mTwistAxis1 = axis;
-        s.mTwistAxis2 = axis;
+        s.mPoint1 = PA(p1);
+        s.mPoint2 = PB(p1);
+        s.mTwistAxis1 = VA(axis);
+        s.mTwistAxis2 = VB(axis);
         s.mHalfConeAngle = d.max_limit > 0.0f ? d.max_limit : 0.5f;
-        add_two(s, d.body_a, d.body_b);
+        main = add_two(s, d.body_a, d.body_b);
         break;
       }
       case JOLT_CONSTRAINT_SLIDER: {
         SliderConstraintSettings s;
         s.mSpace = EConstraintSpace::WorldSpace;
-        s.SetSliderAxis(axis);
-        s.mPoint1 = p1;
-        s.mPoint2 = p1;
-        if (d.min_limit < 0.0f || d.max_limit > 0.0f) {
+        s.mPoint1 = PA(p1);
+        s.mPoint2 = PB(p1);
+        const Vec3 snrm = perp_axis(axis);
+        s.mSliderAxis1 = VA(axis);
+        s.mSliderAxis2 = VB(axis);
+        s.mNormalAxis1 = VA(snrm);
+        s.mNormalAxis2 = VB(snrm);
+        if (has_range(d.min_limit, d.max_limit)) {
           s.mLimitsMin = std::min(d.min_limit, 0.0f);
           s.mLimitsMax = std::max(d.max_limit, 0.0f);
         }
-        TwoBodyConstraint *c = add_two(s, d.body_a, d.body_b);
-        apply_motor(c, d.type, d);
+        main = add_two(s, d.body_a, d.body_b);
+        apply_motor(main, d.type, d);
         break;
       }
       case JOLT_CONSTRAINT_SWING_TWIST: {
         SwingTwistConstraintSettings s;
         s.mSpace = EConstraintSpace::WorldSpace;
-        s.mPosition1 = p1;
-        s.mPosition2 = p1;
-        s.mTwistAxis1 = axis;
-        s.mTwistAxis2 = axis;
-        s.mPlaneAxis1 = nrm;
-        s.mPlaneAxis2 = nrm;
-        const float swing = d.max_limit > 0.0f ? d.max_limit : 0.5f;
+        s.mPosition1 = PA(p1);
+        s.mPosition2 = PB(p1);
+        s.mTwistAxis1 = VA(axis);
+        s.mTwistAxis2 = VB(axis);
+        s.mPlaneAxis1 = VA(nrm);
+        s.mPlaneAxis2 = VB(nrm);
+        const float swing = d.max_limit > 0.0f ? std::min(d.max_limit, JPH_PI) : 0.5f;
         s.mNormalHalfConeAngle = swing;
         s.mPlaneHalfConeAngle = swing;
-        s.mTwistMinAngle = d.min_limit2;
-        s.mTwistMaxAngle = d.max_limit2 != 0.0f ? d.max_limit2 : swing;
-        add_two(s, d.body_a, d.body_b);
+        if (has_range(d.min_limit2, d.max_limit2)) {
+          s.mTwistMinAngle = std::clamp(d.min_limit2, -JPH_PI, JPH_PI);
+          s.mTwistMaxAngle = std::clamp(d.max_limit2, -JPH_PI, JPH_PI);
+        }
+        else {
+          s.mTwistMinAngle = -JPH_PI;
+          s.mTwistMaxAngle = JPH_PI;
+        }
+        main = add_two(s, d.body_a, d.body_b);
         break;
       }
       case JOLT_CONSTRAINT_SIX_DOF: {
+        /* Moves along and turns about Axis (Min/Max = travel, Min/Max 2 = angle, equal = free).
+         * The other two translations and rotations are locked. */
         SixDOFConstraintSettings s;
         s.mSpace = EConstraintSpace::WorldSpace;
-        s.mPosition1 = p1;
-        s.mPosition2 = p1;
-        s.mAxisX1 = axis;
-        s.mAxisY1 = nrm;
-        s.mAxisX2 = axis;
-        s.mAxisY2 = nrm;
-        /* Free translation along axis (slider-like) unless limits given. */
-        if (d.min_limit == 0.0f && d.max_limit == 0.0f && d.min_limit2 == 0.0f &&
-            d.max_limit2 == 0.0f)
-        {
-          /* default: all free */
+        s.mPosition1 = PA(p1);
+        s.mPosition2 = PB(p1);
+        s.mAxisX1 = VA(axis);
+        s.mAxisY1 = VA(nrm);
+        s.mAxisX2 = VB(axis);
+        s.mAxisY2 = VB(nrm);
+        using EAxis = SixDOFConstraintSettings::EAxis;
+        if (has_range(d.min_limit, d.max_limit)) {
+          s.SetLimitedAxis(EAxis::TranslationX, d.min_limit, d.max_limit);
         }
-        add_two(s, d.body_a, d.body_b);
+        else {
+          s.MakeFreeAxis(EAxis::TranslationX);
+        }
+        if (has_range(d.min_limit2, d.max_limit2)) {
+          s.SetLimitedAxis(EAxis::RotationX,
+                           std::clamp(d.min_limit2, -JPH_PI, JPH_PI),
+                           std::clamp(d.max_limit2, -JPH_PI, JPH_PI));
+        }
+        else {
+          s.MakeFreeAxis(EAxis::RotationX);
+        }
+        s.MakeFixedAxis(EAxis::TranslationY);
+        s.MakeFixedAxis(EAxis::TranslationZ);
+        s.MakeFixedAxis(EAxis::RotationY);
+        s.MakeFixedAxis(EAxis::RotationZ);
+        main = add_two(s, d.body_a, d.body_b);
         break;
       }
       case JOLT_CONSTRAINT_PATH: {
         if (!d.path_xyz || d.npath < 2) {
           break;
         }
+        /* Body A slides along the path. The path belongs to Body B (or the world). */
         Ref<PathConstraintPathHermite> path = new PathConstraintPathHermite();
         for (int k = 0; k < d.npath; k++) {
           const Vec3 pos(d.path_xyz[k * 3 + 0], d.path_xyz[k * 3 + 1], d.path_xyz[k * 3 + 2]);
@@ -1107,95 +1165,116 @@ static bool rebuild(Engine &eng,
             tan = Vec3(d.path_xyz[(k + 1) * 3 + 0] - pos.GetX(),
                        d.path_xyz[(k + 1) * 3 + 1] - pos.GetY(),
                        d.path_xyz[(k + 1) * 3 + 2] - pos.GetZ());
-            if (tan.LengthSq() < 1.0e-10f) {
-              tan = axis;
-            }
           }
-          else if (k > 0) {
+          else {
             tan = pos - Vec3(d.path_xyz[(k - 1) * 3 + 0],
                              d.path_xyz[(k - 1) * 3 + 1],
                              d.path_xyz[(k - 1) * 3 + 2]);
           }
-          path->AddPoint(pos, tan, nrm);
+          if (tan.LengthSq() < 1.0e-10f) {
+            tan = axis;
+          }
+          const Vec3 tn = tan.Normalized();
+          Vec3 pn = nrm - tn * tn.Dot(nrm);
+          pn = pn.LengthSq() > 1.0e-8f ? pn.Normalized() : perp_axis(tn);
+          path->AddPoint(pos, tan, pn);
         }
+        const RMat44 owner0_inv = tb0.InversedRotationTranslation();
         PathConstraintSettings s;
         s.mPath = path;
-        s.mPathPosition = Vec3::sZero();
-        s.mPathRotation = Quat::sIdentity();
-        s.mPathFraction = 0.0f;
+        s.mPathPosition = Vec3(owner0_inv.GetTranslation());
+        s.mPathRotation = owner0_inv.GetQuaternion();
+        /* Start at the point of the path closest to Body A now (in the path's rest space). */
+        const RVec3 a_now = ida.IsInvalid() ? p1 : bi.GetPosition(ida);
+        const RVec3 a_rest = tb0 * (tb.InversedRotationTranslation() * a_now);
+        s.mPathFraction = path->GetClosestPoint(Vec3(a_rest), 0.0f);
         s.mRotationConstraintType = EPathRotationConstraintType::ConstrainAroundTangent;
-        add_two(s, d.body_a, d.body_b);
+        main = add_two(s, d.body_b, d.body_a);
         break;
       }
       case JOLT_CONSTRAINT_GEAR: {
+        /* Gears turn on world-fixed hinges: A about Axis at Anchor, B about Axis 2 at Anchor 2. */
         HingeConstraintSettings h1;
         h1.mSpace = EConstraintSpace::WorldSpace;
-        h1.mPoint1 = p1;
-        h1.mHingeAxis1 = axis;
+        h1.mPoint1 = PA(p1);
+        h1.mPoint2 = p1;
+        h1.mHingeAxis1 = VA(axis);
         h1.mHingeAxis2 = axis;
-        h1.mNormalAxis1 = nrm;
+        h1.mNormalAxis1 = VA(nrm);
         h1.mNormalAxis2 = nrm;
-        HingeConstraintSettings h2 = h1;
-        h2.mPoint1 = p2;
-        h2.mHingeAxis1 = nrm;
+        HingeConstraintSettings h2;
+        h2.mSpace = EConstraintSpace::WorldSpace;
+        h2.mPoint1 = PB(p2);
+        h2.mPoint2 = p2;
+        h2.mHingeAxis1 = VB(nrm);
         h2.mHingeAxis2 = nrm;
-        h2.mNormalAxis1 = axis;
+        h2.mNormalAxis1 = VB(axis);
         h2.mNormalAxis2 = axis;
         TwoBodyConstraint *c1 = add_two(h1, d.body_a, -1);
         TwoBodyConstraint *c2 = add_two(h2, d.body_b, -1);
         GearConstraintSettings g;
         g.mSpace = EConstraintSpace::WorldSpace;
-        g.mHingeAxis1 = axis;
-        g.mHingeAxis2 = nrm;
+        g.mHingeAxis1 = VA(axis);
+        g.mHingeAxis2 = VB(nrm);
         g.mRatio = d.ratio != 0.0f ? d.ratio : 1.0f;
-        TwoBodyConstraint *cg = add_two(g, d.body_a, d.body_b);
-        if (cg && c1 && c2) {
-          static_cast<GearConstraint *>(cg)->SetConstraints(c1, c2);
+        main = add_two(g, d.body_a, d.body_b);
+        if (main && c1 && c2) {
+          static_cast<GearConstraint *>(main)->SetConstraints(c1, c2);
         }
         break;
       }
       case JOLT_CONSTRAINT_RACK_AND_PINION: {
+        /* Pinion A turns on a world hinge at Anchor; rack B slides along Axis 2 at Anchor 2. */
         HingeConstraintSettings h;
         h.mSpace = EConstraintSpace::WorldSpace;
-        h.mPoint1 = p1;
-        h.mHingeAxis1 = axis;
+        h.mPoint1 = PA(p1);
+        h.mPoint2 = p1;
+        h.mHingeAxis1 = VA(axis);
         h.mHingeAxis2 = axis;
-        h.mNormalAxis1 = nrm;
+        h.mNormalAxis1 = VA(nrm);
         h.mNormalAxis2 = nrm;
         SliderConstraintSettings sl;
         sl.mSpace = EConstraintSpace::WorldSpace;
-        sl.SetSliderAxis(nrm);
-        sl.mPoint1 = p2;
+        sl.mPoint1 = PB(p2);
+        sl.mPoint2 = p2;
+        const Vec3 snrm = perp_axis(nrm);
+        sl.mSliderAxis1 = VB(nrm);
+        sl.mSliderAxis2 = nrm;
+        sl.mNormalAxis1 = VB(snrm);
+        sl.mNormalAxis2 = snrm;
         TwoBodyConstraint *ch = add_two(h, d.body_a, -1);
         TwoBodyConstraint *cs = add_two(sl, d.body_b, -1);
         RackAndPinionConstraintSettings rp;
         rp.mSpace = EConstraintSpace::WorldSpace;
-        rp.mHingeAxis = axis;
-        rp.mSliderAxis = nrm;
+        rp.mHingeAxis = VA(axis);
+        rp.mSliderAxis = VB(nrm);
         rp.mRatio = d.ratio != 0.0f ? d.ratio : 1.0f;
-        TwoBodyConstraint *cr = add_two(rp, d.body_a, d.body_b);
-        if (cr && ch && cs) {
-          static_cast<RackAndPinionConstraint *>(cr)->SetConstraints(ch, cs);
+        main = add_two(rp, d.body_a, d.body_b);
+        if (main && ch && cs) {
+          static_cast<RackAndPinionConstraint *>(main)->SetConstraints(ch, cs);
         }
         break;
       }
       case JOLT_CONSTRAINT_PULLEY: {
+        /* Rope from Anchor (on A) up to Anchor + Axis, over to Anchor 2 + Axis, down to
+         * Anchor 2 (on B). Max Limit = max rope length (0 = current length). */
         PulleyConstraintSettings s;
         s.mSpace = EConstraintSpace::WorldSpace;
-        s.mBodyPoint1 = p1;
-        s.mBodyPoint2 = p2;
+        s.mBodyPoint1 = PA(p1);
+        s.mBodyPoint2 = PB(p2);
         s.mFixedPoint1 = p1 + RVec3(axis.GetX(), axis.GetY(), axis.GetZ());
-        s.mFixedPoint2 = p2 + RVec3(nrm.GetX(), nrm.GetY(), nrm.GetZ());
+        s.mFixedPoint2 = p2 + RVec3(axis.GetX(), axis.GetY(), axis.GetZ());
         s.mRatio = d.ratio != 0.0f ? d.ratio : 1.0f;
-        if (d.max_limit >= 0.0f) {
+        if (d.max_limit > 0.0f) {
           s.mMaxLength = d.max_limit;
+          s.mMinLength = std::clamp(d.min_limit, 0.0f, d.max_limit);
         }
-        add_two(s, d.body_a, d.body_b);
+        main = add_two(s, d.body_a, d.body_b);
         break;
       }
       case JOLT_CONSTRAINT_VEHICLE: {
         const BodyID chassis = invalid_if_world(d.body_a, eng.bodies);
-        if (chassis.IsInvalid()) {
+        if (chassis.IsInvalid() || d.body_a >= n_bodies) {
           break;
         }
         BodyLockWrite lock(eng.physics->GetBodyLockInterface(), chassis);
@@ -1249,27 +1328,160 @@ static bool rebuild(Engine &eng,
         eng.physics->AddConstraint(vc);
         eng.physics->AddStepListener(vc);
         eng.vehicles.push_back(vc);
-        if (d.motor_state == JOLT_MOTOR_VELOCITY) {
-          if (WheeledVehicleController *c = static_cast<WheeledVehicleController *>(
-                  vc->GetController()))
-          {
-            c->SetDriverInput(std::clamp(d.motor_target, -1.0f, 1.0f), 0.0f, 0.0f, 0.0f);
-          }
+        eng.vehicle_by_index[uint(i)] = vc;
+        if (WheeledVehicleController *c = static_cast<WheeledVehicleController *>(
+                vc->GetController()))
+        {
+          const float throttle = d.motor_state == JOLT_MOTOR_OFF ?
+                                     0.0f :
+                                     std::clamp(d.motor_target, -1.0f, 1.0f);
+          c->SetDriverInput(throttle, 0.0f, 0.0f, 0.0f);
         }
         break;
       }
       default:
         break;
     }
+    if (main) {
+      eng.constraint_by_index[uint(i)] = main;
+    }
   }
+  eng.n_constraints = n_constraints;
+  eng.constraint_fp = constraints_fp(n_constraints, constraints);
+}
+
+/** Motor state / target / force and vehicle throttle may be animated: apply them every step. */
+static void update_constraint_controls(Engine &eng,
+                                       const int n_constraints,
+                                       const JoltConstraintDesc *constraints)
+{
+  BodyInterface &bi = eng.physics->GetBodyInterface();
+  for (int i = 0; i < n_constraints && i < int(eng.constraint_by_index.size()); i++) {
+    const JoltConstraintDesc &d = constraints[i];
+    bool driven = false;
+    if (Constraint *c = eng.constraint_by_index[uint(i)].GetPtr()) {
+      if (d.type == JOLT_CONSTRAINT_HINGE || d.type == JOLT_CONSTRAINT_SLIDER) {
+        apply_motor(static_cast<TwoBodyConstraint *>(c), d.type, d);
+        driven = d.motor_state != JOLT_MOTOR_OFF;
+      }
+    }
+    if (VehicleConstraint *vc = eng.vehicle_by_index[uint(i)].GetPtr()) {
+      if (WheeledVehicleController *wc = static_cast<WheeledVehicleController *>(
+              vc->GetController()))
+      {
+        const float throttle = d.motor_state == JOLT_MOTOR_OFF ?
+                                   0.0f :
+                                   std::clamp(d.motor_target, -1.0f, 1.0f);
+        wc->SetDriverInput(throttle, 0.0f, 0.0f, 0.0f);
+        driven = throttle != 0.0f;
+      }
+    }
+    if (driven) {
+      /* A sleeping body ignores motors. */
+      const BodyID ida = invalid_if_world(d.body_a, eng.bodies);
+      const BodyID idb = invalid_if_world(d.body_b, eng.bodies);
+      if (!ida.IsInvalid()) {
+        bi.ActivateBody(ida);
+      }
+      if (!idb.IsInvalid()) {
+        bi.ActivateBody(idb);
+      }
+    }
+  }
+}
+
+/** Create one body. Kinematics start at their previous pose and sweep to the current one. */
+static BodyID spawn_from_desc(Engine &eng, const JoltStepSettings &st, const JoltBodyDesc &b)
+{
+  BodyInterface &bi = eng.physics->GetBodyInterface();
+  const float kdt = st.dt > 1.0e-6f ? st.dt : (1.0f / 24.0f);
+  const bool kinematic = b.motion_type == JOLT_MOTION_KINEMATIC;
+  JoltBodyDesc spawn = b;
+  if (kinematic) {
+    /* Sweep uses only this frame's geometry: prev_* attributes, else velocity. */
+    RVec3 p0 = rv3(b.position);
+    Quat q0 = quat(b.rotation);
+    if (b.has_prev) {
+      p0 = rv3(b.prev_position);
+      q0 = quat(b.prev_rotation);
+    }
+    else {
+      const Vec3 lv = v3(b.linear_velocity);
+      const Vec3 av = v3(b.angular_velocity);
+      if (lv.LengthSq() > 1.0e-12f) {
+        p0 = rv3(b.position) - RVec3(lv * kdt);
+      }
+      const float ang = av.Length();
+      if (ang > 1.0e-6f) {
+        const Quat dq = Quat::sRotation(av / ang, ang * kdt);
+        q0 = dq.Conjugated() * quat(b.rotation);
+      }
+    }
+    spawn.position = {float(p0.GetX()), float(p0.GetY()), float(p0.GetZ())};
+    spawn.rotation = jq(q0);
+  }
+  /* Always activate: inactive bodies do not receive gravity. */
+  const BodyID id = spawn_body(eng, st, spawn, EActivation::Activate);
+  if (!id.IsInvalid() && kinematic) {
+    Quat q_dst = quat(b.rotation);
+    if (bi.GetRotation(id).Dot(q_dst) < 0.0f) {
+      q_dst = -q_dst;
+    }
+    bi.ActivateBody(id);
+    bi.MoveKinematic(id, rv3(b.position), q_dst, kdt);
+  }
+  return id;
+}
+
+static bool rebuild(Engine &eng,
+                    const JoltStepSettings &st,
+                    int n_bodies,
+                    const JoltBodyDesc *bodies,
+                    int n_constraints,
+                    const JoltConstraintDesc *constraints,
+                    char *error,
+                    int error_max)
+{
+  if (eng.physics) {
+    eng.reset_bodies();
+  }
+  else {
+    ensure_world(eng, n_bodies);
+  }
+  bool has_kinematic = false;
+  for (int i = 0; i < n_bodies; i++) {
+    if (bodies[i].motion_type == JOLT_MOTION_KINEMATIC) {
+      has_kinematic = true;
+      break;
+    }
+  }
+  apply_physics_quality(*eng.physics, st, has_kinematic);
+  eng.physics->SetGravity(v3(st.gravity));
+
+  eng.bodies.resize(uint(n_bodies));
+  eng.names.resize(uint(n_bodies));
+  eng.shape_fp.resize(uint(n_bodies));
+  eng.req_motion.resize(uint(n_bodies));
+  for (int i = 0; i < n_bodies; i++) {
+    const JoltBodyDesc &b = bodies[i];
+    const BodyID id = spawn_from_desc(eng, st, b);
+    if (id.IsInvalid()) {
+      if (error && error_max > 0) {
+        std::snprintf(error, uint(error_max), "Jolt: out of bodies at index %d", i);
+      }
+      return false;
+    }
+    eng.bodies[uint(i)] = id;
+    eng.names[uint(i)] = key_of(b, i);
+    eng.shape_fp[uint(i)] = shape_fp_of(b);
+    eng.req_motion[uint(i)] = b.motion_type;
+  }
+
+  add_constraints(eng, n_bodies, bodies, n_constraints, constraints);
 
   eng.physics->OptimizeBroadPhase();
   eng.n_bodies = n_bodies;
-  eng.n_constraints = n_constraints;
   eng.topology = st.topology_hash;
-  eng.constraint_fp = constraints_fp(n_constraints, constraints);
-  (void)error;
-  (void)error_max;
   return true;
 }
 
@@ -1283,6 +1495,51 @@ static void destroy_slot(Engine &eng, const BodyID id)
     bi.RemoveBody(id);
   }
   bi.DestroyBody(id);
+}
+
+/** Static is always possible; Kinematic / Dynamic need motion properties on the body. */
+static bool can_switch_motion(Engine &eng, const BodyID id, const EMotionType want)
+{
+  if (want == EMotionType::Static) {
+    return true;
+  }
+  BodyLockRead lock(eng.physics->GetBodyLockInterface(), id);
+  return lock.Succeeded() && lock.GetBody().CanBeKinematicOrDynamic();
+}
+
+static float qdot_abs(const JoltQuat &a, const JoltQuat &b)
+{
+  const float na = std::sqrt(a.w * a.w + a.x * a.x + a.y * a.y + a.z * a.z);
+  const float nb = std::sqrt(b.w * b.w + b.x * b.x + b.y * b.y + b.z * b.z);
+  if (na < 1.0e-8f || nb < 1.0e-8f) {
+    return 1.0f;
+  }
+  return std::fabs(a.w * b.w + a.x * b.x + a.y * b.y + a.z * b.z) / (na * nb);
+}
+
+/**
+ * The geometry written by the last step comes back unchanged inside a Simulation Zone. Small
+ * tolerances only absorb the matrix / quaternion round trip of the instance transform.
+ */
+static bool pose_differs(const JoltBodyDesc &b, const JoltVec3 &p, const JoltQuat &q)
+{
+  const float dx = b.position.x - p.x;
+  const float dy = b.position.y - p.y;
+  const float dz = b.position.z - p.z;
+  const float mag2 = p.x * p.x + p.y * p.y + p.z * p.z;
+  if (dx * dx + dy * dy + dz * dz > 1.0e-8f * (1.0f + mag2)) {
+    return true;
+  }
+  return 1.0f - qdot_abs(b.rotation, q) > 2.0e-6f;
+}
+
+static bool vec_differs(const JoltVec3 &a, const JoltVec3 &b)
+{
+  const float dx = a.x - b.x;
+  const float dy = a.y - b.y;
+  const float dz = a.z - b.z;
+  const float mag2 = b.x * b.x + b.y * b.y + b.z * b.z;
+  return dx * dx + dy * dy + dz * dz > 1.0e-8f * (1.0f + mag2);
 }
 
 /** Keep Jolt bodies that still exist (by name). Add/remove without wiping the world. */
@@ -1316,113 +1573,102 @@ static bool sync_world(Engine &eng,
     old_at.emplace(eng.names[uint(i)], i);
   }
 
-  std::vector<char> consumed(size_t(std::max(eng.n_bodies, 0)), 0);
-  std::vector<BodyID> next_ids;
-  std::vector<std::string> next_names;
-  std::vector<uint64_t> next_fp;
-  std::vector<int> next_gd;
-  std::vector<char> spawned;
-  std::vector<char> shape_dirty;
-  next_ids.resize(size_t(n_bodies));
-  next_names.resize(size_t(n_bodies));
-  next_fp.resize(size_t(n_bodies));
-  next_gd.resize(size_t(n_bodies));
-  spawned.assign(size_t(n_bodies), 0);
-  shape_dirty.assign(size_t(n_bodies), 0);
+  std::vector<char> consumed(static_cast<size_t>(std::max(eng.n_bodies, 0)), 0);
+  std::vector<BodyID> next_ids(static_cast<size_t>(n_bodies));
+  std::vector<std::string> next_names(static_cast<size_t>(n_bodies));
+  std::vector<uint64_t> next_fp(static_cast<size_t>(n_bodies));
+  std::vector<int> next_motion(static_cast<size_t>(n_bodies));
+  std::vector<int> prev_slot(static_cast<size_t>(n_bodies), -1);
+  std::vector<char> spawned(static_cast<size_t>(n_bodies), 0);
+  std::vector<char> shape_dirty(static_cast<size_t>(n_bodies), 0);
+  std::vector<char> switch_motion(static_cast<size_t>(n_bodies), 0);
+
+  auto take_slot = [&](const int i, const int slot) {
+    const JoltBodyDesc &b = bodies[i];
+    const EMotionType want = motion_from_int(b.motion_type);
+    const BodyID id = eng.bodies[uint(slot)];
+    if (id.IsInvalid() || !bi.IsAdded(id)) {
+      return false;
+    }
+    if (eng.req_motion[uint(slot)] != b.motion_type) {
+      if (!can_switch_motion(eng, id, want)) {
+        return false;
+      }
+      switch_motion[uint(i)] = 1;
+    }
+    consumed[uint(slot)] = 1;
+    next_ids[uint(i)] = id;
+    prev_slot[uint(i)] = slot;
+    spawned[uint(i)] = 0;
+    if (eng.shape_fp[uint(slot)] != next_fp[uint(i)]) {
+      shape_dirty[uint(i)] = 1;
+    }
+    return true;
+  };
 
   for (int i = 0; i < n_bodies; i++) {
     const JoltBodyDesc &b = bodies[i];
     next_names[uint(i)] = key_of(b, i);
     next_fp[uint(i)] = shape_fp_of(b);
-    next_gd[uint(i)] = (motion_from_int(b.motion_type) == EMotionType::Kinematic) ? 1 : 0;
+    next_motion[uint(i)] = b.motion_type;
+    spawned[uint(i)] = 1;
     const auto it = old_at.find(next_names[uint(i)]);
-    /* Reuse the same BodyID even if size/scale changed — SetShape below. */
     if (it == old_at.end() || consumed[uint(it->second)]) {
-      spawned[uint(i)] = 1;
       continue;
     }
-    const BodyID id = eng.bodies[uint(it->second)];
-    if (id.IsInvalid() || !bi.IsAdded(id) ||
-        bi.GetMotionType(id) != motion_from_int(b.motion_type))
-    {
-      /* Leave unconsumed so the old slot is destroyed; spawn a replacement. */
-      spawned[uint(i)] = 1;
-      continue;
-    }
-    consumed[uint(it->second)] = 1;
-    next_ids[uint(i)] = id;
-    spawned[uint(i)] = 0;
-    if (eng.shape_fp[uint(it->second)] != next_fp[uint(i)]) {
-      shape_dirty[uint(i)] = 1;
-    }
+    /* Reuse the same BodyID even if size/scale or motion type changed. An unswitchable slot
+     * stays unconsumed, so it is destroyed and a replacement spawned. */
+    take_slot(i, it->second);
   }
 
   /* Animated kinematics are often re-joined every frame with a new idx name.
    * Reuse leftover kinematic/static bodies instead of destroy+create (flash). */
   for (int i = 0; i < n_bodies; i++) {
-    if (!spawned[uint(i)]) {
-      continue;
-    }
-    if (bodies[i].motion_type == JOLT_MOTION_DYNAMIC) {
+    if (!spawned[uint(i)] || bodies[i].motion_type == JOLT_MOTION_DYNAMIC) {
       continue;
     }
     for (int j = 0; j < eng.n_bodies; j++) {
-      if (consumed[uint(j)]) {
+      if (consumed[uint(j)] || eng.req_motion[uint(j)] != bodies[i].motion_type) {
         continue;
       }
-      /* Same motion class (static vs kinematic). Size is applied via SetShape. */
-      if (bi.GetMotionType(eng.bodies[uint(j)]) != motion_from_int(bodies[i].motion_type)) {
-        continue;
+      if (take_slot(i, j)) {
+        break;
       }
-      consumed[uint(j)] = 1;
-      spawned[uint(i)] = 0;
-      next_ids[uint(i)] = eng.bodies[uint(j)];
-      if (eng.shape_fp[uint(j)] != next_fp[uint(i)]) {
-        shape_dirty[uint(i)] = 1;
-      }
-      break;
     }
   }
 
-  /* Graph rest pose is re-fed every frame. Comparing it to the cached world
-   * made dynamics snap back after falling 50 cm. Only rewind is a real reset. */
-  const bool timeline_reset = st.scene_time + 1.0e-3f < eng.last_scene_time;
+  if (st.state_from_input) {
+    /* The input is the simulation state. If a dynamic body is not where the last step left
+     * it, the zone was reset, resumed from its cache or edited: start a fresh world from the
+     * input. Deterministic, so a re-run gives the same result as the first run. */
+    for (int i = 0; i < n_bodies; i++) {
+      if (spawned[uint(i)] || switch_motion[uint(i)] ||
+          bodies[i].motion_type != JOLT_MOTION_DYNAMIC)
+      {
+        continue;
+      }
+      const int slot = prev_slot[uint(i)];
+      if (slot < 0 || slot >= int(eng.has_out.size()) || !eng.has_out[uint(slot)] ||
+          pose_differs(bodies[i], eng.out_pos[uint(slot)], eng.out_rot[uint(slot)]))
+      {
+        return rebuild(eng, st, n_bodies, bodies, n_constraints, constraints, error, error_max);
+      }
+    }
+  }
+
+  /* Outside a Simulation Zone the graph usually re-feeds the rest pose every frame, so the
+   * input cannot be compared to the world. Only a timeline rewind resets it. */
+  const bool timeline_reset = !st.state_from_input &&
+                              st.scene_time + 1.0e-3f < eng.last_scene_time;
   eng.last_scene_time = st.scene_time;
+  const float kdt = st.dt > 1.0e-6f ? st.dt : (1.0f / 24.0f);
 
   bool added = false;
   bool removed = false;
   for (int i = 0; i < n_bodies; i++) {
     const JoltBodyDesc &b = bodies[i];
     if (spawned[uint(i)]) {
-      JoltBodyDesc spawn = b;
-      if (b.motion_type == JOLT_MOTION_KINEMATIC) {
-        const float kdt = st.dt > 1.0e-6f ? st.dt : (1.0f / 24.0f);
-        RVec3 p0 = rv3(b.position);
-        Quat q0 = quat(b.rotation);
-        if (b.has_prev) {
-          p0 = rv3(b.prev_position);
-          q0 = quat(b.prev_rotation);
-        }
-        spawn.position = {float(p0.GetX()), float(p0.GetY()), float(p0.GetZ())};
-        spawn.rotation = jq(q0);
-        const BodyID id = spawn_body(eng, st, spawn, EActivation::Activate);
-        if (id.IsInvalid()) {
-          if (error && error_max > 0) {
-            std::snprintf(error, uint(error_max), "Jolt: out of bodies at index %d", i);
-          }
-          return false;
-        }
-        Quat q_dst = quat(b.rotation);
-        const Quat q_cur = bi.GetRotation(id);
-        if (q_cur.Dot(q_dst) < 0.0f) {
-          q_dst = -q_dst;
-        }
-        bi.MoveKinematic(id, rv3(b.position), q_dst, kdt);
-        next_ids[uint(i)] = id;
-        added = true;
-        continue;
-      }
-      const BodyID id = spawn_body(eng, st, spawn, EActivation::Activate);
+      const BodyID id = spawn_from_desc(eng, st, b);
       if (id.IsInvalid()) {
         if (error && error_max > 0) {
           std::snprintf(error, uint(error_max), "Jolt: out of bodies at index %d", i);
@@ -1434,30 +1680,57 @@ static bool sync_world(Engine &eng,
       continue;
     }
     const BodyID id = next_ids[uint(i)];
+    const EMotionType want = motion_from_int(b.motion_type);
+    if (switch_motion[uint(i)]) {
+      /* Same BodyID, so velocity, contacts and constraints carry over (animated → dynamic
+       * hand-off keeps the animation's momentum). */
+      bi.SetObjectLayer(id, layer_for(want));
+      bi.SetMotionType(id, want, EActivation::Activate);
+    }
     refresh_existing_body(*eng.physics, st, b, id, shape_dirty[uint(i)] != 0);
-    if (b.motion_type == JOLT_MOTION_KINEMATIC) {
+    if (want == EMotionType::Kinematic) {
       Quat q_dst = quat(b.rotation);
+      const RVec3 p_dst = rv3(b.position);
+      if (b.has_prev) {
+        /* Start the sweep where the graph says the body was last frame. */
+        const RVec3 p_prev = rv3(b.prev_position);
+        Quat q_prev = quat(b.prev_rotation);
+        if (float((bi.GetPosition(id) - p_prev).LengthSq()) > 1.0e-6f ||
+            std::fabs(bi.GetRotation(id).Dot(q_prev)) < 0.99999f)
+        {
+          bi.SetPositionAndRotation(id, p_prev, q_prev, EActivation::Activate);
+        }
+      }
       const Quat q_cur = bi.GetRotation(id);
       if (q_cur.Dot(q_dst) < 0.0f) {
         q_dst = -q_dst;
       }
-      const RVec3 p_cur = bi.GetPosition(id);
-      const RVec3 p_dst = rv3(b.position);
-      const float dp2 = float((p_dst - p_cur).LengthSq());
-      const float qdot = q_cur.Dot(q_dst);
+      const float dp2 = float((p_dst - bi.GetPosition(id)).LengthSq());
       bi.ActivateBody(id);
       /* Teleport only on a real pop. Always Activate so stacked cubes wake. */
-      if (dp2 > 4.0f || qdot < 0.1f) {
+      if (dp2 > 4.0f || q_cur.Dot(q_dst) < 0.1f) {
         bi.SetPositionAndRotation(id, p_dst, q_dst, EActivation::Activate);
       }
       else {
-        const float kdt = st.dt > 1.0e-6f ? st.dt : (1.0f / 24.0f);
         bi.MoveKinematic(id, p_dst, q_dst, kdt);
       }
     }
-    else if (b.motion_type == JOLT_MOTION_STATIC) {
+    else if (want == EMotionType::Static) {
       bi.SetPositionAndRotationWhenChanged(
           id, rv3(b.position), quat(b.rotation), EActivation::Activate);
+    }
+    else if (st.state_from_input) {
+      /* Pose matched. A changed velocity is an edit inside the zone (impulse, launch). */
+      const int slot = prev_slot[uint(i)];
+      if (!switch_motion[uint(i)] && slot >= 0 && slot < int(eng.has_out.size()) &&
+          eng.has_out[uint(slot)] &&
+          (vec_differs(b.linear_velocity, eng.out_lv[uint(slot)]) ||
+           vec_differs(b.angular_velocity, eng.out_av[uint(slot)])))
+      {
+        bi.SetLinearVelocity(id, v3(b.linear_velocity));
+        bi.SetAngularVelocity(id, v3(b.angular_velocity));
+        bi.ActivateBody(id);
+      }
     }
     else if (timeline_reset) {
       bi.SetPositionAndRotation(id, rv3(b.position), quat(b.rotation), EActivation::Activate);
@@ -1476,76 +1749,23 @@ static bool sync_world(Engine &eng,
   eng.bodies = std::move(next_ids);
   eng.names = std::move(next_names);
   eng.shape_fp = std::move(next_fp);
-  eng.graph_driven = std::move(next_gd);
+  eng.req_motion = std::move(next_motion);
   eng.n_bodies = n_bodies;
 
   const uint64_t cfp = constraints_fp(n_constraints, constraints);
   if (removed || cfp != eng.constraint_fp || n_constraints != eng.n_constraints) {
-    /* Reuse rebuild's constraint path by temporarily running only constraints.
-     * Clear then call rebuild's add via a nested rebuild of constraints only:
-     * we fall through to a light rebuild_constraints by invoking rebuild on a
-     * cloned engine is too heavy — duplicate the Optimize + fp store here and
-     * re-run constraint creation through rebuild() would wipe bodies.
-     * Instead mark constraint_fp dirty and call rebuild() only for constraints
-     * by extracting... we inline a call to the existing rebuild constraint
-     * block via a full rebuild IF constraints changed AND bodies were removed.
-     * If only added bodies and constraints unchanged, skip. */
-    if (removed || cfp != eng.constraint_fp) {
-      eng.clear_constraints_only();
-      /* Recreate constraints using rebuild() would destroy bodies. Call the
-       * constraint loop by running a local copy: jump into rebuild is wrong.
-       * Use rebuild_constraints pattern: temporarily store bodies and call
-       * the remainder of rebuild — implemented as constraint_fp mismatch
-       * triggering add via the same rebuild function's second half.
-       * Simpler: call rebuild() only when constraints change; body sync
-       * already happened. That would wipe bodies. So we need add_constraints.
-       * Fallback: if constraints changed, rebuild entire world (rare). */
-      if (n_constraints > 0 || eng.n_constraints > 0) {
-        /* Keep dynamic state: snapshot, rebuild, restore. */
-        std::vector<RVec3> pos;
-        std::vector<Quat> rot;
-        std::vector<Vec3> lv;
-        std::vector<Vec3> av;
-        std::vector<EMotionType> mt;
-        pos.resize(size_t(n_bodies));
-        rot.resize(size_t(n_bodies));
-        lv.resize(size_t(n_bodies));
-        av.resize(size_t(n_bodies));
-        mt.resize(size_t(n_bodies));
-        for (int i = 0; i < n_bodies; i++) {
-          const BodyID id = eng.bodies[uint(i)];
-          pos[uint(i)] = bi.GetPosition(id);
-          rot[uint(i)] = bi.GetRotation(id);
-          mt[uint(i)] = bi.GetMotionType(id);
-          if (mt[uint(i)] != EMotionType::Static) {
-            lv[uint(i)] = bi.GetLinearVelocity(id);
-            av[uint(i)] = bi.GetAngularVelocity(id);
-          }
-        }
-        if (!rebuild(eng, st, n_bodies, bodies, n_constraints, constraints, error, error_max)) {
-          return false;
-        }
-        BodyInterface &bi2 = eng.physics->GetBodyInterface();
-        for (int i = 0; i < n_bodies; i++) {
-          const BodyID id = eng.bodies[uint(i)];
-          if (mt[uint(i)] == EMotionType::Dynamic) {
-            bi2.SetPositionAndRotation(id, pos[uint(i)], rot[uint(i)], EActivation::Activate);
-            bi2.SetLinearVelocity(id, lv[uint(i)]);
-            bi2.SetAngularVelocity(id, av[uint(i)]);
-            bi2.ActivateBody(id);
-          }
-        }
-        return true;
-      }
-    }
+    /* Body indices or constraint settings changed. Bodies stay; only constraints are
+     * re-created, mapped onto the current poses through constraint_ref. */
+    eng.clear_constraints_only();
+    add_constraints(eng, n_bodies, bodies, n_constraints, constraints);
   }
-  else if (added) {
+  else {
+    update_constraint_controls(eng, n_constraints, constraints);
+  }
+  if (added || removed) {
     eng.physics->OptimizeBroadPhase();
   }
-
-  eng.n_constraints = n_constraints;
   eng.topology = st.topology_hash;
-  (void)added;
   return true;
 }
 
@@ -1554,7 +1774,11 @@ static void write_states(
 {
   BodyInterface &bi = eng.physics->GetBodyInterface();
   const float inv_dt = dt > 1.0e-8f ? (1.0f / dt) : 0.0f;
-  eng.last_pos.resize(uint(n));
+  eng.out_pos.resize(uint(n));
+  eng.out_rot.resize(uint(n));
+  eng.out_lv.resize(uint(n));
+  eng.out_av.resize(uint(n));
+  eng.has_out.assign(uint(n), 1);
   for (int i = 0; i < n; i++) {
     const BodyID id = eng.bodies[uint(i)];
     const RVec3 p = bi.GetPosition(id);
@@ -1586,11 +1810,11 @@ static void write_states(
         };
       }
     }
-    if (mt == EMotionType::Dynamic) {
+    if (bi.GetBodyType(id) == EBodyType::RigidBody && mt != EMotionType::Static) {
       BodyLockRead lock(eng.physics->GetBodyLockInterface(), id);
       if (lock.Succeeded()) {
         const MotionProperties *mp = lock.GetBody().GetMotionProperties();
-        if (mp != nullptr) {
+        if (mp != nullptr && mt == EMotionType::Dynamic) {
           const float inv_m = mp->GetInverseMassUnchecked();
           if (inv_m > 1.0e-12f) {
             states[i].mass = 1.0f / inv_m;
@@ -1604,7 +1828,31 @@ static void write_states(
         }
       }
     }
-    eng.last_pos[uint(i)] = states[i].position;
+    /* Static / kinematic bodies keep the graph's pose in the output geometry. */
+    const bool graph_pose = bodies[i].motion_type != JOLT_MOTION_DYNAMIC;
+    eng.out_pos[uint(i)] = graph_pose ? bodies[i].position : states[i].position;
+    eng.out_rot[uint(i)] = graph_pose ? bodies[i].rotation : states[i].rotation;
+    eng.out_lv[uint(i)] = states[i].linear_velocity;
+    eng.out_av[uint(i)] = states[i].angular_velocity;
+  }
+}
+
+static void evict_old_engines(const Engine *keep)
+{
+  while (g_engines.size() > k_max_engines) {
+    auto oldest = g_engines.end();
+    for (auto it = g_engines.begin(); it != g_engines.end(); ++it) {
+      if (it->second.get() == keep) {
+        continue;
+      }
+      if (oldest == g_engines.end() || it->second->last_use < oldest->second->last_use) {
+        oldest = it;
+      }
+    }
+    if (oldest == g_engines.end()) {
+      return;
+    }
+    g_engines.erase(oldest);
   }
 }
 
@@ -1638,19 +1886,9 @@ int JOLT_step(const JoltStepSettings *settings,
     return 0;
   }
   if (settings->dt <= 0.0f) {
-    /* Viewport / frame-1 evals use dt=0. Do not destroy the cached world —
-     * that made gravity look dead (next real step spawned from rest). */
-    std::lock_guard<std::mutex> lock(g_mu);
-    const std::string key = (settings->cache_key && settings->cache_key[0]) ?
-                                settings->cache_key :
-                                std::string("_");
-    const auto it = g_engines.find(key);
-    if (it != g_engines.end() && it->second && it->second->physics &&
-        int(it->second->bodies.size()) == n_bodies)
-    {
-      write_states(*it->second, n_bodies, bodies, states, 0.0f);
-      return 1;
-    }
+    /* First frame of a Simulation Zone (and paused evaluations) use dt = 0: return the input.
+     * Reading the cached world here returned the pose of an earlier run, so a reset
+     * simulation restarted from where the old one ended. */
     for (int i = 0; i < n_bodies; i++) {
       states[i].position = bodies[i].position;
       states[i].rotation = bodies[i].rotation;
@@ -1672,6 +1910,8 @@ int JOLT_step(const JoltStepSettings *settings,
     slot = std::make_unique<Engine>();
   }
   Engine &eng = *slot;
+  eng.last_use = ++g_use_counter;
+  evict_old_engines(&eng);
 
   if (!sync_world(eng,
                   *settings,

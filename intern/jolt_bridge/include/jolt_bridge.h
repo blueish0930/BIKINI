@@ -182,6 +182,13 @@ typedef struct JoltStepSettings {
   int ccd;
   unsigned long long topology_hash;
   const char *cache_key;
+  /**
+   * 1 = the input bodies are the authoritative state (Simulation Zone). A dynamic body whose
+   * input pose or velocity differs from what the previous step returned is moved to the input
+   * (timeline reset, cache resume, edits inside the zone). 0 = the cached world owns the state
+   * and is only reset when scene_time moves backwards.
+   */
+  int state_from_input;
 } JoltStepSettings;
 
 /** Drop a cached PhysicsSystem. Pass NULL to drop every world. */
@@ -191,9 +198,10 @@ JOLT_API void JOLT_cache_invalidate(const char *cache_key);
  * Step a cached PhysicsSystem (keyed by cache_key). Dynamic bodies keep their
  * Jolt BodyID / velocity / contacts across calls so gravity and stacks work
  * inside a Simulation Zone. Shape/size/friction updates use SetShape.
- * Add/remove is by body name. Dynamics keep the cached Jolt pose during
- * playback (the node graph usually re-feeds the rest pose every frame).
- * They are teleported from the input pose only on timeline rewind.
+ * Add/remove is by body name. A changed motion type switches the body in place
+ * (keeps velocity, so an animated body can be handed over to the simulation).
+ * See JoltStepSettings.state_from_input for how input poses are treated.
+ * dt <= 0 returns the input unchanged and does not touch the cached world.
  * Returns 1 on success.
  */
 JOLT_API int JOLT_step(const JoltStepSettings *settings,

@@ -49,6 +49,7 @@
 #include "node_geometry_util.hh"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <fmt/format.h>
@@ -1161,8 +1162,39 @@ static void destroy_ids_2d(Vector<b2BodyId> &ids)
   ids.clear();
 }
 
+/**
+ * Inside a Simulation Zone the input is the state the last step wrote. A dynamic body that is
+ * elsewhere means the zone was reset, resumed from its cache or edited, so the world must be
+ * rebuilt from the input. The tolerance only absorbs the instance matrix round trip.
+ */
+static bool state_pose_differs(const float3 &p_in,
+                               const math::Quaternion &q_in,
+                               const float3 &p_out,
+                               const math::Quaternion &q_out)
+{
+  if (math::distance_squared(p_in, p_out) > 1.0e-8f * (1.0f + math::length_squared(p_out))) {
+    return true;
+  }
+  const float dot = math::abs(q_in.w * q_out.w + q_in.x * q_out.x + q_in.y * q_out.y +
+                              q_in.z * q_out.z);
+  const float n = math::sqrt(
+      (q_in.w * q_in.w + q_in.x * q_in.x + q_in.y * q_in.y + q_in.z * q_in.z) *
+      (q_out.w * q_out.w + q_out.x * q_out.x + q_out.y * q_out.y + q_out.z * q_out.z));
+  return n > 1.0e-12f && 1.0f - dot / n > 2.0e-6f;
+}
+
+static bool state_vec_differs(const float3 &a, const float3 &b)
+{
+  return math::distance_squared(a, b) > 1.0e-8f * (1.0f + math::length_squared(b));
+}
+
 struct Persist2D {
   b2WorldId world = b2_nullWorldId;
+  /** What the last step wrote for each dynamic body (Simulation Zone state check). */
+  Vector<float3> dyn_out_pos;
+  Vector<math::Quaternion> dyn_out_rot;
+  Vector<float3> dyn_out_vel;
+  Vector<float3> dyn_out_ang;
   Vector<b2BodyId> dyn_ids;
   Vector<b2BodyId> obs_ids;
   uint64_t dyn_hash = 0;
@@ -1181,6 +1213,10 @@ static void persist_2d_reset(Persist2D &p)
     b2DestroyWorld(p.world);
   }
   p.world = b2_nullWorldId;
+  p.dyn_out_pos.clear();
+  p.dyn_out_rot.clear();
+  p.dyn_out_vel.clear();
+  p.dyn_out_ang.clear();
   p.dyn_ids.clear();
   p.obs_ids.clear();
   p.dyn_hash = 0;
@@ -1210,6 +1246,7 @@ static bool step_box2d(const Span<BodyRead> bodies,
                        const int substeps,
                        const PlaneAxis plane,
                        const StringRef cache_ns,
+                       const bool state_from_input,
                        MutableSpan<float3> r_positions,
                        MutableSpan<float3> r_velocities,
                        MutableSpan<float> r_ang_z,
@@ -1234,8 +1271,10 @@ static bool step_box2d(const Span<BodyRead> bodies,
 
   /* b2_worlds[] is process-global; depsgraph may step several hosts at once. */
   std::lock_guard<std::mutex> lock(deformable_solver::box2d_engine_mutex());
-  const float h = math::min(dt, 0.05f);
-  const int slices = math::clamp(substeps, 1, 64);
+  /* Long frames (low fps, slow motion) get extra slices instead of losing time. */
+  const float h = dt;
+  const int slices = math::clamp(
+      math::max(substeps, int(std::ceil(dt / 0.05f - 1.0e-4f))), 1, 64);
 
   b2Vec2 g2;
   if (plane == PlaneAxis::XY) {
@@ -1266,6 +1305,16 @@ static bool step_box2d(const Span<BodyRead> bodies,
       const int i = dyn_idx[k];
       const b2Pos pp = b2Body_GetPosition(persist.dyn_ids[k]);
       const float3 gn = bodies[i].position;
+      if (state_from_input) {
+        if (k >= persist.dyn_out_pos.size() ||
+            state_pose_differs(
+                gn, bodies[i].rotation, persist.dyn_out_pos[k], persist.dyn_out_rot[k]))
+        {
+          reuse_dyn = false;
+          break;
+        }
+        continue;
+      }
       const float3 phys = (plane == PlaneAxis::XY) ? float3(float(pp.x), float(pp.y), gn.z) :
                                                      float3(float(pp.x), gn.y, float(pp.y));
       if (math::distance_squared(phys, gn) > 4.0f) {
@@ -1444,6 +1493,24 @@ static bool step_box2d(const Span<BodyRead> bodies,
   }
   } /* create joints */
 
+  if (state_from_input && reuse_dyn) {
+    /* Pose matched: a changed velocity is an edit inside the zone (impulse, launch). */
+    for (const int k : dyn_idx.index_range()) {
+      const BodyRead &src = bodies[dyn_idx[k]];
+      if (k < persist.dyn_out_vel.size() && b2Body_IsValid(persist.dyn_ids[k]) &&
+          (state_vec_differs(src.velocity, persist.dyn_out_vel[k]) ||
+           state_vec_differs(src.angular_velocity, persist.dyn_out_ang[k])))
+      {
+        const b2Vec2 v = (plane == PlaneAxis::XY) ? b2Vec2{src.velocity.x, src.velocity.y} :
+                                                    b2Vec2{src.velocity.x, src.velocity.z};
+        b2Body_SetLinearVelocity(persist.dyn_ids[k], v);
+        b2Body_SetAngularVelocity(persist.dyn_ids[k],
+                                  plane_omega_of(src.angular_velocity, plane));
+        b2Body_SetAwake(persist.dyn_ids[k], true);
+      }
+    }
+  }
+
   /* Substeps = collide/solve slices this frame (dt/N each). Inner 4 is Box2D's solver. */
   const float step_h = h / float(slices);
   for (int s = 0; s < slices; s++) {
@@ -1492,6 +1559,19 @@ static bool step_box2d(const Span<BodyRead> bodies,
     else {
       r_rotations[i] = math::to_quaternion(math::EulerXYZ(0.0f, angle, 0.0f));
     }
+  }
+
+  persist.dyn_out_pos.resize(dyn_idx.size());
+  persist.dyn_out_rot.resize(dyn_idx.size());
+  persist.dyn_out_vel.resize(dyn_idx.size());
+  persist.dyn_out_ang.resize(dyn_idx.size());
+  for (const int k : dyn_idx.index_range()) {
+    const int i = dyn_idx[k];
+    persist.dyn_out_pos[k] = r_positions[i];
+    persist.dyn_out_rot[k] = r_rotations[i];
+    persist.dyn_out_vel[k] = r_velocities[i];
+    persist.dyn_out_ang[k] = (plane == PlaneAxis::XY) ? float3(0.0f, 0.0f, r_ang_z[i]) :
+                                                        float3(0.0f, r_ang_z[i], 0.0f);
   }
 
   /* Keep the world: contact warm-starting is what makes stacks settle. */
@@ -1801,6 +1881,11 @@ static void destroy_ids_3d(Vector<b3BodyId> &ids)
 
 struct Persist3D {
   b3WorldId world = b3_nullWorldId;
+  /** What the last step wrote for each dynamic body (Simulation Zone state check). */
+  Vector<float3> dyn_out_pos;
+  Vector<math::Quaternion> dyn_out_rot;
+  Vector<float3> dyn_out_vel;
+  Vector<float3> dyn_out_ang;
   Vector<b3BodyId> dyn_ids;
   Vector<b3BodyId> obs_ids;
   Vector<b3MeshData *> dyn_meshes;
@@ -1821,6 +1906,10 @@ static void persist_3d_reset(Persist3D &p)
     b3DestroyWorld(p.world);
   }
   p.world = b3_nullWorldId;
+  p.dyn_out_pos.clear();
+  p.dyn_out_rot.clear();
+  p.dyn_out_vel.clear();
+  p.dyn_out_ang.clear();
   p.dyn_ids.clear();
   p.obs_ids.clear();
   destroy_meshes_3d(p.dyn_meshes);
@@ -1851,6 +1940,7 @@ static bool step_box3d(const Span<BodyRead> bodies,
                        const float dt,
                        const int substeps,
                        const StringRef cache_ns,
+                       const bool state_from_input,
                        MutableSpan<float3> r_positions,
                        MutableSpan<float3> r_velocities,
                        MutableSpan<float3> r_ang,
@@ -1875,8 +1965,10 @@ static bool step_box3d(const Span<BodyRead> bodies,
 
   /* b3_worlds[] is process-global; same race as Box2D under parallel GN eval. */
   std::lock_guard<std::mutex> lock(deformable_solver::box3d_engine_mutex());
-  const float h = math::min(dt, 0.05f);
-  const int slices = math::clamp(substeps, 1, 64);
+  /* Long frames (low fps, slow motion) get extra slices instead of losing time. */
+  const float h = dt;
+  const int slices = math::clamp(
+      math::max(substeps, int(std::ceil(dt / 0.05f - 1.0e-4f))), 1, 64);
   const b3Vec3 g3 = {gravity.x, gravity.y, gravity.z};
 
   const std::string ns(cache_ns);
@@ -1894,6 +1986,17 @@ static bool step_box3d(const Span<BodyRead> bodies,
       if (!b3Body_IsValid(persist.dyn_ids[k])) {
         reuse_dyn = false;
         break;
+      }
+      if (state_from_input) {
+        const BodyRead &src = bodies[dyn_idx[k]];
+        if (k >= persist.dyn_out_pos.size() ||
+            state_pose_differs(
+                src.position, src.rotation, persist.dyn_out_pos[k], persist.dyn_out_rot[k]))
+        {
+          reuse_dyn = false;
+          break;
+        }
+        continue;
       }
       const b3Pos pp = b3Body_GetPosition(persist.dyn_ids[k]);
       const float3 phys(float(pp.x), float(pp.y), float(pp.z));
@@ -2075,6 +2178,24 @@ static bool step_box3d(const Span<BodyRead> bodies,
   }
   } /* create joints */
 
+  if (state_from_input && reuse_dyn) {
+    /* Pose matched: a changed velocity is an edit inside the zone (impulse, launch). */
+    for (const int k : dyn_idx.index_range()) {
+      const BodyRead &src = bodies[dyn_idx[k]];
+      if (k < persist.dyn_out_vel.size() && b3Body_IsValid(persist.dyn_ids[k]) &&
+          (state_vec_differs(src.velocity, persist.dyn_out_vel[k]) ||
+           state_vec_differs(src.angular_velocity, persist.dyn_out_ang[k])))
+      {
+        b3Body_SetLinearVelocity(persist.dyn_ids[k],
+                                 {src.velocity.x, src.velocity.y, src.velocity.z});
+        b3Body_SetAngularVelocity(
+            persist.dyn_ids[k],
+            {src.angular_velocity.x, src.angular_velocity.y, src.angular_velocity.z});
+        b3Body_SetAwake(persist.dyn_ids[k], true);
+      }
+    }
+  }
+
   const float step_h = h / float(slices);
   for (int s = 0; s < slices; s++) {
     b3World_Step(world, step_h, 4);
@@ -2107,6 +2228,18 @@ static bool step_box3d(const Span<BodyRead> bodies,
     r_rotations[i] = math::Quaternion(rot.s, rot.v.x, rot.v.y, rot.v.z);
   }
 
+  persist.dyn_out_pos.resize(dyn_idx.size());
+  persist.dyn_out_rot.resize(dyn_idx.size());
+  persist.dyn_out_vel.resize(dyn_idx.size());
+  persist.dyn_out_ang.resize(dyn_idx.size());
+  for (const int k : dyn_idx.index_range()) {
+    const int i = dyn_idx[k];
+    persist.dyn_out_pos[k] = r_positions[i];
+    persist.dyn_out_rot[k] = r_rotations[i];
+    persist.dyn_out_vel[k] = r_velocities[i];
+    persist.dyn_out_ang[k] = r_ang[i];
+  }
+
   return true;
 }
 
@@ -2124,8 +2257,8 @@ static void node_geo_exec(GeoNodeExecParams params)
   /* Fallbacks only if Set Rigid Body attributes are missing. */
   const float default_radius = 0.25f;
   const float default_density = 1.0f;
-  const std::string cache_ns = fmt::format(
-      "{}:{}", fmt::ptr(params.self_object()), params.node().identifier);
+  const std::string cache_ns = box_engine::solver_cache_key(params, "box");
+  const bool in_zone = box_engine::in_simulation_zone(params);
 
   if (geometry_set.is_empty()) {
     params.set_output("Geometry"_ustr, std::move(geometry_set));
@@ -2239,6 +2372,7 @@ static void node_geo_exec(GeoNodeExecParams params)
                     substeps,
                     plane,
                     cache_ns,
+                    in_zone,
                     new_positions,
                     new_velocities,
                     new_ang_z,
@@ -2265,6 +2399,7 @@ static void node_geo_exec(GeoNodeExecParams params)
                     dt,
                     substeps,
                     cache_ns,
+                    in_zone,
                     new_positions,
                     new_velocities,
                     new_ang,

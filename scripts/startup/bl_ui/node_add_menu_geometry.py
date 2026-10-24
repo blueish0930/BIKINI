@@ -1606,6 +1606,7 @@ class NODE_MT_gn_lib_jolt_solver_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "GeometryNodeJoltSetRigidBody", label="Jolt Set Rigid Body")
         self.node_operator(layout, "GeometryNodeJoltSetConstraint", label="Jolt Set Constraint")
         layout.separator()
+        self.node_operator(layout, "GeometryNodeJoltFollowAnimation", label="Jolt Follow Animation")
         self.node_operator(layout, "GeometryNodeJoltSolver", label="Jolt Solver")
         self.draw_assets_for_catalog(layout, self.menu_path)
 

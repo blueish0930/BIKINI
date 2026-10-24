@@ -14606,6 +14606,7 @@ static void rna_def_nodes(BlenderRNA *brna)
   define("GeometryNode", "GeometryNodeBoxEngineSetRigidBody");
   define("GeometryNode", "GeometryNodeBoxEngineSetConstraint");
   define("GeometryNode", "GeometryNodeJoltSolver");
+  define("GeometryNode", "GeometryNodeJoltFollowAnimation");
   define("GeometryNode", "GeometryNodeJoltSetRigidBody");
   define("GeometryNode", "GeometryNodeJoltSetConstraint");
   define("GeometryNode", "GeometryNodeFlipSolver");
