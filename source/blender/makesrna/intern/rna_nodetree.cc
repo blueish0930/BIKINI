@@ -14277,6 +14277,8 @@ static void rna_def_nodes(BlenderRNA *brna)
   /* GeometryNodeBalanceCheck deleted */
   /* GeometryNodeInnerCarve deleted */
   define("GeometryNode", "GeometryNodeMakeItStand");
+  define("GeometryNode", "GeometryNodeRestingBodies");
+  define("GeometryNode", "GeometryNodeBijectiveUV");
   define("GeometryNode", "GeometryNodeCgalSuper4pcs");
   /* GeometryNodeCgalRegularizeSegments2 deleted */
   /* GeometryNodeCgalPolyfit deleted */

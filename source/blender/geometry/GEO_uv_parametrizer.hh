@@ -200,6 +200,10 @@ void uv_parametrizer_average(ParamHandle *handle, bool ignore_pinned, bool scale
 /** \name Flushing
  * \{ */
 
+/** Solve seam-separated charts with preconditioned L-BFGS. Failed charts are not flushed. */
+void uv_parametrizer_bijective_solve(ParamHandle *handle, int iterations, float tolerance);
+/** Solve each seam-separated chart independently with CGAL ARAP. */
+void uv_parametrizer_arap_solve(ParamHandle *handle, int iterations, float lambda);
 void uv_parametrizer_flush(ParamHandle *handle);
 void uv_parametrizer_flush_restore(ParamHandle *handle);
 

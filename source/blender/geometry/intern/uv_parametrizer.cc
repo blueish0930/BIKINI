@@ -10,6 +10,11 @@
 #include <vector>
 
 #include "GEO_uv_parametrizer.hh"
+#include "GEO_bijective_uv_solver.hh"
+#include "GEO_cgal.hh"
+#include "BKE_mesh.hh"
+#include "BKE_lib_id.hh"
+#include "DNA_mesh_types.h"
 
 #include "BLI_array.hh"
 #include "BLI_bounds.hh"
@@ -4448,6 +4453,93 @@ void uv_parametrizer_average(ParamHandle *phandle, bool ignore_pinned, bool scal
       sub_v2_v2v2(trans, chart->origin, trans);
 
       p_chart_uv_translate(chart, trans);
+    }
+  }
+}
+
+void uv_parametrizer_arap_solve(ParamHandle *phandle, const int iterations, const float lambda)
+{
+  for (int i = 0; i < phandle->ncharts; i++) {
+    PChart *chart = phandle->charts[i];
+    Mesh *mesh = BKE_mesh_new_nomain(chart->nverts, 0, chart->nfaces, 3 * chart->nfaces);
+    MutableSpan<float3> positions = mesh->vert_positions_for_write();
+    MutableSpan<int> offsets = mesh->face_offsets_for_write();
+    MutableSpan<int> corners = mesh->corner_verts_for_write();
+    int j = 0;
+    for (PVert *v = chart->verts; v; v = v->nextlink, j++) {
+      v->u.id = j;
+      positions[j] = float3(v->co);
+    }
+    j = 0;
+    for (PFace *f = chart->faces; f; f = f->nextlink, j++) {
+      offsets[j] = 3 * j;
+      PEdge *e = f->edge;
+      for (int k = 0; k < 3; k++, e = e->next) {
+        corners[3 * j + k] = e->vert->u.id;
+      }
+    }
+    offsets[chart->nfaces] = mesh->corners_num;
+    Array<float2> uv(mesh->corners_num, float2(0));
+    std::string error;
+    if (cgal_mesh_parameterize_uv_corners(
+            *mesh, {}, {}, false, 1, iterations, lambda, uv, error)) {
+      Array<float2> vertex_uv(chart->nverts, float2(0));
+      for (const int c : corners.index_range()) {
+        vertex_uv[corners[c]] = uv[c];
+      }
+      for (PVert *v = chart->verts; v; v = v->nextlink) {
+        copy_v2_v2(v->uv, vertex_uv[v->u.id]);
+      }
+    }
+    else {
+      chart->skip_flush = true;
+    }
+    BKE_id_free(nullptr, mesh);
+  }
+}
+
+void uv_parametrizer_bijective_solve(ParamHandle *phandle,
+                                   const int iterations,
+                                   const float tolerance)
+{
+  namespace uv = bijective_uv;
+  for (int i = 0; i < phandle->ncharts; i++) {
+    PChart *chart = phandle->charts[i];
+    try {
+      std::vector<uv::V3> positions;
+      std::vector<std::array<int, 3>> triangles;
+      for (PVert *v = chart->verts; v; v = v->nextlink) {
+        v->u.id = int(positions.size());
+        positions.emplace_back(v->co[0], v->co[1], v->co[2]);
+      }
+      for (PFace *f = chart->faces; f; f = f->nextlink) {
+        PEdge *e = f->edge;
+        triangles.push_back({e->vert->u.id, e->next->vert->u.id,
+                             e->next->next->vert->u.id});
+      }
+      uv::Options options;
+      options.method = 1; /* Preconditioned L-BFGS. */
+      options.iterations = iterations;
+      options.tolerance = tolerance;
+      uv::Solver solver(positions, triangles, options);
+      const uv::Result result = solver.solve(solver.initialize());
+      uv::Vec rounded = result.uv;
+      for (int j = 0; j < rounded.size(); j++) {
+        rounded[j] = float(rounded[j]);
+      }
+      uv::Vec gradient;
+      double distortion, barrier;
+      if (!std::isfinite(solver.evaluate(rounded, gradient, distortion, barrier)) ||
+          !solver.boundary_valid(rounded)) {
+        throw std::runtime_error("Invalid float UV output");
+      }
+      for (PVert *v = chart->verts; v; v = v->nextlink) {
+        v->uv[0] = float(rounded[2 * v->u.id]);
+        v->uv[1] = float(rounded[2 * v->u.id + 1]);
+      }
+    }
+    catch (const std::exception &) {
+      chart->skip_flush = true;
     }
   }
 }

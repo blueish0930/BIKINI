@@ -538,7 +538,11 @@ void mesh_calc_edges(Mesh &mesh,
         array_utils::gather(src, src_to_dst_mask, dst.take_front(src_to_dst_mask.size()));
       }
       dst.slice(back_range_of_new_edges).fill(-1);
-      layer.sharing_info->remove_user_and_delete_if_last();
+      /* Empty template layers (notably CD_ORIGINDEX in edit mode) have neither data nor
+       * sharing info. Rebuilding edges still has to allocate their new orig-index array. */
+      if (layer.sharing_info != nullptr) {
+        layer.sharing_info->remove_user_and_delete_if_last();
+      }
       layer.data = dst_data;
       layer.sharing_info = implicit_sharing::info_for_mem_free(dst_data);
     }

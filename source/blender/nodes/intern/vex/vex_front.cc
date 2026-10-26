@@ -3062,8 +3062,16 @@ struct Compiler {
       m.add("mat4", int(Builtin::MatrixFn));
       m.add("matrix4", int(Builtin::MatrixFn));
       m.add("svd", int(Builtin::SvdFn));
+      m.add("svddecomp", int(Builtin::SvdFn));
+      m.add("pd", int(Builtin::PolarDecompFn));
       m.add("polardecomp", int(Builtin::PolarDecompFn));
+      m.add("polar_decomp", int(Builtin::PolarDecompFn));
+      /* eigen(m, evals, evecs): symmetric eigen-decomposition of (m + mᵀ) / 2 (4×4: the upper
+       * 3×3). The eigenvalues are in ascending order for every size, the order
+       * BLI_eigen_solve_selfadjoint_m3 returns; eigenvector i is column i of evecs (evecs[i]). */
+      m.add("eigen", int(Builtin::EigenFn));
       m.add("eigendecomp", int(Builtin::EigenFn));
+      m.add("eigen_decomp", int(Builtin::EigenFn));
       m.add("invert", int(Builtin::Invert));
       m.add("rotate_rotation", int(Builtin::RotateRotation));
       m.add("qmultiply", int(Builtin::RotateRotation));
@@ -5088,11 +5096,14 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
       }
       if (n_out > 0) {
         if (ELEM(builtin, Builtin::SvdFn, Builtin::PolarDecompFn, Builtin::EigenFn)) {
+          /* svd(m, U, s, V) and pd(m, R, S) return U / R first; eigen(m, evals, evecs) has the
+           * eigenvalues (DecompS) first and the eigenvectors (DecompU) second. */
+          const bool values_first = builtin == Builtin::EigenFn;
           emit(Op::Pop);
-          emit(Op::Call, int(Builtin::DecompU));
+          emit(Op::Call, int(values_first ? Builtin::DecompS : Builtin::DecompU));
           prog.code.last().a = 0;
           compile_lvalue_store(e->args[n_in], out_types[0]);
-          emit(Op::Call, int(Builtin::DecompS));
+          emit(Op::Call, int(values_first ? Builtin::DecompU : Builtin::DecompS));
           prog.code.last().a = 0;
           compile_lvalue_store(e->args[n_in + 1], out_types[1]);
           if (builtin == Builtin::SvdFn) {

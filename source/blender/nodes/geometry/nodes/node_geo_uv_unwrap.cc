@@ -31,6 +31,16 @@ static EnumPropertyItem method_items[] = {
      N_("Minimum Stretch"),
      N_("Uses SLIM (Scalable Locally Injective Mapping). Minimizes distortion in areas and "
         "angles.")},
+    {GEO_NODE_UV_UNWRAP_METHOD_ARAP,
+     "ARAP",
+     0,
+     N_("ARAP"),
+     N_("As-rigid-as-possible parameterization using CGAL")},
+    {GEO_NODE_UV_UNWRAP_METHOD_BIJECTIVE,
+     "BIJECTIVE",
+     0,
+     N_("Bijective"),
+     N_("Free-boundary bijective mapping using preconditioned L-BFGS; cut charts into disks with seams")},
     {0, nullptr, 0, nullptr, nullptr},
 };
 
@@ -61,8 +71,16 @@ static void node_declare(NodeDeclarationBuilder &b)
   b.add_input<decl::Int>("Iterations"_ustr)
       .default_value(10)
       .min(1)
-      .usage_by_single_menu(GEO_NODE_UV_UNWRAP_METHOD_MINIMUM_STRETCH)
-      .description("Number of iterations to run the SLIM solver for");
+      .usage_by_menu("Method"_ustr, {GEO_NODE_UV_UNWRAP_METHOD_MINIMUM_STRETCH,
+                                    GEO_NODE_UV_UNWRAP_METHOD_ARAP,
+                                    GEO_NODE_UV_UNWRAP_METHOD_BIJECTIVE})
+      .description("Maximum solver iterations");
+  b.add_input<decl::Float>("Lambda"_ustr).default_value(1000.0f).min(0.0f)
+      .usage_by_single_menu(GEO_NODE_UV_UNWRAP_METHOD_ARAP)
+      .description("ARAP rigidity weight");
+  b.add_input<decl::Float>("Tolerance"_ustr).default_value(1e-8f).min(0.0f).max(1.0f)
+      .usage_by_single_menu(GEO_NODE_UV_UNWRAP_METHOD_BIJECTIVE)
+      .description("Relative energy tolerance; zero disables this stopping criterion");
   b.add_input<decl::Bool>("No Flip"_ustr)
       .usage_by_single_menu(GEO_NODE_UV_UNWRAP_METHOD_MINIMUM_STRETCH)
       .description("Prevents flipping UVs");
@@ -86,6 +104,7 @@ static VArray<float3> construct_uv_gvarray(const Mesh &mesh,
                                            const GeometryNodeUVUnwrapMethod method,
                                            const int iterations_,
                                            const bool no_flip_,
+                                           const float solver_parameter,
                                            const AttrDomain domain)
 {
   const Span<float3> positions = mesh.vert_positions();
@@ -151,7 +170,13 @@ static VArray<float3> construct_uv_gvarray(const Mesh &mesh,
    * warning if we fail to solve an island. */
   geometry::uv_parametrizer_construct_end(handle, fill_holes, false, nullptr);
 
-  if (method == GEO_NODE_UV_UNWRAP_METHOD_MINIMUM_STRETCH) {
+  if (method == GEO_NODE_UV_UNWRAP_METHOD_ARAP) {
+    geometry::uv_parametrizer_arap_solve(handle, iterations_, solver_parameter);
+  }
+  else if (method == GEO_NODE_UV_UNWRAP_METHOD_BIJECTIVE) {
+    geometry::uv_parametrizer_bijective_solve(handle, iterations_, solver_parameter);
+  }
+  else if (method == GEO_NODE_UV_UNWRAP_METHOD_MINIMUM_STRETCH) {
     geometry::ParamSlimOptions slim_options{};
     slim_options.iterations = iterations_;
     slim_options.no_flip = no_flip_;
@@ -182,6 +207,7 @@ class UnwrapFieldInput final : public bke::MeshFieldInput {
   const GeometryNodeUVUnwrapMethod method_;
   const int iterations_;
   const bool no_flip_;
+  const float solver_parameter_;
 
  public:
   UnwrapFieldInput(const Field<bool> selection,
@@ -190,7 +216,8 @@ class UnwrapFieldInput final : public bke::MeshFieldInput {
                    const float margin,
                    const GeometryNodeUVUnwrapMethod method,
                    const int iterations,
-                   const bool no_flip)
+                   const bool no_flip,
+                   const float solver_parameter)
       : bke::MeshFieldInput(CPPType::get<float3>(), "UV Unwrap Field"),
         selection_(selection),
         seam_(seam),
@@ -198,7 +225,8 @@ class UnwrapFieldInput final : public bke::MeshFieldInput {
         margin_(margin),
         method_(method),
         iterations_(iterations),
-        no_flip_(no_flip)
+        no_flip_(no_flip),
+        solver_parameter_(solver_parameter)
   {
   }
 
@@ -206,14 +234,34 @@ class UnwrapFieldInput final : public bke::MeshFieldInput {
                                  const AttrDomain domain,
                                  const IndexMask & /*mask*/) const final
   {
-    return construct_uv_gvarray(
-        mesh, selection_, seam_, fill_holes_, margin_, method_, iterations_, no_flip_, domain);
+    return construct_uv_gvarray(mesh,
+                               selection_,
+                               seam_,
+                               fill_holes_,
+                               margin_,
+                               method_,
+                               iterations_,
+                               no_flip_,
+                               solver_parameter_,
+                               domain);
   }
 
   void foreach_recursive_field(FunctionRef<void(const GField &)> fn) const override
   {
     fn(selection_);
     fn(seam_);
+  }
+
+  void hash_unique(UniqueHashBytes &hash, fn::FieldHashDeep &deep_hash_cache) const override
+  {
+    hash.add(deep_hash_cache.ensure(selection_));
+    hash.add(deep_hash_cache.ensure(seam_));
+    hash.add(fill_holes_);
+    hash.add(margin_);
+    hash.add(method_);
+    hash.add(iterations_);
+    hash.add(no_flip_);
+    hash.add(solver_parameter_);
   }
 
   std::optional<AttrDomain> preferred_domain(const Mesh & /*mesh*/) const override
@@ -230,11 +278,19 @@ static void node_geo_exec(GeoNodeExecParams params)
   const float margin = params.extract_input<float>("Margin"_ustr);
   int iterations = 0;
   bool no_flip = false;
+  float solver_parameter = 0;
   /* SLIM requires hole filling. */
   bool fill_holes = true;
   if ((GeometryNodeUVUnwrapMethod)method == GEO_NODE_UV_UNWRAP_METHOD_MINIMUM_STRETCH) {
     iterations = params.extract_input<int>("Iterations"_ustr);
     no_flip = params.extract_input<bool>("No Flip"_ustr);
+  }
+  else if (method == GEO_NODE_UV_UNWRAP_METHOD_ARAP ||
+           method == GEO_NODE_UV_UNWRAP_METHOD_BIJECTIVE) {
+    iterations = params.extract_input<int>("Iterations"_ustr);
+    solver_parameter = params.extract_input<float>(
+        method == GEO_NODE_UV_UNWRAP_METHOD_ARAP ? "Lambda"_ustr : "Tolerance"_ustr);
+    fill_holes = false;
   }
   else {
     fill_holes = params.extract_input<bool>("Fill Holes"_ustr);
@@ -242,7 +298,14 @@ static void node_geo_exec(GeoNodeExecParams params)
   params.set_output(
       "UV"_ustr,
       Field<float3>::from_input<UnwrapFieldInput>(
-          selection_field, seam_field, fill_holes, margin, method, iterations, no_flip));
+          selection_field,
+          seam_field,
+          fill_holes,
+          margin,
+          method,
+          iterations,
+          no_flip,
+          solver_parameter));
 }
 
 static void node_register()

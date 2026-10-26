@@ -405,7 +405,10 @@ struct ButtonText : public Button {
 };
 
 /** Derived struct for #ButtonType::TextBox */
+struct CodeSearchState;
+
 struct ButtonTextBox : public Button {
+  CodeSearchState *code_search = nullptr;
 
   /** Total number of wrapped lines in the last text-box redraw/event handling. */
   int last_total_lines = 0;

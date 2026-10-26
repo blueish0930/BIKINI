@@ -1,0 +1,68 @@
+#pragma once
+
+#include "utils.h"
+#include "convex_hull.h"
+#include "geometrycentral/surface/manifold_surface_mesh.h"
+#include "geometrycentral/surface/vertex_position_geometry.h"
+#include "geometrycentral/numerical/linear_solvers.h"
+#include "geometrycentral/surface/surface_point.h"
+
+using namespace geometrycentral;
+using namespace geometrycentral::surface;
+
+
+Vector3 barycentric(Vector3 p, Vector3 A, Vector3 B, Vector3 C);
+SurfacePoint get_robust_barycentric_point(SurfacePoint p, double threshold);
+
+bool is_in_positive_cone(Vector3 v1, Vector3 v2, Vector3 v3, Vector3 q);
+
+// tmp tools
+Vector3 vec2vec3(Vector<double> v);
+Vector3 vec3d_to_vec3(Eigen::Vector3d v);
+
+// tiny geometry stuff; move elsew
+// Gradient stuff
+// from: https://www.sciencedirect.com/science/article/pii/S0167839607000891 
+// Diherdral angle derivative; the angle <BAC on unit sphere
+Vector3 dihedral_angle_grad_G(Vector3 G, Vector3 A, Vector3 B, Vector3 C);
+Vector3 dihedral_angle_grad_A(Vector3 G, Vector3 A, Vector3 B, Vector3 C);
+Vector3 dihedral_angle_grad_B(Vector3 G, Vector3 A, Vector3 B, Vector3 C);
+Vector3 dihedral_angle_grad_C(Vector3 G, Vector3 A, Vector3 B, Vector3 C);
+
+
+// big geometry stuff
+
+double signed_volume(Vector3 A, Vector3 B, Vector3 C, Vector3 D);
+
+double ray_intersect_triangle(Vector3 O, Vector3 r, Vector3 A, Vector3 B, Vector3 C);
+double ray_intersect(Vector3 O, Vector3 r, std::vector<Vector3> polygon);
+
+double polygonal_face_area(Face f, VertexPositionGeometry &geometry);
+
+// std::tuple<std::unique_ptr<ManifoldSurfaceMesh>, std::unique_ptr<VertexPositionGeometry>> 
+// convex_hull(ManifoldSurfaceMesh &input_mesh, VertexPositionGeometry &input_geometry);
+
+
+bool G_is_inside(ManifoldSurfaceMesh &mesh, VertexPositionGeometry &geometry, Vector3 G);
+
+
+// assumes uniform mass density
+std::pair<Vector3, double> find_center_of_mass(ManifoldSurfaceMesh &input_mesh, VertexPositionGeometry &input_geometry);
+
+void center_and_normalize(SurfaceMesh* input_mesh, VertexPositionGeometry* input_geometry);
+Vector3 bounding_box_size(VertexData<Vector3> positions);
+
+
+bool check_hollow_tet_vertex(ManifoldSurfaceMesh* mesh, VertexPositionGeometry* geometry, Vertex v);
+bool check_convexity_and_repair(ManifoldSurfaceMesh* input_mesh, VertexPositionGeometry* input_geometry);
+
+Edge single_convexity_repair(ManifoldSurfaceMesh* input_mesh, VertexPositionGeometry* input_geometry);
+
+DenseMatrix<double> solve_dense_b(LinearSolver<double> *solver, DenseMatrix<double> b);
+
+VertexData<Vector3> sobolev_diffuse_gradients(VertexData<Vector3> grads, ManifoldSurfaceMesh &mesh, VertexPositionGeometry &geometry,
+                                              double sobolev_lambda, size_t sobolev_p = 2);
+Eigen::MatrixXd sobolev_diffuse_gradients(Eigen::MatrixXd grads, ManifoldSurfaceMesh &mesh, VertexPositionGeometry &geometry,
+                                              double sobolev_lambda, size_t sobolev_p = 2);
+
+std::vector<Eigen::Matrix3d> get_COM_grads_for_convex_uniform_shape(Eigen::MatrixX3d hull_positions);

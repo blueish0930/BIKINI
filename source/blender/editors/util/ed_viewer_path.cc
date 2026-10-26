@@ -17,6 +17,7 @@
 #include "BKE_main.hh"
 #include "BKE_node_legacy_types.hh"
 #include "BKE_node_runtime.hh"
+#include "BKE_node_tree_update.hh"
 #include "BKE_node_tree_zones.hh"
 #include "BKE_scene.hh"
 #include "BKE_viewer_path.hh"
@@ -151,10 +152,20 @@ void activate_geometry_node(Main &bmain,
   if (wm == nullptr) {
     return;
   }
+  bool active_changed = false;
   for (bNode *iter_node : snode.edittree->all_nodes()) {
     if (iter_node->type_legacy == GEO_NODE_VIEWER) {
-      SET_FLAG_FROM_TEST(iter_node->flag, iter_node == &node, NODE_DO_OUTPUT);
+      const bool was_active = (iter_node->flag & NODE_DO_OUTPUT) != 0;
+      const bool is_active = iter_node == &node;
+      active_changed |= was_active != is_active;
+      SET_FLAG_FROM_TEST(iter_node->flag, is_active, NODE_DO_OUTPUT);
     }
+  }
+  /* Selection, socket linking and the eye button all enter here. Synchronize the active output
+   * for every route, including switching to a Viewer when another node is already active. */
+  if (active_changed) {
+    BKE_ntree_update_tag_active_output_changed(snode.edittree);
+    DEG_id_tag_update(&snode.edittree->id, ID_RECALC_SYNC_TO_EVAL);
   }
   /* Only object-backed Geometry Nodes editors own the workspace Viewer Path used by the
    * Spreadsheet / 3D View. GPU Texture Editor (and other Scene-backed trees) must not wipe it —
@@ -167,10 +178,14 @@ void activate_geometry_node(Main &bmain,
   ViewerPath new_viewer_path{};
   BLI_SCOPED_DEFER([&]() { BKE_viewer_path_clear(&new_viewer_path); });
   viewer_path_for_geometry_node(snode, node, new_viewer_path);
+  /* Invalid temporary editor contexts must not erase the last working Viewer path. */
+  if (new_viewer_path.path.is_empty()) {
+    return;
+  }
 
-  bool found_view3d_with_enabled_viewer = false;
-  View3D *any_view3d_without_viewer = nullptr;
   for (wmWindow &window : wm->windows) {
+    bool found_view3d_with_enabled_viewer = false;
+    View3D *any_view3d_without_viewer = nullptr;
     WorkSpace *workspace = BKE_workspace_active_get(window.workspace_hook);
     bScreen *screen = BKE_workspace_active_screen_get(window.workspace_hook);
     for (ScrArea &area : screen->areabase) {

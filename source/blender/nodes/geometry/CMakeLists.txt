@@ -41,7 +41,10 @@ set(SRC
   nodes/node_geo_attribute_statistic.cc
   nodes/node_geo_attribute_transfer.cc
   nodes/node_geo_bake.cc
+  nodes/node_geo_bijective_uv.cc
+  nodes/bijective_uv_solver.hh
   nodes/node_geo_make_it_stand.cc
+  nodes/node_geo_resting_bodies.cc
   nodes/node_geo_winding_number.cc
   nodes/node_geo_blur_attribute.cc
   nodes/node_geo_bone_info.cc
@@ -691,6 +694,7 @@ if(WITH_JOLT)
 endif()
 
 blender_add_lib(bf_nodes_geometry "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
+target_link_libraries(bf_nodes_geometry PRIVATE bf_intern_resting_bridge)
 target_link_libraries(bf_nodes_geometry_generated bf_nodes_geometry)
 
 # Explicit names so MSVC incremental/unity builds cannot drop the cores.

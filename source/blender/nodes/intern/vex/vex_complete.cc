@@ -514,7 +514,7 @@ void gather_completions(Vector<std::string> &r_owned_names,
   add("svd", "Matrix", C::Matrix, K::Function, "svd", "svd(m, U, s, V)  —  m = U * diag(s) * Vᵀ", true);
   add("pd", "Matrix", C::Matrix, K::Function, "pd", "pd(m, R, S)  —  polar: m = R * S", true);
   add("polardecomp", "Matrix", C::Matrix, K::Function, "polardecomp", "polardecomp(m, R, S)", true);
-  add("eigen", "Matrix", C::Matrix, K::Function, "eigen", "eigen(m, evals, evecs)  symmetric eigen-decomposition", true);
+  add("eigen", "Matrix", C::Matrix, K::Function, "eigen", "eigen(m, evals, evecs)  symmetric eigen-decomposition: evals ascending, evecs[i] (column i) for evals[i]", true);
   add("transform_direction",
       "Matrix",
       C::Matrix,

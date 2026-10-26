@@ -12,9 +12,11 @@ set(INC
 )
 
 set(INC_SYS
+  ${EIGEN3_INCLUDE_DIRS}
 )
 
 set(SRC
+  GEO_bijective_uv_solver.hh
   intern/add_curves_on_mesh.cc
   intern/curve_constraints.cc
   intern/curves_remove_and_split.cc

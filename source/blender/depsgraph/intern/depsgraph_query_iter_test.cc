@@ -2,6 +2,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later */
 
+#include "BKE_duplilist.hh"
 #include "BKE_gtest_base.hh"
 #include "BKE_main.hh"
 #include "BKE_object.hh"
@@ -66,6 +67,32 @@ TEST_F(DepsgraphObjectIteratorTest, ObjectOnlyViewerPath)
   EXPECT_EQ(object_count, 2);
   EXPECT_TRUE(found_object_a);
   EXPECT_TRUE(found_object_b);
+}
+
+TEST_F(DepsgraphObjectIteratorTest, ViewerPreviewDupliUsesObjectMode)
+{
+  Main *bmain = BKE_main_new();
+  BLI_SCOPED_DEFER([&]() { BKE_main_free(bmain); });
+  Scene *scene = BKE_scene_add(bmain, "Scene");
+  ViewLayer *view_layer = scene->view_layers.first();
+  Object *object = BKE_object_add(bmain, scene, view_layer, OB_MESH, "Object");
+  object->mode = OB_MODE_EDIT;
+
+  bke::GeometrySet preview_geometry;
+  DupliObject dupli{};
+  dupli.ob = object;
+  dupli.ob_data = static_cast<ID *>(object->data);
+  dupli.preview_base_geometry = &preview_geometry;
+
+  Object temp_object{};
+  bke::ObjectRuntime temp_runtime;
+  ASSERT_TRUE(evil::DEG_iterator_temp_object_from_dupli(
+      object, &dupli, DAG_EVAL_VIEWPORT, false, &temp_object, &temp_runtime));
+  BLI_SCOPED_DEFER([&]() {
+    evil::DEG_iterator_temp_object_free_properties(&dupli, &temp_object);
+  });
+
+  EXPECT_EQ(temp_object.mode, OB_MODE_OBJECT);
 }
 
 }  // namespace blender::deg::tests

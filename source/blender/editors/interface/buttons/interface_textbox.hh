@@ -44,6 +44,19 @@ enum {
   TEXTBOX_SCROLL_HIT_GRIP = 3,
 };
 
+struct TextboxScrollbarGeometry {
+  rctf track;
+  rctf thumb;
+  int max_scroll = 0;
+  float travel = 0;
+};
+
+/** Shared drawing / drag metrics in pixels. Vertical scroll increases downwards. */
+TextboxScrollbarGeometry textbox_scrollbar_geometry(const ButtonTextBox *textbox,
+                                                     const rctf &rect,
+                                                     float aspect,
+                                                     bool horizontal);
+
 /** Window-space track rects matching the always-on code-editor scrollbars. */
 void textbox_scroll_win_rects(const ButtonTextBox *textbox,
                               const rctf *win_rect,

@@ -3319,14 +3319,17 @@ static void fill_polar_from_matrix(const Value &m)
   tls_decomp_v = tls_decomp_s;
 }
 
+/** eigen(m, evals, evecs): eigenvalues of (m + mᵀ) / 2 in ascending order, matching
+ * BLI_eigen_solve_selfadjoint_m3; eigenvector i is column i. 4×4 uses the upper 3×3. */
 static void fill_eigen_from_matrix(const Value &m)
 {
   if (m.type == Type::Matrix2) {
     float2 evals;
     float2x2 evecs;
+    /* eigen_sym_2 sorts descending (svd_2 relies on that). */
     eigen_sym_2(m.as_matrix2(), evals, evecs);
-    tls_decomp_s = Value::from_vec2(evals);
-    tls_decomp_u = Value::from_matrix2(evecs);
+    tls_decomp_s = Value::from_vec2(float2(evals.y, evals.x));
+    tls_decomp_u = Value::from_matrix2(float2x2(evecs[1], evecs[0]));
     tls_decomp_v = tls_decomp_u;
     return;
   }
@@ -4121,6 +4124,14 @@ Value call_builtin(const Builtin id,
       }
       if (arg(0).type == Type::Matrix && args.size() == 1) {
         return arg(0);
+      }
+      /* matrix(m3) / matrix(m2): the upper-left block, identity elsewhere (as GLSL mat4(mat3)).
+       * These used to fall through to the uniform scale below with a scale of 0. */
+      if (arg(0).type == Type::Matrix3 && args.size() == 1) {
+        return Value::from_matrix(float4x4(value_as_matrix3(arg(0))));
+      }
+      if (arg(0).type == Type::Matrix2 && args.size() == 1) {
+        return Value::from_matrix(float4x4(arg(0).as_matrix2()));
       }
       float buf[16];
       for (float &f : buf) {
@@ -5981,13 +5992,20 @@ static bool vm_interp(const Program &program,
         push(typed_array_len(pop()));
         break;
       case Op::Call: {
-        const int nargs = int(in.a);
-        Value args_buf[32];
-        const int n = std::min(nargs, 32);
-        for (int i = n - 1; i >= 0; i--) {
-          args_buf[i] = pop();
+        const int n = std::min(int(in.a), 32);
+        Value result;
+        if (sp >= n) {
+          /* The arguments are the top n stack values, in order: no copy. */
+          sp -= n;
+          result = call_builtin(Builtin(in.imm), Span<Value>(stk.data() + sp, n), env, r_error);
         }
-        Value result = call_builtin(Builtin(in.imm), Span<Value>(args_buf, n), env, r_error);
+        else {
+          Value args_buf[32];
+          for (int i = n - 1; i >= 0; i--) {
+            args_buf[i] = pop();
+          }
+          result = call_builtin(Builtin(in.imm), Span<Value>(args_buf, n), env, r_error);
+        }
         if (!r_error.empty()) {
           return false;
         }
@@ -5995,13 +6013,20 @@ static bool vm_interp(const Program &program,
         break;
       }
       case Op::SampleElem: {
-        const int nargs = int(in.a & 0x1f);
-        Value args_buf[32];
-        const int n = std::min(nargs, 32);
-        for (int i = n - 1; i >= 0; i--) {
-          args_buf[i] = pop();
+        const int n = std::min(int(in.a & 0x1f), 32);
+        Value result;
+        if (sp >= n) {
+          sp -= n;
+          result = call_static_sample(in, Span<Value>(stk.data() + sp, n), env, r_error);
         }
-        push(call_static_sample(in, Span<Value>(args_buf, n), env, r_error));
+        else {
+          Value args_buf[32];
+          for (int i = n - 1; i >= 0; i--) {
+            args_buf[i] = pop();
+          }
+          result = call_static_sample(in, Span<Value>(args_buf, n), env, r_error);
+        }
+        push(result);
         if (!r_error.empty()) {
           return false;
         }
@@ -6581,7 +6606,9 @@ void optimize_program(Program &program)
 
       if (in.op == Op::StoreLocal && in.imm >= 0 && in.imm < known.size()) {
         int value = 0;
-        if (pc > 0 && int_literal(c[pc - 1], value)) {
+        /* A store that is a jump target (the join after `c ? 1 : 2`) can be reached from
+         * other places than the preceding instruction, so that literal is not its value. */
+        if (pc > 0 && !is_target[pc] && int_literal(c[pc - 1], value)) {
           known[in.imm] = 1;
           known_value[in.imm] = value;
         }
@@ -7687,6 +7714,386 @@ static bool vm_run_wavefront(const Program &program,
 }
 
 /* Scalar fixed-storage fallback for programs which cannot enter the wavefront executor. */
+
+/* -------------------------------------------------------------------- */
+/** \name Specialized operand fusion for the tile executor
+ *
+ * The stack byte-code spends most dispatches on `PushLocal`, constant pushes and `StoreLocal`
+ * around typed arithmetic. Before a program runs on the tiles, `PushLocal a; PushF k; MulFF;
+ * StoreLocal c` becomes one specialized instruction (#Op::MulFF_LK_St) with the slots packed in
+ * the immediate. Same arithmetic in the same order: results are bit-identical. Groups never span
+ * a jump target; jumps are remapped. #Program::code itself is never changed.
+ * \{ */
+
+static Op fused_variant(const Op base, const char a, const char b, const bool store)
+{
+  switch (base) {
+    case Op::AddFF:
+      if (a == 'L' && b == 'L') {
+        return store ? Op::AddFF_LL_St : Op::AddFF_LL;
+      }
+      if (a == 'L' && b == 'K') {
+        return store ? Op::AddFF_LK_St : Op::AddFF_LK;
+      }
+      if (a == 'K' && b == 'L') {
+        return store ? Op::AddFF_KL_St : Op::AddFF_KL;
+      }
+      if (a == 'S' && b == 'L') {
+        return store ? Op::AddFF_SL_St : Op::AddFF_SL;
+      }
+      if (a == 'S' && b == 'K') {
+        return store ? Op::AddFF_SK_St : Op::AddFF_SK;
+      }
+      if (a == 'S' && b == 'S' && store) {
+        return Op::AddFF_SS_St;
+      }
+      return Op::Nop;
+    case Op::SubFF:
+      if (a == 'L' && b == 'L') {
+        return store ? Op::SubFF_LL_St : Op::SubFF_LL;
+      }
+      if (a == 'L' && b == 'K') {
+        return store ? Op::SubFF_LK_St : Op::SubFF_LK;
+      }
+      if (a == 'K' && b == 'L') {
+        return store ? Op::SubFF_KL_St : Op::SubFF_KL;
+      }
+      if (a == 'S' && b == 'L') {
+        return store ? Op::SubFF_SL_St : Op::SubFF_SL;
+      }
+      if (a == 'S' && b == 'K') {
+        return store ? Op::SubFF_SK_St : Op::SubFF_SK;
+      }
+      if (a == 'S' && b == 'S' && store) {
+        return Op::SubFF_SS_St;
+      }
+      return Op::Nop;
+    case Op::MulFF:
+      if (a == 'L' && b == 'L') {
+        return store ? Op::MulFF_LL_St : Op::MulFF_LL;
+      }
+      if (a == 'L' && b == 'K') {
+        return store ? Op::MulFF_LK_St : Op::MulFF_LK;
+      }
+      if (a == 'K' && b == 'L') {
+        return store ? Op::MulFF_KL_St : Op::MulFF_KL;
+      }
+      if (a == 'S' && b == 'L') {
+        return store ? Op::MulFF_SL_St : Op::MulFF_SL;
+      }
+      if (a == 'S' && b == 'K') {
+        return store ? Op::MulFF_SK_St : Op::MulFF_SK;
+      }
+      if (a == 'S' && b == 'S' && store) {
+        return Op::MulFF_SS_St;
+      }
+      return Op::Nop;
+    case Op::DivFF:
+      if (a == 'L' && b == 'L') {
+        return store ? Op::DivFF_LL_St : Op::DivFF_LL;
+      }
+      if (a == 'L' && b == 'K') {
+        return store ? Op::DivFF_LK_St : Op::DivFF_LK;
+      }
+      if (a == 'K' && b == 'L') {
+        return store ? Op::DivFF_KL_St : Op::DivFF_KL;
+      }
+      if (a == 'S' && b == 'L') {
+        return store ? Op::DivFF_SL_St : Op::DivFF_SL;
+      }
+      if (a == 'S' && b == 'K') {
+        return store ? Op::DivFF_SK_St : Op::DivFF_SK;
+      }
+      if (a == 'S' && b == 'S' && store) {
+        return Op::DivFF_SS_St;
+      }
+      return Op::Nop;
+    case Op::AddVV:
+      if (a == 'L' && b == 'L') {
+        return store ? Op::AddVV_LL_St : Op::AddVV_LL;
+      }
+      if (a == 'L' && b == 'K') {
+        return store ? Op::AddVV_LK_St : Op::AddVV_LK;
+      }
+      if (a == 'K' && b == 'L') {
+        return store ? Op::AddVV_KL_St : Op::AddVV_KL;
+      }
+      if (a == 'S' && b == 'L') {
+        return store ? Op::AddVV_SL_St : Op::AddVV_SL;
+      }
+      if (a == 'S' && b == 'K') {
+        return store ? Op::AddVV_SK_St : Op::AddVV_SK;
+      }
+      if (a == 'S' && b == 'S' && store) {
+        return Op::AddVV_SS_St;
+      }
+      return Op::Nop;
+    case Op::SubVV:
+      if (a == 'L' && b == 'L') {
+        return store ? Op::SubVV_LL_St : Op::SubVV_LL;
+      }
+      if (a == 'L' && b == 'K') {
+        return store ? Op::SubVV_LK_St : Op::SubVV_LK;
+      }
+      if (a == 'K' && b == 'L') {
+        return store ? Op::SubVV_KL_St : Op::SubVV_KL;
+      }
+      if (a == 'S' && b == 'L') {
+        return store ? Op::SubVV_SL_St : Op::SubVV_SL;
+      }
+      if (a == 'S' && b == 'K') {
+        return store ? Op::SubVV_SK_St : Op::SubVV_SK;
+      }
+      if (a == 'S' && b == 'S' && store) {
+        return Op::SubVV_SS_St;
+      }
+      return Op::Nop;
+    case Op::MulVF:
+      if (a == 'L' && b == 'L') {
+        return store ? Op::MulVF_LL_St : Op::MulVF_LL;
+      }
+      if (a == 'L' && b == 'K') {
+        return store ? Op::MulVF_LK_St : Op::MulVF_LK;
+      }
+      if (a == 'K' && b == 'L') {
+        return store ? Op::MulVF_KL_St : Op::MulVF_KL;
+      }
+      if (a == 'S' && b == 'L') {
+        return store ? Op::MulVF_SL_St : Op::MulVF_SL;
+      }
+      if (a == 'S' && b == 'K') {
+        return store ? Op::MulVF_SK_St : Op::MulVF_SK;
+      }
+      if (a == 'S' && b == 'S' && store) {
+        return Op::MulVF_SS_St;
+      }
+      return Op::Nop;
+    case Op::MulFV:
+      if (a == 'L' && b == 'L') {
+        return store ? Op::MulFV_LL_St : Op::MulFV_LL;
+      }
+      if (a == 'L' && b == 'K') {
+        return store ? Op::MulFV_LK_St : Op::MulFV_LK;
+      }
+      if (a == 'K' && b == 'L') {
+        return store ? Op::MulFV_KL_St : Op::MulFV_KL;
+      }
+      if (a == 'S' && b == 'L') {
+        return store ? Op::MulFV_SL_St : Op::MulFV_SL;
+      }
+      if (a == 'S' && b == 'K') {
+        return store ? Op::MulFV_SK_St : Op::MulFV_SK;
+      }
+      if (a == 'S' && b == 'S' && store) {
+        return Op::MulFV_SS_St;
+      }
+      return Op::Nop;
+    case Op::MulVV:
+      if (a == 'L' && b == 'L') {
+        return store ? Op::MulVV_LL_St : Op::MulVV_LL;
+      }
+      if (a == 'L' && b == 'K') {
+        return store ? Op::MulVV_LK_St : Op::MulVV_LK;
+      }
+      if (a == 'K' && b == 'L') {
+        return store ? Op::MulVV_KL_St : Op::MulVV_KL;
+      }
+      if (a == 'S' && b == 'L') {
+        return store ? Op::MulVV_SL_St : Op::MulVV_SL;
+      }
+      if (a == 'S' && b == 'K') {
+        return store ? Op::MulVV_SK_St : Op::MulVV_SK;
+      }
+      if (a == 'S' && b == 'S' && store) {
+        return Op::MulVV_SS_St;
+      }
+      return Op::Nop;
+    case Op::DotV3:
+      if (a == 'L' && b == 'L') {
+        return store ? Op::DotV3_LL_St : Op::DotV3_LL;
+      }
+      if (a == 'L' && b == 'K') {
+        return store ? Op::DotV3_LK_St : Op::DotV3_LK;
+      }
+      if (a == 'K' && b == 'L') {
+        return store ? Op::DotV3_KL_St : Op::DotV3_KL;
+      }
+      if (a == 'S' && b == 'L') {
+        return store ? Op::DotV3_SL_St : Op::DotV3_SL;
+      }
+      if (a == 'S' && b == 'K') {
+        return store ? Op::DotV3_SK_St : Op::DotV3_SK;
+      }
+      if (a == 'S' && b == 'S' && store) {
+        return Op::DotV3_SS_St;
+      }
+      return Op::Nop;
+    default:
+      return Op::Nop;
+  }
+}
+
+static char fused_operand_type(const Op base, const bool second)
+{
+  switch (base) {
+    case Op::AddFF:
+      return second ? 'F' : 'F';
+    case Op::SubFF:
+      return second ? 'F' : 'F';
+    case Op::MulFF:
+      return second ? 'F' : 'F';
+    case Op::DivFF:
+      return second ? 'F' : 'F';
+    case Op::AddVV:
+      return second ? 'V' : 'V';
+    case Op::SubVV:
+      return second ? 'V' : 'V';
+    case Op::MulVF:
+      return second ? 'F' : 'V';
+    case Op::MulFV:
+      return second ? 'V' : 'F';
+    case Op::MulVV:
+      return second ? 'V' : 'V';
+    case Op::DotV3:
+      return second ? 'V' : 'V';
+    default:
+      return '?';
+  }
+}
+
+/** 'L' local, 'K' constant of the operand type, or 0 when \a in is not a plain operand push. */
+static char fused_source(const Inst &in, const char want_type, const int local_n)
+{
+  if (in.op == Op::PushLocal && in.imm >= 0 && in.imm < local_n && in.imm < 1024) {
+    return 'L';
+  }
+  if (in.op == Op::PushF && want_type == 'F' && in.imm >= 0 && in.imm < 1024) {
+    return 'K';
+  }
+  if (in.op == Op::PushV && want_type == 'V' && in.imm >= 0 && in.imm < 1024) {
+    return 'K';
+  }
+  return 0;
+}
+
+static bool fuse_tile_code(const Program &program, Vector<Inst> &r_code)
+{
+  const Span<Inst> code = program.code;
+  const int n = int(code.size());
+  const int local_n = std::max(program.local_count, 1);
+  Array<bool> is_target(n + 1, false);
+  for (const Inst &in : code) {
+    if (ELEM(in.op, Op::Jmp, Op::JmpIfFalse, Op::JmpIfTrue) && in.imm >= 0 && in.imm <= n) {
+      is_target[in.imm] = true;
+    }
+  }
+  auto store_slot = [&](const int pc) -> int {
+    if (pc < n && !is_target[pc] && code[pc].op == Op::StoreLocal && code[pc].imm >= 0 &&
+        code[pc].imm < local_n && code[pc].imm < 1024)
+    {
+      return code[pc].imm;
+    }
+    return -1;
+  };
+  Array<int> new_pc(n + 1, 0);
+  r_code.clear();
+  r_code.reserve(n);
+  bool changed = false;
+  for (int pc = 0; pc < n;) {
+    new_pc[pc] = int(r_code.size());
+    Inst f;
+    int used = 0;
+    /* push a; push b; op */
+    if (pc + 2 < n && !is_target[pc + 1] && !is_target[pc + 2]) {
+      const Op base = code[pc + 2].op;
+      const char ta = fused_operand_type(base, false);
+      if (ta != '?') {
+        const char sa = fused_source(code[pc], ta, local_n);
+        const char sb = fused_source(code[pc + 1], fused_operand_type(base, true), local_n);
+        if (sa && sb && !(sa == 'K' && sb == 'K')) {
+          const int dst = store_slot(pc + 3);
+          f.op = fused_variant(base, sa, sb, dst >= 0);
+          if (f.op != Op::Nop) {
+            f.imm = int(uint32_t(code[pc].imm) | (uint32_t(code[pc + 1].imm) << 10) |
+                        (uint32_t(std::max(dst, 0)) << 20));
+            used = dst >= 0 ? 4 : 3;
+          }
+        }
+      }
+    }
+    /* (a on the stack) push b; op */
+    if (used == 0 && pc + 1 < n && !is_target[pc + 1]) {
+      const Op base = code[pc + 1].op;
+      const char tb = fused_operand_type(base, true);
+      if (tb != '?') {
+        const char sb = fused_source(code[pc], tb, local_n);
+        if (sb) {
+          const int dst = store_slot(pc + 2);
+          f.op = fused_variant(base, 'S', sb, dst >= 0);
+          if (f.op != Op::Nop) {
+            f.imm = int((uint32_t(code[pc].imm) << 10) | (uint32_t(std::max(dst, 0)) << 20));
+            used = dst >= 0 ? 3 : 2;
+          }
+        }
+      }
+    }
+    /* op; StoreLocal (both operands on the stack) */
+    if (used == 0 && fused_operand_type(code[pc].op, false) != '?') {
+      const int dst = store_slot(pc + 1);
+      if (dst >= 0) {
+        f.op = fused_variant(code[pc].op, 'S', 'S', true);
+        if (f.op != Op::Nop) {
+          f.imm = int(uint32_t(dst) << 20);
+          used = 2;
+        }
+      }
+    }
+    /* push; StoreLocal */
+    if (used == 0) {
+      const int dst = store_slot(pc + 1);
+      if (dst >= 0 && code[pc].imm >= 0 && code[pc].imm < 1024) {
+        if (code[pc].op == Op::PushLocal && code[pc].imm < local_n) {
+          f.op = Op::Mov_L;
+        }
+        else if (code[pc].op == Op::PushF) {
+          f.op = Op::Mov_KF;
+        }
+        else if (code[pc].op == Op::PushV) {
+          f.op = Op::Mov_KV;
+        }
+        if (f.op != Op::Nop) {
+          f.imm = int(uint32_t(code[pc].imm) | (uint32_t(dst) << 20));
+          used = 2;
+        }
+      }
+    }
+    if (used == 0) {
+      r_code.append(code[pc]);
+      pc++;
+      continue;
+    }
+    for (int k = pc + 1; k < pc + used; k++) {
+      new_pc[k] = int(r_code.size());
+    }
+    r_code.append(f);
+    changed = true;
+    pc += used;
+  }
+  new_pc[n] = int(r_code.size());
+  if (!changed) {
+    r_code.clear();
+    return false;
+  }
+  for (Inst &in : r_code) {
+    if (ELEM(in.op, Op::Jmp, Op::JmpIfFalse, Op::JmpIfTrue) && in.imm >= 0 && in.imm <= n) {
+      in.imm = new_pc[in.imm];
+    }
+  }
+  return true;
+}
+
+/** \} */
+
 static bool vm_run_tiles_scalar(const Program &program,
                                 VMEnv &env,
                                 const IndexMask &mask,
@@ -7696,9 +8103,13 @@ static bool vm_run_tiles_scalar(const Program &program,
   constexpr int ST = 48;
   std::atomic<bool> ok{true};
   std::mutex err_mutex;
-  const Span<Inst> code = program.code;
+  Vector<Inst> fused_code;
+  const Span<Inst> code = fuse_tile_code(program, fused_code) ? fused_code.as_span() :
+                                                                program.code.as_span();
   const int code_n = int(code.size());
   const int local_n = std::max(program.local_count, 1);
+  const int stack_cap = std::max({ST, program.max_stack, code_n + 1});
+  const int locals_cap = std::max(ST, local_n);
   const int lane_grain = vm_lane_grain(code_n);
 
   mask.foreach_segment(
@@ -7709,11 +8120,12 @@ static bool vm_run_tiles_scalar(const Program &program,
         VMEnv local = env;
         local.const_s = program.const_s.as_span();
         tls_arrays_begin();
-        Value stack[ST];
-        Value locals_s[ST];
-        for (int i = 0; i < local_n && i < ST; i++) {
-          locals_s[i] = Value{};
-        }
+        /* Sized per program (the compiler does not bound the operand stack, every instruction
+         * pushes at most one value). Small programs keep the inline storage. */
+        Vector<Value, ST> stack_storage(stack_cap);
+        Vector<Value, ST> locals_storage(locals_cap);
+        Value *stack = stack_storage.data();
+        Value *locals_s = locals_storage.data();
         for (int64_t off = 0; off < segment.size();) {
           if (!ok.load(std::memory_order_relaxed)) {
             return;
@@ -7735,7 +8147,7 @@ static bool vm_run_tiles_scalar(const Program &program,
             int sp = 0;
             int64_t jumps = 0;
             auto push = [&](const Value &v) {
-              if (sp < ST) {
+              if (sp < stack_cap) {
                 stack[sp++] = v;
               }
             };
@@ -7745,7 +8157,7 @@ static bool vm_run_tiles_scalar(const Program &program,
               }
               return stack[--sp];
             };
-            for (int i = 0; i < local_n && i < ST; i++) {
+            for (int i = 0; i < local_n; i++) {
               locals_s[i] = Value{};
             }
             std::string err;
@@ -7807,7 +8219,7 @@ static bool vm_run_tiles_scalar(const Program &program,
                   }
                   break;
                 case Op::Dup:
-                  if (sp > 0 && sp < ST) {
+                  if (sp > 0 && sp < stack_cap) {
                     stack[sp] = stack[sp - 1];
                     sp++;
                   }
@@ -8096,14 +8508,22 @@ static bool vm_run_tiles_scalar(const Program &program,
                   push(typed_array_len(pop()));
                   break;
                 case Op::Call: {
-                  const int nargs = int(in.a);
-                  Value args_buf[32];
-                  const int na = std::min(nargs, 32);
-                  for (int a = na - 1; a >= 0; a--) {
-                    args_buf[a] = pop();
+                  const int na = std::min(int(in.a), 32);
+                  Value result;
+                  if (sp >= na) {
+                    /* The arguments are the top na stack values, in order: no copy. */
+                    sp -= na;
+                    result = call_builtin(
+                        Builtin(in.imm), Span<Value>(stack + sp, na), local, err);
                   }
-                  Value result = call_builtin(
-                      Builtin(in.imm), Span<Value>(args_buf, na), local, err);
+                  else {
+                    Value args_buf[32];
+                    for (int a = na - 1; a >= 0; a--) {
+                      args_buf[a] = pop();
+                    }
+                    result = call_builtin(
+                        Builtin(in.imm), Span<Value>(args_buf, na), local, err);
+                  }
                   if (!err.empty()) {
                     lane_ok = false;
                     break;
@@ -8112,13 +8532,20 @@ static bool vm_run_tiles_scalar(const Program &program,
                   break;
                 }
                 case Op::SampleElem: {
-                  const int nargs = int(in.a & 0x1f);
-                  Value args_buf[32];
-                  const int na = std::min(nargs, 32);
-                  for (int a = na - 1; a >= 0; a--) {
-                    args_buf[a] = pop();
+                  const int na = std::min(int(in.a & 0x1f), 32);
+                  Value result;
+                  if (sp >= na) {
+                    sp -= na;
+                    result = call_static_sample(in, Span<Value>(stack + sp, na), local, err);
                   }
-                  push(call_static_sample(in, Span<Value>(args_buf, na), local, err));
+                  else {
+                    Value args_buf[32];
+                    for (int a = na - 1; a >= 0; a--) {
+                      args_buf[a] = pop();
+                    }
+                    result = call_static_sample(in, Span<Value>(args_buf, na), local, err);
+                  }
+                  push(result);
                   if (!err.empty()) {
                     lane_ok = false;
                   }
@@ -8224,6 +8651,675 @@ static bool vm_run_tiles_scalar(const Program &program,
                 case Op::Return:
                   pc = code_n;
                   continue;
+                case Op::AddFF_LL: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  push(Value::from_float(A.v.x + B.v.x));
+                  break;
+                }
+                case Op::AddFF_LL_St: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_float(A.v.x + B.v.x);
+                  break;
+                }
+                case Op::AddFF_LK: {
+                  const Value B = Value::from_float(program.const_f[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  push(Value::from_float(A.v.x + B.v.x));
+                  break;
+                }
+                case Op::AddFF_LK_St: {
+                  const Value B = Value::from_float(program.const_f[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_float(A.v.x + B.v.x);
+                  break;
+                }
+                case Op::AddFF_KL: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = Value::from_float(program.const_f[int(uint32_t(in.imm) & 1023u)]);
+                  push(Value::from_float(A.v.x + B.v.x));
+                  break;
+                }
+                case Op::AddFF_KL_St: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = Value::from_float(program.const_f[int(uint32_t(in.imm) & 1023u)]);
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_float(A.v.x + B.v.x);
+                  break;
+                }
+                case Op::AddFF_SL: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = pop();
+                  push(Value::from_float(A.v.x + B.v.x));
+                  break;
+                }
+                case Op::AddFF_SL_St: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = pop();
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_float(A.v.x + B.v.x);
+                  break;
+                }
+                case Op::AddFF_SK: {
+                  const Value B = Value::from_float(program.const_f[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = pop();
+                  push(Value::from_float(A.v.x + B.v.x));
+                  break;
+                }
+                case Op::AddFF_SK_St: {
+                  const Value B = Value::from_float(program.const_f[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = pop();
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_float(A.v.x + B.v.x);
+                  break;
+                }
+                case Op::AddFF_SS_St: {
+                  const Value B = pop();
+                  const Value A = pop();
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_float(A.v.x + B.v.x);
+                  break;
+                }
+                case Op::SubFF_LL: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  push(Value::from_float(A.v.x - B.v.x));
+                  break;
+                }
+                case Op::SubFF_LL_St: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_float(A.v.x - B.v.x);
+                  break;
+                }
+                case Op::SubFF_LK: {
+                  const Value B = Value::from_float(program.const_f[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  push(Value::from_float(A.v.x - B.v.x));
+                  break;
+                }
+                case Op::SubFF_LK_St: {
+                  const Value B = Value::from_float(program.const_f[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_float(A.v.x - B.v.x);
+                  break;
+                }
+                case Op::SubFF_KL: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = Value::from_float(program.const_f[int(uint32_t(in.imm) & 1023u)]);
+                  push(Value::from_float(A.v.x - B.v.x));
+                  break;
+                }
+                case Op::SubFF_KL_St: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = Value::from_float(program.const_f[int(uint32_t(in.imm) & 1023u)]);
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_float(A.v.x - B.v.x);
+                  break;
+                }
+                case Op::SubFF_SL: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = pop();
+                  push(Value::from_float(A.v.x - B.v.x));
+                  break;
+                }
+                case Op::SubFF_SL_St: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = pop();
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_float(A.v.x - B.v.x);
+                  break;
+                }
+                case Op::SubFF_SK: {
+                  const Value B = Value::from_float(program.const_f[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = pop();
+                  push(Value::from_float(A.v.x - B.v.x));
+                  break;
+                }
+                case Op::SubFF_SK_St: {
+                  const Value B = Value::from_float(program.const_f[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = pop();
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_float(A.v.x - B.v.x);
+                  break;
+                }
+                case Op::SubFF_SS_St: {
+                  const Value B = pop();
+                  const Value A = pop();
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_float(A.v.x - B.v.x);
+                  break;
+                }
+                case Op::MulFF_LL: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  push(Value::from_float(A.v.x * B.v.x));
+                  break;
+                }
+                case Op::MulFF_LL_St: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_float(A.v.x * B.v.x);
+                  break;
+                }
+                case Op::MulFF_LK: {
+                  const Value B = Value::from_float(program.const_f[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  push(Value::from_float(A.v.x * B.v.x));
+                  break;
+                }
+                case Op::MulFF_LK_St: {
+                  const Value B = Value::from_float(program.const_f[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_float(A.v.x * B.v.x);
+                  break;
+                }
+                case Op::MulFF_KL: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = Value::from_float(program.const_f[int(uint32_t(in.imm) & 1023u)]);
+                  push(Value::from_float(A.v.x * B.v.x));
+                  break;
+                }
+                case Op::MulFF_KL_St: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = Value::from_float(program.const_f[int(uint32_t(in.imm) & 1023u)]);
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_float(A.v.x * B.v.x);
+                  break;
+                }
+                case Op::MulFF_SL: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = pop();
+                  push(Value::from_float(A.v.x * B.v.x));
+                  break;
+                }
+                case Op::MulFF_SL_St: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = pop();
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_float(A.v.x * B.v.x);
+                  break;
+                }
+                case Op::MulFF_SK: {
+                  const Value B = Value::from_float(program.const_f[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = pop();
+                  push(Value::from_float(A.v.x * B.v.x));
+                  break;
+                }
+                case Op::MulFF_SK_St: {
+                  const Value B = Value::from_float(program.const_f[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = pop();
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_float(A.v.x * B.v.x);
+                  break;
+                }
+                case Op::MulFF_SS_St: {
+                  const Value B = pop();
+                  const Value A = pop();
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_float(A.v.x * B.v.x);
+                  break;
+                }
+                case Op::DivFF_LL: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  push(Value::from_float(B.v.x != 0.0f ? A.v.x / B.v.x : 0.0f));
+                  break;
+                }
+                case Op::DivFF_LL_St: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_float(B.v.x != 0.0f ? A.v.x / B.v.x : 0.0f);
+                  break;
+                }
+                case Op::DivFF_LK: {
+                  const Value B = Value::from_float(program.const_f[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  push(Value::from_float(B.v.x != 0.0f ? A.v.x / B.v.x : 0.0f));
+                  break;
+                }
+                case Op::DivFF_LK_St: {
+                  const Value B = Value::from_float(program.const_f[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_float(B.v.x != 0.0f ? A.v.x / B.v.x : 0.0f);
+                  break;
+                }
+                case Op::DivFF_KL: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = Value::from_float(program.const_f[int(uint32_t(in.imm) & 1023u)]);
+                  push(Value::from_float(B.v.x != 0.0f ? A.v.x / B.v.x : 0.0f));
+                  break;
+                }
+                case Op::DivFF_KL_St: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = Value::from_float(program.const_f[int(uint32_t(in.imm) & 1023u)]);
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_float(B.v.x != 0.0f ? A.v.x / B.v.x : 0.0f);
+                  break;
+                }
+                case Op::DivFF_SL: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = pop();
+                  push(Value::from_float(B.v.x != 0.0f ? A.v.x / B.v.x : 0.0f));
+                  break;
+                }
+                case Op::DivFF_SL_St: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = pop();
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_float(B.v.x != 0.0f ? A.v.x / B.v.x : 0.0f);
+                  break;
+                }
+                case Op::DivFF_SK: {
+                  const Value B = Value::from_float(program.const_f[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = pop();
+                  push(Value::from_float(B.v.x != 0.0f ? A.v.x / B.v.x : 0.0f));
+                  break;
+                }
+                case Op::DivFF_SK_St: {
+                  const Value B = Value::from_float(program.const_f[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = pop();
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_float(B.v.x != 0.0f ? A.v.x / B.v.x : 0.0f);
+                  break;
+                }
+                case Op::DivFF_SS_St: {
+                  const Value B = pop();
+                  const Value A = pop();
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_float(B.v.x != 0.0f ? A.v.x / B.v.x : 0.0f);
+                  break;
+                }
+                case Op::AddVV_LL: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  push(Value::from_vec(float3(A.v.x + B.v.x, A.v.y + B.v.y, A.v.z + B.v.z)));
+                  break;
+                }
+                case Op::AddVV_LL_St: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_vec(float3(A.v.x + B.v.x, A.v.y + B.v.y, A.v.z + B.v.z));
+                  break;
+                }
+                case Op::AddVV_LK: {
+                  const Value B = Value::from_vec(program.const_v[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  push(Value::from_vec(float3(A.v.x + B.v.x, A.v.y + B.v.y, A.v.z + B.v.z)));
+                  break;
+                }
+                case Op::AddVV_LK_St: {
+                  const Value B = Value::from_vec(program.const_v[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_vec(float3(A.v.x + B.v.x, A.v.y + B.v.y, A.v.z + B.v.z));
+                  break;
+                }
+                case Op::AddVV_KL: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = Value::from_vec(program.const_v[int(uint32_t(in.imm) & 1023u)]);
+                  push(Value::from_vec(float3(A.v.x + B.v.x, A.v.y + B.v.y, A.v.z + B.v.z)));
+                  break;
+                }
+                case Op::AddVV_KL_St: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = Value::from_vec(program.const_v[int(uint32_t(in.imm) & 1023u)]);
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_vec(float3(A.v.x + B.v.x, A.v.y + B.v.y, A.v.z + B.v.z));
+                  break;
+                }
+                case Op::AddVV_SL: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = pop();
+                  push(Value::from_vec(float3(A.v.x + B.v.x, A.v.y + B.v.y, A.v.z + B.v.z)));
+                  break;
+                }
+                case Op::AddVV_SL_St: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = pop();
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_vec(float3(A.v.x + B.v.x, A.v.y + B.v.y, A.v.z + B.v.z));
+                  break;
+                }
+                case Op::AddVV_SK: {
+                  const Value B = Value::from_vec(program.const_v[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = pop();
+                  push(Value::from_vec(float3(A.v.x + B.v.x, A.v.y + B.v.y, A.v.z + B.v.z)));
+                  break;
+                }
+                case Op::AddVV_SK_St: {
+                  const Value B = Value::from_vec(program.const_v[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = pop();
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_vec(float3(A.v.x + B.v.x, A.v.y + B.v.y, A.v.z + B.v.z));
+                  break;
+                }
+                case Op::AddVV_SS_St: {
+                  const Value B = pop();
+                  const Value A = pop();
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_vec(float3(A.v.x + B.v.x, A.v.y + B.v.y, A.v.z + B.v.z));
+                  break;
+                }
+                case Op::SubVV_LL: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  push(Value::from_vec(float3(A.v.x - B.v.x, A.v.y - B.v.y, A.v.z - B.v.z)));
+                  break;
+                }
+                case Op::SubVV_LL_St: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_vec(float3(A.v.x - B.v.x, A.v.y - B.v.y, A.v.z - B.v.z));
+                  break;
+                }
+                case Op::SubVV_LK: {
+                  const Value B = Value::from_vec(program.const_v[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  push(Value::from_vec(float3(A.v.x - B.v.x, A.v.y - B.v.y, A.v.z - B.v.z)));
+                  break;
+                }
+                case Op::SubVV_LK_St: {
+                  const Value B = Value::from_vec(program.const_v[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_vec(float3(A.v.x - B.v.x, A.v.y - B.v.y, A.v.z - B.v.z));
+                  break;
+                }
+                case Op::SubVV_KL: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = Value::from_vec(program.const_v[int(uint32_t(in.imm) & 1023u)]);
+                  push(Value::from_vec(float3(A.v.x - B.v.x, A.v.y - B.v.y, A.v.z - B.v.z)));
+                  break;
+                }
+                case Op::SubVV_KL_St: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = Value::from_vec(program.const_v[int(uint32_t(in.imm) & 1023u)]);
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_vec(float3(A.v.x - B.v.x, A.v.y - B.v.y, A.v.z - B.v.z));
+                  break;
+                }
+                case Op::SubVV_SL: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = pop();
+                  push(Value::from_vec(float3(A.v.x - B.v.x, A.v.y - B.v.y, A.v.z - B.v.z)));
+                  break;
+                }
+                case Op::SubVV_SL_St: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = pop();
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_vec(float3(A.v.x - B.v.x, A.v.y - B.v.y, A.v.z - B.v.z));
+                  break;
+                }
+                case Op::SubVV_SK: {
+                  const Value B = Value::from_vec(program.const_v[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = pop();
+                  push(Value::from_vec(float3(A.v.x - B.v.x, A.v.y - B.v.y, A.v.z - B.v.z)));
+                  break;
+                }
+                case Op::SubVV_SK_St: {
+                  const Value B = Value::from_vec(program.const_v[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = pop();
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_vec(float3(A.v.x - B.v.x, A.v.y - B.v.y, A.v.z - B.v.z));
+                  break;
+                }
+                case Op::SubVV_SS_St: {
+                  const Value B = pop();
+                  const Value A = pop();
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_vec(float3(A.v.x - B.v.x, A.v.y - B.v.y, A.v.z - B.v.z));
+                  break;
+                }
+                case Op::MulVF_LL: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  push(Value::from_vec(float3(A.v.x * B.v.x, A.v.y * B.v.x, A.v.z * B.v.x)));
+                  break;
+                }
+                case Op::MulVF_LL_St: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_vec(float3(A.v.x * B.v.x, A.v.y * B.v.x, A.v.z * B.v.x));
+                  break;
+                }
+                case Op::MulVF_LK: {
+                  const Value B = Value::from_float(program.const_f[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  push(Value::from_vec(float3(A.v.x * B.v.x, A.v.y * B.v.x, A.v.z * B.v.x)));
+                  break;
+                }
+                case Op::MulVF_LK_St: {
+                  const Value B = Value::from_float(program.const_f[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_vec(float3(A.v.x * B.v.x, A.v.y * B.v.x, A.v.z * B.v.x));
+                  break;
+                }
+                case Op::MulVF_KL: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = Value::from_vec(program.const_v[int(uint32_t(in.imm) & 1023u)]);
+                  push(Value::from_vec(float3(A.v.x * B.v.x, A.v.y * B.v.x, A.v.z * B.v.x)));
+                  break;
+                }
+                case Op::MulVF_KL_St: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = Value::from_vec(program.const_v[int(uint32_t(in.imm) & 1023u)]);
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_vec(float3(A.v.x * B.v.x, A.v.y * B.v.x, A.v.z * B.v.x));
+                  break;
+                }
+                case Op::MulVF_SL: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = pop();
+                  push(Value::from_vec(float3(A.v.x * B.v.x, A.v.y * B.v.x, A.v.z * B.v.x)));
+                  break;
+                }
+                case Op::MulVF_SL_St: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = pop();
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_vec(float3(A.v.x * B.v.x, A.v.y * B.v.x, A.v.z * B.v.x));
+                  break;
+                }
+                case Op::MulVF_SK: {
+                  const Value B = Value::from_float(program.const_f[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = pop();
+                  push(Value::from_vec(float3(A.v.x * B.v.x, A.v.y * B.v.x, A.v.z * B.v.x)));
+                  break;
+                }
+                case Op::MulVF_SK_St: {
+                  const Value B = Value::from_float(program.const_f[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = pop();
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_vec(float3(A.v.x * B.v.x, A.v.y * B.v.x, A.v.z * B.v.x));
+                  break;
+                }
+                case Op::MulVF_SS_St: {
+                  const Value B = pop();
+                  const Value A = pop();
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_vec(float3(A.v.x * B.v.x, A.v.y * B.v.x, A.v.z * B.v.x));
+                  break;
+                }
+                case Op::MulFV_LL: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  push(Value::from_vec(float3(A.v.x * B.v.x, A.v.x * B.v.y, A.v.x * B.v.z)));
+                  break;
+                }
+                case Op::MulFV_LL_St: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_vec(float3(A.v.x * B.v.x, A.v.x * B.v.y, A.v.x * B.v.z));
+                  break;
+                }
+                case Op::MulFV_LK: {
+                  const Value B = Value::from_vec(program.const_v[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  push(Value::from_vec(float3(A.v.x * B.v.x, A.v.x * B.v.y, A.v.x * B.v.z)));
+                  break;
+                }
+                case Op::MulFV_LK_St: {
+                  const Value B = Value::from_vec(program.const_v[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_vec(float3(A.v.x * B.v.x, A.v.x * B.v.y, A.v.x * B.v.z));
+                  break;
+                }
+                case Op::MulFV_KL: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = Value::from_float(program.const_f[int(uint32_t(in.imm) & 1023u)]);
+                  push(Value::from_vec(float3(A.v.x * B.v.x, A.v.x * B.v.y, A.v.x * B.v.z)));
+                  break;
+                }
+                case Op::MulFV_KL_St: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = Value::from_float(program.const_f[int(uint32_t(in.imm) & 1023u)]);
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_vec(float3(A.v.x * B.v.x, A.v.x * B.v.y, A.v.x * B.v.z));
+                  break;
+                }
+                case Op::MulFV_SL: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = pop();
+                  push(Value::from_vec(float3(A.v.x * B.v.x, A.v.x * B.v.y, A.v.x * B.v.z)));
+                  break;
+                }
+                case Op::MulFV_SL_St: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = pop();
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_vec(float3(A.v.x * B.v.x, A.v.x * B.v.y, A.v.x * B.v.z));
+                  break;
+                }
+                case Op::MulFV_SK: {
+                  const Value B = Value::from_vec(program.const_v[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = pop();
+                  push(Value::from_vec(float3(A.v.x * B.v.x, A.v.x * B.v.y, A.v.x * B.v.z)));
+                  break;
+                }
+                case Op::MulFV_SK_St: {
+                  const Value B = Value::from_vec(program.const_v[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = pop();
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_vec(float3(A.v.x * B.v.x, A.v.x * B.v.y, A.v.x * B.v.z));
+                  break;
+                }
+                case Op::MulFV_SS_St: {
+                  const Value B = pop();
+                  const Value A = pop();
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_vec(float3(A.v.x * B.v.x, A.v.x * B.v.y, A.v.x * B.v.z));
+                  break;
+                }
+                case Op::MulVV_LL: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  push(Value::from_vec(float3(A.v.x * B.v.x, A.v.y * B.v.y, A.v.z * B.v.z)));
+                  break;
+                }
+                case Op::MulVV_LL_St: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_vec(float3(A.v.x * B.v.x, A.v.y * B.v.y, A.v.z * B.v.z));
+                  break;
+                }
+                case Op::MulVV_LK: {
+                  const Value B = Value::from_vec(program.const_v[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  push(Value::from_vec(float3(A.v.x * B.v.x, A.v.y * B.v.y, A.v.z * B.v.z)));
+                  break;
+                }
+                case Op::MulVV_LK_St: {
+                  const Value B = Value::from_vec(program.const_v[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_vec(float3(A.v.x * B.v.x, A.v.y * B.v.y, A.v.z * B.v.z));
+                  break;
+                }
+                case Op::MulVV_KL: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = Value::from_vec(program.const_v[int(uint32_t(in.imm) & 1023u)]);
+                  push(Value::from_vec(float3(A.v.x * B.v.x, A.v.y * B.v.y, A.v.z * B.v.z)));
+                  break;
+                }
+                case Op::MulVV_KL_St: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = Value::from_vec(program.const_v[int(uint32_t(in.imm) & 1023u)]);
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_vec(float3(A.v.x * B.v.x, A.v.y * B.v.y, A.v.z * B.v.z));
+                  break;
+                }
+                case Op::MulVV_SL: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = pop();
+                  push(Value::from_vec(float3(A.v.x * B.v.x, A.v.y * B.v.y, A.v.z * B.v.z)));
+                  break;
+                }
+                case Op::MulVV_SL_St: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = pop();
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_vec(float3(A.v.x * B.v.x, A.v.y * B.v.y, A.v.z * B.v.z));
+                  break;
+                }
+                case Op::MulVV_SK: {
+                  const Value B = Value::from_vec(program.const_v[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = pop();
+                  push(Value::from_vec(float3(A.v.x * B.v.x, A.v.y * B.v.y, A.v.z * B.v.z)));
+                  break;
+                }
+                case Op::MulVV_SK_St: {
+                  const Value B = Value::from_vec(program.const_v[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = pop();
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_vec(float3(A.v.x * B.v.x, A.v.y * B.v.y, A.v.z * B.v.z));
+                  break;
+                }
+                case Op::MulVV_SS_St: {
+                  const Value B = pop();
+                  const Value A = pop();
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_vec(float3(A.v.x * B.v.x, A.v.y * B.v.y, A.v.z * B.v.z));
+                  break;
+                }
+                case Op::DotV3_LL: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  push(typed_dot_v3(A, B));
+                  break;
+                }
+                case Op::DotV3_LL_St: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = typed_dot_v3(A, B);
+                  break;
+                }
+                case Op::DotV3_LK: {
+                  const Value B = Value::from_vec(program.const_v[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  push(typed_dot_v3(A, B));
+                  break;
+                }
+                case Op::DotV3_LK_St: {
+                  const Value B = Value::from_vec(program.const_v[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = typed_dot_v3(A, B);
+                  break;
+                }
+                case Op::DotV3_KL: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = Value::from_vec(program.const_v[int(uint32_t(in.imm) & 1023u)]);
+                  push(typed_dot_v3(A, B));
+                  break;
+                }
+                case Op::DotV3_KL_St: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = Value::from_vec(program.const_v[int(uint32_t(in.imm) & 1023u)]);
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = typed_dot_v3(A, B);
+                  break;
+                }
+                case Op::DotV3_SL: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = pop();
+                  push(typed_dot_v3(A, B));
+                  break;
+                }
+                case Op::DotV3_SL_St: {
+                  const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
+                  const Value A = pop();
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = typed_dot_v3(A, B);
+                  break;
+                }
+                case Op::DotV3_SK: {
+                  const Value B = Value::from_vec(program.const_v[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = pop();
+                  push(typed_dot_v3(A, B));
+                  break;
+                }
+                case Op::DotV3_SK_St: {
+                  const Value B = Value::from_vec(program.const_v[int((uint32_t(in.imm) >> 10) & 1023u)]);
+                  const Value A = pop();
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = typed_dot_v3(A, B);
+                  break;
+                }
+                case Op::DotV3_SS_St: {
+                  const Value B = pop();
+                  const Value A = pop();
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = typed_dot_v3(A, B);
+                  break;
+                }
+                case Op::Mov_L:
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = locals_s[int(uint32_t(in.imm) & 1023u)];
+                  break;
+                case Op::Mov_KF:
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_float(program.const_f[int(uint32_t(in.imm) & 1023u)]);
+                  break;
+                case Op::Mov_KV:
+                  locals_s[int((uint32_t(in.imm) >> 20) & 1023u)] = Value::from_vec(program.const_v[int(uint32_t(in.imm) & 1023u)]);
+                  break;
                 default:
                   break;
               }
@@ -8282,7 +9378,8 @@ bool vm_run_lanes(const Program &program,
   /* The fixed-storage lane interpreter now handles structured jumps as well. It avoids rebuilding
    * the general recursive VM stack and call-frame vectors for every geometry element, while still
    * preserving independent locals, temporary arrays and instruction limits per lane. */
-  if (program.max_stack <= 48 && program.local_count <= 48) {
+  /* Any stack depth / local count: the tile executor sizes its storage per program. */
+  if (program.local_count <= (1 << 16)) {
     return vm_run_tiles(program, env, mask, r_error);
   }
   std::atomic<bool> ok{true};

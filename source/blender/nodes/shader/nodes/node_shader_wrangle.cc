@@ -51,6 +51,7 @@
 #include "UI_interface.hh"
 #include "UI_interface_c.hh"
 #include "UI_interface_layout.hh"
+#include "UI_code_editor.hh"
 #include "UI_resources.hh"
 
 #include "RNA_access.hh"
@@ -346,7 +347,8 @@ static void wrangle_code_diag_fn(const char *str,
   *r_num = n;
 }
 
-static void wrangle_apply_code_editor_flags(ui::Block *block, const int64_t buttons_before)
+static void wrangle_apply_code_editor_flags(ui::Block *block, const int64_t buttons_before,
+                                            ui::CodeSearchState *search = nullptr)
 {
   if (!block) {
     return;
@@ -355,6 +357,7 @@ static void wrangle_apply_code_editor_flags(ui::Block *block, const int64_t butt
     ui::Button *but = block->buttons_ptrs[i].get();
     if (but && but->type == ui::ButtonType::TextBox) {
       button_flag_enable(but, ui::BUT_CODE_EDITOR);
+      ui::button_code_search_set(but, search);
       button_drawflag_enable(but, ui::BUT_TEXT_LEFT);
       button_drawflag_disable(but, ui::BUT_NO_TEXT_PADDING);
       button_func_complete_set(but, wrangle_autocomplete_fn, nullptr);
@@ -1836,6 +1839,7 @@ struct WrangleEditPopupArg {
   bNodeTree *ntree = nullptr;
   int32_t node_identifier = 0;
   TextboxState editor_state;
+  ui::CodeSearchState search;
   char status[256] = {};
   bool pinned = false;
   float font_pt = 0.0f;
@@ -1950,6 +1954,9 @@ static ui::Block *wrangle_edit_popup(bContext *C, ARegion *region, void *arg_v)
                 arg->pinned ? TIP_("Unpin") : TIP_("Keep this window open"));
   header.button("", ICON_X, [block](bContext & /*C*/) { ui::popup_menu_close(block, false); }, IFACE_("Close"));
 
+  PointerRNA tools_ptr = RNA_pointer_create_discrete(&arg->ntree->id, RNA_Node, arg->node);
+  ui::code_editor_draw_tools(layout, tools_ptr, arg->search, arg->editor_state);
+
   const char *code = storage.code ? storage.code : "";
   const vex::CompileOutput compiled = vex::compile_shader_material(code);
   if (!compiled.program && !compiled.error.empty()) {
@@ -1962,7 +1969,7 @@ static ui::Block *wrangle_edit_popup(bContext *C, ARegion *region, void *arg_v)
   PointerRNA node_ptr = RNA_pointer_create_discrete(&arg->ntree->id, RNA_Node, live_node);
   const int64_t buttons_before = block->buttons_ptrs.size();
   layout.textbox_with_state(&node_ptr, "code", &arg->editor_state, std::nullopt);
-  wrangle_apply_code_editor_flags(block, buttons_before);
+  wrangle_apply_code_editor_flags(block, buttons_before, &arg->search);
 
   const int bounds_offset[2] = {0, -UI_UNIT_Y};
   ui::block_bounds_set_popup(block, int(0.3f * U.widget_unit), bounds_offset);

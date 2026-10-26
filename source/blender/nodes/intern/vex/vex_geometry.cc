@@ -195,6 +195,12 @@ Value value_from_varray(const GVArray &varray, const int index, Vector<std::stri
   return Value::from_float(0.0f);
 }
 
+static uint64_t next_parm_serial()
+{
+  static std::atomic<uint64_t> serial{1};
+  return serial.fetch_add(1, std::memory_order_relaxed);
+}
+
 struct ElemUser {
   struct ElementSampleCache {
     int geo = 0;
@@ -216,6 +222,8 @@ struct ElemUser {
   const bke::GeometrySet *self = nullptr; /* geometry currently being wrangled (geo 0) */
   Vector<std::string> parm_names;
   Vector<GVArray> parm_arrays;
+  /** Identifies this evaluation in the per-thread channel lookup cache of #load_parm_fn. */
+  uint64_t parm_serial = next_parm_serial();
   Span<ChList> parm_lists;
   Span<ChRamp> parm_ramps;
   Span<AttrInfo> attr_infos;
@@ -1016,16 +1024,63 @@ Value load_sample_fn(void *user,
   return load_elem_fn(user, sample.geo, sample.domain, sample.name, index, Type::Float, error);
 }
 
+/** Slot of a channel name: a list channel, a parameter, or neither (an attribute read). */
+static int resolve_parm_slot(const ElemUser &u, const StringRef name)
+{
+  for (const int i : u.parm_lists.index_range()) {
+    if (u.parm_lists[i].name == name) {
+      return i;
+    }
+  }
+  for (const int i : u.parm_names.index_range()) {
+    if (u.parm_names[i] == name) {
+      return (1 << 20) + i;
+    }
+  }
+  return -1;
+}
+
 Value load_parm_fn(void *user, const StringRef name, const int index, std::string & /*error*/)
 {
   auto *u = static_cast<ElemUser *>(user);
   if (!u || name.is_empty()) {
     return Value::from_float(0.0f);
   }
-  for (const ChList &list : u->parm_lists) {
-    if (list.name != name) {
-      continue;
+  /* chf("name") runs for every element: remember the slot per evaluation and thread. The name
+   * bytes are compared because runtime-built names can reuse a temporary buffer. */
+  struct SlotCacheEntry {
+    uint64_t serial = 0;
+    int len = -1;
+    int slot = -1;
+    char name[40];
+  };
+  thread_local SlotCacheEntry slot_cache[32];
+  int slot = -1;
+  if (name.size() < int64_t(sizeof(SlotCacheEntry::name))) {
+    const uint64_t h = uint64_t(name.size()) * 131u + uint64_t(uint8_t(name[0])) * 31u +
+                       uint64_t(uint8_t(name[name.size() - 1]));
+    SlotCacheEntry &entry = slot_cache[(h ^ (h >> 5)) & 31];
+    if (entry.serial == u->parm_serial && entry.len == int(name.size()) &&
+        std::memcmp(entry.name, name.data(), size_t(name.size())) == 0)
+    {
+      slot = entry.slot;
     }
+    else {
+      slot = resolve_parm_slot(*u, name);
+      entry.serial = u->parm_serial;
+      entry.len = int(name.size());
+      std::memcpy(entry.name, name.data(), size_t(name.size()));
+      entry.slot = slot;
+    }
+  }
+  else {
+    slot = resolve_parm_slot(*u, name);
+  }
+  if (slot >= (1 << 20)) {
+    return value_from_varray(u->parm_arrays[slot - (1 << 20)], index, nullptr);
+  }
+  if (slot >= 0) {
+    const ChList &list = u->parm_lists[slot];
     switch (list.kind) {
       case ChList::Kind::Int:
         return value_from_int_span(list.ints);
@@ -1037,12 +1092,6 @@ Value load_parm_fn(void *user, const StringRef name, const int index, std::strin
         return value_from_string_array(list.strings);
       case ChList::Kind::Matrix:
         return value_from_mat_array(list.matrices);
-    }
-  }
-  for (const int i : u->parm_names.index_range()) {
-    if (u->parm_names[i] == name) {
-      const GVArray &va = u->parm_arrays[i];
-      return value_from_varray(va, index, nullptr);
     }
   }
   std::string dummy;

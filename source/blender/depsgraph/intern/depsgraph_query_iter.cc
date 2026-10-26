@@ -507,6 +507,14 @@ bool evil::DEG_iterator_temp_object_from_dupli(const Object *dupli_parent,
     BKE_object_replace_data_on_shallow_copy(r_temp_object, dupli->ob_data);
   }
 
+  /* Viewer geometry is an evaluated result, not the editable data of the source object. The
+   * temporary preview object still inherits the source object's mode from the shallow copy above.
+   * Leaving it in edit mode makes drawing use edit-mesh buffers for unrelated evaluated geometry,
+   * which can hide the Viewer wireframe and access stale edit data after mesh edits. */
+  if (dupli->preview_base_geometry != nullptr) {
+    r_temp_object->mode = OB_MODE_OBJECT;
+  }
+
   /* Duplicated elements shouldn't care whether their original collection is visible or not. */
   r_temp_object->base_flag |= BASE_ENABLED_AND_MAYBE_VISIBLE_IN_VIEWPORT;
 

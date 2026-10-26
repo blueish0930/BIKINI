@@ -1249,6 +1249,7 @@ class NODE_MT_gn_bikini_simulation_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "GeometryNodeXPBDSolver")
         self.node_operator(layout, "GeometryNodeFlipSolver")
         self.node_operator(layout, "GeometryNodeMakeItStand")
+        self.node_operator(layout, "GeometryNodeRestingBodies")
         self.draw_assets_for_catalog(layout, self.menu_path)
 
 
@@ -1456,7 +1457,6 @@ class NODE_MT_gn_lib_cgal_mesh_uv_base(node_add_menu.NodeMenu):
     def draw(self, _context):
         layout = self.layout
         self.node_operator(layout, "GeometryNodeCgalLscmUV")
-        self.node_operator(layout, "GeometryNodeCgalArapUV")
         self.node_operator(layout, "GeometryNodeCgalUVDistortion")
         self.draw_assets_for_catalog(layout, self.menu_path)
 

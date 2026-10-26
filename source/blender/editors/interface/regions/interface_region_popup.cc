@@ -901,12 +901,32 @@ Block *popup_block_refresh(bContext *C, PopupBlockHandle *handle, ARegion *butre
       block_translate(block, 0, -unit_half);
     }
 
-    /* clip block with window boundary */
-    popup_block_clip(window, block);
+    /* Code editors are floating windows. Keep their user placement across content refreshes,
+     * including partially off-screen positions. Ordinary popup menus still fit to the window. */
+    bool floating_code_editor = false;
+    if (block_old && (block->flag & BLOCK_KEEP_OPEN)) {
+      for (const Button &button : block->buttons()) {
+        if (button.type == ButtonType::TextBox && (button.flag & BUT_CODE_EDITOR)) {
+          floating_code_editor = true;
+          break;
+        }
+      }
+    }
+    if (floating_code_editor) {
+      rctf previous = block_old->rect;
+      /* Popup coordinates are already region pixels. Applying winmat again adds a half-pixel
+       * center offset, which becomes a one-pixel drift on every refresh. */
+      BLI_rctf_translate(&previous, region->winrct.xmin, region->winrct.ymin);
+      block_translate(block, previous.xmin - block->rect.xmin, previous.ymax - block->rect.ymax);
+    }
+    else {
+      popup_block_clip(window, block);
+    }
 
     /* Avoid menu moving down and losing cursor focus by keeping it at the same height when the
      * popup is displaced down by at least one window unit. */
-    if (handle->refresh && (handle->prev_block_rect.ymax - block->rect.ymax) > 1.0f) {
+    if (!floating_code_editor && handle->refresh &&
+        (handle->prev_block_rect.ymax - block->rect.ymax) > 1.0f) {
       if (block->bounds_type != BLOCK_BOUNDS_POPUP_CENTER) {
         const float offset = handle->prev_block_rect.ymax - block->rect.ymax;
         block_translate(block, 0, offset);

@@ -1067,6 +1067,8 @@
 #define GEO_NODE_SPOM_PRISMS 2706
 /** Generalized winding number (Jacobson 2013 / Barill 2018). */
 #define GEO_NODE_WINDING_NUMBER 2707
+#define GEO_NODE_RESTING_BODIES 2708
+#define GEO_NODE_BIJECTIVE_UV 2709
 
 /* 2429 reserved: deleted Structure Point Set (exploded positions / unusable defaults) */
 

@@ -27,6 +27,12 @@
 #include "RNA_access.hh"
 
 #include "UI_interface_c.hh"
+#include "UI_code_editor.hh"
+#include "UI_interface_layout.hh"
+#include "BKE_context.hh"
+#include "ED_screen.hh"
+#include "ED_undo.hh"
+#include "BLT_translation.hh"
 
 #include "interface_intern.hh"
 #include "interface_textbox.hh"
@@ -130,6 +136,54 @@ float textbox_vscroll_width(const ButtonTextBox *textbox)
   return pad;
 }
 
+TextboxScrollbarGeometry textbox_scrollbar_geometry(const ButtonTextBox *textbox,
+                                                     const rctf &rect,
+                                                     const float aspect,
+                                                     const bool horizontal)
+{
+  TextboxScrollbarGeometry result;
+  const float aspect_safe = std::max(aspect, 0.0001f);
+  const float pad = 2.0f / aspect_safe;
+  const bool code = (textbox->flag & BUT_CODE_EDITOR) != 0;
+  const float vwidth = textbox_vscroll_width(textbox);
+  const float grip_width = code ? std::max(vwidth, 0.9f * UI_UNIT_X / aspect_safe) : vwidth;
+  result.track = rect;
+  BLI_rctf_pad(&result.track, -pad, -pad);
+  float visible, total, current;
+  if (horizontal) {
+    result.track.xmax -= grip_width;
+    result.track.ymax = result.track.ymin + std::max(4.0f, textbox_hscroll_height() / aspect_safe);
+    visible = std::max(textbox->last_code_visible_w, 1);
+    total = std::max(float(textbox->last_max_line_px), visible);
+    current = textbox->col_scroll();
+  }
+  else {
+    result.track.xmin = result.track.xmax - vwidth;
+    result.track.ymin += textbox_grip_height() / aspect_safe;
+    visible = std::max(textbox->drawn_rows(), 1);
+    total = std::max(float(textbox->last_total_lines), visible);
+    current = textbox->line_scroll();
+  }
+  result.max_scroll = std::max(0, int(total - visible));
+  const float length = std::max(0.0f, horizontal ? BLI_rctf_size_x(&result.track) :
+                                                  BLI_rctf_size_y(&result.track));
+  const float thumb_length = std::clamp(length * visible / total,
+                                       std::min(10.0f / aspect_safe, length), length);
+  result.travel = length - thumb_length;
+  const float offset = result.max_scroll > 0 ?
+                           std::clamp(current / result.max_scroll, 0.0f, 1.0f) * result.travel : 0;
+  result.thumb = result.track;
+  if (horizontal) {
+    result.thumb.xmin += offset;
+    result.thumb.xmax = result.thumb.xmin + thumb_length;
+  }
+  else {
+    result.thumb.ymax -= offset;
+    result.thumb.ymin = result.thumb.ymax - thumb_length;
+  }
+  return result;
+}
+
 void textbox_scroll_win_rects(const ButtonTextBox *textbox,
                               const rctf *win_rect,
                               const float aspect,
@@ -144,7 +198,6 @@ void textbox_scroll_win_rects(const ButtonTextBox *textbox,
   const bool is_code = (textbox->flag & BUT_CODE_EDITOR) != 0;
   const float grip_w = is_code ? std::max(vscroll_w, 0.9f * UI_UNIT_X / aspect_safe) : vscroll_w;
   const float grip_hit_h = is_code ? std::max(grip_h, 0.75f * UI_UNIT_Y / aspect_safe) : grip_h;
-  const float hscroll_h = textbox_hscroll_height() / aspect_safe;
   /* Code editors need a wide slop: the caret otherwise steals the first press. */
   const float hit_extra = is_code ? (0.5f * UI_UNIT_X / aspect_safe) : (4.0f / aspect_safe);
 
@@ -154,20 +207,11 @@ void textbox_scroll_win_rects(const ButtonTextBox *textbox,
     r_grip->ymax = r_grip->ymin + grip_hit_h;
   }
   if (r_hscroll) {
-    *r_hscroll = *win_rect;
-    r_hscroll->xmin += pad;
-    r_hscroll->xmax -= pad + grip_w;
-    r_hscroll->ymin += pad;
-    r_hscroll->ymax = r_hscroll->ymin + std::max(4.0f, hscroll_h);
-    /* Extra pixels toward the text so the drawn thumb is easy to grab. */
+    *r_hscroll = textbox_scrollbar_geometry(textbox, *win_rect, aspect, true).track;
     r_hscroll->ymax += hit_extra;
   }
   if (r_vscroll) {
-    *r_vscroll = *win_rect;
-    r_vscroll->xmax -= pad;
-    r_vscroll->xmin = r_vscroll->xmax - vscroll_w;
-    r_vscroll->ymin += pad + grip_h;
-    r_vscroll->ymax -= pad;
+    *r_vscroll = textbox_scrollbar_geometry(textbox, *win_rect, aspect, false).track;
     r_vscroll->xmin -= hit_extra;
   }
 }
@@ -593,7 +637,7 @@ Vector<StringRef> textbox_wrap_lines(ButtonTextBox *textbox)
     }
     int max_px = 0;
     for (const StringRef line : lines) {
-      max_px = std::max(max_px, int(BLF_width(fontid, line.data(), line.size())));
+      max_px = std::max(max_px, textbox_code_x_from_offset(fontid, line, int(line.size())));
     }
     /* Extra em so the last glyph isn't flush against the vertical scrollbar. */
     const CodeLineMetrics m = textbox_code_metrics(fontid, int(lines.size()));
@@ -829,5 +873,92 @@ void wrangle_editor_size_set(const int width, const int visible_lines)
 }
 
 /** \} */
+
+void button_code_search_set(Button *button, CodeSearchState *search)
+{
+  if (button && button->type == ButtonType::TextBox) {
+    static_cast<ButtonTextBox *>(button)->code_search = search;
+  }
+}
+
+static void code_editor_refresh(bContext &C)
+{
+  if (ARegion *region = CTX_wm_region_popup(&C)) {
+    ED_region_tag_refresh_ui(region);
+    ED_region_tag_redraw(region);
+  }
+}
+
+void code_editor_draw_tools(Layout &layout,
+                            PointerRNA node_ptr,
+                            CodeSearchState &search,
+                            TextboxState &editor)
+{
+  char *buffer = RNA_string_get_alloc(&node_ptr, "code", nullptr, 0, nullptr);
+  search.update(buffer ? buffer : "");
+  MEM_SAFE_DELETE(buffer);
+  Layout &find_row = layout.row(true);
+  Block *block = find_row.block();
+  Button *find = uiDefBut(block, ButtonType::Text, "", 0, 0, 12 * UI_UNIT_X,
+                          UI_UNIT_Y, search.find, 0, sizeof(search.find) - 1, "Find in code");
+  button_placeholder_set(find, IFACE_("Find"));
+  button_flag_enable(find, BUT_TEXTEDIT_UPDATE);
+  button_func_set(find, [](bContext &C) { code_editor_refresh(C); });
+  find_row.button("", ICON_TRIA_UP, [&search](bContext &C) {
+    search.step(-1);
+    code_editor_refresh(C);
+  }, TIP_("Previous match (wrap around)"));
+  find_row.button("", ICON_TRIA_DOWN, [&search](bContext &C) {
+    search.step(1);
+    code_editor_refresh(C);
+  }, TIP_("Next match (wrap around)"));
+  find_row.label(fmt::format("{} / {}", search.current + 1, search.matches.size()), ICON_NONE);
+  find_row.button(IFACE_("Format Code"), ICON_ALIGN_JUSTIFY,
+                  [node_ptr, &search, &editor](bContext &C) mutable {
+    char *raw = RNA_string_get_alloc(&node_ptr, "code", nullptr, 0, nullptr);
+    const std::string old_code = raw ? raw : "";
+    MEM_SAFE_DELETE(raw);
+    const std::string formatted = code_editor_format(old_code);
+    if (old_code != formatted) {
+      RNA_string_set(&node_ptr, "code", formatted.c_str());
+      RNA_property_update(&C, &node_ptr, RNA_struct_find_property(&node_ptr, "code"));
+      ED_undo_push(&C, "Format Wrangle Code");
+      search.update(formatted);
+      editor.scroll = editor.scroll_x = 0;
+    }
+    code_editor_refresh(C);
+  }, TIP_("Format with two-space indentation, new lines after statements, and } else on one line"));
+  Layout &replace_row = layout.row(true);
+  Button *replace = uiDefBut(replace_row.block(), ButtonType::Text, "", 0, 0,
+                             12 * UI_UNIT_X, UI_UNIT_Y, search.replace, 0,
+                             sizeof(search.replace) - 1, "Replacement text");
+  button_placeholder_set(replace, IFACE_("Replace"));
+  auto replace_matches = [node_ptr, &search](bContext &C, const bool all) mutable {
+    char *raw = RNA_string_get_alloc(&node_ptr, "code", nullptr, 0, nullptr);
+    std::string text = raw ? raw : "";
+    MEM_SAFE_DELETE(raw);
+    search.update(text);
+    if (search.current < 0) {
+      return;
+    }
+    if (all) {
+      for (auto it = search.matches.rbegin(); it != search.matches.rend(); ++it) {
+        text.replace(*it, search.query.size(), search.replace);
+      }
+    }
+    else {
+      text.replace(search.matches[search.current], search.query.size(), search.replace);
+    }
+    RNA_string_set(&node_ptr, "code", text.c_str());
+    RNA_property_update(&C, &node_ptr, RNA_struct_find_property(&node_ptr, "code"));
+    ED_undo_push(&C, "Replace Wrangle Code");
+    search.update(text);
+    code_editor_refresh(C);
+  };
+  replace_row.button(IFACE_("Replace"), ICON_LOOP_FORWARDS,
+                      [replace_matches](bContext &C) mutable { replace_matches(C, false); });
+  replace_row.button(IFACE_("Replace All"), ICON_FILE_REFRESH,
+                      [replace_matches](bContext &C) mutable { replace_matches(C, true); });
+}
 
 }  // namespace blender::ui

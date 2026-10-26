@@ -114,3 +114,5 @@ endif()
 if(WITH_KTX)
   add_subdirectory(ktx_bridge)
 endif()
+
+add_subdirectory(resting_bodies)

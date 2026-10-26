@@ -44,6 +44,7 @@
 #include "ED_node.hh"
 
 #include "UI_interface_icons.hh"
+#include "UI_code_editor.hh"
 #include "UI_view2d.hh"
 
 #include "buttons/interface_label.hh"
@@ -2828,7 +2829,7 @@ static void widget_draw_textbox(const uiFontStyle *fstyle,
   }
   const int visible_w = is_code ? std::max(8, textbox->last_code_visible_w) :
                                   std::max(8, BLI_rcti_size_x(&rect) - code_gutter);
-  const int scroll_x = is_code ? textbox->col_scroll() : 0;
+  int scroll_x = is_code ? textbox->col_scroll() : 0;
 
   /* Code editor: row height follows the font (A+/Ctrl-wheel), so glyphs do not pile up.
    * Other text-boxes still pack visible_lines into the widget. */
@@ -2848,8 +2849,28 @@ static void widget_draw_textbox(const uiFontStyle *fstyle,
     return line_top - line_height + extra * 0.5f;
   };
 
-  const int scroll = textbox->line_scroll();
   const char *str = lines[0].begin();
+  if (is_code && textbox->code_search) {
+    CodeSearchState &search = *textbox->code_search;
+    search.update(str);
+    if (search.reveal && search.current >= 0) {
+      const int offset = search.matches[search.current];
+      const int line = textbox_wrapped_line_index_from_char_offset(lines, offset);
+      textbox->line_scroll_set(std::max(0, line - visible_lines / 2));
+      const int col = offset - int(lines[line].begin() - str);
+      const int x0 = textbox_code_x_from_offset(draw_fontid, lines[line], col,
+                                               textbox->last_code_cell_w);
+      const int x1 = textbox_code_x_from_offset(draw_fontid, lines[line],
+                                               col + int(search.query.size()),
+                                               textbox->last_code_cell_w);
+      if (x0 < scroll_x || x1 > scroll_x + visible_w) {
+        textbox->col_scroll_set(std::max(0, x0 - visible_w / 4));
+        scroll_x = textbox->col_scroll();
+      }
+      search.reveal = false;
+    }
+  }
+  const int scroll = textbox->line_scroll();
 
   int line_cursor = 0;
   int line_select_start = 0;
@@ -2927,6 +2948,40 @@ static void widget_draw_textbox(const uiFontStyle *fstyle,
                 scissor_textbox.ymin,
                 BLI_rcti_size_x(&scissor_textbox),
                 BLI_rcti_size_y(&scissor_textbox));
+  }
+
+  /* Search stays visible when the search field, rather than the code box, has focus. */
+  if (is_code && textbox->code_search && !textbox->code_search->matches.empty()) {
+    const CodeSearchState &search = *textbox->code_search;
+    GPU_blend(GPU_BLEND_ALPHA);
+    for (int i = scroll; i < std::min(scroll + visible_lines, int(lines.size())); i++) {
+      const StringRef line = lines[i];
+      const int begin = int(line.begin() - str), end = begin + int(line.size());
+      auto match = std::lower_bound(search.matches.begin(), search.matches.end(),
+                                    begin - int(search.query.size()) + 1);
+      for (; match != search.matches.end() && *match < end; ++match) {
+        const int first = std::max(0, *match - begin);
+        const int last = std::min(end, *match + int(search.query.size())) - begin;
+        if (last <= first) {
+          continue;
+        }
+        const bool active = int(match - search.matches.begin()) == search.current;
+        const float color[4] = {1.0f, active ? 0.55f : 0.8f, 0.12f, active ? 0.65f : 0.3f};
+        const int x0 = textbox_code_x_from_offset(draw_fontid, line, first,
+                                                 textbox->last_code_cell_w);
+        const int x1 = textbox_code_x_from_offset(draw_fontid, line, last,
+                                                 textbox->last_code_cell_w);
+        const float left = std::max(float(rect.xmin + code_gutter),
+                                     float(rect.xmin + code_gutter + x0 - scroll_x));
+        const float right = std::min(float(rect.xmax - 2),
+                                      float(rect.xmin + code_gutter + x1 - scroll_x));
+        const float y = rect.ymax - line_height * float(i - scroll);
+        if (right > left) {
+          draw_code_box(left, y - line_height, right, y, color);
+        }
+      }
+    }
+    GPU_blend(GPU_BLEND_NONE);
   }
 
   /* Text button selection, cursor, composite underline. */
@@ -3332,58 +3387,25 @@ static void widget_draw_textbox(const uiFontStyle *fstyle,
     }
     return 0;
   };
-  if (need_hscroll) {
-    rcti hscroll_rect = *button_rect;
-    BLI_rcti_pad(&hscroll_rect, -scrollbar_pad, -scrollbar_pad);
-    hscroll_rect.ymax = hscroll_rect.ymin + std::max(4, hscroll_h);
-    /* Full-width track; keep a little room for the resize grip. */
-    hscroll_rect.xmax -= int(std::lround(grip_w));
-    rcti hslider = hscroll_rect;
-    const int track_w = std::max(1, BLI_rcti_size_x(&hscroll_rect));
-    const int content_w = std::max(textbox->last_max_line_px, visible_w);
-    const float hfactor = float(visible_w) / float(std::max(content_w, 1));
-    const int slider_w = std::max(int(10.0f / but->block->aspect), int(track_w * hfactor));
-    const int max_scroll = std::max(textbox->last_max_line_px - visible_w, 1);
-    hslider.xmin = hscroll_rect.xmin +
-                   int((float(textbox->col_scroll()) / float(max_scroll)) * (track_w - slider_w));
-    hslider.xmax = hslider.xmin + slider_w;
-    hslider.xmin = std::max(hslider.xmin, hscroll_rect.xmin);
-    hslider.xmax = std::min(hslider.xmax, hscroll_rect.xmax);
-    if (BLI_rcti_isect(&hscroll_rect, button_rect, nullptr)) {
-      uiWidgetColors wscroll_h = theme::theme_get()->tui.wcol_scroll;
-      draw_widget_scroll(&wscroll_h, &hscroll_rect, &hslider, scroll_state_for(2));
+  rctf scrollbar_bounds;
+  BLI_rctf_rcti_copy(&scrollbar_bounds, button_rect);
+  auto draw_scrollbar = [&](const bool horizontal) {
+    const TextboxScrollbarGeometry geometry = textbox_scrollbar_geometry(
+        textbox, scrollbar_bounds, but->block->aspect, horizontal);
+    rcti track, thumb;
+    BLI_rcti_rctf_copy(&track, &geometry.track);
+    BLI_rcti_rctf_copy(&thumb, &geometry.thumb);
+    if (BLI_rcti_size_x(&track) > 0 && BLI_rcti_size_y(&track) > 0 &&
+        BLI_rcti_isect(&track, button_rect, nullptr)) {
+      uiWidgetColors colors = theme::theme_get()->tui.wcol_scroll;
+      draw_widget_scroll(&colors, &track, &thumb, scroll_state_for(horizontal ? 2 : 1));
     }
+  };
+  if (need_hscroll) {
+    draw_scrollbar(true);
   }
-  /* Vertical scrollbar is always drawn for the code editor. */
-  if (!is_code && textbox->last_total_lines <= visible_lines) {
-    return;
-  }
-  /* Draw scrollbar. */
-  rcti scroll_rect = *button_rect;
-  BLI_rcti_pad(&scroll_rect, -scrollbar_pad, -scrollbar_pad);
-  scroll_rect.xmin = scroll_rect.xmax - vscroll_w;
-  scroll_rect.ymin += textbox_grip_height() / but->block->aspect;
-
-  rcti slider_rect = scroll_rect;
-
-  const float factor = float(scroll_rect.ymax - scroll_rect.ymin) / float(lines.size());
-
-  slider_rect.ymax -= std::ceil(factor * textbox->line_scroll());
-  slider_rect.ymin = slider_rect.ymax - std::ceil(factor * visible_lines);
-  if (BLI_rcti_size_y(&slider_rect) < (10.0f / but->block->aspect)) {
-    float center = BLI_rcti_cent_y_fl(&slider_rect);
-    slider_rect.ymin = center - (5.0f / but->block->aspect);
-    slider_rect.ymax = center + (5.0f / but->block->aspect);
-  }
-  const int pad = slider_rect.ymax > scroll_rect.ymax ? -(slider_rect.ymax - scroll_rect.ymax) :
-                  slider_rect.ymin < scroll_rect.ymin ? (scroll_rect.ymin - slider_rect.ymin) :
-                                                        0;
-  BLI_rcti_translate(&slider_rect, 0, pad);
-  slider_rect.ymin = std::max(slider_rect.ymin, scroll_rect.ymin);
-  slider_rect.ymax = std::min(slider_rect.ymax, scroll_rect.ymax);
-  if (BLI_rcti_isect(&scroll_rect, button_rect, nullptr)) {
-    uiWidgetColors wscroll_v = theme::theme_get()->tui.wcol_scroll;
-    draw_widget_scroll(&wscroll_v, &scroll_rect, &slider_rect, scroll_state_for(1));
+  if (is_code || textbox->last_total_lines > visible_lines) {
+    draw_scrollbar(false);
   }
 }
 

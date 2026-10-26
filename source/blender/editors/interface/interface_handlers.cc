@@ -78,6 +78,7 @@
 #include "UI_abstract_view.hh"
 #include "UI_interface.hh"
 #include "UI_interface_c.hh"
+#include "UI_code_editor.hh"
 #include "UI_string_search.hh"
 
 #include "BLF_api.hh"
@@ -3146,6 +3147,14 @@ static void but_paste(bContext *C, Button *but, HandleButtonData *data, const bo
   but_get_pasted_text_from_clipboard(
       but_is_utf8(but), &buf_paste, &buf_paste_len, but->type == ButtonType::TextBox);
 
+  /* Value-paste shortcuts and pasting while a text buffer is active must use the same width. */
+  if (buf_paste && but->type == ButtonType::TextBox && (but->flag & BUT_CODE_EDITOR)) {
+    const std::string normalized = code_editor_normalize_paste(
+        std::string_view(buf_paste, buf_paste_len));
+    MEM_delete(buf_paste);
+    buf_paste = BLI_strdup(normalized.c_str());
+    buf_paste_len = int(normalized.size());
+  }
   const bool has_required_data = but->poin || but->rnapoin;
 
   switch (but->type) {
@@ -4434,7 +4443,13 @@ static bool textedit_copypaste(Button *but, TextEdit &text_edit, const int mode)
                      WM_clipboard_text_get(false, but_is_utf8(but), &buf_len);
 
     if (pbuf) {
-      textedit_insert_buf(but, text_edit, pbuf, buf_len);
+      if (but_is_code_editor(but)) {
+        const std::string normalized = code_editor_normalize_paste(std::string_view(pbuf, buf_len));
+        textedit_insert_buf(but, text_edit, normalized.c_str(), int(normalized.size()));
+      }
+      else {
+        textedit_insert_buf(but, text_edit, pbuf, buf_len);
+      }
 
       changed = true;
 
@@ -5162,6 +5177,15 @@ static int do_but_textedit(
 
   if (event->val == KM_PRESS && !is_ime_composing) {
     switch (event->type) {
+      case EVT_F3KEY:
+        if (textbox && textbox->code_search) {
+          textbox->code_search->update(text_edit.edit_string);
+          textbox->code_search->step((event->modifier & KM_SHIFT) ? -1 : 1);
+          ED_region_tag_refresh_ui(data->region);
+          ED_region_tag_redraw(data->region);
+          retval = WM_UI_HANDLER_BREAK;
+        }
+        break;
       case EVT_VKEY:
       case EVT_XKEY:
       case EVT_CKEY:
@@ -6660,26 +6684,23 @@ static int do_but_TEXTBOX(bContext *C,
       if (!(event->type == LEFTMOUSE && ELEM(event->val, KM_PRESS, KM_DBL_CLICK))) {
         break;
       }
-      /* Try activate the text-box scroll-bar. */
-      if (scroll_hit == TEXTBOX_SCROLL_HIT_V) {
+      /* Capture both the mouse and scroll origins. Merely grabbing the thumb must not move it. */
+      if (ELEM(scroll_hit, TEXTBOX_SCROLL_HIT_V, TEXTBOX_SCROLL_HIT_H)) {
+        const bool horizontal = scroll_hit == TEXTBOX_SCROLL_HIT_H;
+        const TextboxScrollbarGeometry geometry = textbox_scrollbar_geometry(
+            textbox, rect, block->aspect, horizontal);
         WM_cursor_modal_restore(win);
         WM_cursor_set(win, WM_CURSOR_DEFAULT);
         data->changed_cursor = false;
-        data->origvalue = 1.0;
-        textbox->scroll_active = 1;
+        data->origvalue = horizontal ? 2.0 : 1.0;
+        data->dragstartx = event->xy[0];
+        data->dragstarty = event->xy[1];
+        data->origvec[0] = horizontal ? textbox->col_scroll() : textbox->line_scroll();
+        data->origvec[1] = geometry.max_scroll;
+        data->origvec[2] = geometry.travel;
+        textbox->scroll_active = horizontal ? 2 : 1;
         button_activate_state(C, textbox, BUTTON_STATE_TEXTBOX_SCROLLING);
-        /* Scroll to mouse cursor with mouse move. */
-        WM_event_add_mousemove(win);
-        return WM_UI_HANDLER_BREAK;
-      }
-      if (scroll_hit == TEXTBOX_SCROLL_HIT_H) {
-        WM_cursor_modal_restore(win);
-        WM_cursor_set(win, WM_CURSOR_DEFAULT);
-        data->changed_cursor = false;
-        data->origvalue = 2.0;
-        textbox->scroll_active = 2;
-        button_activate_state(C, textbox, BUTTON_STATE_TEXTBOX_SCROLLING);
-        WM_event_add_mousemove(win);
+        ED_region_tag_redraw(data->region);
         return WM_UI_HANDLER_BREAK;
       }
       /* Try activate the text-box grip button. */
@@ -6703,42 +6724,32 @@ static int do_but_TEXTBOX(bContext *C,
       break;
     }
     case BUTTON_STATE_TEXTBOX_SCROLLING: {
-      if (event->type == LEFTMOUSE && event->val == KM_RELEASE) {
+      if ((event->type == LEFTMOUSE && event->val == KM_RELEASE) ||
+          event->type == WINDEACTIVATE ||
+          (event->type == EVT_ESCKEY && event->val == KM_PRESS)) {
         textbox->scroll_active = 0;
         ED_region_tag_redraw(data->region);
         button_activate_state(
             C, textbox, textbox->editstr ? BUTTON_STATE_TEXT_EDITING : BUTTON_STATE_HIGHLIGHT);
         return WM_UI_HANDLER_BREAK;
       }
-      if (event->type == MOUSEMOVE) {
-        int mx = event->xy[0];
-        int my = event->xy[1];
-        window_to_block(data->region, block, &mx, &my);
-        if (data->origvalue >= 1.5) {
-          const float xmin = textbox->rect.xmin;
-          const float xmax = textbox->rect.xmax - textbox_vscroll_width(textbox);
-          const float range = std::max(1.0f, xmax - xmin);
-          const int visible_w = textbox->last_code_visible_w > 0 ? textbox->last_code_visible_w :
-                                                                   std::max(8, int(range));
-          const int max_scroll = std::max(textbox->last_max_line_px - visible_w, 0);
-          const int scroll = round_fl_to_int(((mx - xmin) / range) * float(max_scroll));
-          if (textbox->col_scroll() != scroll) {
-            ED_region_tag_redraw(data->region);
-          }
+      if (ELEM(event->type, MOUSEMOVE, INBETWEEN_MOUSEMOVE)) {
+        const bool horizontal = data->origvalue >= 1.5;
+        const float delta = horizontal ? event->xy[0] - data->dragstartx :
+                                         data->dragstarty - event->xy[1];
+        const int scroll = data->origvec[2] > 0 ?
+                               std::clamp(round_fl_to_int(data->origvec[0] +
+                                                          delta * data->origvec[1] /
+                                                              data->origvec[2]),
+                                          0, int(data->origvec[1])) :
+                               int(data->origvec[0]);
+        if (horizontal) {
           textbox->col_scroll_set(scroll);
         }
         else {
-          const float ymin = textbox->rect.ymin + textbox_grip_height();
-          const float range = textbox->rect.ymax - ymin;
-          const int scroll = round_fl_to_int(
-              (range - (my - ymin)) / range *
-              (textbox->last_total_lines - textbox->drawn_rows()));
-
-          if (textbox->line_scroll() != scroll) {
-            ED_region_tag_redraw(data->region);
-          }
           textbox->line_scroll_set(scroll);
         }
+        ED_region_tag_redraw(data->region);
         return WM_UI_HANDLER_BREAK;
       }
       break;
@@ -14709,6 +14720,14 @@ static bool popup_handler_should_passthrough(bContext *C,
   const bool is_text = popup_event_is_text_input(event);
   const bool is_mouse_press = ISMOUSE_BUTTON(event->type) &&
                               ELEM(event->val, KM_PRESS, KM_DBL_CLICK);
+
+  /* Pointer drags belong to their starting popup until release, even over another region.
+   * Passing the release through left scrollbar and resize interactions stuck in modal state. */
+  if (menu->is_grab || menu->mmb_panning ||
+      (has_active && ELEM(active->active->state, BUTTON_STATE_TEXTBOX_SCROLLING,
+                         BUTTON_STATE_TEXTBOX_RESIZING, BUTTON_STATE_TEXT_SELECTING))) {
+    return false;
+  }
 
   /* Focused editor keeps keys and timers even when the cursor is over another popup. */
   if (has_active && (is_text || ISTIMER(event->type))) {

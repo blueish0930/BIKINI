@@ -52,6 +52,7 @@
 #include "UI_interface.hh"
 #include "UI_interface_c.hh"
 #include "UI_interface_layout.hh"
+#include "UI_code_editor.hh"
 #include "UI_resources.hh"
 
 #include "RNA_access.hh"
@@ -1913,11 +1914,10 @@ static void node_geo_exec(GeoNodeExecParams params)
 struct WrangleEditPopupArg {
   bNode *node = nullptr;
   bNodeTree *ntree = nullptr;
+  int32_t node_identifier = 0;
   TextboxState editor_state;
-  char find[256] = {};
-  char replace[256] = {};
+  ui::CodeSearchState search;
   char status[256] = {};
-  int find_from = 0;
   bool pinned = false;
   /** Editor font size in points, for the size field in the header. */
   float font_pt = 0.0f;
@@ -1943,7 +1943,8 @@ static void wrangle_code_diag_fn(const char *str,
   *r_num = n;
 }
 
-static void wrangle_apply_code_editor_flags(ui::Block *block, const int64_t buttons_before)
+static void wrangle_apply_code_editor_flags(ui::Block *block, const int64_t buttons_before,
+                                            ui::CodeSearchState *search = nullptr)
 {
   if (!block) {
     return;
@@ -1952,6 +1953,7 @@ static void wrangle_apply_code_editor_flags(ui::Block *block, const int64_t butt
     ui::Button *but = block->buttons_ptrs[i].get();
     if (but && but->type == ui::ButtonType::TextBox) {
       button_flag_enable(but, ui::BUT_CODE_EDITOR);
+      ui::button_code_search_set(but, search);
       button_drawflag_enable(but, ui::BUT_TEXT_LEFT);
       button_func_complete_set(but, wrangle_autocomplete_fn, nullptr);
       button_func_suggest_set(but, wrangle_suggest_fn, nullptr);
@@ -1960,17 +1962,14 @@ static void wrangle_apply_code_editor_flags(ui::Block *block, const int64_t butt
   }
 }
 
-static void wrangle_set_code(WrangleEditPopupArg &arg, const std::string &code)
-{
-  NodeGeometryWrangle &storage = node_storage(*arg.node);
-  MEM_SAFE_DELETE(storage.code);
-  storage.code = BLI_strdup(code.c_str());
-}
-
 static ui::Block *wrangle_edit_popup(bContext *C, ARegion *region, void *arg_v)
 {
   WrangleEditPopupArg *arg = static_cast<WrangleEditPopupArg *>(arg_v);
   if (!arg || !arg->node || !arg->ntree) {
+    return nullptr;
+  }
+  arg->node = arg->ntree->node_by_id(arg->node_identifier);
+  if (!arg->node) {
     return nullptr;
   }
   NodeGeometryWrangle &storage = node_storage(*arg->node);
@@ -2046,111 +2045,9 @@ static ui::Block *wrangle_edit_popup(bContext *C, ARegion *region, void *arg_v)
                 arg->pinned ? TIP_("Unpin") : TIP_("Keep this window open"));
   header.button("", ICON_X, [block](bContext & /*C*/) { ui::popup_menu_close(block, false); }, IFACE_("Close"));
 
-  ui::Layout &find_abs = layout.absolute(true);
-  find_abs.ui_units_y_set(1.15f);
-  ui::Block *abs_block = find_abs.block();
-  const int find_w = int(17 * UI_UNIT_X);
-  ui::Button *find_but = uiDefBut(abs_block,
-                                  ui::ButtonType::Text,
-                                  "",
-                                  0,
-                                  0,
-                                  find_w,
-                                  UI_UNIT_Y,
-                                  arg->find,
-                                  0,
-                                  255,
-                                  TIP_("Find"));
-  ui::button_placeholder_set(find_but, IFACE_("Find"));
-  ui::Button *repl_but = uiDefBut(abs_block,
-                                  ui::ButtonType::Text,
-                                  "",
-                                  find_w + int(0.4f * UI_UNIT_X),
-                                  0,
-                                  find_w,
-                                  UI_UNIT_Y,
-                                  arg->replace,
-                                  0,
-                                  255,
-                                  TIP_("Replace"));
-  ui::button_placeholder_set(repl_but, IFACE_("Replace"));
+  PointerRNA tools_ptr = RNA_pointer_create_discrete(&arg->ntree->id, RNA_Node, arg->node);
+  ui::code_editor_draw_tools(layout, tools_ptr, arg->search, arg->editor_state);
 
-  ui::Layout &tools = layout.row(true);
-  tools.button(IFACE_("Find Next"), ICON_VIEWZOOM, [arg](bContext &C) {
-    const char *code = node_storage(*arg->node).code;
-    if (!code || arg->find[0] == '\0') {
-      BLI_strncpy(arg->status, "Nothing to find", sizeof(arg->status));
-      return;
-    }
-    const char *hit = strstr(code + arg->find_from, arg->find);
-    if (!hit && arg->find_from > 0) {
-      hit = strstr(code, arg->find);
-    }
-    if (!hit) {
-      BLI_strncpy(arg->status, "Not found", sizeof(arg->status));
-      return;
-    }
-    arg->find_from = int(hit - code) + int(strlen(arg->find));
-    int line = 1;
-    int col = 1;
-    for (const char *p = code; p < hit; p++) {
-      if (*p == '\n') {
-        line++;
-        col = 1;
-      }
-      else {
-        col++;
-      }
-    }
-    arg->editor_state.scroll = std::max(0, line - 1);
-    SNPRINTF(arg->status, "Line %d, column %d", line, col);
-    ED_region_tag_redraw(CTX_wm_region(&C));
-  });
-  tools.button(IFACE_("Replace"), ICON_LOOP_FORWARDS, [arg](bContext &C) {
-    const char *code = node_storage(*arg->node).code;
-    if (!code || arg->find[0] == '\0') {
-      return;
-    }
-    std::string s(code);
-    const size_t pos = s.find(arg->find, size_t(arg->find_from > 0 ? arg->find_from - 1 : 0));
-    if (pos == std::string::npos) {
-      BLI_strncpy(arg->status, "Not found", sizeof(arg->status));
-      return;
-    }
-    s.replace(pos, strlen(arg->find), arg->replace);
-    wrangle_set_code(*arg, s);
-    arg->find_from = int(pos) + int(strlen(arg->replace));
-    BLI_strncpy(arg->status, "Replaced 1", sizeof(arg->status));
-    if (ARegion *popup = CTX_wm_region_popup(&C)) {
-      ED_region_tag_refresh_ui(popup);
-      ED_region_tag_redraw(popup);
-    }
-  });
-  tools.button(IFACE_("All"), ICON_FILE_REFRESH, [arg](bContext &C) {
-    const char *code = node_storage(*arg->node).code;
-    if (!code || arg->find[0] == '\0') {
-      return;
-    }
-    std::string s(code);
-    int n = 0;
-    size_t pos = 0;
-    const std::string find(arg->find);
-    const std::string repl(arg->replace);
-    while ((pos = s.find(find, pos)) != std::string::npos) {
-      s.replace(pos, find.size(), repl);
-      pos += repl.size();
-      n++;
-    }
-    wrangle_set_code(*arg, s);
-    SNPRINTF(arg->status, "Replaced %d", n);
-    if (ARegion *popup = CTX_wm_region_popup(&C)) {
-      ED_region_tag_refresh_ui(popup);
-      ED_region_tag_redraw(popup);
-    }
-  });
-  if (arg->status[0]) {
-    layout.label(arg->status, ICON_INFO);
-  }
   const char *code = storage.code ? storage.code : "";
   const vex::CompileOutput compiled = wrangle_compile_editor_preview(code);
   if (!compiled.program && !compiled.error.empty()) {
@@ -2163,7 +2060,7 @@ static ui::Block *wrangle_edit_popup(bContext *C, ARegion *region, void *arg_v)
   PointerRNA node_ptr = RNA_pointer_create_discrete(&arg->ntree->id, RNA_Node, arg->node);
   const int64_t buttons_before = block->buttons_ptrs.size();
   layout.textbox_with_state(&node_ptr, "code", &arg->editor_state, std::nullopt);
-  wrangle_apply_code_editor_flags(block, buttons_before);
+  wrangle_apply_code_editor_flags(block, buttons_before, &arg->search);
 
   const int bounds_offset[2] = {0, -UI_UNIT_Y};
   ui::block_bounds_set_popup(block, int(0.3f * U.widget_unit), bounds_offset);
@@ -2211,6 +2108,7 @@ static wmOperatorStatus wrangle_edit_invoke(bContext *C, wmOperator *op, const w
   WrangleEditPopupArg *arg = MEM_new<WrangleEditPopupArg>(__func__);
   arg->node = static_cast<bNode *>(node_ptr.data);
   arg->ntree = reinterpret_cast<bNodeTree *>(node_ptr.owner_id);
+  arg->node_identifier = arg->node->identifier;
   ui::popup_block_invoke(C, wrangle_edit_popup, arg, wrangle_edit_popup_free);
   return OPERATOR_CANCELLED;
 }
