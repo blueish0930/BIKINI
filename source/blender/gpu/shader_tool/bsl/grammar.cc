@@ -340,7 +340,10 @@ struct BSLParser {
         match_if(Const, Constexpr);
 
         if (peek() == Static) {
-          error("Static keyword must be placed before constexpr");
+          /* Report even when parsing speculatively, as no other declaration accepts this. Then
+           * stop parsing like #error(). */
+          error_handler.report(curr, "Static keyword must be placed before constexpr");
+          curr = Token(parser);
           return true;
         }
       }
@@ -365,6 +368,12 @@ struct BSLParser {
   void declarator(bool optional_id_name = true, bool optional_bitfield = false)
   {
     NODE(Declarator);
+    if (peek() == '*') {
+      /* Note that '*' is parsed as multi-token. The parser code will check the number of stars.
+       * Doing the check here would make the error disappear because 'var_decl' is optional. */
+      NODE(Pointer);
+      match('*');
+    }
     bool par = match_if('(');
     /* NOTE: Require Ampersand after parenthesis to avoid mistaking the decl with a func call. */
     if (par || peek() == '&') {

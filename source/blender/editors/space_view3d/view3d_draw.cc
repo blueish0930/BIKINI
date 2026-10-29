@@ -38,6 +38,7 @@
 #include "BKE_scene.hh"
 #include "BKE_screen.hh"
 #include "BKE_unit.hh"
+#include "BKE_view3d_runtime.hh"
 #include "BKE_viewer_path.hh"
 
 #include "BLF_api.hh"
@@ -144,15 +145,17 @@ void ED_view3d_update_viewmat(const Depsgraph *depsgraph,
     rctf cameraborder;
     cameraborder = BKE_camera_view_border(
         scene, depsgraph, v3d, rv3d, region->winx, region->winy, false, false, false);
-    rv3d->viewcamtexcofac[0] = float(region->winx) / BLI_rctf_size_x(&cameraborder);
-    rv3d->viewcamtexcofac[1] = float(region->winy) / BLI_rctf_size_y(&cameraborder);
+    rv3d->runtime->viewcamtexcofac[0] = float(region->winx) / BLI_rctf_size_x(&cameraborder);
+    rv3d->runtime->viewcamtexcofac[1] = float(region->winy) / BLI_rctf_size_y(&cameraborder);
 
-    rv3d->viewcamtexcofac[2] = -rv3d->viewcamtexcofac[0] * cameraborder.xmin / float(region->winx);
-    rv3d->viewcamtexcofac[3] = -rv3d->viewcamtexcofac[1] * cameraborder.ymin / float(region->winy);
+    rv3d->runtime->viewcamtexcofac[2] = -rv3d->runtime->viewcamtexcofac[0] * cameraborder.xmin /
+                                        float(region->winx);
+    rv3d->runtime->viewcamtexcofac[3] = -rv3d->runtime->viewcamtexcofac[1] * cameraborder.ymin /
+                                        float(region->winy);
   }
   else {
-    rv3d->viewcamtexcofac[0] = rv3d->viewcamtexcofac[1] = 1.0f;
-    rv3d->viewcamtexcofac[2] = rv3d->viewcamtexcofac[3] = 0.0f;
+    rv3d->runtime->viewcamtexcofac[0] = rv3d->runtime->viewcamtexcofac[1] = 1.0f;
+    rv3d->runtime->viewcamtexcofac[2] = rv3d->runtime->viewcamtexcofac[3] = 0.0f;
   }
 
   /* Calculate pixel-size factor once, this is used for lights and object-centers. */
@@ -891,11 +894,11 @@ static void draw_ndof_guide_orbit_axis(const RegionView3D *rv3d)
 
   immBindBuiltinProgram(GPU_SHADER_3D_SMOOTH_COLOR);
 
-  if (rv3d->ndof_rot_angle != 0.0f) {
+  if (rv3d->runtime->ndof_rot_angle != 0.0f) {
     /* -- draw rotation axis -- */
     float scaled_axis[3];
     const float scale = rv3d->dist;
-    mul_v3_v3fl(scaled_axis, rv3d->ndof_rot_axis, scale);
+    mul_v3_v3fl(scaled_axis, rv3d->runtime->ndof_rot_axis, scale);
 
     immBegin(GPU_PRIM_LINE_STRIP, 3);
     color[3] = 0; /* more transparent toward the ends */
@@ -926,13 +929,13 @@ static void draw_ndof_guide_orbit_axis(const RegionView3D *rv3d)
       const float step = 2.0f * float(M_PI / ROT_AXIS_DETAIL);
 
       float q[4]; /* rotate ring so it's perpendicular to axis */
-      const int upright = fabsf(rv3d->ndof_rot_axis[2]) >= 0.95f;
+      const int upright = fabsf(rv3d->runtime->ndof_rot_axis[2]) >= 0.95f;
       if (!upright) {
         const float up[3] = {0.0f, 0.0f, 1.0f};
         float vis_angle, vis_axis[3];
 
-        cross_v3_v3v3(vis_axis, up, rv3d->ndof_rot_axis);
-        vis_angle = acosf(dot_v3v3(up, rv3d->ndof_rot_axis));
+        cross_v3_v3v3(vis_axis, up, rv3d->runtime->ndof_rot_axis);
+        vis_angle = acosf(dot_v3v3(up, rv3d->runtime->ndof_rot_axis));
         axis_angle_to_quat(q, vis_axis, vis_angle);
       }
 
@@ -1042,7 +1045,7 @@ static void view3d_draw_grease_pencil(const bContext * /*C*/)
 static const char *view3d_get_name(View3D *v3d, RegionView3D *rv3d)
 {
   const char *name = nullptr;
-  const bool is_locked = RV3D_LOCK_FLAGS(rv3d) & RV3D_LOCK_ROTATION;
+  const bool is_locked = bke::region_view3d_lock_flags_get(rv3d) & RV3D_LOCK_ROTATION;
 
   switch (rv3d->view) {
     case RV3D_VIEW_FRONT:
@@ -1354,7 +1357,7 @@ static void draw_selected_name(const Main &bmain,
    * If not, increase it. */
   BLI_assert(BLI_string_len_array(info_array, i) < sizeof(info));
 
-  BLI_string_join_array(info, sizeof(info), info_array, i);
+  BLI_string_join_array(info, info_array, i);
 
   *yoffset -= VIEW3D_OVERLAY_LINEHEIGHT;
   BLF_draw_default(xoffset, *yoffset, 0.0f, info, sizeof(info));
@@ -1372,7 +1375,7 @@ static float4 get_low_fps_color()
   return col_alert;
 }
 
-static void get_fps_string(const Scene *scene, char *printable, const size_t printable_size)
+static void get_fps_string(const Scene *scene, MutableCStr printable)
 {
   SceneFPS_State state;
   if (!ED_scene_fps_average_calc(scene, &state)) {
@@ -1392,10 +1395,10 @@ static void get_fps_string(const Scene *scene, char *printable, const size_t pri
   }
 
   if (show_fractional) {
-    BLI_snprintf_utf8(printable, printable_size, ("%.2f fps"), state.fps_average);
+    SNPRINTF_UTF8(printable, ("%.2f fps"), state.fps_average);
   }
   else {
-    BLI_snprintf_utf8(printable, printable_size, ("%i fps"), int(state.fps_average + 0.5f));
+    SNPRINTF_UTF8(printable, ("%i fps"), int(state.fps_average + 0.5f));
   }
 }
 
@@ -1420,7 +1423,7 @@ static void draw_frame_info(Scene *scene, int xoffset, int *yoffset)
   /* 8 4-bytes chars (complex writing systems like Devanagari in UTF8 encoding) */
   char printable[32];
   printable[0] = '\0';
-  get_fps_string(scene, printable, sizeof(printable));
+  get_fps_string(scene, printable);
 
   if (U.uiflag & USER_SHOW_FPS && printable[0] != '\0') {
     info += msg_sep;
@@ -1534,9 +1537,9 @@ void view3d_draw_region_info(const bContext *C, ARegion *region)
 
 #ifdef WITH_INPUT_NDOF
   if (U.ndof_flag & NDOF_SHOW_GUIDE_ORBIT_AXIS) {
-    if ((RV3D_LOCK_FLAGS(rv3d) & RV3D_LOCK_ROTATION) == 0) {
+    if ((bke::region_view3d_lock_flags_get(rv3d) & RV3D_LOCK_ROTATION) == 0) {
       /* It only makes sense to show when orbiting. */
-      if (rv3d->ndof_rot_angle != 0.0f) {
+      if (rv3d->runtime->ndof_rot_angle != 0.0f) {
         /* TODO: draw something else (but not this) during fly mode. */
         draw_ndof_guide_orbit_axis(rv3d);
       }
@@ -1550,7 +1553,7 @@ void view3d_draw_region_info(const bContext *C, ARegion *region)
         /* When the center is locked, the auto-center is not used. */
         if (!(v3d->ob_center_cursor || v3d->ob_center)) {
           /* It only makes sense to show when orbiting. */
-          if (rv3d->ndof_rot_angle != 0.0f) {
+          if (rv3d->runtime->ndof_rot_angle != 0.0f) {
             draw_ndof_guide_orbit_center(rv3d);
           }
         }
@@ -1917,7 +1920,9 @@ void ED_view3d_draw_offscreen_simple(Depsgraph *depsgraph,
   ARegion region = {nullptr};
   bke::ARegionRuntime region_runtime{};
   region.runtime = &region_runtime;
+  bke::RegionView3DRuntime region_view3d_runtime;
   RegionView3D rv3d;
+  rv3d.runtime = &region_view3d_runtime;
 
   v3d.regionbase.first_ = v3d.regionbase.last_ = &region;
   region.regiondata = &rv3d;
@@ -2202,7 +2207,9 @@ ImBuf *ED_view3d_draw_offscreen_imbuf_simple(Depsgraph *depsgraph,
   ARegion region = {nullptr};
   bke::ARegionRuntime region_runtime{};
   region.runtime = &region_runtime;
+  bke::RegionView3DRuntime region_view3d_runtime;
   RegionView3D rv3d;
+  rv3d.runtime = &region_view3d_runtime;
 
   /* connect data */
   v3d.regionbase.first_ = v3d.regionbase.last_ = &region;
@@ -2352,7 +2359,7 @@ static bool view3d_clipping_test(const float co[3], const float clip[6][4])
 
 bool ED_view3d_clipping_test(const RegionView3D *rv3d, const float co[3], const bool is_local)
 {
-  return view3d_clipping_test(co, is_local ? rv3d->clip_local : rv3d->clip);
+  return view3d_clipping_test(co, is_local ? rv3d->runtime->clip_local : rv3d->clip);
 }
 
 /** \} */
@@ -2779,7 +2786,7 @@ RV3DMatrixStore *ED_view3d_mats_rv3d_backup(RegionView3D *rv3d)
   copy_m4_m4(rv3dmat->persmat, rv3d->persmat);
   copy_m4_m4(rv3dmat->persinv, rv3d->persinv);
   copy_m4_m4(rv3dmat->viewinv, rv3d->viewinv);
-  copy_v4_v4(rv3dmat->viewcamtexcofac, rv3d->viewcamtexcofac);
+  copy_v4_v4(rv3dmat->viewcamtexcofac, rv3d->runtime->viewcamtexcofac);
   rv3dmat->pixsize = rv3d->pixsize;
   return rv3dmat;
 }
@@ -2792,7 +2799,7 @@ void ED_view3d_mats_rv3d_restore(RegionView3D *rv3d, RV3DMatrixStore *rv3dmat_pt
   copy_m4_m4(rv3d->persmat, rv3dmat->persmat);
   copy_m4_m4(rv3d->persinv, rv3dmat->persinv);
   copy_m4_m4(rv3d->viewinv, rv3dmat->viewinv);
-  copy_v4_v4(rv3d->viewcamtexcofac, rv3dmat->viewcamtexcofac);
+  copy_v4_v4(rv3d->runtime->viewcamtexcofac, rv3dmat->viewcamtexcofac);
   rv3d->pixsize = rv3dmat->pixsize;
 }
 
@@ -2819,7 +2826,7 @@ void ED_scene_draw_fps(const Scene *scene, int xoffset, int *yoffset)
   /* 8 4-bytes chars (complex writing systems like Devanagari in UTF8 encoding) */
   char printable[32];
   printable[0] = '\0';
-  get_fps_string(scene, printable, sizeof(printable));
+  get_fps_string(scene, printable);
 
   BLF_draw_default(xoffset, *yoffset, 0.0f, printable, sizeof(printable));
 }

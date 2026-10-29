@@ -18,6 +18,7 @@
 #include "BKE_movieclip.hh"
 #include "BKE_node_runtime.hh"
 #include "BKE_object_types.hh"
+#include "BKE_view3d_runtime.hh"
 
 #include "DNA_node_types.h"
 
@@ -1409,7 +1410,7 @@ static void rna_RegionView3D_quadview_clip_update(Main * /*main*/,
 static RenderEngine *rna_RegionView3D_engine_get(const PointerRNA *ptr)
 {
   const RegionView3D *rv3d = static_cast<RegionView3D *>(ptr->data);
-  return rv3d->view_render ? RE_view_engine_get(rv3d->view_render) : nullptr;
+  return rv3d->runtime->view_render ? RE_view_engine_get(rv3d->runtime->view_render) : nullptr;
 }
 
 static bool rna_RegionView3D_pause_render_get(PointerRNA *ptr)
@@ -1431,8 +1432,8 @@ static void rna_RegionView3D_pause_render_set(PointerRNA *ptr, const bool value)
         continue;
       }
       const RegionView3D *rv3d = static_cast<RegionView3D *>(region_iter.regiondata);
-      if (rv3d && rv3d->view_render) {
-        if (RenderEngine *engine = RE_view_engine_get(rv3d->view_render)) {
+      if (rv3d && rv3d->runtime->view_render) {
+        if (RenderEngine *engine = RE_view_engine_get(rv3d->runtime->view_render)) {
           RE_engine_view_pause_set(engine, value);
         }
       }
@@ -2271,7 +2272,7 @@ static void rna_SpaceImageEditor_cursor_location_set(PointerRNA *ptr, const floa
   }
 }
 
-static void rna_SpaceImageEditor_image_update(Main * /*bmain*/, Scene * /*scene*/, PointerRNA *ptr)
+static void rna_SpaceImageEditor_image_update(Main * /*bmain*/, Scene *scene, PointerRNA *ptr)
 {
   SpaceImage *sima = static_cast<SpaceImage *>(ptr->data);
   Image *ima = sima->image;
@@ -2286,6 +2287,12 @@ static void rna_SpaceImageEditor_image_update(Main * /*bmain*/, Scene * /*scene*
     else {
       BKE_image_multiview_index(ima, &sima->iuser);
     }
+  }
+
+  /* If the new image is the viewer image, we tag the compositor to execute to update the viewer
+   * image. */
+  if (ima && ima->source == IMA_SRC_VIEWER && ima->type == IMA_TYPE_COMPOSITE) {
+    DEG_id_tag_update(&scene->id, ID_RECALC_COMPOSITOR);
   }
 }
 

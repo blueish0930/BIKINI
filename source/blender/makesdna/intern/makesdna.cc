@@ -47,6 +47,9 @@
 #include "dna_parse.h"
 #include "dna_utils.h"
 
+/* The naming prefix for generated, exported DNA symbols. Used to avoid naming collisions. */
+const char *dna_prefix = "";
+
 namespace blender {
 
 /* Include files that will be used to generate makesdna output.
@@ -789,18 +792,48 @@ static void write_sdna_verify(FILE *file,
  * Apply struct/member renames from `dna_rename_defs.h`.
  * \{ */
 
+/**
+ * Existing renames that reuse the old name of another struct or member.
+ * Don't add to these, see #apply_renames.
+ *
+ * Although it's supported, they're fairly confusing.
+ * Struct renames use an empty member name.
+ */
+static Set<std::pair<StringRef, StringRef>> rename_collisions_known()
+{
+  return {
+      /* `energy` -> `energy_deprecated`, `energy_new` -> `energy`.
+       * Area light power was re-scaled in 4.0, the old value is still written
+       * for forward compatibility, see: !109153. */
+      {"Light", "energy"},
+      /* `Strip` -> `StripData`, `Sequence` -> `Strip`.
+       * VSE refactor so strips are called `Strip` in C++ & Python, see: !132165 & !132179. */
+      {"Strip", ""},
+  };
+}
+
 static bool apply_renames(Vector<dna::ParsedStruct> &parsed_structs)
 {
   const DnaRenameMaps rename_maps = DNA_rename_maps_alias_to_static();
+  Set<std::pair<StringRef, StringRef>> collisions_known = rename_collisions_known();
+  bool success = true;
+
+  Set<StringRef> struct_names;
+  struct_names.reserve(parsed_structs.size());
+
+  Set<StringRef> member_names;
+  Vector<const dna::ParsedMember *> members_renamed;
 
   for (dna::ParsedStruct &parsed_struct : parsed_structs) {
     /* Save the original C++ name and rewrite. */
     parsed_struct.alias_type_name = parsed_struct.type_name;
     parsed_struct.type_name = rename_maps.types.lookup_default_as(parsed_struct.type_name,
                                                                   parsed_struct.type_name);
+    struct_names.add(parsed_struct.type_name);
 
-    Set<StringRef> members_unique;
-    members_unique.reserve(parsed_struct.members.size());
+    member_names.clear_and_keep_capacity();
+    member_names.reserve(parsed_struct.members.size());
+    members_renamed.clear();
 
     for (dna::ParsedMember &parsed_member : parsed_struct.members) {
       /* Save the original C++ type and rewrite. */
@@ -817,10 +850,11 @@ static bool apply_renames(Vector<dna::ParsedStruct> &parsed_structs)
         const size_t prefix_len = stripped.data() - member_name.data();
         member_name.replace(prefix_len, stripped.size(), *member_static);
         stripped = DNA_member_id_string_ref(member_name);
+        members_renamed.append(&parsed_member);
       }
 
       /* Sanity check to ensure all member names are still unique. */
-      if (!members_unique.add(stripped)) {
+      if (!member_names.add(stripped)) {
         fprintf(stderr,
                 "Error: duplicate name found '%s.%.*s', "
                 "likely cause is 'dna_rename_defs.h'\n",
@@ -830,8 +864,82 @@ static bool apply_renames(Vector<dna::ParsedStruct> &parsed_structs)
         return false;
       }
     }
+
+    /* Renaming to the blend-file name of another member swaps which data the name refers to. */
+    for (const dna::ParsedMember *parsed_member : members_renamed) {
+      const StringRef alias = DNA_member_id_string_ref(parsed_member->alias_member_name);
+      if (!member_names.contains(alias)) {
+        continue;
+      }
+      if (collisions_known.remove({parsed_struct.alias_type_name, alias})) {
+        continue;
+      }
+      const dna::ParsedMember *other = nullptr;
+      for (const dna::ParsedMember &parsed_member_other : parsed_struct.members) {
+        if (DNA_member_id_string_ref(parsed_member_other.member_name) == alias) {
+          other = &parsed_member_other;
+          break;
+        }
+      }
+      const StringRef other_alias = DNA_member_id_string_ref(other->alias_member_name);
+      fprintf(stderr,
+              "Error: rename to '%s.%.*s' collides with the blend-file name of '%s.%.*s', "
+              "see 'dna_rename_defs.h'\n",
+              parsed_struct.alias_type_name.c_str(),
+              int(alias.size()),
+              alias.data(),
+              parsed_struct.alias_type_name.c_str(),
+              int(other_alias.size()),
+              other_alias.data());
+      success = false;
+    }
   }
-  return true;
+
+  /* The same check for struct names. */
+  for (const dna::ParsedStruct &parsed_struct : parsed_structs) {
+    if (parsed_struct.alias_type_name == parsed_struct.type_name) {
+      continue;
+    }
+    if (!struct_names.contains(parsed_struct.alias_type_name)) {
+      continue;
+    }
+    if (collisions_known.remove({parsed_struct.alias_type_name, ""})) {
+      continue;
+    }
+    const dna::ParsedStruct *other = nullptr;
+    for (const dna::ParsedStruct &parsed_struct_other : parsed_structs) {
+      if (parsed_struct_other.type_name == parsed_struct.alias_type_name) {
+        other = &parsed_struct_other;
+        break;
+      }
+    }
+    fprintf(stderr,
+            "Error: rename to '%s' collides with the blend-file name of '%s', "
+            "see 'dna_rename_defs.h'\n",
+            parsed_struct.alias_type_name.c_str(),
+            other->alias_type_name.c_str());
+    success = false;
+  }
+
+  /* Known collisions that no longer occur must be removed.
+   * Skip structs that aren't parsed (when generating test DNA for example). */
+  for (const std::pair<StringRef, StringRef> &item : collisions_known) {
+    const StringRef struct_name = item.first;
+    const StringRef member_name = item.second;
+    if (!struct_names.contains(rename_maps.types.lookup_default(struct_name, struct_name))) {
+      continue;
+    }
+    fprintf(stderr,
+            "Error: known rename collision '%.*s%s%.*s' not found, "
+            "remove it from 'rename_collisions_known'\n",
+            int(struct_name.size()),
+            struct_name.data(),
+            member_name.is_empty() ? "" : ".",
+            int(member_name.size()),
+            member_name.data());
+    success = false;
+  }
+  return success;
 }
 
 /** \} */
@@ -923,7 +1031,7 @@ static void make_bad_file(const StringRefNull filename, int line)
 static void print_usage(const char *argv0)
 {
   printf(
-      "Usage: %s [--include-file <file>, ...] "
+      "Usage: %s [--prefix <dna_prexix>] [--include-file <file>, ...] "
       "dna.cc dna_type_offsets.h dna_verify.cc dna_struct_ids.cc dna_defaults.cc "
       "[base directory]\n",
       argv0);
@@ -945,6 +1053,16 @@ int main(int argc, char **argv)
   /* Parse optional arguments. */
   int arg_index = 1; /* Skip the argv0. */
   while (arg_index < argc) {
+    if (STREQ(argv[arg_index], "--prefix")) {
+      ++arg_index;
+      if (arg_index == argc) {
+        printf("Missing argument for --prefix\n");
+        print_usage(argv[0]);
+        return 1;
+      }
+      dna_prefix = argv[arg_index];
+      ++arg_index;
+    }
     if (STREQ(argv[arg_index], "--include-file")) {
       ++arg_index;
       if (arg_index == argc) {
@@ -1015,8 +1133,8 @@ int main(int argc, char **argv)
 #else
 #  define FORCE_ALIGN_4 " "
 #endif
-    fprintf(file_dna, "extern const unsigned char DNAstr[];\n");
-    fprintf(file_dna, "const unsigned char" FORCE_ALIGN_4 "DNAstr[] = {\n");
+    fprintf(file_dna, "extern const unsigned char %sDNAstr[];\n", dna_prefix);
+    fprintf(file_dna, "const unsigned char" FORCE_ALIGN_4 "%sDNAstr[] = {\n", dna_prefix);
 #undef FORCE_ALIGN_4
 
     if (!make_structDNA(base_directory,
@@ -1034,8 +1152,8 @@ int main(int argc, char **argv)
     }
     else {
       fprintf(file_dna, "};\n");
-      fprintf(file_dna, "extern const int DNAlen;\n");
-      fprintf(file_dna, "const int DNAlen = sizeof(DNAstr);\n");
+      fprintf(file_dna, "extern const int %sDNAlen;\n", dna_prefix);
+      fprintf(file_dna, "const int %sDNAlen = sizeof(%sDNAstr);\n", dna_prefix, dna_prefix);
     }
   }
 

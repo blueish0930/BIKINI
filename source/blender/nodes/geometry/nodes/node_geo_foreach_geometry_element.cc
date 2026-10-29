@@ -223,20 +223,17 @@ static void node_init(bNodeTree * /*tree*/, bNode *node)
 
 static void node_label(const bNodeTree *ntree,
                        const bNode *node,
-                       char *label,
-                       const int label_maxncpy)
+                       MutableCStr label)
 {
   const bNode *output_node = node;
   if (node->type_legacy == GEO_NODE_FOREACH_GEOMETRY_ELEMENT_INPUT) {
     output_node = ntree->node_by_id(node_storage(*node).output_node_id);
   }
   if (output_node && iterates_over_groups(*output_node)) {
-    BLI_strncpy_utf8(
-        label, CTX_IFACE_(BLT_I18NCONTEXT_ID_NODETREE, "For Each Group"), label_maxncpy);
+    STRNCPY_UTF8(label, CTX_IFACE_(BLT_I18NCONTEXT_ID_NODETREE, "For Each Group"));
     return;
   }
-  BLI_strncpy_utf8(
-      label, CTX_IFACE_(BLT_I18NCONTEXT_ID_NODETREE, "For Each Element"), label_maxncpy);
+  STRNCPY_UTF8(label, CTX_IFACE_(BLT_I18NCONTEXT_ID_NODETREE, "For Each Element"));
 }
 
 static bool node_insert_link(bke::NodeInsertLinkParams &params)

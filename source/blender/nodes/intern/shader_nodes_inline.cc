@@ -542,11 +542,14 @@ class ShaderNodesInliner {
                                                                   const bNodeTree &tree,
                                                                   Vector<TreeInContext> &r_trees)
   {
+    const bke::bNodeTreeZones *zones = tree.zones();
+    if (!zones) {
+      return;
+    }
     if (tree.has_available_link_cycle()) {
       return;
     }
     r_trees.append({context, &tree});
-    const bke::bNodeTreeZones *zones = src_tree_.zones();
     for (const bNode *group_node : tree.group_nodes()) {
       if (group_node == nullptr || group_node->is_muted()) {
         continue;

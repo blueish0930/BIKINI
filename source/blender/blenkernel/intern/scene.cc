@@ -1000,11 +1000,7 @@ static bool strip_foreach_path_callback(Strip *strip, void *user_data)
     BPathForeachPathData *bpath_data = static_cast<BPathForeachPathData *>(user_data);
 
     if (ELEM(strip->type, STRIP_TYPE_MOVIE, STRIP_TYPE_SOUND) && se) {
-      BKE_bpath_foreach_path_dirfile_fixed_process(bpath_data,
-                                                   strip->data->dirpath,
-                                                   sizeof(strip->data->dirpath),
-                                                   se->filename,
-                                                   sizeof(se->filename));
+      BKE_bpath_foreach_path_dirfile_fixed_process(bpath_data, strip->data->dirpath, se->filename);
     }
     else if ((strip->type == STRIP_TYPE_IMAGE) && se) {
       /* NOTE: An option not to loop over all strips could be useful? */
@@ -1017,17 +1013,13 @@ static bool strip_foreach_path_callback(Strip *strip, void *user_data)
       }
 
       for (i = 0; i < len; i++, se++) {
-        BKE_bpath_foreach_path_dirfile_fixed_process(bpath_data,
-                                                     strip->data->dirpath,
-                                                     sizeof(strip->data->dirpath),
-                                                     se->filename,
-                                                     sizeof(se->filename));
+        BKE_bpath_foreach_path_dirfile_fixed_process(
+            bpath_data, strip->data->dirpath, se->filename);
       }
     }
     else {
       /* simple case */
-      BKE_bpath_foreach_path_fixed_process(
-          bpath_data, strip->data->dirpath, sizeof(strip->data->dirpath));
+      BKE_bpath_foreach_path_fixed_process(bpath_data, strip->data->dirpath);
     }
   }
   return true;
@@ -2706,7 +2698,7 @@ static bool check_rendered_viewport_visible(Main *bmain)
     Scene *scene = window.scene;
     RenderEngineType *type = RE_engines_find(scene->r.engine);
 
-    if (type->draw_engine || !type->render) {
+    if ((type->flag & RE_INTERNAL) || !type->render) {
       continue;
     }
 
@@ -2752,6 +2744,16 @@ static void prepare_mesh_for_viewport_render(Main *bmain,
         BM_mesh_bm_to_me(bmain, bm, mesh, &params);
         DEG_id_tag_update(&mesh->id, 0);
       }
+    }
+  }
+
+  /* Same for the dynamic topology sculpt BMesh. */
+  Object *ob_sculpt = BKE_view_layer_active_object_get(view_layer);
+  if (ob_sculpt && (ob_sculpt->mode & OB_MODE_SCULPT) && ob_sculpt->runtime->sculpt_session &&
+      ob_sculpt->runtime->sculpt_session->bm && (ob_sculpt->id.recalc & ID_RECALC_GEOMETRY))
+  {
+    if (check_rendered_viewport_visible(bmain)) {
+      BKE_sculptsession_bm_to_me(ob_sculpt);
     }
   }
 }
@@ -3387,7 +3389,7 @@ void BKE_scene_multiview_filepath_get(const SceneRenderView *srv,
                                       char *r_filepath)
 {
   BLI_strncpy(r_filepath, filepath, FILE_MAX);
-  BLI_path_suffix(r_filepath, FILE_MAX, srv->suffix, "");
+  BLI_path_suffix(MutableCStr(r_filepath, FILE_MAX), srv->suffix, "");
 }
 
 void BKE_scene_multiview_view_filepath_get(const RenderData *rd,
@@ -3408,7 +3410,7 @@ void BKE_scene_multiview_view_filepath_get(const RenderData *rd,
   }
 
   BLI_strncpy(r_filepath, filepath, FILE_MAX);
-  BLI_path_suffix(r_filepath, FILE_MAX, suffix, "");
+  BLI_path_suffix(MutableCStr(r_filepath, FILE_MAX), suffix, "");
 }
 
 const char *BKE_scene_multiview_view_suffix_get(const RenderData *rd, const char *viewname)

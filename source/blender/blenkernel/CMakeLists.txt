@@ -288,8 +288,8 @@ set(SRC
   intern/subdiv_displacement.cc
   intern/subdiv_displacement_multires.cc
   intern/subdiv_eval.cc
-  intern/subdiv_foreach.cc
   intern/subdiv_mesh.cc
+  intern/subdiv_mesh_layout.cc
   intern/subdiv_modifier.cc
   intern/subdiv_stats.cc
   intern/subdiv_topology.cc
@@ -311,6 +311,7 @@ set(SRC
   intern/vfont.cc
   intern/vfont_curve.cc
   intern/vfontdata_freetype.cc
+  intern/view3d_runtime.cc
   intern/viewer_path.cc
   intern/volume.cc
   intern/volume_grid.cc
@@ -533,8 +534,8 @@ set(SRC
   BKE_subdiv_ccg.hh
   BKE_subdiv_deform.hh
   BKE_subdiv_eval.hh
-  BKE_subdiv_foreach.hh
   BKE_subdiv_mesh.hh
+  BKE_subdiv_mesh_layout.hh
   BKE_subdiv_modifier.hh
   BKE_subdiv_topology.hh
   BKE_text.h
@@ -547,6 +548,7 @@ set(SRC
   BKE_uvproject.h
   BKE_vfont.hh
   BKE_vfontdata.hh
+  BKE_view3d_runtime.hh
   BKE_viewer_path.hh
   BKE_volume.hh
   BKE_volume_enums.hh

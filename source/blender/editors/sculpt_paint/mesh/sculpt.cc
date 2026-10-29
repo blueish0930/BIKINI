@@ -65,6 +65,7 @@
 #include "BKE_paint_types.hh"
 #include "BKE_report.hh"
 #include "BKE_subdiv_ccg.hh"
+#include "BKE_view3d_runtime.hh"
 
 #include "BLT_translation.hh"
 
@@ -116,6 +117,33 @@ namespace ed::sculpt_paint {
 /* -------------------------------------------------------------------- */
 /** \name Sculpt Brush Utilities
  * \{ */
+
+ActiveElementIndices get_active_element_indices(ViewContext &vc, const float2 &mval)
+{
+  const bke::pbvh::Tree &pbvh = *bke::object::pbvh_get(*vc.obact);
+  const Mesh &mesh = *id_cast<const Mesh *>(vc.obact->data);
+  const SculptSession &ss = *vc.obact->runtime->sculpt_session;
+
+  std::optional<ActiveElementInfo> active_element_info = active_element_info_get(vc, mval);
+
+  if (!active_element_info.has_value()) {
+    return {-1, -1};
+  }
+
+  switch (pbvh.type()) {
+    case bke::pbvh::Type::Mesh:
+      return {std::get<int>(active_element_info->vert), active_element_info->active_face_idx};
+    case bke::pbvh::Type::Grids:
+      return {
+          mesh.corner_verts()[active_element_info->active_grid_idx],
+          BKE_subdiv_ccg_grid_to_face_index(*ss.subdiv_ccg, active_element_info->active_grid_idx)};
+    case bke::pbvh::Type::BMesh:
+      /* TODO: We currently do not calculate this active information for Dyntopo. */
+      return {-1, -1};
+  }
+  BLI_assert_unreachable();
+  return {-1, -1};
+}
 
 /* TODO: This should be moved to either BKE_paint.hh or BKE_brush.hh */
 float object_space_radius_get(const ViewContext &vc,
@@ -3325,7 +3353,7 @@ static void do_brush_action(const Depsgraph &depsgraph,
    *
    * TODO: See #141417
    */
-  const bool external_engine = ss.rv3d && ss.rv3d->view_render != nullptr;
+  const bool external_engine = ss.rv3d && ss.rv3d->runtime->view_render != nullptr;
   if (external_engine) {
     bke::pbvh::Tree &pbvh = *bke::object::pbvh_get(ob);
     bke::pbvh::update_normals(depsgraph, ob, pbvh);
@@ -4918,7 +4946,7 @@ void flush_update_step(ViewContext &vc, Object &object, const UpdateType update_
   PRF_scope(ProfileCategory::Editor);
   if (vc.rv3d) {
     /* Mark for faster 3D viewport redraws. */
-    vc.rv3d->rflag |= RV3D_PAINTING;
+    vc.rv3d->runtime->tags |= bke::RV3D_TAG_PAINTING;
   }
 
   const SculptSession &ss = *object.runtime->sculpt_session;
@@ -4968,7 +4996,7 @@ void flush_update_done(ViewContext &vc,
   bool need_tag = ID_REAL_USERS(&mesh.id) > 1;
 
   if (vc.rv3d) {
-    vc.rv3d->rflag &= ~RV3D_PAINTING;
+    vc.rv3d->runtime->tags &= ~bke::RV3D_TAG_PAINTING;
   }
 
   /* TODO: this might be better in the `redraw` callback instead of here */
@@ -6672,8 +6700,8 @@ void calc_factors_common_grids(const Depsgraph &depsgraph,
                                const Object &object,
                                const Span<float3> positions,
                                const bke::pbvh::GridsNode &node,
-                               Vector<float> &r_factors,
-                               Vector<float> &r_distances)
+                               MutableSpan<float> factors,
+                               MutableSpan<float> distances)
 {
   const SculptSession &ss = *object.runtime->sculpt_session;
   const StrokeCache &cache = *ss.cache;
@@ -6681,16 +6709,12 @@ void calc_factors_common_grids(const Depsgraph &depsgraph,
 
   const Span<int> grids = node.grids();
 
-  r_factors.resize(positions.size());
-  const MutableSpan<float> factors = r_factors;
   fill_factor_from_hide_and_mask(subdiv_ccg, grids, factors);
   filter_region_clip_factors(ss, positions, factors);
   if (brush.flag & BRUSH_FRONTFACE) {
     calc_front_face(cache.view_normal_symm, subdiv_ccg, grids, factors);
   }
 
-  r_distances.resize(positions.size());
-  const MutableSpan<float> distances = r_distances;
   calc_brush_distances(ss, positions, eBrushFalloffShape(brush.falloff_shape), distances);
   filter_distances_with_radius(cache.radius, distances, factors);
   apply_hardness_to_distances(cache, distances);
@@ -6708,8 +6732,8 @@ void calc_cube_tip_factors_common_grids(const Depsgraph &depsgraph,
                                         Span<float3> positions,
                                         const MutableSpan<float3> local_positions,
                                         const bke::pbvh::GridsNode &node,
-                                        Vector<float> &r_factors,
-                                        Vector<float> &r_distances)
+                                        MutableSpan<float> factors,
+                                        MutableSpan<float> distances)
 {
   const SculptSession &ss = *object.runtime->sculpt_session;
   const StrokeCache &cache = *ss.cache;
@@ -6718,8 +6742,6 @@ void calc_cube_tip_factors_common_grids(const Depsgraph &depsgraph,
   const Span<int> grids = node.grids();
   /* Fill initial factors from hide and mask, and apply front face culling and region clipping.
    */
-  r_factors.resize(positions.size());
-  const MutableSpan<float> factors = r_factors;
   fill_factor_from_hide_and_mask(subdiv_ccg, grids, factors);
   filter_region_clip_factors(ss, positions, factors);
   if (brush.flag & BRUSH_FRONTFACE) {
@@ -6735,8 +6757,6 @@ void calc_cube_tip_factors_common_grids(const Depsgraph &depsgraph,
                        local_positions);
 
   /* Find the cube distance. */
-  r_distances.resize(positions.size());
-  const MutableSpan<float> distances = r_distances;
   calc_brush_cube_distances<float3>(brush, local_positions, distances);
   filter_distances_with_radius(1.0f, distances, factors);
   apply_hardness_to_distances(1.0f, cache.hardness, distances);
@@ -6758,24 +6778,20 @@ void calc_factors_common_bmesh(const Depsgraph &depsgraph,
                                const Object &object,
                                const Span<float3> positions,
                                bke::pbvh::BMeshNode &node,
-                               Vector<float> &r_factors,
-                               Vector<float> &r_distances)
+                               MutableSpan<float> factors,
+                               MutableSpan<float> distances)
 {
   const SculptSession &ss = *object.runtime->sculpt_session;
   const StrokeCache &cache = *ss.cache;
 
   const Set<BMVert *, 0> &verts = BKE_pbvh_bmesh_node_unique_verts(&node);
 
-  r_factors.resize(verts.size());
-  const MutableSpan<float> factors = r_factors;
   fill_factor_from_hide_and_mask(*ss.bm, verts, factors);
   filter_region_clip_factors(ss, positions, factors);
   if (brush.flag & BRUSH_FRONTFACE) {
     calc_front_face(cache.view_normal_symm, verts, factors);
   }
 
-  r_distances.resize(verts.size());
-  const MutableSpan<float> distances = r_distances;
   calc_brush_distances(ss, positions, eBrushFalloffShape(brush.falloff_shape), distances);
   filter_distances_with_radius(cache.radius, distances, factors);
   apply_hardness_to_distances(cache, distances);
@@ -6793,8 +6809,8 @@ void calc_cube_tip_factors_common_bmesh(const Depsgraph &depsgraph,
                                         Span<float3> positions,
                                         const MutableSpan<float3> local_positions,
                                         bke::pbvh::BMeshNode &node,
-                                        Vector<float> &r_factors,
-                                        Vector<float> &r_distances)
+                                        MutableSpan<float> factors,
+                                        MutableSpan<float> distances)
 {
   const SculptSession &ss = *object.runtime->sculpt_session;
   const StrokeCache &cache = *ss.cache;
@@ -6802,8 +6818,6 @@ void calc_cube_tip_factors_common_bmesh(const Depsgraph &depsgraph,
   const Set<BMVert *, 0> &verts = BKE_pbvh_bmesh_node_unique_verts(&node);
   /* Fill initial factors from hide and mask, and apply front face culling and region clipping.
    */
-  r_factors.resize(verts.size());
-  const MutableSpan<float> factors = r_factors;
   fill_factor_from_hide_and_mask(*ss.bm, verts, factors);
   filter_region_clip_factors(ss, positions, factors);
   if (brush.flag & BRUSH_FRONTFACE) {
@@ -6819,8 +6833,6 @@ void calc_cube_tip_factors_common_bmesh(const Depsgraph &depsgraph,
                        local_positions);
 
   /* Find the cube distance. */
-  r_distances.resize(verts.size());
-  const MutableSpan<float> distances = r_distances;
   calc_brush_cube_distances<float3>(brush, local_positions, distances);
   filter_distances_with_radius(1.0f, distances, factors);
   apply_hardness_to_distances(1.0f, cache.hardness, distances);
@@ -6920,8 +6932,8 @@ void calc_factors_common_from_orig_data_grids(const Depsgraph &depsgraph,
                                               const Span<float3> positions,
                                               const Span<float3> normals,
                                               const bke::pbvh::GridsNode &node,
-                                              Vector<float> &r_factors,
-                                              Vector<float> &r_distances)
+                                              MutableSpan<float> factors,
+                                              MutableSpan<float> distances)
 {
   SculptSession &ss = *object.runtime->sculpt_session;
   const StrokeCache &cache = *ss.cache;
@@ -6929,16 +6941,12 @@ void calc_factors_common_from_orig_data_grids(const Depsgraph &depsgraph,
 
   const Span<int> grids = node.grids();
 
-  r_factors.resize(positions.size());
-  const MutableSpan<float> factors = r_factors;
   fill_factor_from_hide_and_mask(subdiv_ccg, grids, factors);
   filter_region_clip_factors(ss, positions, factors);
   if (brush.flag & BRUSH_FRONTFACE) {
     calc_front_face(cache.view_normal_symm, normals, factors);
   }
 
-  r_distances.resize(positions.size());
-  const MutableSpan<float> distances = r_distances;
   calc_brush_distances(ss, positions, eBrushFalloffShape(brush.falloff_shape), distances);
   filter_distances_with_radius(cache.radius, distances, factors);
   apply_hardness_to_distances(cache, distances);
@@ -6957,8 +6965,8 @@ void calc_cube_tip_factors_common_from_orig_data_grids(const Depsgraph &depsgrap
                                                        const Span<float3> normals,
                                                        const MutableSpan<float3> local_positions,
                                                        const bke::pbvh::GridsNode &node,
-                                                       Vector<float> &r_factors,
-                                                       Vector<float> &r_distances)
+                                                       MutableSpan<float> factors,
+                                                       MutableSpan<float> distances)
 {
   SculptSession &ss = *object.runtime->sculpt_session;
   const StrokeCache &cache = *ss.cache;
@@ -6966,8 +6974,6 @@ void calc_cube_tip_factors_common_from_orig_data_grids(const Depsgraph &depsgrap
 
   const Span<int> grids = node.grids();
 
-  r_factors.resize(positions.size());
-  const MutableSpan<float> factors = r_factors;
   fill_factor_from_hide_and_mask(subdiv_ccg, grids, factors);
   filter_region_clip_factors(ss, positions, factors);
   if (brush.flag & BRUSH_FRONTFACE) {
@@ -6981,8 +6987,6 @@ void calc_cube_tip_factors_common_from_orig_data_grids(const Depsgraph &depsgrap
                        eBrushFalloffShape(brush.falloff_shape),
                        local_positions);
 
-  r_distances.resize(positions.size());
-  const MutableSpan<float> distances = r_distances;
   calc_brush_cube_distances<float3>(brush, local_positions, distances);
   filter_distances_with_radius(1.0f, distances, factors);
   apply_hardness_to_distances(1.0f, cache.hardness, distances);
@@ -7003,24 +7007,20 @@ void calc_factors_common_from_orig_data_bmesh(const Depsgraph &depsgraph,
                                               const Span<float3> positions,
                                               const Span<float3> normals,
                                               bke::pbvh::BMeshNode &node,
-                                              Vector<float> &r_factors,
-                                              Vector<float> &r_distances)
+                                              MutableSpan<float> factors,
+                                              MutableSpan<float> distances)
 {
   SculptSession &ss = *object.runtime->sculpt_session;
   const StrokeCache &cache = *ss.cache;
 
   const Set<BMVert *, 0> &verts = BKE_pbvh_bmesh_node_unique_verts(&node);
 
-  r_factors.resize(verts.size());
-  const MutableSpan<float> factors = r_factors;
   fill_factor_from_hide_and_mask(*ss.bm, verts, factors);
   filter_region_clip_factors(ss, positions, factors);
   if (brush.flag & BRUSH_FRONTFACE) {
     calc_front_face(cache.view_normal_symm, normals, factors);
   }
 
-  r_distances.resize(verts.size());
-  const MutableSpan<float> distances = r_distances;
   calc_brush_distances(ss, positions, eBrushFalloffShape(brush.falloff_shape), distances);
   filter_distances_with_radius(cache.radius, distances, factors);
   apply_hardness_to_distances(cache, distances);
@@ -7039,16 +7039,14 @@ void calc_cube_tip_factors_common_from_orig_data_bmesh(const Depsgraph &depsgrap
                                                        const Span<float3> normals,
                                                        const MutableSpan<float3> local_positions,
                                                        bke::pbvh::BMeshNode &node,
-                                                       Vector<float> &r_factors,
-                                                       Vector<float> &r_distances)
+                                                       MutableSpan<float> factors,
+                                                       MutableSpan<float> distances)
 {
   SculptSession &ss = *object.runtime->sculpt_session;
   const StrokeCache &cache = *ss.cache;
 
   const Set<BMVert *, 0> &verts = BKE_pbvh_bmesh_node_unique_verts(&node);
 
-  r_factors.resize(verts.size());
-  const MutableSpan<float> factors = r_factors;
   fill_factor_from_hide_and_mask(*ss.bm, verts, factors);
   filter_region_clip_factors(ss, positions, factors);
   if (brush.flag & BRUSH_FRONTFACE) {
@@ -7062,8 +7060,6 @@ void calc_cube_tip_factors_common_from_orig_data_bmesh(const Depsgraph &depsgrap
                        eBrushFalloffShape(brush.falloff_shape),
                        local_positions);
 
-  r_distances.resize(verts.size());
-  const MutableSpan<float> distances = r_distances;
   calc_brush_cube_distances<float3>(brush, local_positions, distances);
   filter_distances_with_radius(1.0f, distances, factors);
   apply_hardness_to_distances(1.0f, cache.hardness, distances);

@@ -539,7 +539,8 @@ static void remove_shape_key_attributes(Mesh &mesh, const Key &key)
  * we need to create evaluated copies of geometry before passing it to geometry nodes. Implicit
  * sharing lets us avoid copying attribute data though.
  */
-static bke::GeometrySet get_original_geometry_eval_copy(Depsgraph &depsgraph,
+static bke::GeometrySet get_original_geometry_eval_copy(ViewContext &vc,
+                                                        Depsgraph &depsgraph,
                                                         Object &object,
                                                         Vector<MeshState> &orig_mesh_states)
 {
@@ -570,6 +571,11 @@ static bke::GeometrySet get_original_geometry_eval_copy(Depsgraph &depsgraph,
       }
 
       if (bke::pbvh::Tree *pbvh = bke::object::pbvh_get(object)) {
+        const auto [active_vert, active_face] = sculpt_paint::get_active_element_indices(
+            vc, float2(operator_data.mouse_position));
+        operator_data.active_point_index = active_vert;
+        operator_data.active_face_index = active_face;
+
         /* Currently many sculpt mode operations do not tag normals dirty (see use of
          * #Mesh::tag_positions_changed_no_normals()), so access within geometry nodes cannot
          * know that normals are out of date and recalculate them. Update them here instead. */
@@ -1223,6 +1229,7 @@ static wmOperatorStatus run_node_group_execute(bContext *C,
   const Vector<Object *> objects = gather_supported_objects(*C, *bmain, mode);
 
   Depsgraph *depsgraph_active = CTX_data_ensure_evaluated_depsgraph(C);
+  ViewContext vc = ED_view3d_viewcontext_init(C, depsgraph_active);
   Set<ID *> extra_ids;
   gather_node_group_ids(*node_tree_orig, extra_ids);
   const Map<std::string, ID *> input_ids = gather_input_ids(*bmain, *node_tree_orig, *op->ptr);

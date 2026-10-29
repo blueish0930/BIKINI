@@ -1905,12 +1905,16 @@ static wmOperatorStatus sequencer_split_exec(bContext *C, wmOperator *op)
   const seq::eSplitMethod method = seq::eSplitMethod(RNA_enum_get(op->ptr, "type"));
   const seq::Side split_side = sequence_split_side_for_exec_get(op);
 
-  /* Only splitting selected strips never propagates to connections. Otherwise, it only matters for
-   * cursor split on a single channel (other splits cut all strips at the frame anyway), so leave
-   * it up to the user (alt). */
-  const bool ignore_connections = only_selected ||
-                                  (split_at_cursor && !all_channels &&
-                                   RNA_boolean_get(op->ptr, "ignore_connections"));
+  /* Only consider ignoring connections for a blade tool split on a single channel, enabled by
+   * `alt`. The option is moot for playhead splits with `K` and all-channel blade tool splits,
+   * since they will always either cut (a) everything at the frame, or (b) only selected strips. */
+  const bool ignore_connections = split_at_cursor && !all_channels &&
+                                  RNA_boolean_get(op->ptr, "ignore_connections");
+  seq::StripRelation include = seq::StripRelation::EffectChain;
+  if (!ignore_connections) {
+    include |= only_selected ? seq::StripRelation::SelectedConnected :
+                               seq::StripRelation::Connected;
+  }
 
   const std::optional<int> channel = (split_at_cursor && !all_channels) ?
                                          std::optional<int>(split_channel) :
@@ -1926,23 +1930,15 @@ static wmOperatorStatus sequencer_split_exec(bContext *C, wmOperator *op)
 
   seq::prefetch_stop(scene);
 
-  for (Strip *strip : strips) {
-    const char *error_msg = nullptr;
-    if (seq::edit_strip_split(bmain,
-                              scene,
-                              ed->current_strips(),
-                              strip,
-                              split_frame,
-                              method,
-                              ignore_connections,
-                              &error_msg) != nullptr)
-    {
-      changed = true;
-    }
-    if (error_msg != nullptr) {
-      BKE_report(op->reports, RPT_WARNING, error_msg);
-      failed = true;
-    }
+  const char *error_msg = nullptr;
+  changed =
+      !seq::edit_strips_split(
+           bmain, scene, ed->current_strips(), strips, split_frame, method, include, &error_msg)
+           .is_empty();
+  if (error_msg != nullptr) {
+    /* We might have split some strips (#changed could be true); others might have still failed. */
+    BKE_report(op->reports, RPT_WARNING, error_msg);
+    failed = true;
   }
 
   if (changed) { /* Got new strips? */
@@ -2023,7 +2019,6 @@ static void sequencer_split_ui(bContext * /*C*/, wmOperator *op)
 
   const bool split_at_cursor = RNA_boolean_get(op->ptr, "use_cursor_position");
   const bool all_channels = RNA_boolean_get(op->ptr, "all_channels");
-  const bool only_selected = split_only_selected_get(op);
 
   if (split_at_cursor) {
     layout.prop(op->ptr, "all_channels", UI_ITEM_NONE, std::nullopt, ICON_NONE);
@@ -2032,12 +2027,11 @@ static void sequencer_split_ui(bContext * /*C*/, wmOperator *op)
   layout.prop(op->ptr, "only_selected", UI_ITEM_NONE, std::nullopt, ICON_NONE);
 
   /* Ignoring connections only makes sense when we split at the mouse cursor.
-   * If splitting at the playhead, we either split selected strips (default) or on all channels.
-   * Also, if `all_channels` is set, it makes no sense to ignore connections, and `only_selected`
-   * always ignores them. */
+   * If splitting at the playhead, we either split selected strips (default) or on all channels. */
   if (split_at_cursor) {
     ui::Layout &row = layout.row(false);
-    row.active_set(!all_channels && !only_selected);
+    /* If `all_channels` is set, it makes no sense to ignore connections. */
+    row.active_set(!all_channels);
     row.prop(op->ptr, "ignore_connections", UI_ITEM_NONE, std::nullopt, ICON_NONE);
   }
 }
@@ -2164,103 +2158,82 @@ static wmOperatorStatus sequencer_box_blade_exec(bContext *C, wmOperator *op)
   const rctf box_rect = box_blade_rect_get(op, v2d);
   const bool remove_gaps = RNA_boolean_get(op->ptr, "remove_gaps");
   const bool only_selected = split_only_selected_get(op);
-  const bool ignore_connections = only_selected || RNA_boolean_get(op->ptr, "ignore_connections");
+  const bool ignore_connections = RNA_boolean_get(op->ptr, "ignore_connections");
+  seq::StripRelation include = seq::StripRelation::EffectChain;
+  if (!ignore_connections) {
+    include |= only_selected ? seq::StripRelation::SelectedConnected :
+                               seq::StripRelation::Connected;
+  }
   const int2 rect_frames = {round_fl_to_int(box_rect.xmin), round_fl_to_int(box_rect.xmax)};
   const seq::eSplitMethod method = seq::eSplitMethod(RNA_enum_get(op->ptr, "type"));
 
   int2 gap_removal_boundary = {INT_MAX, INT_MIN};
   VectorSet<Strip *> to_remove;
 
-  Vector<Strip *> strips = only_selected ? selected_strips_from_context(C).extract_vector() :
-                                           all_strips_from_context(C).extract_vector();
-  strips.remove_if([&](Strip *strip) { return seq::transform_is_locked(channels, strip); });
-
-  auto box_cuts_any = [&](const Span<Strip *> candidates) {
-    for (const Strip *strip : candidates) {
+  auto strips_to_split_get = [&](const bool selected) {
+    Vector<Strip *> box_strips;
+    for (Strip *strip : selected ? selected_strips_from_context(C) : all_strips_from_context(C)) {
       const rctf strip_rect = strip_bounds_get(scene, strip);
       if (!seq::transform_is_locked(channels, strip) &&
           BLI_rctf_isect(&strip_rect, &box_rect, nullptr))
       {
-        return true;
+        box_strips.append(strip);
       }
     }
-    return false;
+    return box_strips;
   };
-  if (only_selected && !box_cuts_any(strips) && box_cuts_any(all_strips_from_context(C).as_span()))
-  {
+
+  Vector<Strip *> strips_to_split = strips_to_split_get(only_selected);
+
+  /* Report if we potentially _could_ have split some intersecting strips, but the user chose
+   * #only_selected and they were deselected. */
+  if (only_selected && strips_to_split.is_empty() && !strips_to_split_get(false).is_empty()) {
     BKE_report(op->reports, RPT_WARNING, "No selected strips to split");
     return OPERATOR_CANCELLED;
   }
 
   seq::prefetch_stop(scene);
 
-  /* Use `Vector` and iterate with `i` to access newly created strips from splits;
-   * note that this means strips.size() can increase during the loops.  */
-  for (int i = 0; i < strips.size(); i++) {
-    Strip *strip = strips[i];
-    rctf strip_rect = strip_bounds_get(scene, strip);
-    if (BLI_rctf_isect(&strip_rect, &box_rect, nullptr)) {
-      gap_removal_boundary[0] = math::min(gap_removal_boundary[0], strip->left_handle());
-      gap_removal_boundary[1] = math::max(gap_removal_boundary[1], strip->right_handle(scene));
-
-      if (strip->left_handle() >= rect_frames[0] && strip->right_handle(scene) <= rect_frames[1]) {
-        /* The box rect completely covers the strip rect, so just delete it. */
-        to_remove.add(strip);
-        continue;
-      }
-
-      /* Whether there is a valid split for this strip at the left/right side of the box rect. */
-      const bool box_left_splits = (strip->left_handle() < rect_frames[0]) &&
-                                   (strip->right_handle(scene) > rect_frames[0]);
-
-      const bool box_right_splits = (strip->left_handle() < rect_frames[1]) &&
-                                    (strip->right_handle(scene) > rect_frames[1]);
-
-      const char *error_msg = nullptr;
-      if (box_left_splits) {
-        Strip *new_strip = seq::edit_strip_split(bmain,
-                                                 scene,
-                                                 ed->current_strips(),
-                                                 strip,
-                                                 rect_frames[0],
-                                                 method,
-                                                 ignore_connections,
-                                                 &error_msg);
-        if (new_strip == nullptr) {
-          continue;
-        }
-
-        if (!box_right_splits) {
-          /* The new strip can be deleted since there is no way it could be split further. */
-          to_remove.add(new_strip);
-        }
-        else {
-          /* In a future iteration of this `for` loop we will split the `new_strip` once more. */
-          strips.append(new_strip);
-        }
-      }
-      /* Note that after a left split, the original strip can no longer be split on the right,
-       * since a new strip occupies that position. */
-      else if (box_right_splits) {
-        seq::edit_strip_split(bmain,
-                              scene,
-                              ed->current_strips(),
-                              strip,
-                              rect_frames[1],
-                              method,
-                              ignore_connections,
-                              &error_msg);
-        /* If splitting on the right, we can always delete the old strip. */
-        to_remove.add(strip);
-      }
-    }
+  for (Strip *strip : strips_to_split) {
+    gap_removal_boundary[0] = math::min(gap_removal_boundary[0], strip->left_handle());
+    gap_removal_boundary[1] = math::max(gap_removal_boundary[1], strip->right_handle(scene));
   }
 
+  const char *error_msg = nullptr;
+  /* Step 1: Split every strip the box touches at the left edge of the box. */
+  seq::edit_strips_split(bmain,
+                         scene,
+                         ed->current_strips(),
+                         strips_to_split,
+                         rect_frames[0],
+                         method,
+                         include,
+                         &error_msg);
+
   /* Edge case early return where box rect is too thin to cut gaps.
-   * In this case, the operator should have only split strips with none marked for deletion. */
+   * In this case, the operator should only split strips with nothing marked for deletion. */
   if (rect_frames[0] == rect_frames[1]) {
-    BLI_assert(to_remove.size() == 0);
     return OPERATOR_FINISHED;
+  }
+
+  /* Step 2: New strips have been generated from the left split, so recalculate
+   * #strips_to_split and split at the right edge of the box this time. */
+  strips_to_split = strips_to_split_get(only_selected);
+  seq::edit_strips_split(bmain,
+                         scene,
+                         ed->current_strips(),
+                         strips_to_split,
+                         rect_frames[1],
+                         method,
+                         include,
+                         &error_msg);
+
+  /* Step 3: Recalculate #strips_to_split once more, and mark all the strip content that lies in
+   * the box's frame range for deletion. */
+  for (Strip *strip : strips_to_split_get(only_selected)) {
+    if (strip->left_handle() >= rect_frames[0] && strip->right_handle(scene) <= rect_frames[1]) {
+      to_remove.add(strip);
+    }
   }
 
   if (to_remove.size() == 0) {
@@ -2273,7 +2246,9 @@ static wmOperatorStatus sequencer_box_blade_exec(bContext *C, wmOperator *op)
     if (!ignore_connections) {
       VectorSet<Strip *> connections = seq::connected_strips_get(strip);
       for (Strip *connection : connections) {
-        seq::edit_flag_for_removal(scene, connection);
+        if (!only_selected || (connection->flag & SEQ_SELECT)) {
+          seq::edit_flag_for_removal(scene, connection);
+        }
       }
     }
   }
@@ -2307,9 +2282,6 @@ static wmOperatorStatus sequencer_box_blade_exec(bContext *C, wmOperator *op)
       }
     }
 
-    const seq::StripRelation include = ignore_connections ?
-                                           seq::StripRelation::EffectChain :
-                                           seq::StripRelation::ConnectedEffectChain;
     seq::expand_strips(ed, to_offset, include);
 
     for (Strip *strip : to_offset) {
@@ -2332,9 +2304,7 @@ static void sequencer_box_blade_ui(bContext * /*C*/, wmOperator *op)
   layout.prop(op->ptr, "type", UI_ITEM_NONE, std::nullopt, ICON_NONE);
   layout.prop(op->ptr, "remove_gaps", UI_ITEM_NONE, std::nullopt, ICON_NONE);
   layout.prop(op->ptr, "only_selected", UI_ITEM_NONE, std::nullopt, ICON_NONE);
-  ui::Layout &row = layout.row(false);
-  row.active_set(!split_only_selected_get(op));
-  row.prop(op->ptr, "ignore_connections", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+  layout.prop(op->ptr, "ignore_connections", UI_ITEM_NONE, std::nullopt, ICON_NONE);
 }
 
 static wmOperatorStatus sequencer_box_blade_modal(bContext *C,
@@ -3440,7 +3410,7 @@ static wmOperatorStatus sequencer_meta_make_exec(bContext *C, wmOperator * /*op*
 
   const int channel = active_strip ? active_strip->channel : channel_max;
   strip_meta->channel_set(channel);
-  BLI_strncpy_utf8(strip_meta->name + 2, DATA_("MetaStrip"), sizeof(strip_meta->name) - 2);
+  STRNCPY_UTF8(MutableCStr(strip_meta->name).drop_front(2), DATA_("MetaStrip"));
   seq::strip_unique_name_set(scene, &ed->seqbase, strip_meta);
   strip_meta->start = meta_start_frame;
   strip_meta->content_length_set(meta_end_frame - meta_start_frame);
@@ -4109,24 +4079,18 @@ static wmOperatorStatus sequencer_change_path_exec(bContext *C, wmOperator *op)
       }
       char ext[FILE_MAX];
       char filename_stripped[FILE_MAX];
-      BLI_path_split_file_part(range.filepath, filename_stripped, sizeof(filename_stripped));
-      BLI_path_frame_strip(filename_stripped, ext, sizeof(ext));
+      BLI_path_split_file_part(range.filepath, filename_stripped);
+      BLI_path_frame_strip(filename_stripped, ext);
 
       if (use_placeholders) {
         for (const int i : IndexRange::from_begin_end(range.offset, range.max_framenr + 1)) {
-          frame_filename_set(
-              se->filename, sizeof(se->filename), filename_stripped, i, numdigits, ext);
+          frame_filename_set(se->filename, filename_stripped, i, numdigits, ext);
           se++;
         }
       }
       else {
         for (ImageFrame &frame : range.frames) {
-          frame_filename_set(se->filename,
-                             sizeof(se->filename),
-                             filename_stripped,
-                             frame.framenr,
-                             numdigits,
-                             ext);
+          frame_filename_set(se->filename, filename_stripped, frame.framenr, numdigits, ext);
           se++;
         }
       }
@@ -4185,8 +4149,7 @@ static wmOperatorStatus sequencer_change_path_invoke(bContext *C,
   Strip *strip = seq::select_active_get(scene);
   char filepath[FILE_MAX];
 
-  BLI_path_join(
-      filepath, sizeof(filepath), strip->data->dirpath, strip->data->stripdata->filename);
+  BLI_path_join(filepath, strip->data->dirpath, strip->data->stripdata->filename);
 
   RNA_string_set(op->ptr, "directory", strip->data->dirpath);
   RNA_string_set(op->ptr, "filepath", filepath);
@@ -4418,7 +4381,7 @@ static wmOperatorStatus sequencer_export_subtitles_exec(bContext *C, wmOperator 
   }
 
   RNA_string_get(op->ptr, "filepath", filepath);
-  BLI_path_extension_ensure(filepath, sizeof(filepath), ".srt");
+  BLI_path_extension_ensure(filepath, ".srt");
 
   /* Avoid File write exceptions. */
   if (!BLI_exists(filepath)) {
@@ -4455,13 +4418,11 @@ static wmOperatorStatus sequencer_export_subtitles_exec(bContext *C, wmOperator 
 
     /* Write time-code relative to start frame of scene. Don't allow negative time-codes. */
     BLI_timecode_string_from_time(timecode_str_start,
-                                  sizeof(timecode_str_start),
                                   -2,
                                   FRA2TIME(max_ii(strip->left_handle() - scene->r.sfra, 0)),
                                   scene->frames_per_second(),
                                   USER_TIMECODE_SUBRIP);
     BLI_timecode_string_from_time(timecode_str_end,
-                                  sizeof(timecode_str_end),
                                   -2,
                                   FRA2TIME(strip->right_handle(scene) - scene->r.sfra),
                                   scene->frames_per_second(),

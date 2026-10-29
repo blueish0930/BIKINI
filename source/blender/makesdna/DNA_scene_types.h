@@ -673,6 +673,9 @@ ENUM_OPERATORS(eCompositorCacheFlags);
 /** #RenderData::compositor_proxy_flags */
 enum class CompositorProxyFlags : uint8_t {
   None = 0,
+  /* Scale down input media and pixel-unit values by RenderData::compositor_proxy_preview_scale
+   * during interactive compositor preview for better performance. */
+  UsePreviewScale = (1 << 0),
   /* Scale input media and pixel-unit values by the render resolution scale or viewport zoom, such
    * that results match across resolution scales and viewport zoom levels. */
   AdaptToRenderScale = (1 << 1),
@@ -992,7 +995,7 @@ struct RenderData {
 
   /** Stamps flags. */
   int stamp = R_STAMP_TIME | R_STAMP_FRAME | R_STAMP_DATE | R_STAMP_CAMERA | R_STAMP_SCENE |
-              R_STAMP_FILENAME | R_STAMP_RENDERTIME | R_STAMP_MEMORY;
+              R_STAMP_FILENAME | R_STAMP_RENDERTIME;
   /** Select one of blenders bitmap fonts. */
   short stamp_font_id = 12;
   char _pad3[2] = {};
@@ -1059,10 +1062,11 @@ struct RenderData {
   /** Cache options for the interactive compositor. */
   eCompositorCacheFlags compositor_cache_flags = SCE_COMPOSITOR_CACHE_FRAMES;
 
-  /** Proxy options for the interactive and viewport compositors. */
+  /** Proxy options for the compositor. */
   CompositorProxyFlags compositor_proxy_flags = CompositorProxyFlags::AdaptToRenderScale;
+  int8_t compositor_proxy_preview_scale = 100;
 
-  char _pad10[2] = {};
+  char _pad10[1] = {};
 
   /** Precision used by the GPU execution of the compositor tree. */
   eCompositorPrecision compositor_precision = SCE_COMPOSITOR_PRECISION_AUTO;

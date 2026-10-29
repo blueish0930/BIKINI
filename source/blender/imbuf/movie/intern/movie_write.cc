@@ -246,7 +246,7 @@ static void add_stereo3d_metadata(AVCodecParameters *codecpar,
     return;
   }
   AVStereo3D *stereo_3d = reinterpret_cast<AVStereo3D *>(side_data->data);
-  AVStereo3DType interlace_type = AV_STEREO3D_UNSPEC;
+  AVStereo3DType interlace_type = AV_STEREO3D_LINES;
   switch (imf.stereo3d_format.interlace_type) {
     case S3D_INTERLACE_ROW:
       interlace_type = AV_STEREO3D_LINES;
@@ -373,9 +373,6 @@ static bool write_video_frame(MovieWriter *context, AVFrame *frame, ReportList *
 
     packet->stream_index = context->video_stream->index;
     av_packet_rescale_ts(packet, c->time_base, context->video_stream->time_base);
-#  ifdef FFMPEG_USE_DURATION_WORKAROUND
-    my_guess_pkt_duration(context->outfile, context->video_stream, packet);
-#  endif
 
     ret = av_interleaved_write_frame(context->outfile, packet);
     if (ret < 0) {
@@ -563,7 +560,7 @@ static AVFrame *generate_video_frame(MovieWriter *context, const ImBuf *input_ib
       rgb_frame->data[0] = const_cast<uint8_t *>(pixels) + size_t(height - 1) * linesize_src;
       rgb_frame->linesize[0] = -linesize_src;
     }
-    ffmpeg_sws_scale_frame(context->sws_ctx, context->current_frame, rgb_frame);
+    sws_scale_frame(context->sws_ctx, context->current_frame, rgb_frame);
     rgb_frame->data[0] = rgb_data;
     rgb_frame->linesize[0] = rgb_linesize;
   }
@@ -850,8 +847,7 @@ static AVStream *alloc_video_stream(MovieWriter *context,
                                     AVFormatContext *of,
                                     int rectx,
                                     int recty,
-                                    char *error,
-                                    int error_maxncpy)
+                                    MutableCStr error)
 {
   AVStream *st;
   const AVCodec *codec;
@@ -1152,7 +1148,7 @@ static AVStream *alloc_video_stream(MovieWriter *context,
     char error_str[AV_ERROR_MAX_STRING_SIZE];
     av_make_error_string(error_str, AV_ERROR_MAX_STRING_SIZE, ret);
     CLOG_ERROR(&LOG, "Couldn't initialize video codec: %s\n", error_str);
-    BLI_strncpy(error, ffmpeg_last_error(), error_maxncpy);
+    STRNCPY(error, ffmpeg_last_error());
     av_dict_free(&opts);
     avcodec_free_context(&c);
     context->video_codec = nullptr;
@@ -1202,13 +1198,10 @@ static AVStream *alloc_video_stream(MovieWriter *context,
   return st;
 }
 
-static void ffmpeg_add_metadata_callback(void *data,
-                                         const char *propname,
-                                         char *propvalue,
-                                         int /*propvalue_maxncpy*/)
+static void ffmpeg_add_metadata_callback(void *data, const char *propname, MutableCStr propvalue)
 {
   AVDictionary **metadata = (AVDictionary **)data;
-  av_dict_set(metadata, propname, propvalue, 0);
+  av_dict_set(metadata, propname, propvalue.data(), 0);
 }
 
 static bool start_ffmpeg_impl(MovieWriter *context,
@@ -1342,12 +1335,7 @@ static bool start_ffmpeg_impl(MovieWriter *context,
 
   /* Returns after this must 'goto fail;' */
 
-#  if LIBAVFORMAT_VERSION_MAJOR >= 59
   of->oformat = fmt;
-#  else
-  /* *DEPRECATED* 2022/08/01 For FFMPEG (<5.0) remove this else branch and the `ifdef` above. */
-  of->oformat = (AVOutputFormat *)fmt;
-#  endif
 
   if (video_codec == AV_CODEC_ID_DVVIDEO) {
     if (rectx != 720) {
@@ -1380,7 +1368,7 @@ static bool start_ffmpeg_impl(MovieWriter *context,
 
   if (video_codec != AV_CODEC_ID_NONE) {
     context->video_stream = alloc_video_stream(
-        context, *scene, imf, video_codec, of, rectx, recty, error, sizeof(error));
+        context, *scene, imf, video_codec, of, rectx, recty, error);
     CLOG_INFO(&LOG, "ffmpeg: alloc video stream %p", context->video_stream);
     if (!context->video_stream) {
       if (error[0]) {
@@ -1402,7 +1390,6 @@ static bool start_ffmpeg_impl(MovieWriter *context,
                                                audio_codec,
                                                of,
                                                error,
-                                               sizeof(error),
                                                reports);
     if (!context->audio_stream) {
       if (error[0]) {
@@ -1485,9 +1472,6 @@ static void flush_delayed_frames(AVCodecContext *c, AVStream *stream, AVFormatCo
 
     packet->stream_index = stream->index;
     av_packet_rescale_ts(packet, c->time_base, stream->time_base);
-#  ifdef FFMPEG_USE_DURATION_WORKAROUND
-    my_guess_pkt_duration(outfile, stream, packet);
-#  endif
 
     int write_ret = av_interleaved_write_frame(outfile, packet);
     if (write_ret != 0) {
@@ -1542,7 +1526,7 @@ static bool ffmpeg_filepath_get(MovieWriter *context,
   BKE_add_template_variables_for_render_path(template_variables, *scene);
 
   const Vector<bke::path_templates::Error> errors = BKE_path_apply_template(
-      filepath, FILE_MAX, template_variables);
+      MutableCStr(filepath, FILE_MAX), template_variables);
   if (!errors.is_empty()) {
     BKE_report_path_template_errors(reports, RPT_ERROR, filepath, errors);
     return false;
@@ -1572,26 +1556,26 @@ static bool ffmpeg_filepath_get(MovieWriter *context,
     }
 
     if (*fe == nullptr) {
-      BLI_strncat(filepath, autosplit, FILE_MAX);
+      BLI_strncat(MutableCStr(filepath, FILE_MAX), autosplit);
 
-      BLI_path_frame_range(filepath, FILE_MAX, sfra, efra, 4);
-      BLI_strncat(filepath, *exts, FILE_MAX);
+      BLI_path_frame_range(MutableCStr(filepath, FILE_MAX), sfra, efra, 4);
+      BLI_strncat(MutableCStr(filepath, FILE_MAX), *exts);
     }
     else {
       *(filepath + strlen(filepath) - strlen(*fe)) = '\0';
-      BLI_strncat(filepath, autosplit, FILE_MAX);
-      BLI_strncat(filepath, *fe, FILE_MAX);
+      BLI_strncat(MutableCStr(filepath, FILE_MAX), autosplit);
+      BLI_strncat(MutableCStr(filepath, FILE_MAX), *fe);
     }
   }
   else {
     if (BLI_path_frame_check_chars(filepath)) {
-      BLI_path_frame_range(filepath, FILE_MAX, sfra, efra, 4);
+      BLI_path_frame_range(MutableCStr(filepath, FILE_MAX), sfra, efra, 4);
     }
 
-    BLI_strncat(filepath, autosplit, FILE_MAX);
+    BLI_strncat(MutableCStr(filepath, FILE_MAX), autosplit);
   }
 
-  BLI_path_suffix(filepath, FILE_MAX, suffix, "");
+  BLI_path_suffix(MutableCStr(filepath, FILE_MAX), suffix, "");
 
   return true;
 }

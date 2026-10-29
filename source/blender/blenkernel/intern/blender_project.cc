@@ -348,11 +348,11 @@ void BlenderProject::rename_variable(int variable_index, StringRef name)
   };
 
   this->variables[variable_index]->prop().name[0] = '\0';
-  BLI_uniquename_cb(is_variable_name_used,
-                    new_name.c_str(),
-                    '_',
-                    this->variables[variable_index]->prop().name,
-                    sizeof(IDProperty::name));
+  BLI_uniquename_cb(
+      is_variable_name_used,
+      new_name.c_str(),
+      '_',
+      MutableCStr(this->variables[variable_index]->prop().name, sizeof(IDProperty::name)));
 }
 
 void with_blender_project_read_lock(FunctionRef<void()> lambda)
@@ -412,14 +412,12 @@ std::string BKE_is_path_inside_blender_project(const char *path)
 {
   char project_root_path[FILE_MAX];
   if (BLI_is_file(path)) {
-    BLI_path_split_dir_part(path, project_root_path, sizeof(project_root_path));
-  }
-  else if (BLI_is_dir(path)) {
-    STRNCPY(project_root_path, path);
+    BLI_path_split_dir_part(path, project_root_path);
   }
   else {
-    /* The provided path doesn't exist. */
-    return "";
+    /* Note this function is used for paths that don't yet exist. We still
+     * check its parent directories then. */
+    STRNCPY(project_root_path, path);
   }
 
   bool found_project = false;
@@ -430,7 +428,7 @@ std::string BKE_is_path_inside_blender_project(const char *path)
    */
   do {
     STRNCPY(project_root_path_test, project_root_path);
-    BLI_path_append(project_root_path_test, FILE_MAX, ".blender_project");
+    BLI_path_append(project_root_path_test, BLENDER_PROJECT_CONFIG_DIR);
     found_project = BLI_is_dir(project_root_path_test);
   } while (!found_project && BLI_path_parent_dir(project_root_path));
 
@@ -478,6 +476,31 @@ bool BKE_blender_project_init(StringRef name, StringRef root_path)
   return true;
 }
 
+void BKE_blender_project_refresh(Main *bmain, const char *filepath)
+{
+  if (!bmain || !filepath[0]) {
+    return;
+  }
+
+  const std::string new_root_path = BKE_is_path_inside_blender_project(filepath);
+  if (new_root_path.empty()) {
+    /* The current .blend file is not located in any project, clear the active project. */
+    BKE_blender_project_clear();
+    return;
+  }
+
+  bke::BlenderProject *project = BKE_blender_project_get(bmain);
+  if (project != nullptr && new_root_path == project->get_root_path()) {
+    /* Same project as before, do nothing. */
+    return;
+  }
+
+  BKE_blender_project_clear();
+
+  /* Load the new project. */
+  BKE_blender_project_init_from_root_path(bmain, new_root_path);
+}
+
 void BKE_blender_project_clear()
 {
   bke::with_blender_project_write_lock([&] {
@@ -516,9 +539,7 @@ std::string BKE_blender_project_path_make_relative(const StringRef path,
 
   const bool walk_up = false;
   char path_relative[FILE_MAX];
-  if (!BLI_path_relative_to(
-          path_str.c_str(), root.c_str(), walk_up, path_relative, sizeof(path_relative)))
-  {
+  if (!BLI_path_relative_to(path_str.c_str(), root.c_str(), walk_up, path_relative)) {
     return path_escaped;
   }
   if (path_relative[0] == '\0') {
@@ -542,7 +563,7 @@ std::string BKE_blender_project_path_resolve(const StringRef path,
 
   bke::path_templates::VariableMap variables;
   BKE_add_template_variables_for_project(variables, project);
-  if (!BKE_path_apply_template(path_expanded, sizeof(path_expanded), variables).is_empty()) {
+  if (!BKE_path_apply_template(path_expanded, variables).is_empty()) {
     return "";
   }
 
@@ -552,6 +573,13 @@ std::string BKE_blender_project_path_resolve(const StringRef path,
   }
 
   return path_expanded;
+}
+
+bool BKE_blender_project_dir_is_project(StringRef path)
+{
+  const std::string project_config_dir = path + SEP_STR + BLENDER_PROJECT_CONFIG_DIR;
+
+  return BLI_is_dir(project_config_dir.c_str());
 }
 
 /* -------------------------------------------------------------------- */
@@ -627,7 +655,7 @@ void BKE_blender_project_recent_clear(const bool only_missing)
 {
   Vector<RecentProject> projects = BKE_blender_project_recent_get();
   projects.remove_if([&](const RecentProject &project) {
-    return !only_missing || !BLI_is_dir(project.path.c_str());
+    return !only_missing || !BKE_blender_project_dir_is_project(project.path);
   });
   recent_projects_set(projects);
 }

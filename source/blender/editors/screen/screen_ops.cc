@@ -54,6 +54,7 @@
 #include "BKE_scene_context.hh"
 #include "BKE_screen.hh"
 #include "BKE_sound.hh"
+#include "BKE_view3d_runtime.hh"
 #include "BKE_workspace.hh"
 
 #include "WM_api.hh"
@@ -68,6 +69,7 @@
 #include "ED_fileselect.hh"
 #include "ED_image.hh"
 #include "ED_keyframes_keylist.hh"
+#include "ED_markers.hh"
 #include "ED_mesh.hh"
 #include "ED_object.hh"
 #include "ED_scene.hh"
@@ -4342,16 +4344,43 @@ static void SCREEN_OT_keyframe_jump(wmOperatorType *ot)
 /** \name Jump to Marker Operator
  * \{ */
 
-template<typename MarkerIterator>
-static std::optional<int> get_first_marker_in_range(const ScenePlaybackRange playback_range,
-                                                    MarkerIterator markers)
+enum class SearchDirection {
+  BACKWARDS,
+  FORWARDS,
+};
+
+static std::optional<int> find_marker_in_direction(
+    const ListBaseT<TimeMarker> &markers,
+    const int from_frame,
+    const SearchDirection direction,
+    const std::optional<ScenePlaybackRange> playback_range)
 {
+  std::optional<int> closest;
   for (const TimeMarker &marker : markers) {
-    if (playback_range.contains(marker.frame)) {
-      return marker.frame;
+    /* Ignore markers outside the playback range, when one is provided. */
+    if (playback_range && !playback_range->contains(marker.frame)) {
+      continue;
+    }
+
+    if (direction == SearchDirection::FORWARDS) {
+      /* Ignore frames at or before from_frame. */
+      if (marker.frame <= from_frame) {
+        continue;
+      }
+      /* Keep the earliest marker's frame. */
+      closest = std::min(closest.value_or(marker.frame), marker.frame);
+    }
+    else {
+      /* Ignore frames at or after from_frame. */
+      if (marker.frame >= from_frame) {
+        continue;
+      }
+      /* Keep the latest marker's frame. */
+      closest = std::max(closest.value_or(marker.frame), marker.frame);
     }
   }
-  return std::nullopt;
+
+  return closest;
 }
 
 /* function to be called outside UI context, or for redo */
@@ -4362,62 +4391,43 @@ static wmOperatorStatus marker_jump_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
-  const bool wrap_timeline_navigation = scene->r.flag & SCER_WRAP_TIMELINE_NAVIGATION;
-  const ScenePlaybackRange playback_range = BKE_scene_get_playback_range(scene);
-
-  int closest = scene->r.cfra;
-  const bool next = RNA_boolean_get(op->ptr, "next");
-  bool found = false;
-
-  /* Find matching marker in the right direction. */
-  for (TimeMarker &marker : scene->markers) {
-    /* Ignore markers outside of playback_range. */
-    if (wrap_timeline_navigation && !playback_range.contains(marker.frame)) {
-      continue;
-    }
-
-    if (next) {
-      if ((marker.frame > scene->r.cfra) && (!found || closest > marker.frame)) {
-        closest = marker.frame;
-        found = true;
-      }
-    }
-    else {
-      if ((marker.frame < scene->r.cfra) && (!found || closest < marker.frame)) {
-        closest = marker.frame;
-        found = true;
-      }
-    }
+  std::optional<ScenePlaybackRange> playback_range;
+  if (scene->r.flag & SCER_WRAP_TIMELINE_NAVIGATION) {
+    playback_range = BKE_scene_get_playback_range(scene);
   }
 
-  /* Wrap around playback range and try to look for markers again. */
-  if (!found && wrap_timeline_navigation) {
-    if (next) {
-      if (const std::optional<int> frame = get_first_marker_in_range(playback_range,
-                                                                     scene->markers))
-      {
-        closest = *frame;
-        found = true;
-      }
-    }
-    else {
-      if (const std::optional<int> frame = get_first_marker_in_range(
-              playback_range, scene->markers.items_reversed()))
-      {
-        closest = *frame;
-        found = true;
-      }
-    }
+  const bool next = RNA_boolean_get(op->ptr, "next");
+  const SearchDirection direction = next ? SearchDirection::FORWARDS : SearchDirection::BACKWARDS;
+
+  ListBaseT<TimeMarker> *markers = ED_scene_markers_get(C, scene);
+  if (!markers) {
+    BKE_report(op->reports, RPT_INFO, "No markers to jump to");
+    return OPERATOR_CANCELLED;
+  }
+
+  /* Find matching marker in the right direction. */
+  std::optional<int> frame_to_jump_to = find_marker_in_direction(
+      *markers, scene->r.cfra, direction, playback_range);
+
+  /* Wrap around playback range and try to look for markers again.
+   * Anchor just outside the range, so a marker sitting on the boundary still passes the
+   * strict comparison in the scan. */
+  if (!frame_to_jump_to && playback_range) {
+    const int from_frame = direction == SearchDirection::FORWARDS ?
+                               (playback_range->start_frame - 1) :
+                               (playback_range->end_frame + 1);
+    frame_to_jump_to = find_marker_in_direction(*markers, from_frame, direction, playback_range);
   }
 
   /* any success? */
-  if (!found) {
+  if (!frame_to_jump_to) {
     BKE_report(op->reports, RPT_INFO, "No more markers to jump to in this direction");
 
     return OPERATOR_CANCELLED;
   }
 
-  scene->r.cfra = closest;
+  scene->r.cfra = *frame_to_jump_to;
+  scene->r.subframe = 0.0f;
 
   ED_areas_do_frame_follow(C, true);
 
@@ -4908,10 +4918,6 @@ void static area_docking_apply(bContext *C, wmOperator *op)
         jd->win1->global_areas.areabase.is_empty())
     {
       jd->close_win = true;
-      /* Clear the active region in each screen, otherwise they are pointing
-       * at incorrect regions and will cause errors in uiTemplateInputStatus. */
-      WM_window_get_active_screen(jd->win1)->active_region = nullptr;
-      WM_window_get_active_screen(jd->win2)->active_region = nullptr;
     }
     else {
       float inner[4] = {0.0f, 0.0f, 0.0f, 0.7f};
@@ -5894,7 +5900,7 @@ static void region_quadview_init_rv3d(ScrArea *area,
   }
 
   rv3d->viewlock = viewlock;
-  rv3d->runtime_viewlock = eRegionView3D_ViewLock{};
+  rv3d->runtime->viewlock = eRegionView3D_ViewLock{};
   rv3d->view = view;
   rv3d->view_axis_roll = RV3D_VIEW_AXIS_ROLL_0;
   rv3d->persp = persp;
@@ -5917,7 +5923,6 @@ static wmOperatorStatus region_quadview_exec(bContext *C, wmOperator *op)
   }
   else if (region->alignment == RGN_ALIGN_QSPLIT) {
     /* Exit quad-view */
-    bScreen *screen = CTX_wm_screen(C);
     ScrArea *area = CTX_wm_area(C);
 
     /* keep current region */
@@ -5944,7 +5949,7 @@ static wmOperatorStatus region_quadview_exec(bContext *C, wmOperator *op)
 
       /* FIXME: This fixes missing update to workbench TAA. (see #76216)
        * However, it would be nice if the tagging should be done in a more conventional way. */
-      rv3d->rflag |= RV3D_GPULIGHT_UPDATE;
+      rv3d->runtime->tags |= bke::RV3D_TAG_GPULIGHT_UPDATE;
 
       /* Accumulate locks, in case they're mixed. */
       for (ARegion &region_iter : area->regionbase) {
@@ -5958,9 +5963,6 @@ static wmOperatorStatus region_quadview_exec(bContext *C, wmOperator *op)
     for (ARegion &region_iter : area->regionbase.items_mutable()) {
       if (region_iter.alignment == RGN_ALIGN_QSPLIT) {
         ED_region_remove(C, area, &region_iter);
-        if (&region_iter == screen->active_region) {
-          screen->active_region = nullptr;
-        }
       }
     }
     ED_area_tag_redraw(area);
