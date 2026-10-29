@@ -21,9 +21,17 @@ The wrapper normalizes geometry relative to the supplied mass center, merges
 identical stable normals, validates area totals, limits contact-transition
 loops, and constructs contact-preserving rigid transformations. Original
 surface geometry is retained; only the support computation uses its convex hull.
-The node computes uniform solid mass from the original closed oriented surface,
-or accepts a custom mass center. The center must be strictly inside the hull.
+The node computes uniform solid mass from the original closed oriented surface.
+The center must be strictly inside the hull. The bridge API also accepts a supplied
+mass center for standalone/reference validation.
 The support plane is local `Z=0`; scene object transforms are applied afterward.
+
+The node is named **Putting Rigid Bodies to Rest** and matches the reference group:
+inputs `Mesh`, `Gravity`, `Progress`; outputs `Transform`, `Trajectory`,
+`Separatrix`, `Stable Poses`, in that order. Gravity defaults to `(0, 0, -1)`
+and Progress defaults to `1`. The RNA type and Gravity's legacy socket identifier
+remain unchanged so existing group links to the initial direction are retained.
+Use Transform Geometry to apply the matrix to the original mesh.
 
 `Stable Poses` and `Trajectory` are point clouds on the unit Gauss sphere.
 Their attributes are `rest_transform` (4x4 matrix), `rest_normal` (vector),
@@ -31,6 +39,21 @@ Their attributes are `rest_transform` (4x4 matrix), `rest_normal` (vector),
 Normals point downward in the input object's coordinate system. Matrices
 transform original input coordinates to grounded output coordinates.
 `Progress` follows accumulated rotation angle, not physical time.
+
+`Separatrix` exports the ascending manifolds of saddle contacts from the same
+boundary graph used for probability integration. Coplanar triangles belonging to
+one merged stable pose do not introduce basin seams. Each great-circle arc is
+sampled independently into a wire mesh with a maximum angular spacing of 0.02
+radians; there are no edges between unrelated arcs. Its point attribute
+`rest_normal` equals the unit-sphere position. Edge attributes `rest_pose_a` and
+`rest_pose_b` give the adjacent sorted stable-pose indices, and `rest_arc` groups
+the edges of one analytic arc. Uniformly scaling/translating the input does not
+change this sphere geometry. Gravity and Progress affect the selected transform
+and trajectory, not the attraction-basin boundaries.
+
+The simplified node fixes trajectory sampling at 0.002 radians, matching the
+reference group's internal setting; advanced controls from the original prototype
+are no longer sockets on this node.
 
 Eight geometry/center precomputations are retained in a bounded process cache.
 Each solver also caches its last initial-direction/angle-step trajectory.

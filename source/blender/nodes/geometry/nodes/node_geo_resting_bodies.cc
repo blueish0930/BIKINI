@@ -8,7 +8,6 @@
 #include "BLI_math_vector.hh"
 #include "DNA_mesh_types.h"
 #include "DNA_pointcloud_types.h"
-#include "GEO_transform.hh"
 #include "node_geometry_util.hh"
 #include "resting_bridge.h"
 #include <algorithm>
@@ -21,30 +20,19 @@
 namespace blender::nodes::node_geo_resting_bodies_cc {
 static void node_declare(NodeDeclarationBuilder &b)
 {
-  b.use_custom_socket_order();
   b.add_input<decl::Geometry>("Mesh"_ustr).supported_type(GeometryComponent::Type::Mesh).only_realized_data();
-  b.add_output<decl::Geometry>("Mesh"_ustr).propagate_all_geometry().align_with_previous();
-  b.add_input<decl::Vector>("Initial Down"_ustr).default_value(float3(0.2f,0.3f,-1.0f))
+  /* Retain the identifier so links in existing node groups survive the label change. */
+  b.add_input<decl::Vector>("Gravity"_ustr, "Initial Down"_ustr).default_value(float3(0,0,-1))
       .description("Downward direction in the input mesh coordinates; negligible-momentum rolling onto the local Z=0 plane");
   b.add_input<decl::Float>("Progress"_ustr).default_value(1).min(0).max(1)
       .description("Progress along the contact trajectory, measured by accumulated rotation angle");
-  b.add_input<decl::Bool>("Use Stable Pose"_ustr).default_value(false)
-      .description("Choose a stable orientation directly instead of following the initial direction");
-  b.add_input<decl::Int>("Pose Index"_ustr).default_value(0).min(0)
-      .description("Stable orientations are ordered by decreasing probability");
-  b.add_input<decl::Bool>("Custom Center"_ustr).default_value(false)
-      .description("Use a supplied center of mass; otherwise integrate the closed input surface with uniform density");
-  b.add_input<decl::Vector>("Center"_ustr).description("Custom center of mass, strictly inside the convex hull");
-  b.add_input<decl::Float>("Angle Step"_ustr).default_value(0.04f).min(0.002f).max(0.5f).subtype(PROP_ANGLE)
-      .description("Maximum angular spacing of trajectory output points; does not change the analytical contact path");
-  b.add_output<decl::Geometry>("Stable Poses"_ustr)
-      .description("Gauss sphere points with rest_transform (matrix), rest_probability, rest_normal and rest_height attributes; coplanar poses are merged");
+  b.add_output<decl::Matrix>("Transform"_ustr).description("Rigid transform applied to the input mesh");
   b.add_output<decl::Geometry>("Trajectory"_ustr)
       .description("Ordered Gauss sphere samples with rest_transform, rest_normal and rest_height attributes");
-  b.add_output<decl::Matrix>("Transform"_ustr).description("Rigid transform applied to the input mesh");
-  b.add_output<decl::Vector>("Center"_ustr).description("Center of mass in input coordinates");
-  b.add_output<decl::Int>("Pose Count"_ustr);
-  b.add_output<decl::Float>("Probability"_ustr).description("Resting probability of the chosen/final stable orientation under uniform initial orientations");
+  b.add_output<decl::Geometry>("Separatrix"_ustr)
+      .description("Great-circle attraction-basin boundaries on the unit Gauss sphere; separate wire arcs with rest_pose_a and rest_pose_b edge attributes");
+  b.add_output<decl::Geometry>("Stable Poses"_ustr)
+      .description("Gauss sphere points with rest_transform (matrix), rest_probability, rest_normal and rest_height attributes; coplanar poses are merged");
 }
 
 static bool volume_center(const Mesh &mesh, std::array<double,3> &center)
@@ -113,6 +101,54 @@ static GeometrySet pose_points(const std::vector<RRB_Pose> &poses)
   return GeometrySet::from_pointcloud(cloud);
 }
 
+static GeometrySet separatrix_geometry(const std::vector<RRB_Separatrix> &arcs)
+{
+  if (arcs.empty()) return {};
+  constexpr double max_angle_step = 0.02;
+  std::vector<int> subdivisions;
+  int vertices_num = 0, edges_num = 0;
+  for (const auto &arc : arcs) {
+    const double3 a(arc.start[0],arc.start[1],arc.start[2]);
+    const double3 b(arc.end[0],arc.end[1],arc.end[2]);
+    const double angle = std::acos(std::clamp(math::dot(a,b),-1.0,1.0));
+    const int count = std::max(1,int(std::ceil(angle/max_angle_step)));
+    subdivisions.push_back(count);
+    vertices_num += count+1; edges_num += count;
+  }
+  Mesh *mesh = BKE_mesh_new_nomain(vertices_num,edges_num,0,0);
+  MutableSpan<float3> positions = mesh->vert_positions_for_write();
+  MutableSpan<int2> edges = mesh->edges_for_write();
+  auto attrs = mesh->attributes_for_write();
+  auto normals = attrs.lookup_or_add_for_write_span<float3>("rest_normal",bke::AttrDomain::Point);
+  auto pose_a = attrs.lookup_or_add_for_write_span<int>("rest_pose_a",bke::AttrDomain::Edge);
+  auto pose_b = attrs.lookup_or_add_for_write_span<int>("rest_pose_b",bke::AttrDomain::Edge);
+  auto arc_index = attrs.lookup_or_add_for_write_span<int>("rest_arc",bke::AttrDomain::Edge);
+  int vertex_offset = 0, edge_offset = 0;
+  for (int i = 0; i < int(arcs.size()); i++) {
+    const auto &arc = arcs[i];
+    const double3 a(arc.start[0],arc.start[1],arc.start[2]);
+    const double3 b(arc.end[0],arc.end[1],arc.end[2]);
+    const double angle = std::acos(std::clamp(math::dot(a,b),-1.0,1.0));
+    const int count = subdivisions[i];
+    for (int j = 0; j <= count; j++) {
+      const double t = double(j)/count;
+      const double3 p = angle < 1e-8 ? math::normalize((1-t)*a+t*b) :
+          math::normalize((std::sin((1-t)*angle)*a+std::sin(t*angle)*b)/std::sin(angle));
+      positions[vertex_offset+j] = float3(p);
+      normals.span[vertex_offset+j] = float3(p);
+    }
+    for (int j = 0; j < count; j++) {
+      edges[edge_offset+j] = int2(vertex_offset+j,vertex_offset+j+1);
+      pose_a.span[edge_offset+j] = arc.pose_a;
+      pose_b.span[edge_offset+j] = arc.pose_b;
+      arc_index.span[edge_offset+j] = i;
+    }
+    vertex_offset += count+1; edge_offset += count;
+  }
+  normals.finish();pose_a.finish();pose_b.finish();arc_index.finish();
+  return GeometrySet::from_mesh(mesh);
+}
+
 struct CacheEntry {
   std::vector<double> positions;
   std::array<double,3> center;
@@ -126,23 +162,22 @@ static void node_geo_exec(GeoNodeExecParams params)
   GeometrySet geometry=params.extract_input<GeometrySet>("Mesh"_ustr);
   const Mesh *mesh=geometry.get_mesh();
   if(!mesh) { params.set_default_remaining_outputs();return; }
-  const bool custom=params.extract_input<bool>("Custom Center"_ustr);
-  const float3 custom_center=params.extract_input<float3>("Center"_ustr);
-  std::array<double,3> center{custom_center.x,custom_center.y,custom_center.z};
-  if(!custom && !volume_center(*mesh,center)) {
-    params.error_message_add(NodeWarningType::Error,TIP_("Uniform density requires a closed, consistently oriented volumetric mesh; alternatively supply Custom Center"));
+  std::array<double,3> center;
+  if(!volume_center(*mesh,center)) {
+    params.error_message_add(NodeWarningType::Error,TIP_("Uniform density requires a closed, consistently oriented volumetric mesh"));
     params.set_default_remaining_outputs();return;
   }
   const float3 down=params.extract_input<float3>("Initial Down"_ustr);
   const double direction[3]={down.x,down.y,down.z};
   const float progress=params.extract_input<float>("Progress"_ustr);
-  const float angle=params.extract_input<float>("Angle Step"_ustr);
-  const bool use_pose=params.extract_input<bool>("Use Stable Pose"_ustr);
-  const int index=params.extract_input<int>("Pose Index"_ustr);
+  constexpr float angle = 0.002f;
+  const bool trace_required = params.output_is_required("Transform"_ustr) ||
+                              params.output_is_required("Trajectory"_ustr);
   std::vector<double> positions;
   positions.reserve(mesh->verts_num*3);
   for(const float3 &p:mesh->vert_positions()) positions.insert(positions.end(),{p.x,p.y,p.z});
   std::vector<RRB_Pose> poses,trajectory;
+  std::vector<RRB_Separatrix> separatrices;
   RRB_Pose selected{};
   char error[512]={};
   {
@@ -164,8 +199,7 @@ static void node_geo_exec(GeoNodeExecParams params)
     RRB_Solver *solver=found->solver.get();
     poses.resize(rrb_pose_count(solver));
     for(int i=0;i<int(poses.size());i++) rrb_pose(solver,i,&poses[i]);
-    if(use_pose) selected=poses[std::clamp(index,0,int(poses.size())-1)];
-    else {
+    if(trace_required) {
       if(!rrb_trace(solver,direction,angle,error)) {
         params.error_message_add(NodeWarningType::Error,error);
         params.set_default_remaining_outputs();return;
@@ -183,22 +217,23 @@ static void node_geo_exec(GeoNodeExecParams params)
         for(int i=0;i<int(trajectory.size());i++) rrb_step(solver,i,&trajectory[i]);
       }
     }
+    if(params.output_is_required("Separatrix"_ustr)) {
+      separatrices.resize(rrb_separatrix_count(solver));
+      for(int i=0;i<int(separatrices.size());i++) rrb_separatrix(solver,i,&separatrices[i]);
+    }
   }
-  const float4x4 transform=matrix_of(selected);
-  geometry::transform_geometry(geometry,transform);
-  params.set_output("Mesh"_ustr,std::move(geometry));
+  const float4x4 transform=trace_required ? matrix_of(selected) : float4x4::identity();
   params.set_output("Stable Poses"_ustr,pose_points(poses));
   params.set_output("Trajectory"_ustr,pose_points(trajectory));
+  params.set_output("Separatrix"_ustr,separatrix_geometry(separatrices));
   params.set_output("Transform"_ustr,transform);
-  params.set_output("Center"_ustr,float3(float(center[0]),float(center[1]),float(center[2])));
-  params.set_output("Pose Count"_ustr,int(poses.size()));
-  params.set_output("Probability"_ustr,float(selected.probability));
 }
 static void node_register()
 {
   static bke::bNodeType ntype;
   geo_node_type_base(&ntype,"GeometryNodeRestingBodies"_ustr,GEO_NODE_RESTING_BODIES);
-  ntype.ui_name="Resting Bodies";
+  ntype.ui_name="Putting Rigid Bodies to Rest";
+  ntype.default_width=240;
   ntype.ui_description="Putting Rigid Bodies to Rest (SIGGRAPH 2025): geometric rolling trajectories and analytical stable orientation probabilities under negligible momentum";
   ntype.enum_name_legacy="RESTING_BODIES";
   ntype.nclass=NODE_CLASS_GEOMETRY;

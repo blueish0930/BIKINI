@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstring>
 #include <memory>
+#include <set>
 
 using V = Eigen::Vector3d;
 using M = Eigen::Matrix4d;
@@ -31,6 +32,7 @@ struct RRB_Solver {
   V center;
   double scale;
   std::vector<RRB_Pose> poses;
+  std::vector<RRB_Separatrix> separatrices;
   std::vector<Step> steps;
   V last_direction = V::Zero();
   double last_step = 0;
@@ -117,6 +119,46 @@ RRB_Solver *rrb_create(const double *positions, int count, const double center[3
     std::stable_sort(s->poses.begin(),s->poses.end(),[](const auto &a,const auto &b) {
       return a.probability>b.probability;
     });
+    /* Export the same ascending manifolds used for the basin-area integral.
+     * A boundary point at a saddle carries its two terminal stable faces;
+     * its neighbors are the backward trace toward maxima, not other saddles
+     * in iteration order. Keep these arcs independent in the Blender output. */
+    const auto pose_index = [&](Face face) {
+      const V normal = ev(s->geometry->faceNormal(face));
+      for (int i = 0; i < int(s->poses.size()); i++) {
+        if ((Eigen::Map<const V>(s->poses[i].normal)-normal).squaredNorm() < 1e-18) {
+          return i;
+        }
+      }
+      throw std::runtime_error("Separatrix has no corresponding stable pose");
+    };
+    std::set<std::pair<size_t, size_t>> exported;
+    for (Edge edge : s->mesh->edges()) {
+      for (const BoundaryNormal *point : boundaries.edge_boundary_normals[edge]) {
+        const int a = pose_index(point->f1), b = pose_index(point->f2);
+        /* Triangles on one planar support are one stable pose, so a seam
+         * between them is not an attraction-basin boundary. */
+        if (a == b) continue;
+        for (const BoundaryNormal *neighbor : point->neighbors) {
+          const auto key = std::minmax(point->index, neighbor->index);
+          if (!exported.emplace(key.first, key.second).second) continue;
+          V start = ev(point->normal), end = ev(neighbor->normal);
+          if (!start.allFinite() || !end.allFinite() || start.norm() < 1e-12 || end.norm() < 1e-12) {
+            throw std::runtime_error("Invalid separatrix direction");
+          }
+          start.normalize(); end.normalize();
+          if ((start-end).squaredNorm() < 1e-20) continue;
+          if (start.dot(end) < -1.0+1e-12) {
+            throw std::runtime_error("Ambiguous antipodal separatrix arc");
+          }
+          RRB_Separatrix arc{};
+          std::copy(start.data(), start.data()+3, arc.start);
+          std::copy(end.data(), end.data()+3, arc.end);
+          arc.pose_a = std::min(a,b); arc.pose_b = std::max(a,b);
+          s->separatrices.push_back(arc);
+        }
+      }
+    }
     error[0]=0;
     return s.release();
   } catch (const std::exception &e) { error_text(error,e.what()); return nullptr; }
@@ -124,6 +166,8 @@ RRB_Solver *rrb_create(const double *positions, int count, const double center[3
 void rrb_free(RRB_Solver *s) { delete s; }
 int rrb_pose_count(const RRB_Solver *s) { return int(s->poses.size()); }
 void rrb_pose(const RRB_Solver *s,int i,RRB_Pose *p) { *p=s->poses.at(i); }
+int rrb_separatrix_count(const RRB_Solver *s) { return int(s->separatrices.size()); }
+void rrb_separatrix(const RRB_Solver *s,int i,RRB_Separatrix *arc) { *arc=s->separatrices.at(i); }
 int rrb_trace(RRB_Solver *s,const double direction[3],double angle_step,char error[512])
 {
   try {
