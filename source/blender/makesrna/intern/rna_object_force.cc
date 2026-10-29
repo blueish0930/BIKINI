@@ -249,7 +249,7 @@ static void rna_Cache_change(Main * /*bmain*/, Scene * /*scene*/, PointerRNA *pt
 
   PTCacheID pid = BKE_ptcache_id_find(ob, scene, cache);
 
-  DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+  DEG_id_tag_update(ptr->owner_id, ob ? ID_RECALC_GEOMETRY : ID_RECALC_SYNC_TO_EVAL);
 
   if (pid.cache) {
     /* Just make sure this wasn't changed. */
@@ -260,16 +260,21 @@ static void rna_Cache_change(Main * /*bmain*/, Scene * /*scene*/, PointerRNA *pt
   }
 }
 
-static void rna_Cache_toggle_disk_cache(Main * /*bmain*/, Scene * /*scene*/, PointerRNA *ptr)
+static void rna_Cache_use_disk_cache_set(PointerRNA *ptr, const bool value)
 {
+  PointCache *cache = static_cast<PointCache *>(ptr->data);
+  if (bool(cache->flag & PTCACHE_DISK_CACHE) == value) {
+    return;
+  }
+
+  SET_FLAG_FROM_TEST(cache->flag, value, PTCACHE_DISK_CACHE);
+
   Object *ob = nullptr;
   Scene *scene = nullptr;
 
   if (!rna_Cache_get_valid_owner_ID(ptr, &ob, &scene)) {
     return;
   }
-
-  PointCache *cache = static_cast<PointCache *>(ptr->data);
 
   PTCacheID pid = BKE_ptcache_id_find(ob, scene, cache);
 
@@ -295,7 +300,9 @@ bool rna_Cache_use_disk_cache_override_apply(Main * /*bmain*/,
   BLI_assert(opop->operation == LIBOVERRIDE_OP_REPLACE);
   UNUSED_VARS_NDEBUG(opop);
 
-  RNA_property_boolean_set(ptr_dst, prop_dst, RNA_property_boolean_get(ptr_src, prop_src));
+  /* Applying an override only changes the stored setting. Do not migrate or delete caches. */
+  PointCache *cache = static_cast<PointCache *>(ptr_dst->data);
+  SET_FLAG_FROM_TEST(cache->flag, RNA_property_boolean_get(ptr_src, prop_src), PTCACHE_DISK_CACHE);
 
   /* DO NOT call `RNA_property_update_main(bmain, nullptr, ptr_dst, prop_dst);`, that would trigger
    * the whole 'update from mem point cache' process, ending up in the complete deletion of an
@@ -324,7 +331,7 @@ static void rna_Cache_idname_change(Main * /*bmain*/, Scene * /*scene*/, Pointer
       BKE_ptcache_load_external(&pid);
     }
 
-    DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+    DEG_id_tag_update(ptr->owner_id, ob ? ID_RECALC_GEOMETRY : ID_RECALC_SYNC_TO_EVAL);
     WM_main_add_notifier(NC_OBJECT | ND_POINTCACHE, ob);
   }
   else {
@@ -1035,9 +1042,10 @@ static void rna_def_pointcache_common(StructRNA *srna)
 
   prop = RNA_def_property(srna, "use_disk_cache", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, nullptr, "flag", PTCACHE_DISK_CACHE);
+  RNA_def_property_boolean_funcs(prop, nullptr, "rna_Cache_use_disk_cache_set");
   RNA_def_property_ui_text(
       prop, "Disk Cache", "Save cache files to disk (.blend file must be saved first)");
-  RNA_def_property_update(prop, NC_OBJECT, "rna_Cache_toggle_disk_cache");
+  RNA_def_property_update(prop, NC_OBJECT, nullptr);
   RNA_def_property_override_funcs(
       prop, nullptr, nullptr, "rna_Cache_use_disk_cache_override_apply");
 

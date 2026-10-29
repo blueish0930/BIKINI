@@ -3160,7 +3160,8 @@ void DepsgraphRelationBuilder::build_nodetree(bNodeTree *ntree)
       build_object(id_cast<Object *>(id));
       ComponentKey object_transform_key(id, NodeType::TRANSFORM);
       add_relation(object_transform_key, ntree_output_key, "Object Transform -> Node");
-      if (object_have_geometry_component(reinterpret_cast<Object *>(id))) {
+      if (!bnode->is_type("ShaderNodeObjectTransform"_ustr) &&
+          object_have_geometry_component(reinterpret_cast<Object *>(id))) {
         ComponentKey object_geometry_key(id, NodeType::GEOMETRY);
         add_relation(object_geometry_key, ntree_output_key, "Object Geometry -> Node");
       }

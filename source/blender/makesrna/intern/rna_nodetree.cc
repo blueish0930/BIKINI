@@ -900,8 +900,10 @@ static const EnumPropertyItem rna_enum_shader_attribute_data_type_items[] = {
     {SHD_ATTRIBUTE_DATA_FLOAT, "FLOAT", 0, "Float", ""},
     {SHD_ATTRIBUTE_DATA_INT, "INT", 0, "Integer", ""},
     {SHD_ATTRIBUTE_DATA_VECTOR, "VECTOR", 0, "Vector", ""},
-    {SHD_ATTRIBUTE_DATA_ROTATION, "QUATERNION", 0, "Quaternion", ""},
+    {SHD_ATTRIBUTE_DATA_ROTATION, "QUATERNION", ICON_NODE_SOCKET_ROTATION, "Rotation", ""},
     {SHD_ATTRIBUTE_DATA_MATRIX, "MATRIX", 0, "Matrix", ""},
+    {SHD_ATTRIBUTE_DATA_COLOR, "FLOAT_COLOR", 0, "Color", ""},
+    {SHD_ATTRIBUTE_DATA_BOOLEAN, "BOOLEAN", 0, "Boolean", ""},
     {0, nullptr, 0, nullptr, nullptr},
 };
 
@@ -7002,6 +7004,7 @@ static void def_sh_attribute(BlenderRNA * /*brna*/, StructRNA *srna)
   prop = RNA_def_property(srna, "data_type", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_sdna(prop, nullptr, "data_type");
   RNA_def_property_enum_items(prop, rna_enum_shader_attribute_data_type_items);
+  RNA_def_property_enum_default(prop, SHD_ATTRIBUTE_DATA_FLOAT);
   RNA_def_property_enum_funcs(prop, nullptr, nullptr, "rna_NodeShaderAttribute_data_type_itemf");
   RNA_def_property_ui_text(prop, "Data Type", "Type of the attribute output");
   RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_socket_update");
@@ -7743,6 +7746,17 @@ static void def_sh_tex_white_noise(BlenderRNA * /*brna*/, StructRNA *srna)
   RNA_def_property_ui_text(prop, "Dimensions", "Number of dimensions to output noise for");
   RNA_def_property_translation_context(prop, BLT_I18NCONTEXT_ID_TEXTURE);
   RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_ShaderNode_socket_update");
+}
+
+static void def_sh_object_transform(BlenderRNA * /*brna*/, StructRNA *srna)
+{
+  PropertyRNA *prop = RNA_def_property(srna, "object", PROP_POINTER, PROP_NONE);
+  RNA_def_property_pointer_sdna(prop, nullptr, "id");
+  RNA_def_property_struct_type(prop, "Object");
+  RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_REFCOUNT);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
+  RNA_def_property_ui_text(prop, "Object", "Object whose world-space transform is retrieved");
+  RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update_relations");
 }
 
 static void def_sh_tex_coord(BlenderRNA * /*brna*/, StructRNA *srna)
@@ -13768,6 +13782,7 @@ static void rna_def_nodes(BlenderRNA *brna)
   define("ShaderNode", "ShaderNodeNormal");
   define("ShaderNode", "ShaderNodeNormalMap", def_sh_normal_map);
   define("ShaderNode", "ShaderNodeObjectInfo");
+  define("ShaderNode", "ShaderNodeObjectTransform", def_sh_object_transform);
   define("ShaderNode", "ShaderNodeOutputAOV", def_sh_output_aov);
   define("ShaderNode", "ShaderNodeOutputLight", def_sh_output);
   define("ShaderNode", "ShaderNodeOutputLineStyle", def_sh_output_linestyle);

@@ -26,6 +26,8 @@
 
 #include "BLI_listbase.hh"
 #include "BLI_math_vector_c.hh"
+#include "BLI_math_matrix_types.hh"
+#include "BLI_math_rotation.hh"
 #include "BLI_stack.hh"
 #include "BLI_string.hh"
 #include "BLI_string_utf8.hh"
@@ -61,6 +63,8 @@ struct PrimitiveSocketValue {
                bool,
                ColorGeometry4f,
                float3,
+               float4x4,
+               math::Quaternion,
                MenuValue,
                std::string,
                Image *,
@@ -95,6 +99,12 @@ struct PrimitiveSocketValue {
     }
     if (type.is<float3>()) {
       return {*static_cast<const float3 *>(value.get())};
+    }
+    if (type.is<float4x4>()) {
+      return {*static_cast<const float4x4 *>(value.get())};
+    }
+    if (type.is<math::Quaternion>()) {
+      return {*static_cast<const math::Quaternion *>(value.get())};
     }
     if (type.is<MenuValue>()) {
       return {*static_cast<const MenuValue *>(value.get())};
@@ -236,6 +246,14 @@ struct SocketValue {
           return value ? std::make_optional(PrimitiveSocketValue{std::string(value->value)}) :
                          std::nullopt;
         }
+        case SOCK_MATRIX:
+          return PrimitiveSocketValue{float4x4::identity()};
+        case SOCK_ROTATION: {
+          const auto *value = socket.default_value_typed<bNodeSocketValueRotation>();
+          return value ? std::make_optional(PrimitiveSocketValue{
+                             math::to_quaternion(math::EulerXYZ(float3(value->value_euler)))}) :
+                         std::nullopt;
+        }
         case SOCK_IMAGE: {
           const auto *value = socket.default_value_typed<bNodeSocketValueImage>();
           return value ? std::make_optional(PrimitiveSocketValue{value->value}) : std::nullopt;
@@ -278,6 +296,8 @@ struct SocketValue {
         case SOCK_BOOLEAN:
         case SOCK_VECTOR:
         case SOCK_RGBA:
+        case SOCK_MATRIX:
+        case SOCK_ROTATION:
         case SOCK_FLOAT:
         case SOCK_IMAGE:
         case SOCK_STRING:
@@ -2495,6 +2515,18 @@ class ShaderNodesInliner {
       return src_value;
     }
     if (std::get_if<LinkedSocketValue>(&src_value.value)) {
+      if ((from_socket_type.type == SOCK_ROTATION && to_socket_type.type == SOCK_VECTOR) ||
+          (from_socket_type.type == SOCK_VECTOR && to_socket_type.type == SOCK_ROTATION))
+      {
+        /* A rotation uses quaternion GPU storage. A vector stores Euler angles; a generic
+         * vec4/vec3 cast would silently return quaternion components instead. */
+        const UString conversion_type = from_socket_type.type == SOCK_ROTATION ?
+                                            "FunctionNodeRotationToEuler"_ustr :
+                                            "FunctionNodeEulerToRotation"_ustr;
+        bNode &conversion = *this->add_node(conversion_type);
+        this->set_input_socket_value({}, conversion, *conversion.inputs.first(), src_value);
+        return {LinkedSocketValue{&conversion, conversion.outputs.first()}};
+      }
       if (to_socket_type.type == SOCK_BOOLEAN) {
         if (ELEM(from_socket_type.type, SOCK_FLOAT, SOCK_INT, SOCK_RGBA)) {
           /* The same to-bool conversion happens to work for integer and color sockets too. */
@@ -2692,6 +2724,24 @@ class ShaderNodesInliner {
       return {node, socket};
     };
 
+    if (const float4x4 *matrix = std::get_if<float4x4>(&value.value)) {
+      const NodeAndSocket result = add_node_with_output("FunctionNodeCombineMatrix"_ustr);
+      for (const int i : IndexRange(16)) {
+        static_cast<bNodeSocket *>(BLI_findlink(&result.node->inputs, i))
+            ->default_value_typed<bNodeSocketValueFloat>()->value =
+            (*matrix)[i / 4][i % 4];
+      }
+      return result;
+    }
+    if (const math::Quaternion *rotation = std::get_if<math::Quaternion>(&value.value)) {
+      const NodeAndSocket result = add_node_with_output("FunctionNodeQuaternionToRotation"_ustr);
+      const float values[4] = {rotation->w, rotation->x, rotation->y, rotation->z};
+      for (const int i : IndexRange(4)) {
+        static_cast<bNodeSocket *>(BLI_findlink(&result.node->inputs, i))
+            ->default_value_typed<bNodeSocketValueFloat>()->value = values[i];
+      }
+      return result;
+    }
     if (const float *value_float = std::get_if<float>(&value.value)) {
       const NodeAndSocket result = add_node_with_output("ShaderNodeValue"_ustr);
       if (result.socket == nullptr) {
@@ -2784,6 +2834,21 @@ class ShaderNodesInliner {
   void set_primitive_value_on_socket(bNodeSocket &socket, const PrimitiveSocketValue &value)
   {
     switch (socket.type) {
+      case SOCK_MATRIX:
+      case SOCK_ROTATION: {
+        /* Matrix sockets have an identity fallback, not storage for an arbitrary matrix.
+         * Materialize folded values as nodes so groups and constants retain all components. */
+        const NodeAndSocket result = this->primitive_value_to_output_socket(value);
+        for (bNode &owner : dst_tree_.nodes) {
+          for (bNodeSocket &input : owner.inputs) {
+            if (&input == &socket) {
+              bke::node_add_link(dst_tree_, *result.node, *result.socket, owner, socket);
+              return;
+            }
+          }
+        }
+        break;
+      }
       case SOCK_FLOAT: {
         socket.default_value_typed<bNodeSocketValueFloat>()->value = std::get<float>(value.value);
         break;
@@ -2980,6 +3045,18 @@ bool inline_shader_node_tree(const bNodeTree &src_tree,
   ShaderNodesInliner inliner(src_tree, dst_tree, params);
 
   if (inliner.do_inline()) {
+    if (params.target_engine_ == SHD_OUTPUT_CYCLES) {
+      std::string error;
+      if (!lower_shader_matrix_nodes(dst_tree, error)) {
+        for (const bNode &node : src_tree.nodes) {
+          if (node.is_type("ShaderNodeWrangle"_ustr)) {
+            params.r_error_messages.append({&node, error, NodeWarningType::Error});
+            break;
+          }
+        }
+        return false;
+      }
+    }
     /* Update deprecated bNodeSocket.link pointers because some code still depends on it. */
     for (bNode &node : dst_tree.nodes) {
       for (bNodeSocket &sock : node.inputs) {

@@ -16,6 +16,7 @@
 #include <optional>
 #include <string>
 #include <variant>
+#include <unordered_set>
 
 #include "MEM_guardedalloc.h"
 
@@ -647,13 +648,16 @@ static std::string cast_gpu_to_vex(const std::string &src,
                                    const vex::Type to)
 {
   if (to == vex::Type::Int) {
-    return "int(" + src + ")";
+    return "int(" + src + (from == GPU_VEC4 ? ".x)" : ")");
   }
   if (to == vex::Type::Bool) {
-    return "(" + src + " != 0.0)";
+    return "(" + src + (from == GPU_VEC4 ? ".x" : "") + " != 0.0)";
   }
   if (to == vex::Type::Float && from != GPU_FLOAT) {
-    return "float(" + src + ")";
+    return from == GPU_VEC4 ? "(" + src + ").x" : "float(" + src + ")";
+  }
+  if (to == vex::Type::Vector2 && from == GPU_VEC4) {
+    return "(" + src + ").xy";
   }
   if (to == vex::Type::Vector && from == GPU_VEC4) {
     return "(" + src + ").xyz";
@@ -1067,7 +1071,7 @@ static void node_declare(NodeDeclarationBuilder &b)
   auto &constant_panel = b.add_panel("Constant"_ustr)
                              .description("Single values from chi/chf/chv/... created by Compile");
   auto &field_panel = b.add_panel("Field"_ustr).description(
-      "Inputs captured as named attributes; read in VEX with i@/f@/v@ using the socket name");
+      "Inputs captured as named attributes; read with i@/f@/v@/m@ using the socket name");
 
   const bNodeTree *tree = b.tree_or_null();
   if (bNode *node_mut = const_cast<bNode *>(b.node_or_null())) {
@@ -1086,7 +1090,7 @@ static void node_declare(NodeDeclarationBuilder &b)
       const UString identifier{ShaderWrangleOutputItemsAccessor::socket_identifier_for_item(item)};
       const UString name{item.name ? item.name : ""};
       b.add_output(socket_type, name, identifier)
-          .description("Assign this name in VEX (`Output = set(p, 0)`). Float/Vector/Color")
+          .description("Assign this name in VEX. Supports values including 4x4 matrices")
           .socket_name_ptr(&tree->id, *ShaderWrangleOutputItemsAccessor::item_srna, &item, "name")
           .custom_draw([i](CustomSocketDrawParams &params) {
             socket_items::ui::draw_item_socket_with_remove<ShaderWrangleOutputItemsAccessor>(
@@ -1233,9 +1237,9 @@ static void node_extra_info(NodeExtraInfoParams &parameters)
     return;
   }
   NodeExtraInfoRow row;
-  row.text = IFACE_("EEVEE Only");
+  row.text = IFACE_("EEVEE / Cycles");
   row.tooltip = TIP_(
-      "VEX compiles to EEVEE GLSL. Cycles can evaluate a constant Output as a color");
+      "Material code supports EEVEE and Cycles. Unsupported engine-specific operations report an error");
   row.icon = ICON_STATUS_INFO;
   parameters.rows.append(std::move(row));
 }
@@ -1271,7 +1275,7 @@ static bool node_insert_link(bke::NodeInsertLinkParams &params)
     if (!ok && params.C) {
       BKE_report(CTX_wm_reports(params.C),
                  RPT_ERROR,
-                 "Wrangle output accepts float, int, boolean, vector, or color");
+                 "Wrangle output accepts float, int, boolean, vector, color, or 4x4 matrix");
     }
     return ok;
   }
@@ -1303,14 +1307,9 @@ static const char *wrangle_live_code(const NodeShaderWrangle &storage)
 static const char *wrangle_intern_gpu_name(const char *name)
 {
   /* GPUNode stores this pointer and uses it after gpu_fn returns. Stack buffers dangle. */
-  static Map<std::string, const char *> intern;
-  const std::string key(name);
-  if (const char **existing = intern.lookup_ptr(key)) {
-    return *existing;
-  }
-  const char *copy = BLI_strdup(name);
-  intern.add(name, copy);
-  return copy;
+  /* Node-based storage keeps c_str pointers stable across insertions and owns their lifetime. */
+  static std::unordered_set<std::string> intern;
+  return intern.emplace(name).first->c_str();
 }
 
 static uint64_t hash_wrangle_signature(const NodeShaderWrangle &storage, const bNode & /*node*/)
@@ -1553,6 +1552,52 @@ static int node_shader_gpu_wrangle(GPUMaterial *mat,
     }
   }
   /* Extra GPU_link inputs after sockets so GPU_stack_link matches totin then va_arg. */
+  struct MatrixAttributeParam {
+    std::string name;
+    std::string ident;
+    vex::Type type;
+  };
+  Vector<MatrixAttributeParam> matrix_attributes;
+  Vector<GPUNodeStack> matrix_input_stack;
+  if (compiled.program) {
+    for (const vex::AttrInfo &attr : compiled.program->attrs) {
+      if (!attr.read || attr.name == "position" || attr.name == "normal" ||
+          !ELEM(attr.type, vex::Type::Matrix, vex::Type::Float, vex::Type::Vector,
+                vex::Type::Vector2, vex::Type::Vector4, vex::Type::Color, vex::Type::Int,
+                vex::Type::Bool)) {
+        continue;
+      }
+      bool is_field = false;
+      for (const InParam &param : in_params) {
+        is_field |= param.kind == SH_NODE_WRANGLE_ITEM_FIELD &&
+                    field_attr_name(param.item_name) == attr.name;
+      }
+      if (!is_field) {
+        MatrixAttributeParam param{attr.name, "_geometry_attr_" + std::to_string(matrix_attributes.size()), attr.type};
+        append_in(attr.type == vex::Type::Matrix ? GPU_MAT4 : GPU_VEC4, param.ident);
+        matrix_attributes.append(std::move(param));
+      }
+    }
+    if (!matrix_attributes.is_empty()) {
+      for (int i = 0; in && !in[i].end; i++) {
+        matrix_input_stack.append(in[i]);
+      }
+      for (const MatrixAttributeParam &param : matrix_attributes) {
+        GPUNodeStack stack;
+        stack.type = param.type == vex::Type::Matrix ? GPU_MAT4 : GPU_VEC4;
+        stack.sockettype = param.type == vex::Type::Matrix ? SOCK_MATRIX : SOCK_RGBA;
+        stack.link = param.type == vex::Type::Matrix ?
+                         GPU_attribute_matrix(mat, param.name.c_str()) :
+                         GPU_attribute(mat, CD_AUTO_FROM_NAME, param.name.c_str());
+        stack.hasinput = true;
+        matrix_input_stack.append(std::move(stack));
+      }
+      GPUNodeStack end;
+      end.end = true;
+      matrix_input_stack.append(std::move(end));
+      in = matrix_input_stack.data();
+    }
+  }
   if (need_wp) {
     append_in(GPU_VEC3, "_wp");
   }
@@ -1702,6 +1747,16 @@ static int node_shader_gpu_wrangle(GPUMaterial *mat,
       }
       else if (a.name == "normal") {
         init = cast_gpu_to_vex("_wn", GPU_VEC3, a.type);
+      }
+      else {
+        for (const MatrixAttributeParam &param : matrix_attributes) {
+          if (param.name == a.name) {
+            init = cast_gpu_to_vex(param.ident,
+                                   param.type == vex::Type::Matrix ? GPU_MAT4 : GPU_VEC4,
+                                   a.type);
+            break;
+          }
+        }
       }
       declare(ident, a.type, init);
     }
@@ -2080,9 +2135,8 @@ void register_node_type_sh_wrangle()
   sh_node_type_base(&ntype, "ShaderNodeWrangle"_ustr, SH_NODE_WRANGLE);
   ntype.ui_name = "Wrangle";
   ntype.ui_description =
-      "VEX material function (like GLSL / Shadertoy). Outputs are float/vector/color "
-      "you plug into other sockets. Field sockets are @name; Compile creates "
-      "chf/chi/chv constants";
+      "Material code for EEVEE and Cycles. Read named geometry attributes with f@, v@ and m@; "
+      "connected Field inputs override named attributes. Outputs connect to other shader nodes";
   ntype.enum_name_legacy = "WRANGLE";
   ntype.nclass = NODE_CLASS_SCRIPT;
   ntype.declare = file_ns::node_declare;

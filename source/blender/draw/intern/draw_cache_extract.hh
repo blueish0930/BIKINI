@@ -113,6 +113,7 @@ enum class VBOType : int8_t {
   Attr14,
   Attr15,
   AttrViewer,
+  MaterialAttributes,
   VertexNormal,
   PaintOverlayFlag,
 };
@@ -323,6 +324,8 @@ struct MeshBatchCache {
   DRW_MeshCDMask cd_used, cd_needed, cd_used_over_time;
 
   VectorSet<std::string> attr_used, attr_needed, attr_used_over_time;
+  VectorSet<std::string> material_attr_used, material_attr_needed;
+  VectorSet<int> material_attribute_buffer_materials;
 
   int lastmatch;
 

@@ -48,5 +48,7 @@ bool inline_shader_node_tree(const bNodeTree &src_tree,
                              bNodeTree &dst_tree,
                              InlineShaderNodeTreeParams &params);
 
+bool lower_shader_matrix_nodes(bNodeTree &tree, std::string &r_error);
+
 }  // namespace nodes
 }  // namespace blender

@@ -22,6 +22,7 @@
 #include "BLI_memory_utils.hh"
 #include "BLI_stack.hh"
 #include "BLI_string.hh"
+#include "BLI_shader_matrix_attribute.hh"
 #include "BLI_utildefines.hh"
 
 #include "BKE_image.hh"
@@ -710,7 +711,7 @@ static GPUMaterialAttribute *gpu_node_graph_add_attribute(GPUNodeGraph *graph,
   }
 
   /* Add new requested attribute if it's within GPU limits. */
-  if (attr == nullptr && num_attributes < GPU_MAX_ATTR) {
+  if (attr == nullptr) {
     attr = MEM_new_zeroed<GPUMaterialAttribute>(__func__);
     attr->is_default_color = is_default_color;
     attr->is_hair_length = is_hair_length;
@@ -865,6 +866,18 @@ GPUNodeLink *GPU_attribute(GPUMaterial *mat, const eCustomDataType type, const c
   link->link_type = GPU_NODE_LINK_ATTR;
   link->attr = attr;
   return link;
+}
+
+GPUNodeLink *GPU_attribute_matrix(GPUMaterial *mat, const char *name)
+{
+  GPUNodeLink *columns[4];
+  for (int column = 0; column < 4; column++) {
+    const std::string request = shader_matrix_attribute_column_name(name, column);
+    columns[column] = GPU_attribute(mat, CD_AUTO_FROM_NAME, request.c_str());
+  }
+  GPUNodeLink *matrix;
+  GPU_link(mat, "node_attribute_matrix", columns[0], columns[1], columns[2], columns[3], &matrix);
+  return matrix;
 }
 
 GPUNodeLink *GPU_attribute_default_color(GPUMaterial *mat)

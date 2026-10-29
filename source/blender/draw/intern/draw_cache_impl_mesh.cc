@@ -17,6 +17,7 @@
 #include "BLI_listbase.hh"
 #include "BLI_span.hh"
 #include "BLI_string_ref.hh"
+#include "BLI_shader_matrix_attribute.hh"
 
 #include "DNA_mesh_types.h"
 #include "DNA_object_types.h"
@@ -175,22 +176,37 @@ static bool attribute_exists(const Mesh &mesh, const StringRef name)
 static std::optional<bke::AttributeMetaData> lookup_meta_data(const Mesh &mesh,
                                                               const StringRef name)
 {
+  const auto column = shader_attribute_request(name);
+  const StringRef source_name = column ? column->name : name;
+  std::optional<bke::AttributeMetaData> metadata;
   if (mesh.runtime->wrapper_type == ME_WRAPPER_TYPE_BMESH) {
     if (const BMesh *bm = BKE_editmesh_bmesh_get(&mesh)) {
-      if (const BMDataLayerLookup attr = BM_data_layer_lookup(*bm, name)) {
-        return bke::AttributeMetaData{attr.domain, attr.type};
+      if (const BMDataLayerLookup attr = BM_data_layer_lookup(*bm, source_name)) {
+        metadata = bke::AttributeMetaData{attr.domain, attr.type};
       }
-      return std::nullopt;
     }
   }
-  return mesh.attributes().lookup_meta_data(name);
+  else {
+    metadata = mesh.attributes().lookup_meta_data(source_name);
+  }
+  if (column) {
+    /* Missing matrix columns need an explicit zero buffer, including the fourth component. */
+    return bke::AttributeMetaData{
+        metadata && metadata->data_type == (column->kind == ShaderAttributeRequestKind::Rotation ?
+                                               bke::AttrType::Quaternion : bke::AttrType::Float4x4) ? metadata->domain :
+                                                                  bke::AttrDomain::Point,
+        bke::AttrType::ColorFloat};
+  }
+  /* Matrix data has a dedicated output. The legacy color/vector outputs have no matrix cast. */
+  return metadata && metadata->data_type == bke::AttrType::Float4x4 ? std::nullopt : metadata;
 }
 
 static void mesh_cd_calc_used_gpu_layers(const Object &object,
                                          const Mesh &mesh,
                                          const Span<const GPUMaterial *> materials,
                                          VectorSet<std::string> *r_attributes,
-                                         DRW_MeshCDMask *r_cd_used)
+                                         DRW_MeshCDMask *r_cd_used,
+                                         VectorSet<std::string> *r_buffer_attributes = nullptr)
 {
   constexpr bke::AttributeMetaData UV_METADATA{bke::AttrDomain::Corner, bke::AttrType::Float2};
   const Mesh &me_final = editmesh_final_or_this(object, mesh);
@@ -216,6 +232,12 @@ static void mesh_cd_calc_used_gpu_layers(const Object &object,
       }
 
       StringRef name = gpu_attr.name;
+      if (r_buffer_attributes && GPU_material_flag_get(gpumat, GPU_MATFLAG_ATTRIBUTE_BUFFER) &&
+          gpu_attr.type == CD_AUTO_FROM_NAME && !name.is_empty() && !gpu_attr.is_default_color)
+      {
+        r_buffer_attributes->add_as(name);
+        continue;
+      }
 
       if (gpu_attr.type == CD_TANGENT) {
         if (name.is_empty()) {
@@ -777,7 +799,18 @@ Span<Batch *> DRW_mesh_batch_cache_get_surface_shaded(Object &object,
                                                       const Span<const GPUMaterial *> materials)
 {
   MeshBatchCache &cache = *mesh_batch_cache_get(mesh);
-  mesh_cd_calc_used_gpu_layers(object, mesh, materials, &cache.attr_needed, &cache.cd_needed);
+  mesh_cd_calc_used_gpu_layers(object, mesh, materials, &cache.attr_needed, &cache.cd_needed,
+                               &cache.material_attr_needed);
+  for (const int i : materials.index_range()) {
+    const bool use_buffer = materials[i] &&
+                           GPU_material_flag_get(materials[i], GPU_MATFLAG_ATTRIBUTE_BUFFER);
+    if (use_buffer != cache.material_attribute_buffer_materials.contains(i)) {
+      if (use_buffer) { cache.material_attribute_buffer_materials.add(i); }
+      else { cache.material_attribute_buffer_materials.remove(i); }
+      if (cache.surface_per_mat[i]) { Batch::clear(cache.surface_per_mat[i]); }
+      cache.batch_ready &= ~MBC_SURFACE_PER_MAT;
+    }
+  }
 
   BLI_assert(materials.size() == cache.mat_len);
 
@@ -1154,12 +1187,17 @@ void DRW_mesh_batch_cache_create_requested(TaskGraph &task_graph,
     const bool uvs_overlap = drw_attributes_overlap(&cache.cd_used.uv, &cache.cd_needed.uv);
     const bool tan_overlap = drw_attributes_overlap(&cache.cd_used.tan, &cache.cd_needed.tan);
     const bool attr_overlap = drw_attributes_overlap(&cache.attr_used, &cache.attr_needed);
-    if (!uvs_overlap || !tan_overlap || !attr_overlap ||
+    const bool material_attr_overlap = drw_attributes_overlap(&cache.material_attr_used,
+                                                             &cache.material_attr_needed);
+    if (!uvs_overlap || !tan_overlap || !attr_overlap || !material_attr_overlap ||
         (cache.cd_needed.orco && !cache.cd_used.orco) ||
         (cache.cd_needed.tan_orco && !cache.cd_used.tan_orco) ||
         (cache.cd_needed.sculpt_overlays && !cache.cd_used.sculpt_overlays))
     {
       FOREACH_MESH_BUFFER_CACHE (cache, mbc) {
+        if (!material_attr_overlap) {
+          mbc->buff.vbos.remove(VBOType::MaterialAttributes);
+        }
         if (!uvs_overlap) {
           mbc->buff.vbos.remove(VBOType::UVs);
           cd_uv_update = true;
@@ -1190,12 +1228,14 @@ void DRW_mesh_batch_cache_create_requested(TaskGraph &task_graph,
 
       mesh_cd_layers_type_merge(&cache.cd_used, cache.cd_needed);
       drw_attributes_merge(&cache.attr_used, &cache.attr_needed);
+      drw_attributes_merge(&cache.material_attr_used, &cache.material_attr_needed);
     }
     mesh_cd_layers_type_merge(&cache.cd_used_over_time, cache.cd_needed);
     cache.cd_needed.clear();
 
     drw_attributes_merge(&cache.attr_used_over_time, &cache.attr_needed);
     cache.attr_needed.clear();
+    cache.material_attr_needed.clear();
   }
 
   if ((batch_requested & MBC_EDITUV) || cd_uv_update) {
@@ -1669,6 +1709,9 @@ void DRW_mesh_batch_cache_create_requested(TaskGraph &task_graph,
 
   if (batches_to_create & MBC_SURFACE_PER_MAT) {
     ibo_requests[int(BufferList::Final)].add(IBOType::Tris);
+    if (!cache.material_attr_used.is_empty()) {
+      vbo_requests[int(BufferList::Final)].add(VBOType::MaterialAttributes);
+    }
     vbo_requests[int(BufferList::Final)].add(VBOType::CornerNormal);
     vbo_requests[int(BufferList::Final)].add(VBOType::Position);
     for (const int i : cache.attr_used.index_range()) {
@@ -1787,9 +1830,14 @@ void DRW_mesh_batch_cache_create_requested(TaskGraph &task_graph,
       if (cache.cd_used.orco) {
         GPU_batch_vertbuf_add(gpu_batch, buffers.vbos.lookup(VBOType::Orco).get(), false);
       }
-      for (const int i : cache.attr_used.index_range()) {
-        GPU_batch_vertbuf_add(
-            gpu_batch, buffers.vbos.lookup(VBOType(int8_t(VBOType::Attr0) + i)).get(), false);
+      if (cache.material_attribute_buffer_materials.contains(material)) {
+        GPU_batch_vertbuf_add(gpu_batch, buffers.vbos.lookup(VBOType::MaterialAttributes).get(), false);
+      }
+      else {
+        for (const int i : cache.attr_used.index_range()) {
+          GPU_batch_vertbuf_add(
+              gpu_batch, buffers.vbos.lookup(VBOType(int8_t(VBOType::Attr0) + i)).get(), false);
+        }
       }
     }
   }

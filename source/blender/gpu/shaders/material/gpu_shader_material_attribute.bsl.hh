@@ -8,6 +8,18 @@
 #include "gpu_shader_material_interface.bsl.hh"
 
 [[node]]
+void node_attribute_matrix(float4 a, float4 b, float4 c, float4 d, float4x4 &matrix)
+{
+  matrix = float4x4(a, b, c, d);
+}
+
+[[node]]
+void node_attribute_matrix_zero(float4x4 &matrix)
+{
+  matrix = float4x4(0.0f);
+}
+
+[[node]]
 void node_attribute_color(KernelGlobals &kg, float4 attr, float4 &out_attr)
 {
   out_attr = attr_load_color_post(kg, attr);
@@ -100,31 +112,43 @@ void node_attribute(float4 attr, float4 &outcol, float3 &outvec, float &outf, fl
 }
 
 [[node]]
-void node_attribute_as_float(float4 attr, float &out)
+void node_attribute_as_float(float4 attr, float &result)
 {
-  out = attr.x;
+  result = attr.x;
 }
 
 [[node]]
-void node_attribute_as_int(float4 attr, float &out)
+void node_attribute_as_int(float4 attr, float &result)
 {
-  out = trunc(attr.x);
+  result = trunc(attr.x);
 }
 
 [[node]]
-void node_attribute_as_vector(float4 attr, float3 &out)
+void node_attribute_as_vector(float4 attr, float3 &result)
 {
-  out = attr.xyz;
+  result = attr.xyz;
 }
 
 [[node]]
-void node_attribute_as_rotation(float4 attr, float4 &out)
+void node_attribute_as_rotation(float4 attr, float4 &result)
 {
-  out = attr;
+  result = dot(attr, attr) > 0.0f ? normalize(attr) : float4(1.0f, 0.0f, 0.0f, 0.0f);
 }
 
 [[node]]
-void node_attribute_as_matrix(float4 attr, float4x4 &out)
+void node_attribute_as_color(float4 attr, float4 &result)
 {
-  out = float4x4(attr.x, 0.0f, 0.0f, 0.0f, 0.0f, attr.y, 0.0f, 0.0f, 0.0f, 0.0f, attr.z, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+  result = attr;
+}
+
+[[node]]
+void node_attribute_as_boolean(float4 attr, float &result)
+{
+  result = float(attr.x != 0.0f);
+}
+
+[[node]]
+void node_attribute_as_matrix(float4 attr, float4x4 &result)
+{
+  result = float4x4(attr.x, 0.0f, 0.0f, 0.0f, 0.0f, attr.y, 0.0f, 0.0f, 0.0f, 0.0f, attr.z, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
 }

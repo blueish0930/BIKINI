@@ -337,7 +337,9 @@ void node_gpu_stack_from_data(GPUNodeStack *gs, bNodeSocket *socket, bNodeStack 
 
     /* The value is retrieved as float4, then stored using the type of the socket. */
     float4 vec(0.0f);
-    nodestack_get_vec(vec, socket->type, ns);
+    if (socket->type != SOCK_MATRIX) {
+      nodestack_get_vec(vec, socket->type, ns);
+    }
 
     switch (socket->type) {
       case SOCK_FLOAT:
@@ -489,9 +491,11 @@ static void data_from_gpu_stack_list(ListBaseT<bNodeSocket> *sockets,
              SOCK_COLOR_RAMP,
              SOCK_CURVE))
     {
-      node_data_from_gpu_stack(ns[i], &gs[i]);
-      i++;
+      if (ns[i]) {
+        node_data_from_gpu_stack(ns[i], &gs[i]);
+      }
     }
+    i++;
   }
 }
 

@@ -78,6 +78,7 @@ void register_node_type_sh_mix();
 void register_node_type_sh_normal_map();
 void register_node_type_sh_normal();
 void register_node_type_sh_object_info();
+void register_node_type_sh_object_transform();
 void register_node_type_sh_output_aov();
 void register_node_type_sh_output_eevee_material();
 void register_node_type_sh_output_light();

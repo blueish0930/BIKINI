@@ -7,6 +7,19 @@
 #include "gpu_shader_math_rotation_conversion.bsl.hh"
 #include "gpu_shader_math_vector.bsl.hh"
 #include "gpu_shader_math_vector_compare.bsl.hh"
+#include "gpu_shader_math_vector_safe.bsl.hh"
+
+float3 axes_to_rotation_orthogonal(float3 v)
+{
+  /* Match the deterministic fallback used by Geometry Nodes on the CPU. */
+  if (v.x != -v.y) {
+    return float3(-v.y, v.x, 0.0f);
+  }
+  if (v.x != -v.z) {
+    return float3(-v.z, 0.0f, v.x);
+  }
+  return float3(0.0f, -v.z, v.y);
+}
 
 [[node]]
 void axes_to_rotation(float3 primary_in,
@@ -17,7 +30,7 @@ void axes_to_rotation(float3 primary_in,
                       float tertiary_factor,
                       float4 &rotation)
 {
-  float3 primary = normalize(primary_in);
+  float3 primary = normalize_fallback(primary_in, float3(0.0f));
   float3 secondary = secondary_in;
   float3 tertiary;
 
@@ -26,20 +39,21 @@ void axes_to_rotation(float3 primary_in,
 
   if (primary_is_non_zero && secondary_is_non_zero) {
     tertiary = cross(primary, secondary);
-    if (is_zero(tertiary)) {
-      tertiary = orthogonal<float3>(primary);
+    /* GPU fused operations can leave a tiny cross product for parallel inputs. */
+    if (dot(tertiary, tertiary) <= 1e-12f * dot(secondary, secondary)) {
+      tertiary = axes_to_rotation_orthogonal(primary);
     }
     tertiary = normalize(tertiary);
     secondary = cross(tertiary, primary);
   }
   else if (primary_is_non_zero) {
-    secondary = orthogonal<float3>(primary);
+    secondary = axes_to_rotation_orthogonal(primary);
     secondary = normalize(secondary);
     tertiary = cross(primary, secondary);
   }
   else if (secondary_is_non_zero) {
     secondary = normalize(secondary);
-    primary = orthogonal<float3>(secondary);
+    primary = axes_to_rotation_orthogonal(secondary);
     primary = normalize(primary);
     tertiary = cross(primary, secondary);
   }

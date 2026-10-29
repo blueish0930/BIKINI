@@ -99,8 +99,14 @@ Batch *pointcloud_sub_pass_setup_implementation(PassT &sub_ps,
   sub_ps.bind_texture("ptcloud_pos_rad_tx", is_empty ? module.dummy_vbo : pos_rad_buf);
 
   if (gpu_material != nullptr) {
+    if(GPU_material_flag_get(gpu_material,GPU_MATFLAG_ATTRIBUTE_BUFFER)) {
+      sub_ps.bind_texture("material_attributes_tx",
+                         pointcloud_material_attributes_get(pointcloud,*gpu_material));
+    }
     ListBaseT<GPUMaterialAttribute> gpu_attrs = GPU_material_attributes(gpu_material);
     for (GPUMaterialAttribute &gpu_attr : gpu_attrs) {
+      if(GPU_material_flag_get(gpu_material,GPU_MATFLAG_ATTRIBUTE_BUFFER) &&
+         gpu_attr.type==CD_AUTO_FROM_NAME && gpu_attr.name[0] && !gpu_attr.is_default_color){continue;}
       char sampler_name[32];
       /** NOTE: Reusing curve attribute function. */
       drw_curves_get_attribute_sampler_name(gpu_attr.name, sampler_name);

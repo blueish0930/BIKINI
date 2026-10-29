@@ -14,6 +14,7 @@
 #include "BLI_vector.hh"
 
 #include "FN_field.hh"
+#include "FN_user_data.hh"
 
 #include "NOD_expression_complete.hh"
 
@@ -109,7 +110,8 @@ ExecOutput execute(const Program &program,
                    const fn::Field<bool> &selection,
                    Span<ChField> parms = {},
                    Span<ChList> lists = {},
-                   Span<ChRamp> ramps = {});
+                   Span<ChRamp> ramps = {},
+                   const fn::UserData *cancel_data = nullptr);
 
 /** Evaluate a script once with no geometry (for tests). Optional `return` value as int/float/string. */
 struct PureEvalOutput {

@@ -5646,7 +5646,12 @@ static bool vm_interp(const Program &program,
   const Span<Inst> code = program.code;
   const int code_n = int(code.size());
 
+  uint32_t cancel_steps = 0;
   for (int pc = start_pc; pc < code_n;) {
+    if ((cancel_steps++ & 1023) == 0 && env.cancel_data && env.cancel_data->is_cancelled()) {
+      r_error = "Evaluation cancelled";
+      return false;
+    }
     const Inst &in = code[pc];
     switch (in.op) {
       case Op::Nop:
@@ -7317,7 +7322,14 @@ static bool vm_run_wavefront(const Program &program,
           std::string tile_error;
           enqueue(0, n == 32 ? 0xffffffffu : ((uint32_t(1) << n) - 1u));
 
+          uint32_t cancel_steps = 0;
           while (!work.is_empty() && tile_error.empty()) {
+            if ((cancel_steps++ & 1023) == 0 && env.cancel_data &&
+                env.cancel_data->is_cancelled())
+            {
+              tile_error = "Evaluation cancelled";
+              break;
+            }
             const int pc = work.pop_last();
             queued[pc] = 0;
             const uint32_t bits = pc_masks[pc];
@@ -8162,7 +8174,15 @@ static bool vm_run_tiles_scalar(const Program &program,
             }
             std::string err;
             bool lane_ok = true;
+            uint32_t cancel_steps = 0;
             for (int pc = 0; pc < code_n && lane_ok;) {
+              if ((cancel_steps++ & 1023) == 0 && local.cancel_data &&
+                  local.cancel_data->is_cancelled())
+              {
+                err = "Evaluation cancelled";
+                lane_ok = false;
+                break;
+              }
               const Inst &in = code[pc];
               switch (in.op) {
                 case Op::Nop:
@@ -9848,7 +9868,12 @@ bool vm_run_array(const Program &program,
   const Span<Inst> code = program.code;
   const int code_n = int(code.size());
 
+  uint32_t cancel_steps = 0;
   for (int pc = 0; pc < code_n;) {
+    if ((cancel_steps++ & 1023) == 0 && env.cancel_data && env.cancel_data->is_cancelled()) {
+      r_error = "Evaluation cancelled";
+      return false;
+    }
     CountedAttrLoop loop;
     if (match_counted_attr_loop(program, pc, loop)) {
       const int i0 = (loop.i_slot >= 0 && loop.i_slot < local_n) ? locals[loop.i_slot].as_int() :

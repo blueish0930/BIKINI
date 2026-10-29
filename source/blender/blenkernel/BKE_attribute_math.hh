@@ -795,9 +795,7 @@ class float4x4Mixer {
  private:
   MutableSpan<float4x4> buffer_;
   Array<float> total_weights_;
-  Array<float3> location_buffer_;
-  Array<float3> expmap_buffer_;
-  Array<float3> scale_buffer_;
+  Array<float4x4> matrix_buffer_;
 
  public:
   float4x4Mixer(MutableSpan<float4x4> buffer);

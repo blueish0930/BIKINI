@@ -10,6 +10,7 @@
 
 #include "BLI_index_mask.hh"
 #include "BLI_math_base.hh"
+#include "BLI_math_matrix.hh"
 
 namespace blender::length_parameterize {
 
@@ -60,10 +61,20 @@ inline void interpolate_to_masked(const Span<T> src,
       const float factor = factors[dst_segment_pos + i];
       const bool is_cyclic_case = prev_index == last_src_index;
       if (is_cyclic_case) {
-        dst[dst_segment[i]] = math::interpolate(src.last(), src.first(), factor);
+        if constexpr (std::is_same_v<T,float4x4>) {
+          dst[dst_segment[i]] = math::interpolate_linear(src.last(), src.first(), factor);
+        }
+        else {
+          dst[dst_segment[i]] = math::interpolate(src.last(), src.first(), factor);
+        }
       }
       else {
-        dst[dst_segment[i]] = math::interpolate(src[prev_index], src[prev_index + 1], factor);
+        if constexpr (std::is_same_v<T,float4x4>) {
+          dst[dst_segment[i]] = math::interpolate_linear(src[prev_index],src[prev_index+1],factor);
+        }
+        else {
+          dst[dst_segment[i]] = math::interpolate(src[prev_index],src[prev_index+1],factor);
+        }
       }
     }
   });

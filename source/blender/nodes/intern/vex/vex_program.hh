@@ -19,6 +19,7 @@
 #include "BLI_vector.hh"
 
 #include "BKE_wrangle_array.hh"
+#include "FN_user_data.hh"
 #include "DNA_meshdata_types.h"
 
 namespace blender::nodes::vex {
@@ -1175,6 +1176,7 @@ using TopoFn = Value (*)(void *user,
                          std::string &r_error);
 
 struct VMEnv {
+  const fn::UserData *cancel_data = nullptr;
   int index = 0;
   int rand_seq = 0;
   int npoints = 0;

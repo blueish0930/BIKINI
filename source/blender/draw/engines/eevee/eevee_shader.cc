@@ -24,6 +24,10 @@
 
 #include "BLI_assert.hh"
 #include "BLI_math_bits.hh"
+#include "BLI_hash.hh"
+#include "BLI_set.hh"
+#include "BLI_shader_matrix_attribute.hh"
+#include <unordered_map>
 #include <fmt/format.h>
 
 namespace blender::eevee {
@@ -696,6 +700,14 @@ class SlotAllocator {
     }
     available_vertex_id_ &= ~bit;
   }
+  int allocate_vertex_input()
+  {
+    uint32_t mask=available_vertex_id_&0xFFFFu;
+    if(mask==0){vertex_id_overflow_=true;return -1;}
+    int slot=bitscan_forward_clear_uint(&mask);
+    available_vertex_id_ &= ~(1u<<slot);
+    return slot;
+  }
 };
 
 static SlotAllocator add_pipeline_create_info(gpu::shader::ShaderCreateInfo &info,
@@ -977,6 +989,81 @@ void ShaderModule::material_create_info_amend(GPUMaterial *gpumat, GPUCodegenOut
   GPUCodegenOutput &codegen = *codegen_;
   ShaderCreateInfo &info = *reinterpret_cast<ShaderCreateInfo *>(codegen.create_info);
 
+  /* Named mesh attributes may exceed the vertex-input and varying limits. Spill them into
+   * one per-geometry buffer and interpolate its corner values at the shading point. */
+  int attribute_count=0;
+  for(const GPUMaterialAttribute &attr:GPU_material_attributes(gpumat)){attribute_count++;}
+  const bool use_attribute_buffer=ELEM(geometry_type,MAT_GEOM_MESH,MAT_GEOM_CURVES,MAT_GEOM_POINTCLOUD) &&
+      pipeline_type!=MAT_PIPE_VOLUME_MATERIAL && attribute_count>14;
+  Set<int> buffer_attribute_ids;
+  Set<std::string> buffer_input_names,buffer_varying_names;
+  std::unordered_map<int,std::string> buffer_expressions;
+  if(use_attribute_buffer) {
+    GPU_material_flag_set(gpumat,GPU_MATFLAG_ATTRIBUTE_BUFFER|GPU_MATFLAG_BARYCENTRIC);
+    std::unordered_map<int,int> legacy_indices;
+    int legacy_index=0;
+    for(const GPUMaterialAttribute &attr:GPU_material_attributes(gpumat)) {
+      if(attr.type!=CD_AUTO_FROM_NAME || attr.name[0]=='\0' || attr.is_default_color) {
+        legacy_indices[attr.id]=legacy_index++;
+      }
+    }
+    for(const GPUMaterialAttribute &attr:GPU_material_attributes(gpumat)) {
+      if(attr.type!=CD_AUTO_FROM_NAME || attr.name[0]=='\0' || attr.is_default_color){continue;}
+      const uint64_t hash=get_default_hash(StringRef(attr.name));
+      buffer_attribute_ids.add(attr.id);buffer_input_names.add(attr.input_name);
+      buffer_varying_names.add("v"+std::to_string(attr.id));
+      buffer_expressions[attr.id]=fmt::format(
+          "material_attribute_fetch(kg, sd, float3({}.0, {}.0, {}.0), {}.0)",
+          hash&0xFFFFFF,(hash>>24)&0xFFFFFF,hash>>48,
+          shader_attribute_request(attr.name) ? 0 : 1);
+    }
+    auto replace_reads=[&](std::string &source) {
+      size_t pos=0;
+      while((pos=source.find("var_attrs.v",pos))!=std::string::npos) {
+        size_t end=pos+11;while(end<source.size() && source[end]>='0' && source[end]<='9'){end++;}
+        int id=std::stoi(source.substr(pos+11,end-pos-11));
+        auto it=buffer_expressions.find(id);
+        if(it!=buffer_expressions.end()){source.replace(pos,end-pos,it->second);pos+=it->second.size();}
+        else{pos=end;}
+      }
+    };
+    replace_reads(codegen.surface.serialized);replace_reads(codegen.displacement.serialized);
+    replace_reads(codegen.thickness.serialized);replace_reads(codegen.volume.serialized);
+    for(auto &graph:codegen.material_functions){replace_reads(graph.serialized);}
+    std::stringstream kept;size_t begin=0;
+    while(begin<codegen.attr_load.size()) {
+      size_t end=codegen.attr_load.find('\n',begin);if(end==std::string::npos){end=codegen.attr_load.size();}
+      std::string line=codegen.attr_load.substr(begin,end-begin);bool skip=false;
+      for(int id:buffer_attribute_ids) {
+        if(line.starts_with("var_attrs.v"+std::to_string(id)+" =")){skip=true;break;}
+      }
+      if(!skip){
+        for(const auto &[id,index]:legacy_indices) {
+          if(line.starts_with("var_attrs.v"+std::to_string(id)+" =")) {
+            const size_t end_arg=line.rfind(", ");
+            const size_t close=line.rfind(");");
+            if(end_arg!=std::string::npos && close!=std::string::npos) {
+              line.replace(end_arg+2,close-end_arg-2,std::to_string(index));
+            }
+            break;
+          }
+        }
+        kept<<line<<'\n';
+      }begin=end+1;
+    }
+    codegen.attr_load=kept.str();
+    for(auto &entry:info.vertex_out_interfaces_) {
+      StageInterfaceInfo *iface=const_cast<StageInterfaceInfo *>(entry.iface);
+      if(iface->instance_name!="var_attrs"){continue;}
+      for(int i=int(iface->inouts.size())-1;i>=0;i--) {
+        if(buffer_varying_names.contains(std::string(iface->inouts[i].name))){iface->inouts.remove(i);}
+      }
+    }
+    for(int i=int(info.vertex_out_interfaces_.size())-1;i>=0;i--) {
+      if(info.vertex_out_interfaces_[i].iface->inouts.is_empty()) { info.vertex_out_interfaces_.remove(i); }
+    }
+  }
+
   /* WORKAROUND: Add new ob attr buffer. */
   if (GPU_material_uniform_attributes(gpumat) != nullptr ||
       GPU_material_flag_get(gpumat, GPU_MATFLAG_LIGHT_ATTRIBUTE))
@@ -1041,6 +1128,11 @@ void ShaderModule::material_create_info_amend(GPUMaterial *gpumat, GPUCodegenOut
    * We add them back after we get the SlotAllocator. */
   auto vertex_inputs = info.vertex_inputs_;
   info.vertex_inputs_.clear();
+  if(use_attribute_buffer) {
+    for(int i=int(vertex_inputs.size())-1;i>=0;i--) {
+      if(buffer_input_names.contains(std::string(vertex_inputs[i].name))){vertex_inputs.remove(i);}
+    }
+  }
 
   /* IMPORTANT: All additional_info containing resources should go before
    * add_pipeline_create_info. This ensure all resource slot are correctly reserved inside the
@@ -1054,6 +1146,17 @@ void ShaderModule::material_create_info_amend(GPUMaterial *gpumat, GPUCodegenOut
                                                  use_ao_node,
                                                  use_raycast,
                                                  use_additional_data);
+  if(use_attribute_buffer) {
+    info.sampler(slots.get_next_sampler(),ImageType::FloatBuffer,"material_attributes_tx",Frequency::BATCH);
+    if(geometry_type==MAT_GEOM_MESH) {
+      info.storage_buf(12,Qualifier::read,"uint","material_attribute_indices[]",Frequency::GEOMETRY);
+      info.push_constant(gpu::shader::Type::int_t,"material_attribute_first_index");
+      info.push_constant(gpu::shader::Type::int_t,"material_attribute_index_base");
+      info.push_constant(gpu::shader::Type::int_t,"material_attribute_no_indices");
+      info.push_constant(gpu::shader::Type::int_t,"material_attribute_indices_16bit");
+      info.builtins(BuiltinBits::PRIMITIVE_ID);
+    }
+  }
 
   using gpuType = gpu::shader::Type;
   info.compilation_constant(
@@ -1229,7 +1332,8 @@ void ShaderModule::material_create_info_amend(GPUMaterial *gpumat, GPUCodegenOut
   }
 
   for (auto &vert_in : vertex_inputs) {
-    slots.set_vertex_input(vert_in.index);
+    if(use_attribute_buffer){vert_in.index=slots.allocate_vertex_input();}
+    else {slots.set_vertex_input(vert_in.index);}
     info.vertex_in(vert_in.index, vert_in.type, vert_in.name);
   }
 
@@ -1289,6 +1393,79 @@ void ShaderModule::material_create_info_amend(GPUMaterial *gpumat, GPUCodegenOut
   attr_load << "}\n\n";
 
   std::stringstream vert_gen, frag_gen;
+  if(use_attribute_buffer) {
+    const char *common=R"GLSL(
+float4 material_attribute_read(KernelGlobals kg, int corner, float3 key, float alpha, int curve)
+{
+  int size=int(texelFetch(material_attributes_tx,0).x);
+  if(size<=0){return float4(0.0,0.0,0.0,alpha);}
+  int slot=int(key.x) & (size-1);
+  for(int probe=0;probe<size;probe++) {
+    float4 header=texelFetch(material_attributes_tx,1+2*slot);
+    if(header.w==0.0){break;}
+    if(all(equal(header.xyz,key))) {
+      float4 offset=texelFetch(material_attributes_tx,2+2*slot);
+      int base=int(offset.x)+int(offset.y)*65536;
+      int element=offset.z>0.5 ? curve : corner;
+      if(offset.w>0.0){element=clamp(element,0,int(offset.w)-1);}
+      return texelFetch(material_attributes_tx,base+element);
+    }
+    slot=(slot+1)&(size-1);
+  }
+  return float4(0.0,0.0,0.0,alpha);
+}
+)GLSL";
+    if(geometry_type==MAT_GEOM_MESH) {
+      vert_gen<<common<<R"GLSL(
+float4 material_attribute_fetch(KernelGlobals kg, ShadingData sd, float3 key, float alpha)
+{
+  return material_attribute_read(kg,gl_VertexID,key,alpha,-1);
+}
+)GLSL";
+      frag_gen<<common<<R"GLSL(
+int material_attribute_corner(int index)
+{
+  if(material_attribute_no_indices!=0){return index;}
+  uint raw=material_attribute_indices[material_attribute_indices_16bit!=0 ? index>>1 : index];
+  if(material_attribute_indices_16bit!=0){raw=(index&1)==0 ? (raw&65535u) : raw>>16u;}
+  return int(raw)+material_attribute_index_base;
+}
+float4 material_attribute_fetch(KernelGlobals kg, ShadingData sd, float3 key, float alpha)
+{
+  int first=material_attribute_first_index+gl_PrimitiveID*3;
+  float3 w=float3(sd.barycentric_coords.xy,1.0-sd.barycentric_coords.x-sd.barycentric_coords.y);
+  return material_attribute_read(kg,material_attribute_corner(first),key,alpha,-1)*w.x+
+         material_attribute_read(kg,material_attribute_corner(first+1),key,alpha,-1)*w.y+
+         material_attribute_read(kg,material_attribute_corner(first+2),key,alpha,-1)*w.z;
+}
+)GLSL";
+    }
+    else {
+      std::string fetch;
+      if(geometry_type==MAT_GEOM_CURVES) {
+        fetch=R"GLSL(
+float4 material_attribute_fetch(KernelGlobals kg, ShadingData sd, float3 key, float alpha)
+{
+  float4 a=material_attribute_read(kg,sd.point_id,key,alpha,sd.hair_strand_id);
+  float t=sd.barycentric_coords.y;
+  if(t==0.0){return a;}
+  float4 b=material_attribute_read(kg,sd.point_id+1,key,alpha,sd.hair_strand_id);
+  return a*(1.0-t)+b*t;
+}
+)GLSL";
+      }
+      else {
+        fetch=R"GLSL(
+float4 material_attribute_fetch(KernelGlobals kg, ShadingData sd, float3 key, float alpha)
+{
+  return material_attribute_read(kg,sd.point_id,key,alpha,-1);
+}
+)GLSL";
+      }
+      vert_gen<<common<<fetch;
+      frag_gen<<common<<fetch;
+    }
+  }
 
   if (do_vertex_attrib_load) {
     vert_gen << global_vars.str() << "void attrib_load(" << domain_type_vert << " domain)"
@@ -1584,6 +1761,19 @@ GPUMaterial *ShaderModule::material_shader_get(blender::Material *blender_mat,
       &thunk,
       is_default_material ? nullptr : pass_replacement_cb);
   store_node_tree_errors(material_from_tree);
+  /* Replaced depth/shadow passes skip code generation, but their attribute requests still reach
+   * the geometry cache. Mark them here as well so they cannot overflow the legacy slots. */
+  if (ELEM(geometry_type, MAT_GEOM_MESH, MAT_GEOM_CURVES, MAT_GEOM_POINTCLOUD) &&
+      pipeline_type != MAT_PIPE_VOLUME_MATERIAL)
+  {
+    int attribute_count = 0;
+    for (const GPUMaterialAttribute &attribute : GPU_material_attributes(material_from_tree.material)) {
+      attribute_count++;
+    }
+    if (attribute_count > 14) {
+      GPU_material_flag_set(material_from_tree.material, GPU_MATFLAG_ATTRIBUTE_BUFFER);
+    }
+  }
   return material_from_tree.material;
 }
 

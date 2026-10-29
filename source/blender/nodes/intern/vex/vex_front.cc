@@ -3131,6 +3131,7 @@ struct Compiler {
       m.add("nearestpoints", int(Builtin::NearestPoints));
       m.add("transpose", int(Builtin::Transpose));
       m.add("determinant", int(Builtin::Determinant));
+      m.add("det", int(Builtin::Determinant));
       m.add("transform_point", int(Builtin::TransformPoint));
       m.add("transform_direction", int(Builtin::TransformDirection));
       m.add("project_point", int(Builtin::ProjectPoint));
@@ -6937,6 +6938,9 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
        * xyz diagonal = s, m44 stays 1. */
       if (ELEM(v.type, Type::Float, Type::Int, Type::Bool)) {
         const std::string s = (v.type == Type::Float) ? v.s : ("float(" + v.s + ")");
+        if (shader_material) {
+          return "mat4(" + s + ")";
+        }
         return "mat4(" + s + ",0.0,0.0,0.0, 0.0," + s + ",0.0,0.0, 0.0,0.0," + s +
                ",0.0, 0.0,0.0,0.0,1.0)";
       }
@@ -7171,13 +7175,186 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
     return "elem_i";
   };
 
-  em = [&](Expr *e, Type hint) -> GpuVal {
+  /* Keep arithmetic recursion outside the large builtin emitter's stack frame. */
+  auto emit_binary = [&](Expr *e) -> GpuVal {
+    GpuVal r;
+        GpuVal a = em(e->a, Type::Void);
+        GpuVal b = em(e->b, Type::Void);
+        if (e->op == "*" && a.type == Type::Rotation && b.type == Type::Rotation) {
+          r.s = "wr_qmul(" + a.s + ", " + b.s + ")";
+          r.type = Type::Rotation;
+          return r;
+        }
+        if (e->op == "*" && a.type == Type::Rotation &&
+            ELEM(b.type, Type::Vector, Type::Vector2, Type::Vector4, Type::Color))
+        {
+          r.s = "wr_qrot(" + a.s + ", " + cast_to(b, Type::Vector) + ")";
+          r.type = Type::Vector;
+          return r;
+        }
+        if (e->op == "*" && b.type == Type::Rotation &&
+            ELEM(a.type, Type::Vector, Type::Vector2, Type::Vector4, Type::Color))
+        {
+          r.s = "wr_qrot(" + b.s + ", " + cast_to(a, Type::Vector) + ")";
+          r.type = Type::Vector;
+          return r;
+        }
+        if (e->op == "*" && type_is_matrix(a.type) && type_is_vec_like(b.type)) {
+          r.s = "((" + a.s + ")*(" + b.s + "))";
+          r.type = vec_type_for_dim(type_linear_dim(a.type));
+          return r;
+        }
+        if (e->op == "*" && type_is_vec_like(a.type) && type_is_matrix(b.type)) {
+          r.s = "((" + a.s + ")*(" + b.s + "))";
+          r.type = vec_type_for_dim(type_linear_dim(b.type));
+          return r;
+        }
+        if (e->op == "*" && type_is_matrix(a.type) &&
+            ELEM(b.type, Type::Float, Type::Int, Type::Bool))
+        {
+          if (a.type == Type::Matrix && !shader_material) {
+            /* Like the interpreter: a uniform scale of X, Y and Z, not of all sixteen entries. */
+            r.s = "((" + a.s + ")*wr_scale4(" + cast_to(b, Type::Float) + "))";
+          }
+          else {
+            r.s = "((" + a.s + ")*(" + cast_to(b, Type::Float) + "))";
+          }
+          r.type = a.type;
+          return r;
+        }
+        if (e->op == "*" && type_is_matrix(b.type) &&
+            ELEM(a.type, Type::Float, Type::Int, Type::Bool))
+        {
+          if (b.type == Type::Matrix && !shader_material) {
+            r.s = "(wr_scale4(" + cast_to(a, Type::Float) + ")*(" + b.s + "))";
+          }
+          else {
+            r.s = "((" + cast_to(a, Type::Float) + ")*(" + b.s + "))";
+          }
+          r.type = b.type;
+          return r;
+        }
+        if (shader_material && e->op == "/" && a.type == Type::Matrix) {
+          r.s = std::string(b.type == Type::Matrix ? "wr_div_matrix4(" : "wr_div_scalar4(") +
+                a.s + "," + (b.type == Type::Matrix ? b.s : cast_to(b, Type::Float)) + ")";
+          r.type = Type::Matrix;
+          return r;
+        }
+        if (shader_material && (e->op == "+" || e->op == "-") &&
+            ((a.type == Type::Matrix && ELEM(b.type,Type::Float,Type::Int,Type::Bool)) ||
+             (b.type == Type::Matrix && ELEM(a.type,Type::Float,Type::Int,Type::Bool))))
+        {
+          r.s = "((" + (a.type == Type::Matrix ? a.s : cast_to(a,Type::Float)) + ")" +
+                e->op + "(" + (b.type == Type::Matrix ? b.s : cast_to(b,Type::Float)) + "))";
+          r.type = Type::Matrix;
+          return r;
+        }
+        Type rt = a.type;
+        if (a.type == Type::Color || b.type == Type::Color) {
+          /* `0.5 * c@Cd` is a color, not a float. */
+          rt = Type::Color;
+        }
+        else if (a.type == Type::Vector4 || b.type == Type::Vector4) {
+          rt = Type::Vector4;
+        }
+        else if (a.type == Type::Vector || b.type == Type::Vector) {
+          rt = Type::Vector;
+        }
+        else if (a.type == Type::Vector2 || b.type == Type::Vector2) {
+          rt = Type::Vector2;
+        }
+        else if (a.type == Type::Matrix || b.type == Type::Matrix) {
+          rt = Type::Matrix;
+        }
+        else if (a.type == Type::Matrix3 || b.type == Type::Matrix3) {
+          rt = Type::Matrix3;
+        }
+        else if (a.type == Type::Matrix2 || b.type == Type::Matrix2) {
+          rt = Type::Matrix2;
+        }
+        else if (a.type == Type::Float || b.type == Type::Float) {
+          rt = Type::Float;
+        }
+        else if (a.type == Type::Int && b.type == Type::Int) {
+          rt = Type::Int;
+        }
+        const std::string as = cast_to(a, rt);
+        const std::string bs = cast_to(b, rt);
+        if (e->op == "**") {
+          r.s = "pow(" + as + ", " + bs + ")";
+          r.type = rt == Type::Int ? Type::Float : rt;
+        }
+        else if ((e->op == "+" || e->op == "-") && shader_material &&
+                 (a.lattice || a.intish) &&
+                 (b.lattice || b.intish || expr_is_intish(e->b)))
+        {
+          /* Integer add for lattice ± offset so hash21(i+(1,0)) is
+           * `int(i)+1`, not a float add the backend can rewrite into
+           * `i*c+c` after inlining `p*c`. */
+          const char *it = gpu_int_type(rt);
+          const char *ft = gpu_vec_ctor(rt);
+          r.s = std::string(ft) + "(" + it + "(" + as + ")" + e->op + it + "(" + bs + "))";
+          r.type = rt;
+          r.lattice = true;
+          r.intish = true;
+        }
+        else if (e->op == "*" && shader_material &&
+                 (rt == Type::Float || type_is_vec_like(rt) ||
+                  ELEM(rt, Type::Color, Type::Rotation)))
+        {
+          /* `precise` multiply: `(i+1)*c` must not become `i*c+c`. */
+          r.s = "wr_mul(" + as + ", " + bs + ")";
+          r.type = rt;
+        }
+        else if (e->op == "+" || e->op == "-" || e->op == "*" || e->op == "/") {
+          r.s = "((" + as + ")" + e->op + "(" + bs + "))";
+          r.type = rt;
+          if ((e->op == "+" || e->op == "-") && a.lattice &&
+              (b.lattice || b.intish))
+          {
+            r.lattice = true;
+            r.intish = true;
+          }
+        }
+        else if (e->op == "%") {
+          if (rt == Type::Int) {
+            r.s = "((" + as + ")%(" + bs + "))";
+          }
+          else {
+            r.s = "mod(" + as + ", " + bs + ")";
+          }
+          r.type = rt;
+        }
+        else if (e->op == "<" || e->op == "<=" || e->op == ">" || e->op == ">=" || e->op == "==" ||
+                 e->op == "!=")
+        {
+          if (rt == Type::Vector && (e->op == "==" || e->op == "!=")) {
+            r.s = std::string(e->op == "==" ? "" : "!") + "all(equal(" + as + ", " + bs + "))";
+          }
+          else {
+            r.s = "((" + as + ")" + e->op + "(" + bs + "))";
+          }
+          r.type = Type::Bool;
+        }
+        else if (e->op == "&&" || e->op == "||") {
+          r.s = "((" + as + ")" + e->op + "(" + bs + "))";
+          r.type = Type::Bool;
+        }
+        else {
+          bad("GPU: unsupported operator");
+          r.s = "0.0";
+        }
+        return r;
+  };
+  auto emit_other = [&](Expr *e, Type hint) -> GpuVal {
     GpuVal r;
     if (!e) {
       r.s = "0.0";
       return r;
     }
     switch (e->kind) {
+      case ExprKind::Binary:
+        return emit_binary(e);
       case ExprKind::LitInt:
         r.s = std::to_string(e->i);
         r.type = Type::Int;
@@ -7296,160 +7473,6 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
         }
         else {
           r = a;
-        }
-        return r;
-      }
-      case ExprKind::Binary: {
-        GpuVal a = em(e->a, Type::Void);
-        GpuVal b = em(e->b, Type::Void);
-        if (e->op == "*" && a.type == Type::Rotation && b.type == Type::Rotation) {
-          r.s = "wr_qmul(" + a.s + ", " + b.s + ")";
-          r.type = Type::Rotation;
-          return r;
-        }
-        if (e->op == "*" && a.type == Type::Rotation &&
-            ELEM(b.type, Type::Vector, Type::Vector2, Type::Vector4, Type::Color))
-        {
-          r.s = "wr_qrot(" + a.s + ", " + cast_to(b, Type::Vector) + ")";
-          r.type = Type::Vector;
-          return r;
-        }
-        if (e->op == "*" && b.type == Type::Rotation &&
-            ELEM(a.type, Type::Vector, Type::Vector2, Type::Vector4, Type::Color))
-        {
-          r.s = "wr_qrot(" + b.s + ", " + cast_to(a, Type::Vector) + ")";
-          r.type = Type::Vector;
-          return r;
-        }
-        if (e->op == "*" && type_is_matrix(a.type) && type_is_vec_like(b.type)) {
-          r.s = "((" + a.s + ")*(" + b.s + "))";
-          r.type = vec_type_for_dim(type_linear_dim(a.type));
-          return r;
-        }
-        if (e->op == "*" && type_is_vec_like(a.type) && type_is_matrix(b.type)) {
-          r.s = "((" + a.s + ")*(" + b.s + "))";
-          r.type = vec_type_for_dim(type_linear_dim(b.type));
-          return r;
-        }
-        if (e->op == "*" && type_is_matrix(a.type) &&
-            ELEM(b.type, Type::Float, Type::Int, Type::Bool))
-        {
-          if (a.type == Type::Matrix && !shader_material) {
-            /* Like the interpreter: a uniform scale of X, Y and Z, not of all sixteen entries. */
-            r.s = "((" + a.s + ")*wr_scale4(" + cast_to(b, Type::Float) + "))";
-          }
-          else {
-            r.s = "((" + a.s + ")*(" + cast_to(b, Type::Float) + "))";
-          }
-          r.type = a.type;
-          return r;
-        }
-        if (e->op == "*" && type_is_matrix(b.type) &&
-            ELEM(a.type, Type::Float, Type::Int, Type::Bool))
-        {
-          if (b.type == Type::Matrix && !shader_material) {
-            r.s = "(wr_scale4(" + cast_to(a, Type::Float) + ")*(" + b.s + "))";
-          }
-          else {
-            r.s = "((" + cast_to(a, Type::Float) + ")*(" + b.s + "))";
-          }
-          r.type = b.type;
-          return r;
-        }
-        Type rt = a.type;
-        if (a.type == Type::Color || b.type == Type::Color) {
-          /* `0.5 * c@Cd` is a color, not a float. */
-          rt = Type::Color;
-        }
-        else if (a.type == Type::Vector4 || b.type == Type::Vector4) {
-          rt = Type::Vector4;
-        }
-        else if (a.type == Type::Vector || b.type == Type::Vector) {
-          rt = Type::Vector;
-        }
-        else if (a.type == Type::Vector2 || b.type == Type::Vector2) {
-          rt = Type::Vector2;
-        }
-        else if (a.type == Type::Matrix || b.type == Type::Matrix) {
-          rt = Type::Matrix;
-        }
-        else if (a.type == Type::Matrix3 || b.type == Type::Matrix3) {
-          rt = Type::Matrix3;
-        }
-        else if (a.type == Type::Matrix2 || b.type == Type::Matrix2) {
-          rt = Type::Matrix2;
-        }
-        else if (a.type == Type::Float || b.type == Type::Float) {
-          rt = Type::Float;
-        }
-        else if (a.type == Type::Int && b.type == Type::Int) {
-          rt = Type::Int;
-        }
-        const std::string as = cast_to(a, rt);
-        const std::string bs = cast_to(b, rt);
-        if (e->op == "**") {
-          r.s = "pow(" + as + ", " + bs + ")";
-          r.type = rt == Type::Int ? Type::Float : rt;
-        }
-        else if ((e->op == "+" || e->op == "-") && shader_material &&
-                 (a.lattice || a.intish) &&
-                 (b.lattice || b.intish || expr_is_intish(e->b)))
-        {
-          /* Integer add for lattice ± offset so hash21(i+(1,0)) is
-           * `int(i)+1`, not a float add the backend can rewrite into
-           * `i*c+c` after inlining `p*c`. */
-          const char *it = gpu_int_type(rt);
-          const char *ft = gpu_vec_ctor(rt);
-          r.s = std::string(ft) + "(" + it + "(" + as + ")" + e->op + it + "(" + bs + "))";
-          r.type = rt;
-          r.lattice = true;
-          r.intish = true;
-        }
-        else if (e->op == "*" && shader_material &&
-                 (rt == Type::Float || type_is_vec_like(rt) ||
-                  ELEM(rt, Type::Color, Type::Rotation)))
-        {
-          /* `precise` multiply: `(i+1)*c` must not become `i*c+c`. */
-          r.s = "wr_mul(" + as + ", " + bs + ")";
-          r.type = rt;
-        }
-        else if (e->op == "+" || e->op == "-" || e->op == "*" || e->op == "/") {
-          r.s = "((" + as + ")" + e->op + "(" + bs + "))";
-          r.type = rt;
-          if ((e->op == "+" || e->op == "-") && a.lattice &&
-              (b.lattice || b.intish))
-          {
-            r.lattice = true;
-            r.intish = true;
-          }
-        }
-        else if (e->op == "%") {
-          if (rt == Type::Int) {
-            r.s = "((" + as + ")%(" + bs + "))";
-          }
-          else {
-            r.s = "mod(" + as + ", " + bs + ")";
-          }
-          r.type = rt;
-        }
-        else if (e->op == "<" || e->op == "<=" || e->op == ">" || e->op == ">=" || e->op == "==" ||
-                 e->op == "!=")
-        {
-          if (rt == Type::Vector && (e->op == "==" || e->op == "!=")) {
-            r.s = std::string(e->op == "==" ? "" : "!") + "all(equal(" + as + ", " + bs + "))";
-          }
-          else {
-            r.s = "((" + as + ")" + e->op + "(" + bs + "))";
-          }
-          r.type = Type::Bool;
-        }
-        else if (e->op == "&&" || e->op == "||") {
-          r.s = "((" + as + ")" + e->op + "(" + bs + "))";
-          r.type = Type::Bool;
-        }
-        else {
-          bad("GPU: unsupported operator");
-          r.s = "0.0";
         }
         return r;
       }
@@ -8028,7 +8051,8 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
           const GpuVal a = arg(0);
           const Type t = type_is_matrix(a.type) ? a.type :
                          (type_is_matrix(hint) ? hint : Type::Matrix);
-          r.s = "inverse(" + (type_is_matrix(a.type) ? a.s : cast_to(a, t)) + ")";
+          r.s = std::string(t == Type::Matrix ? "wr_inverse4(" : "inverse(") +
+                (type_is_matrix(a.type) ? a.s : cast_to(a, t)) + ")";
           r.type = t;
           return r;
         }
@@ -8717,6 +8741,10 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
     return r;
   };
 
+  em = [&](Expr *e, Type hint) -> GpuVal {
+    return e && e->kind == ExprKind::Binary ? emit_binary(e) : emit_other(e, hint);
+  };
+
   ems = [&](Stmt *s) -> std::string {
     if (!s) {
       return "";
@@ -8875,7 +8903,14 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
     return s;
   };
 
-  std::string helpers;
+  std::string helpers =
+      "#ifndef VEX_MATRIX_INVERSE4_DEFINED\n#define VEX_MATRIX_INVERSE4_DEFINED\n"
+      "mat4 wr_inverse4(mat4 m) { return determinant(m) == 0.0 ? mat4(1.0) : inverse(m); }\n"
+      "mat4 wr_div_scalar4(mat4 m,float s) { return s == 0.0 ? mat4(0.0) : m/s; }\n"
+      "mat4 wr_div_matrix4(mat4 a,mat4 b) { mat4 r=mat4(0.0); "
+      "for(int c=0;c<4;c++) for(int i=0;i<4;i++) "
+      "r[c][i]=b[c][i] == 0.0 ? 0.0 : a[c][i]/b[c][i]; return r; }\n"
+      "#endif\n";
   for (Stmt *fn : user_fn_stmts) {
     if (fn == nullptr) {
       continue;

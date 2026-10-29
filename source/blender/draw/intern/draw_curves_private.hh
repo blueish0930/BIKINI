@@ -180,6 +180,8 @@ struct CurvesEvalCache {
 
   /** Attributes currently being drawn or about to be drawn. */
   VectorSet<std::string> attr_used;
+  VectorSet<std::string> material_attr_used;
+  gpu::VertBufPtr material_attribute_atlas;
   /**
    * Attributes that were used at some point. This is used for garbage collection, to remove
    * attributes that are not used in shaders anymore due to user edits.

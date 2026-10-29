@@ -37,6 +37,7 @@ static int node_exec_socket_use_stack(bNodeSocket *sock)
               SOCK_RGBA,
               SOCK_SHADER,
               SOCK_ROTATION,
+              SOCK_MATRIX,
               SOCK_COLOR_RAMP,
               SOCK_CURVE);
 }

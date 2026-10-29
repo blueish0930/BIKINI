@@ -134,6 +134,9 @@ set(SRC
   intern/partial_eval.cc
   intern/scene_compositor_effect_inputs_srna.cc
   intern/shader_nodes_inline.cc
+  intern/shader_nodes_matrix.cc
+  intern/shader_nodes_rotation.hh
+  intern/shader_nodes_wrangle_graph.hh
   intern/socket_items_name_util.cc
   intern/socket_search_link.cc
   intern/socket_usage_inference.cc

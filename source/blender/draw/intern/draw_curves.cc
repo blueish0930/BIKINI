@@ -300,6 +300,8 @@ static int attribute_index_in_material(const GPUMaterial *gpu_material,
 
   ListBaseT<GPUMaterialAttribute> gpu_attrs = GPU_material_attributes(gpu_material);
   for (GPUMaterialAttribute &gpu_attr : gpu_attrs) {
+    if(GPU_material_flag_get(gpu_material,GPU_MATFLAG_ATTRIBUTE_BUFFER) &&
+       gpu_attr.type==CD_AUTO_FROM_NAME && gpu_attr.name[0] && !gpu_attr.is_default_color){continue;}
     if (is_curve_length) {
       if (gpu_attr.is_hair_length) {
         return index;
@@ -401,9 +403,14 @@ void curves_bind_resources_implementation(PassT &sub_ps,
   sub_ps.bind_texture("l", module.dummy_vbo);
   sub_ps.bind_texture("i", module.dummy_vbo);
   if (gpu_material) {
+    if(GPU_material_flag_get(gpu_material,GPU_MATFLAG_ATTRIBUTE_BUFFER)) {
+      sub_ps.bind_texture("material_attributes_tx",cache.material_attribute_atlas);
+    }
     ListBaseT<GPUMaterialAttribute> attr_list = GPU_material_attributes(gpu_material);
     ListBaseWrapper<GPUMaterialAttribute> attrs(attr_list);
     for (const GPUMaterialAttribute *attr : attrs) {
+      if(GPU_material_flag_get(gpu_material,GPU_MATFLAG_ATTRIBUTE_BUFFER) &&
+         attr->type==CD_AUTO_FROM_NAME && attr->name[0] && !attr->is_default_color){continue;}
       sub_ps.bind_texture(attr->input_name, module.dummy_vbo);
     }
   }

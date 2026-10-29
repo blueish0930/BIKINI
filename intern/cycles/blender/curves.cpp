@@ -783,6 +783,14 @@ static void attr_create_generic(Scene *scene,
     const blender::bke::AttrDomain b_domain = iter.domain;
     const blender::bke::AttrType b_data_type = iter.data_type;
 
+    sync_shader_rotation_attribute(hair, scene, attributes, iter,
+        b_domain == blender::bke::AttrDomain::Point ? ATTR_ELEMENT_CURVE_KEY : ATTR_ELEMENT_CURVE);
+    if (sync_shader_matrix_columns(hair,scene,attributes,iter,
+          b_domain == blender::bke::AttrDomain::Point ? ATTR_ELEMENT_CURVE_KEY : ATTR_ELEMENT_CURVE))
+    {
+      return;
+    }
+
     if (need_motion && name == u_velocity) {
       const blender::VArraySpan b_attr = *iter.get<blender::float3>(
           blender::bke::AttrDomain::Point);

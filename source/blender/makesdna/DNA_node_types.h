@@ -547,6 +547,8 @@ enum eNodeShader_AttributeDataType : short {
   SHD_ATTRIBUTE_DATA_VECTOR = 3,
   SHD_ATTRIBUTE_DATA_ROTATION = 4,
   SHD_ATTRIBUTE_DATA_MATRIX = 5,
+  SHD_ATTRIBUTE_DATA_COLOR = 6,
+  SHD_ATTRIBUTE_DATA_BOOLEAN = 7,
 };
 
 /* toon modes */

@@ -29,6 +29,8 @@
 #include "BKE_anonymous_attribute_id.hh"
 #include "BKE_attribute.h"
 #include "BKE_attribute.hh"
+#include "BLI_math_matrix_types.hh"
+#include "BLI_shader_matrix_attribute.hh"
 #include "BKE_attribute_math.hh"
 #include "BKE_customdata.hh"
 #include "BKE_mesh.hh"
@@ -198,6 +200,79 @@ static void attr_create_generic(Scene *scene,
   b_attributes.foreach_attribute([&](const blender::bke::AttributeIter &iter) {
     const ustring name{std::string_view(iter.name)};
     const bool is_render_color = name == default_color_name;
+
+    /* Quaternion transport uses the same domain and triangle ordering as ordinary attributes. */
+    const ustring rotation_request(blender::shader_rotation_attribute_name(iter.name));
+    if (mesh->need_attribute(scene, rotation_request) && !attributes.find(rotation_request)) {
+      const auto domain = iter.domain == blender::bke::AttrDomain::Edge ?
+                              blender::bke::AttrDomain::Point : iter.domain;
+      const auto reader = iter.get<blender::math::Quaternion>(domain);
+      if (reader) {
+        const blender::VArraySpan<blender::math::Quaternion> rotations = *reader;
+        Attribute *attr = attributes.add(rotation_request, TypeRGBA,
+                                         blender_domain_to_attr_element(domain));
+        float4 *data = attr->data_for_write<float4>();
+        const auto value = [&](const int i) {
+          const auto &q = rotations[i];
+          return make_float4(q.w, q.x, q.y, q.z);
+        };
+        if (domain == blender::bke::AttrDomain::Corner && !subdivision) {
+          for (const int i : corner_tris.index_range()) {
+            for (int k = 0; k < 3; k++) {
+              data[i * 3 + k] = value(corner_tris[i][k]);
+            }
+          }
+        }
+        else if (domain == blender::bke::AttrDomain::Face && !subdivision) {
+          for (const int face : faces.index_range()) {
+            const auto tris = blender::bke::mesh::face_triangles_range(faces, face);
+            std::fill_n(data + tris.start(), tris.size(), value(face));
+          }
+        }
+        else {
+          for (const int i : rotations.index_range()) {
+            data[i] = value(i);
+          }
+        }
+      }
+    }
+
+    if (iter.data_type == blender::bke::AttrType::Float4x4) {
+      const auto domain = iter.domain == blender::bke::AttrDomain::Edge ?
+                              blender::bke::AttrDomain::Point : iter.domain;
+      const auto reader = iter.get<blender::float4x4>(domain);
+      if (!reader) {
+        return;
+      }
+      const blender::VArraySpan<blender::float4x4> matrices = *reader;
+      for (int column = 0; column < 4; column++) {
+        const ustring request(blender::shader_matrix_attribute_column_name(iter.name, column));
+        if (!mesh->need_attribute(scene, request) || attributes.find(request)) {
+          continue;
+        }
+        Attribute *attr = attributes.add(request, TypeRGBA, blender_domain_to_attr_element(domain));
+        float4 *data = attr->data_for_write<float4>();
+        const auto value = [&](int i) {
+          const auto &v = matrices[i][column];
+          return make_float4(v.x, v.y, v.z, v.w);
+        };
+        if (domain == blender::bke::AttrDomain::Corner && !subdivision) {
+          for (const int i : corner_tris.index_range()) {
+            for (int k = 0; k < 3; k++) { data[i * 3 + k] = value(corner_tris[i][k]); }
+          }
+        }
+        else if (domain == blender::bke::AttrDomain::Face && !subdivision) {
+          for (const int face : faces.index_range()) {
+            const auto tris = blender::bke::mesh::face_triangles_range(faces, face);
+            std::fill_n(data + tris.start(), tris.size(), value(face));
+          }
+        }
+        else {
+          for (const int i : matrices.index_range()) { data[i] = value(i); }
+        }
+      }
+      return;
+    }
 
     if (need_motion && name == u_velocity) {
       const blender::VArraySpan b_attribute = *iter.get<blender::float3>(

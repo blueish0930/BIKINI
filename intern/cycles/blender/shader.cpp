@@ -22,6 +22,7 @@
 #include "util/task.h"
 
 #include "BLI_listbase.hh"
+#include "BLI_shader_matrix_attribute.hh"
 
 #include "BKE_duplilist.hh"
 #include "BKE_node.hh"
@@ -655,6 +656,10 @@ static ShaderNode *add_node(Scene *scene,
     const auto &storage = *static_cast<blender::NodeShaderAttribute *>(b_node.storage);
     AttributeNode *attr = graph->create_node<AttributeNode>();
     attr->set_attribute(blender_attribute_name_add_type(storage.name, storage.type));
+    if (blender::shader_attribute_request(storage.name) ||
+        b_node.custom2 == blender::SHD_ATTRIBUTE_DATA_ROTATION) {
+      attr->set_missing_alpha(0.0f);
+    }
     node = attr;
   }
   else if (b_node.is_type("ShaderNodeBackground"_ustr)) {

@@ -342,6 +342,17 @@ inline void LazyFunction::execute(Params &params, const Context &context) const
 {
   PRF_scope_with_name("LazyFunction", ProfileCategory::Default);
   PRF_scope_set_dynamic_name("%s", debug_name_);
+  if (context.user_data && context.user_data->is_cancelled()) {
+    /* Complete the calling convention without requesting any more inputs. In particular this
+     * lets nested groups and loop bodies unwind without evaluating their remaining work. */
+    for (const int i : outputs_.index_range()) {
+      if (!params.output_was_set(i)) {
+        outputs_[i].type->value_initialize(params.get_output_data_ptr(i));
+        params.output_set(i);
+      }
+    }
+    return;
+  }
   BLI_assert(this->always_used_inputs_available(params));
   this->execute_impl(params, context);
 }

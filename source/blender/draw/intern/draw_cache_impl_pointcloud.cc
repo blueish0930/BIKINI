@@ -23,6 +23,7 @@
 #include "DNA_userdef_types.h"
 
 #include "BKE_attribute.hh"
+#include "BKE_shader_matrix_attribute.hh"
 #include "BKE_material.hh"
 #include "BKE_pointcloud.hh"
 
@@ -32,6 +33,7 @@
 #include "DRW_render.hh"
 
 #include "draw_attributes.hh"
+#include "draw_attribute_atlas.hh"
 #include "draw_cache_impl.hh"
 #include "draw_cache_inline.hh"
 #include "draw_pointcloud_private.hh" /* own include */
@@ -57,6 +59,8 @@ struct PointCloudEvalCache {
   gpu::VertBuf *attr_viewer;
   /* Requested attributes */
   gpu::VertBuf *attributes_buf[GPU_MAX_ATTR];
+  gpu::VertBuf *material_attribute_atlas = nullptr;
+  VectorSet<std::string> material_attr_used;
 
   /** Attributes currently being drawn or about to be drawn. */
   VectorSet<std::string> attr_used;
@@ -142,6 +146,8 @@ void DRW_pointcloud_batch_cache_dirty_tag(PointCloud *pointcloud, int mode)
 
 static void pointcloud_discard_attributes(PointCloudBatchCache &cache)
 {
+  GPU_VERTBUF_DISCARD_SAFE(cache.eval_cache.material_attribute_atlas);
+  cache.eval_cache.material_attr_used.clear();
   for (const int j : IndexRange(GPU_MAX_ATTR)) {
     GPU_VERTBUF_DISCARD_SAFE(cache.eval_cache.attributes_buf[j]);
   }
@@ -275,8 +281,14 @@ static void pointcloud_extract_attribute(const PointCloud &pointcloud,
    * the Blender convention, it should be `float4(s, s, s, 1)`. This could be resolved using a
    * similar texture state swizzle to map the attribute correctly as for volume attributes, so we
    * can control the conversion ourselves. */
-  bke::AttributeReader<ColorGeometry4f> attribute = attributes.lookup_or_default<ColorGeometry4f>(
-      name, bke::AttrDomain::Point, {0.0f, 0.0f, 0.0f, 1.0f});
+  bke::AttributeReader<ColorGeometry4f> attribute = shader_attribute_request(name) ?
+      bke::lookup_shader_attribute_request(attributes,name).typed<ColorGeometry4f>() :
+      attributes.lookup_or_default<ColorGeometry4f>(name, bke::AttrDomain::Point,
+                                                   {0.0f, 0.0f, 0.0f, 1.0f});
+  if (!attribute) {
+    attribute = {VArray<ColorGeometry4f>::from_single({0.0f,0.0f,0.0f,0.0f},pointcloud.totpoint),
+                 bke::AttrDomain::Point,nullptr};
+  }
 
   static const GPUVertFormat format = [&]() {
     GPUVertFormat format{};
@@ -312,10 +324,11 @@ Batch **pointcloud_surface_shaded_get(PointCloud *pointcloud,
   VectorSet<std::string> attrs_needed;
 
   for (GPUMaterial *gpu_material : Span<GPUMaterial *>(gpu_materials, mat_len)) {
+    if(GPU_material_flag_get(gpu_material,GPU_MATFLAG_ATTRIBUTE_BUFFER)){continue;}
     ListBaseT<GPUMaterialAttribute> gpu_attrs = GPU_material_attributes(gpu_material);
     for (GPUMaterialAttribute &gpu_attr : gpu_attrs) {
       const StringRef name = gpu_attr.name;
-      if (!attributes.contains(name)) {
+      if (!shader_attribute_request(name) && !bke::shader_attribute_exists(attributes, name)) {
         continue;
       }
       drw_attributes_add_request(&attrs_needed, name);
@@ -333,6 +346,34 @@ Batch **pointcloud_surface_shaded_get(PointCloud *pointcloud,
 
   DRW_batch_request(&cache->eval_cache.surface_per_mat[0]);
   return cache->eval_cache.surface_per_mat;
+}
+
+gpu::VertBuf **pointcloud_material_attributes_get(PointCloud &pointcloud, GPUMaterial &material)
+{
+  auto &cache=pointcloud_batch_cache_get(pointcloud)->eval_cache;
+  bool changed=false;
+  for(const GPUMaterialAttribute &attr:GPU_material_attributes(&material)) {
+    if(attr.type==CD_AUTO_FROM_NAME && attr.name[0] && !attr.is_default_color) {
+      changed |= cache.material_attr_used.add_as(attr.name);
+    }
+  }
+  if(changed || !cache.material_attribute_atlas) {
+    const bke::AttributeAccessor attributes=pointcloud.attributes();
+    Vector<MaterialAttributeColumn> columns;
+    for(const std::string &name:cache.material_attr_used) {
+      const bool matrix=bool(shader_attribute_request(name));
+      MaterialAttributeColumn column;
+      column.name=name;column.values=Array<ColorGeometry4f>(pointcloud.totpoint,
+          ColorGeometry4f(0,0,0,matrix ? 0.0f : 1.0f));
+      auto attr=matrix ? bke::lookup_shader_attribute_request(attributes,name).typed<ColorGeometry4f>() :
+                        attributes.lookup<ColorGeometry4f>(name);
+      if(attr){attr.varray.materialize(column.values);}
+      columns.append(std::move(column));
+    }
+    GPU_VERTBUF_DISCARD_SAFE(cache.material_attribute_atlas);
+    cache.material_attribute_atlas=build_material_attribute_atlas(columns).release();
+  }
+  return &cache.material_attribute_atlas;
 }
 
 Batch *pointcloud_surface_get(PointCloud *pointcloud)
@@ -382,7 +423,7 @@ gpu::VertBuf **DRW_pointcloud_evaluated_attribute(PointCloud *pointcloud, const 
   const bke::AttributeAccessor attributes = pointcloud->attributes();
   PointCloudBatchCache &cache = *pointcloud_batch_cache_get(*pointcloud);
 
-  if (!attributes.contains(name)) {
+  if (!shader_attribute_request(name) && !bke::shader_attribute_exists(attributes, name)) {
     return nullptr;
   }
   {

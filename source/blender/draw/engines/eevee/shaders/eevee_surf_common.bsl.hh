@@ -98,6 +98,7 @@ void init_globals_curves(const VertOutCommon &interp,
   sd.is_strand = true;
   sd.hair_diameter = curve_interp.radius * 2.0;
   sd.hair_strand_id = curve_interp.strand_id;
+  sd.point_id = int(floor(curve_interp.point_id));
   sd.barycentric_coords.y = fract(curve_interp.point_id);
   sd.barycentric_coords.x = 1.0 - sd.barycentric_coords.y;
 }

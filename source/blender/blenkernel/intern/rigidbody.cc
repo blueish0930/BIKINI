@@ -1561,7 +1561,7 @@ void BKE_rigidbody_remove_object(Main *bmain, Scene *scene, Object *ob, const bo
     BKE_rigidbody_cache_reset(rbw);
     /* Reset cache as the object order probably changed after freeing the object. */
     PTCacheID pid;
-    BKE_ptcache_id_from_rigidbody(&pid, nullptr, rbw);
+    BKE_ptcache_id_from_rigidbody(&pid, scene, rbw);
     BKE_ptcache_id_reset(scene, &pid, PTCACHE_RESET_OUTDATED);
   }
 
@@ -2176,7 +2176,7 @@ void BKE_rigidbody_rebuild_world(Depsgraph *depsgraph, Scene *scene, float ctime
   /* Avoid multiple depsgraph evaluations accessing the same shared data. */
   std::unique_lock lock(rbw->shared->runtime->mutex);
 
-  BKE_ptcache_id_from_rigidbody(&pid, nullptr, rbw);
+  BKE_ptcache_id_from_rigidbody(&pid, scene, rbw);
   BKE_ptcache_id_time(&pid, scene, ctime, &startframe, &endframe, nullptr);
   cache = rbw->shared->pointcache;
 
@@ -2216,7 +2216,7 @@ void BKE_rigidbody_do_simulation(Depsgraph *depsgraph, Scene *scene, float ctime
   PTCacheID pid;
   int startframe, endframe;
 
-  BKE_ptcache_id_from_rigidbody(&pid, nullptr, rbw);
+  BKE_ptcache_id_from_rigidbody(&pid, scene, rbw);
   BKE_ptcache_id_time(&pid, scene, ctime, &startframe, &endframe, nullptr);
   cache = rbw->shared->pointcache;
 

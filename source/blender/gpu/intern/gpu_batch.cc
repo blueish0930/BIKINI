@@ -255,6 +255,35 @@ static uint16_t bind_attribute_as_ssbo(const ShaderInterface *interface,
   return bound_attr;
 }
 
+static void bind_material_attribute_resources(Batch *batch, gpu::Shader *shader)
+{
+  const int binding=GPU_shader_get_sampler_binding(shader,"material_attributes_tx");
+  if(binding==-1){return;}
+  for(int i=0;i<GPU_BATCH_VBO_MAX_LEN;i++) {
+    VertBuf *vbo=batch->verts_(i);
+    if(vbo && GPU_vertformat_attr_id_get(&vbo->format,"material_attribute_atlas")!=-1) {
+      GPU_vertbuf_bind_as_texture(vbo,binding);
+      break;
+    }
+  }
+  const ShaderInput *indices=shader->interface->ssbo_get("material_attribute_indices");
+  if(indices && indices->location!=-1) {
+    if(batch->elem) {
+      GPU_indexbuf_bind_as_ssbo(batch->elem,indices->location);
+      GPU_shader_uniform_1i(shader,"material_attribute_no_indices",0);
+      GPU_shader_uniform_1i(shader,"material_attribute_indices_16bit",!batch->elem->is_32bit());
+      GPU_shader_uniform_1i(shader,"material_attribute_index_base",batch->elem->index_base_get());
+      GPU_shader_uniform_1i(shader,"material_attribute_first_index",batch->elem->index_start_get());
+    }
+    else {
+      GPU_vertbuf_bind_as_ssbo(batch->verts_(0),indices->location);
+      GPU_shader_uniform_1i(shader,"material_attribute_no_indices",1);
+      GPU_shader_uniform_1i(shader,"material_attribute_first_index",0);
+      GPU_shader_uniform_1i(shader,"material_attribute_index_base",0);
+    }
+  }
+}
+
 void GPU_batch_bind_as_resources(Batch *batch,
                                  gpu::Shader *shader,
                                  const shader::SpecializationConstants *constants)
@@ -265,6 +294,10 @@ void GPU_batch_bind_as_resources(Batch *batch,
   }
 
   uint16_t ssbo_attributes = interface->ssbo_attr_mask_;
+  bind_material_attribute_resources(batch,shader);
+  if(const ShaderInput *input=interface->ssbo_get("material_attribute_indices")) {
+    if(input->location>=0){ssbo_attributes &= ~(1<<input->location);}
+  }
 
   if (ssbo_attributes & (1 << GPU_SSBO_INDEX_BUF_SLOT)) {
     /* Ensure binding for setting uniforms. This is required by the OpenGL backend. */
@@ -454,6 +487,7 @@ void GPU_batch_draw_advanced(
   debug_validate_binding_image_format();
 #endif
 
+  bind_material_attribute_resources(batch,Context::get()->shader);
   batch->draw(vertex_first, vertex_count, instance_first, instance_count);
 }
 
@@ -468,6 +502,7 @@ void GPU_batch_draw_indirect(Batch *batch, gpu::StorageBuf *indirect_buf, intptr
   debug_validate_binding_image_format();
 #endif
 
+  bind_material_attribute_resources(batch,Context::get()->shader);
   batch->draw_indirect(indirect_buf, offset);
 }
 
@@ -483,6 +518,7 @@ void GPU_batch_multi_draw_indirect(
   debug_validate_binding_image_format();
 #endif
 
+  bind_material_attribute_resources(batch,Context::get()->shader);
   batch->multi_draw_indirect(indirect_buf, count, offset, stride);
 }
 

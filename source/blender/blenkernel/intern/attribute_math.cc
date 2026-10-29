@@ -48,20 +48,13 @@ math::Quaternion mix4(const float4 &weights,
 
 template<> float4x4 mix2(const float factor, const float4x4 &a, const float4x4 &b)
 {
-  return math::interpolate(a, b, factor);
+  return math::interpolate_linear(a, b, factor);
 }
 
 template<>
 float4x4 mix3(const float3 &weights, const float4x4 &v0, const float4x4 &v1, const float4x4 &v2)
 {
-  const float3 location = mix3(weights, v0.location(), v1.location(), v2.location());
-  const math::Quaternion rotation = mix3(
-      weights,
-      math::normalized_to_quaternion_safe(math::normalize(float3x3(v0))),
-      math::normalized_to_quaternion_safe(math::normalize(float3x3(v1))),
-      math::normalized_to_quaternion_safe(math::normalize(float3x3(v2))));
-  const float3 scale = mix3(weights, math::to_scale(v0), math::to_scale(v1), math::to_scale(v2));
-  return math::from_loc_rot_scale<float4x4>(location, rotation, scale);
+  return v0 * weights.x + v1 * weights.y + v2 * weights.z;
 }
 
 template<>
@@ -71,16 +64,7 @@ float4x4 mix4(const float4 &weights,
               const float4x4 &v2,
               const float4x4 &v3)
 {
-  const float3 location = mix4(
-      weights, v0.location(), v1.location(), v2.location(), v3.location());
-  const math::Quaternion rotation = mix4(weights,
-                                         math::to_quaternion(v0),
-                                         math::to_quaternion(v1),
-                                         math::to_quaternion(v2),
-                                         math::to_quaternion(v3));
-  const float3 scale = mix4(
-      weights, math::to_scale(v0), math::to_scale(v1), math::to_scale(v2), math::to_scale(v3));
-  return math::from_loc_rot_scale<float4x4>(location, rotation, scale);
+  return v0 * weights.x + v1 * weights.y + v2 * weights.z + v3 * weights.w;
 }
 
 ColorGeometry4fMixer::ColorGeometry4fMixer(MutableSpan<ColorGeometry4f> buffer,
@@ -216,30 +200,19 @@ float4x4Mixer::float4x4Mixer(MutableSpan<float4x4> buffer)
 float4x4Mixer::float4x4Mixer(MutableSpan<float4x4> buffer, const IndexMask & /*mask*/)
     : buffer_(buffer),
       total_weights_(buffer.size(), 0.0f),
-      location_buffer_(buffer.size(), float3(0)),
-      expmap_buffer_(buffer.size(), float3(0)),
-      scale_buffer_(buffer.size(), float3(0))
+      matrix_buffer_(buffer.size(), float4x4::all(0.0f))
 {
 }
 
 void float4x4Mixer::float4x4Mixer::set(int64_t index, const float4x4 &value, const float weight)
 {
-  location_buffer_[index] = value.location() * weight;
-  expmap_buffer_[index] = math::to_quaternion(value).expmap() * weight;
-  scale_buffer_[index] = math::to_scale(value) * weight;
+  matrix_buffer_[index] = value * weight;
   total_weights_[index] = weight;
 }
 
 void float4x4Mixer::mix_in(int64_t index, const float4x4 &value, float weight)
 {
-  float3 location;
-  math::Quaternion rotation;
-  float3 scale;
-  math::to_loc_rot_scale_safe<true>(value, location, rotation, scale);
-
-  location_buffer_[index] += location * weight;
-  expmap_buffer_[index] += rotation.expmap() * weight;
-  scale_buffer_[index] += scale * weight;
+  matrix_buffer_[index] += value * weight;
   total_weights_[index] += weight;
 }
 
@@ -255,10 +228,7 @@ void float4x4Mixer::finalize(const IndexMask &mask)
     const float weight = total_weights_[i];
     if (weight > 0.0f) {
       const float weight_inv = math::rcp(weight);
-      buffer_[i] = math::from_loc_rot_scale<float4x4>(
-          location_buffer_[i] * weight_inv,
-          math::Quaternion::expmap(expmap_buffer_[i] * weight_inv),
-          scale_buffer_[i] * weight_inv);
+      buffer_[i] = matrix_buffer_[i] * weight_inv;
     }
     else {
       buffer_[i] = float4x4::identity();
@@ -268,23 +238,13 @@ void float4x4Mixer::finalize(const IndexMask &mask)
 
 float4x4 mix_indices(const Span<float4x4> src, const Span<int> indices)
 {
-  float3 location_accum(0);
-  float3 expmap_accum(0);
-  float3 scale_accum(0);
+  float4x4 accum = float4x4::all(0.0f);
   for (const int i : indices) {
-    float3 location;
-    math::Quaternion rotation;
-    float3 scale;
-    math::to_loc_rot_scale_safe<true>(src[i], location, rotation, scale);
-    location_accum += location;
-    expmap_accum += rotation.expmap();
-    scale_accum += scale;
+    accum += src[i];
   }
 
   const float weight_inv = math::safe_rcp(float(indices.size()));
-  return math::from_loc_rot_scale<float4x4>(location_accum * weight_inv,
-                                            math::Quaternion::expmap(expmap_accum * weight_inv),
-                                            scale_accum * weight_inv);
+  return indices.is_empty() ? float4x4::identity() : accum * weight_inv;
 }
 
 template<typename T>
@@ -302,26 +262,16 @@ void mix_groups(const Span<T> src,
 
 float4x4 mix_indices(const Span<float4x4> src, const Span<int> indices, const Span<float> weights)
 {
-  float3 location_accum(0);
-  float3 expmap_accum(0);
-  float3 scale_accum(0);
+  float4x4 accum = float4x4::all(0.0f);
   float total_weight = 0.0f;
   for (const int i : indices.index_range()) {
     const float weight = weights[i];
-    float3 location;
-    math::Quaternion rotation;
-    float3 scale;
-    math::to_loc_rot_scale_safe<true>(src[indices[i]], location, rotation, scale);
-    location_accum += location * weight;
-    expmap_accum += rotation.expmap() * weight;
-    scale_accum += scale * weight;
+    accum += src[indices[i]] * weight;
     total_weight += weight;
   }
 
   const float weight_inv = math::safe_rcp(total_weight);
-  return math::from_loc_rot_scale<float4x4>(location_accum * weight_inv,
-                                            math::Quaternion::expmap(expmap_accum * weight_inv),
-                                            scale_accum * weight_inv);
+  return total_weight == 0.0f ? float4x4::identity() : accum * weight_inv;
 }
 
 template<typename T>

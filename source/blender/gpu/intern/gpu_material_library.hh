@@ -11,12 +11,12 @@
 #pragma once
 
 #include "BLI_set.hh"
+#include "BLI_vector.hh"
 #include "GPU_material.hh"
 
 namespace blender {
 
 #define MAX_FUNCTION_NAME 64
-#define MAX_PARAMETER 39
 
 enum GPUFunctionQual {
   FUNCTION_QUAL_IN,
@@ -26,8 +26,8 @@ enum GPUFunctionQual {
 
 struct GPUFunction {
   char name[MAX_FUNCTION_NAME];
-  GPUType paramtype[MAX_PARAMETER];
-  GPUFunctionQual paramqual[MAX_PARAMETER];
+  Vector<GPUType> paramtype;
+  Vector<GPUFunctionQual> paramqual;
   int totparam;
   /* TODO(@fclem): Clean that void pointer. */
   void *source; /* GPUSource */

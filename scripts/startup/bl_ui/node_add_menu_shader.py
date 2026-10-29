@@ -140,6 +140,11 @@ class NODE_MT_shader_node_input_base(node_add_menu.NodeMenu):
             poll=object_shader_nodes_poll(context)
         )
         self.node_operator_with_outputs(
+            context, layout, "ShaderNodeObjectTransform",
+            ["Transform", "Location", "Rotation", "Scale", "Seed"],
+            poll=object_material_shader_nodes_poll(context)
+        )
+        self.node_operator_with_outputs(
             context, layout, "ShaderNodeParticleInfo",
             ["Index", "Random", "Age", "Lifetime", "Location", "Size", "Velocity", "Angular Velocity"],
             poll=object_material_shader_nodes_poll(context)
@@ -587,12 +592,14 @@ class NODE_MT_shader_node_matrix_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "FunctionNodeCombineMatrix")
         self.node_operator(layout, "FunctionNodeCombineTransform")
         self.node_operator(layout, "FunctionNodeMatrixDeterminant", label="Determinant")
+        self.node_operator(layout, "FunctionNodeGetMatrixComponent")
         self.node_operator(layout, "FunctionNodeInvertMatrix")
         self.node_operator(layout, "FunctionNodeMatrixMultiply")
         self.node_operator(layout, "FunctionNodeMatrixSVD")
         self.node_operator(layout, "FunctionNodeProjectPoint")
         self.node_operator(layout, "FunctionNodeSeparateMatrix")
         self.node_operator(layout, "FunctionNodeSeparateTransform")
+        self.node_operator(layout, "FunctionNodeSetMatrixComponent")
         self.node_operator(layout, "FunctionNodeTransformDirection")
         self.node_operator(layout, "FunctionNodeTransformPoint")
         self.node_operator(layout, "FunctionNodeTransposeMatrix")

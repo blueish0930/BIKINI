@@ -11,12 +11,62 @@
 #include "util/types.h"
 
 #include "BKE_attribute.hh"
+#include "BLI_math_matrix_types.hh"
+#include "BLI_shader_matrix_attribute.hh"
 
 #include "BLI_color_types.hh"
 #include "BLI_math_quaternion_types.hh"
 #include "BLI_math_vector_types.hh"
 
 CCL_NAMESPACE_BEGIN
+
+template<typename GeometryT, typename SceneT>
+void sync_shader_rotation_attribute(GeometryT *geometry,
+                                    SceneT *scene,
+                                    AttributeSet &attributes,
+                                    const blender::bke::AttributeIter &iter,
+                                    const AttributeElement element)
+{
+  const ustring name(blender::shader_rotation_attribute_name(iter.name));
+  if ((scene && !geometry->need_attribute(scene, name)) || attributes.find(name) ||
+      (!scene && iter.data_type != blender::bke::AttrType::Quaternion))
+  {
+    return;
+  }
+  const auto reader = iter.get<blender::math::Quaternion>();
+  if (!reader) {
+    return;
+  }
+  const blender::VArraySpan<blender::math::Quaternion> rotations = *reader;
+  Attribute *attr = attributes.add(name, TypeRGBA, element);
+  float4 *data = attr->data_for_write<float4>();
+  for (const int i : rotations.index_range()) {
+    const auto &q = rotations[i];
+    data[i] = make_float4(q.w, q.x, q.y, q.z);
+  }
+}
+
+template<typename GeometryT, typename SceneT>
+bool sync_shader_matrix_columns(GeometryT *geometry,
+                                SceneT *scene,
+                                AttributeSet &attributes,
+                                const blender::bke::AttributeIter &iter,
+                                const AttributeElement element)
+{
+  if (iter.data_type != blender::bke::AttrType::Float4x4) { return false; }
+  const blender::VArraySpan<blender::float4x4> matrices = *iter.get<blender::float4x4>();
+  for (int c=0;c<4;c++) {
+    const ustring name(blender::shader_matrix_attribute_column_name(iter.name,c));
+    if ((scene && !geometry->need_attribute(scene,name)) || attributes.find(name)) { continue; }
+    Attribute *attr = attributes.add(name,TypeRGBA,element);
+    float4 *data = attr->data_for_write<float4>();
+    for (const int i : matrices.index_range()) {
+      const auto &v=matrices[i][c];
+      data[i]=make_float4(v.x,v.y,v.z,v.w);
+    }
+  }
+  return true;
+}
 
 template<typename BlenderT> struct AttributeConverter {
   using CyclesT = void;

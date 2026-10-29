@@ -105,6 +105,8 @@ enum eGPUMaterialFlag {
 
   /* Signals scene time use. */
   GPU_MATFLAG_SCENE_TIME = (1 << 25),
+  /** Mesh named attributes are fetched from a packed buffer instead of vertex inputs. */
+  GPU_MATFLAG_ATTRIBUTE_BUFFER = (1 << 26),
 
   /* Tells the render engine the material was just compiled or updated. */
   GPU_MATFLAG_UPDATED = (1 << 29),
@@ -340,7 +342,7 @@ enum GPUDefaultValue {
 struct GPUMaterialAttribute {
   GPUMaterialAttribute *next, *prev;
   int type; /* eCustomDataType */
-  char name[/*MAX_CUSTOMDATA_LAYER_NAME*/ 68];
+  char name[256];
   char input_name[/*GPU_MAX_SAFE_ATTR_NAME + 1*/ 12 + 1];
   GPUType gputype;
   GPUDefaultValue default_value; /* Only for volumes attributes. */
@@ -678,6 +680,7 @@ GPUNodeLink *GPU_uniform(const bool *num);
 GPUNodeLink *GPU_constant(const GPUNodeStack &stack);
 GPUNodeLink *GPU_uniform(const GPUNodeStack &stack);
 GPUNodeLink *GPU_attribute(GPUMaterial *mat, eCustomDataType type, const char *name);
+GPUNodeLink *GPU_attribute_matrix(GPUMaterial *mat, const char *name);
 /**
  * Add a GPU attribute that refers to the default color attribute on a geometry.
  * The name, type, and domain are unknown and do not depend on the material.

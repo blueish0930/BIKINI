@@ -202,6 +202,7 @@ static uint64_t next_parm_serial()
 }
 
 struct ElemUser {
+  const fn::UserData *cancel_data = nullptr;
   struct ElementSampleCache {
     int geo = 0;
     int domain = 0;
@@ -7514,6 +7515,7 @@ ExecOutput run_on_accessor(const Program &program,
   }
 
   VMEnv env;
+  env.cancel_data = elem_user.cancel_data;
   fill_counts(owner, env);
   env.attrs = state.rt.as_mutable_span();
   env.const_s = program.const_s.as_span();
@@ -8006,11 +8008,13 @@ ExecOutput execute(const Program &program,
                    const fn::Field<bool> &selection,
                    const Span<ChField> ch_parms,
                    const Span<ChList> ch_lists,
-                   const Span<ChRamp> ch_ramps)
+                   const Span<ChRamp> ch_ramps,
+                   const fn::UserData *cancel_data)
 {
   ExecOutput out;
   geometry.ensure_owns_direct_data();
   ElemUser elem_user;
+  elem_user.cancel_data = cancel_data;
   elem_user.parm_lists = ch_lists;
   elem_user.parm_ramps = ch_ramps;
   elem_user.geos.append(&geometry);
@@ -8042,6 +8046,7 @@ ExecOutput execute(const Program &program,
       return;
     }
     ElemUser local_user;
+    local_user.cancel_data = cancel_data;
     local_user.parm_lists = elem_user.parm_lists;
     local_user.parm_ramps = elem_user.parm_ramps;
     local_user.geos = elem_user.geos;

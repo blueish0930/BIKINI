@@ -467,6 +467,10 @@ gpu::VertBufPtr extract_attribute_subdiv(const MeshRenderData &mr,
                                          const DRWSubdivCache &subdiv_cache,
                                          StringRef name);
 gpu::VertBufPtr extract_attr_viewer(const MeshRenderData &mr, MeshBufferCache &cache);
+gpu::VertBufPtr extract_material_attributes(const MeshRenderData &mr,
+                                          MeshBufferCache &cache,
+                                          Span<std::string> names,
+                                          const DRWSubdivCache *subdiv_cache = nullptr);
 
 gpu::VertBufPtr extract_paint_overlay_flags(const MeshRenderData &mr);
 gpu::VertBufPtr extract_paint_overlay_flags_subdiv(const MeshRenderData &mr,

@@ -33,6 +33,12 @@ class UserData {
  public:
   virtual ~UserData() = default;
 
+  /** Cooperative cancellation. Implementations must be safe to call from worker threads. */
+  virtual bool is_cancelled() const
+  {
+    return false;
+  }
+
   /**
    * Get thread local data for this user-data and the current thread.
    */

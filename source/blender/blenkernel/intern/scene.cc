@@ -1639,7 +1639,7 @@ static void scene_lib_override_apply_post(ID *id_dst, ID * /*id_src*/)
 
   if (scene->rigidbody_world != nullptr) {
     PTCacheID pid;
-    BKE_ptcache_id_from_rigidbody(&pid, nullptr, scene->rigidbody_world);
+    BKE_ptcache_id_from_rigidbody(&pid, scene, scene->rigidbody_world);
     for (PointCache &point_cache : *pid.ptcaches) {
       point_cache.flag |= PTCACHE_FLAG_INFO_DIRTY;
     }

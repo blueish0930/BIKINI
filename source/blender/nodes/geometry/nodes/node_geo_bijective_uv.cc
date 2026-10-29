@@ -94,6 +94,11 @@ static void node_geo_exec(GeoNodeExecParams params)
   }
   const auto start = std::chrono::steady_clock::now();
   uv::Options options;
+  if (params.user_data()) {
+    options.is_cancelled = [user_data = params.user_data()]() {
+      return user_data->is_cancelled();
+    };
+  }
   options.method = params.extract_input<MenuValue>("Method"_ustr).value;
   options.iterations = std::clamp(params.extract_input<int>("Iterations"_ustr), 0, 100000);
   options.history = std::clamp(params.extract_input<int>("History"_ustr), 1, 32);
@@ -182,6 +187,10 @@ static void node_geo_exec(GeoNodeExecParams params)
         u = solver.initialize();
       }
       const uv::Result result = solver.solve(std::move(u));
+      if (options.is_cancelled && options.is_cancelled()) {
+        params.set_default_remaining_outputs();
+        return;
+      }
       /* Verify the actual float output, not only the internal double solution.
        */
       uv::Vec rounded(result.uv.size());

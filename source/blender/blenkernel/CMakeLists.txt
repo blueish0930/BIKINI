@@ -273,6 +273,7 @@ set(SRC
   intern/scene_context.cc
   intern/screen.cc
   intern/shader_fx.cc
+  intern/shader_object_transform.cc
   intern/shrinkwrap.cc
   intern/softbody.cc
   intern/sound.cc
@@ -523,6 +524,7 @@ set(SRC
   BKE_scene_runtime.hh
   BKE_screen.hh
   BKE_shader_fx.hh
+  BKE_shader_object_transform.hh
   BKE_shrinkwrap.hh
   BKE_softbody.h
   BKE_sound.hh

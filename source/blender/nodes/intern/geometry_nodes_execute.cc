@@ -698,7 +698,7 @@ bke::GeometrySet execute_geometry_nodes_on_geometry(const bNodeTree &btree,
   }
   lazy_function.destruct_storage(lf_context.storage);
 
-  if (only_side_effects) {
+  if (only_side_effects || user_data.is_cancelled()) {
     for (const int i : IndexRange(num_outputs)) {
       if (param_set_outputs[i]) {
         param_outputs[i].destruct();

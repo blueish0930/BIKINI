@@ -207,16 +207,16 @@ void GPUCodegen::generate_attribs()
   /* Index of the attribute as ordered in graph.attributes. */
   int attr_n = 0;
   int slot = 15;
+  int attributes_num=0;
+  for([[maybe_unused]] const GPUMaterialAttribute &attr:graph.attributes){attributes_num++;}
+  info.name_buffer.attr_names.resize(attributes_num);
+  info.name_buffer.var_names.resize(attributes_num);
   for (GPUMaterialAttribute &attr : graph.attributes) {
-    if (slot == -1) {
-      BLI_assert_msg(0, "Too many attributes");
-      break;
-    }
-    STRNCPY(info.name_buffer.attr_names[slot], attr.input_name);
-    SNPRINTF(info.name_buffer.var_names[slot], "v%d", attr.id);
+    BLI_strncpy(info.name_buffer.attr_names[attr_n].data(), attr.input_name,GPU_MAX_SAFE_ATTR_NAME+1);
+    BLI_snprintf(info.name_buffer.var_names[attr_n].data(),16,"v%d",attr.id);
 
-    StringRefNull attr_name = info.name_buffer.attr_names[slot];
-    StringRefNull var_name = info.name_buffer.var_names[slot];
+    StringRefNull attr_name = info.name_buffer.attr_names[attr_n].data();
+    StringRefNull var_name = info.name_buffer.var_names[attr_n].data();
 
     GPUType input_type, iface_type;
 

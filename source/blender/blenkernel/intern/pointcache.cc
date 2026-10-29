@@ -1086,12 +1086,14 @@ void BKE_ptcache_id_from_dynamicpaint(PTCacheID *pid, Object *ob, DynamicPaintSu
   pid->file_type = PTCACHE_FILE_PTCACHE;
 }
 
-void BKE_ptcache_id_from_rigidbody(PTCacheID *pid, Object *ob, RigidBodyWorld *rbw)
+void BKE_ptcache_id_from_rigidbody(PTCacheID *pid, Scene *scene, RigidBodyWorld *rbw)
 {
 
   memset(pid, 0, sizeof(PTCacheID));
 
-  pid->owner_id = ob != nullptr ? &ob->id : nullptr;
+  /* The world cache belongs to the scene, including when queried without a rigid body object. */
+  pid->scene = scene;
+  pid->owner_id = &scene->id;
   pid->calldata = rbw;
   pid->type = PTCACHE_TYPE_RIGIDBODY;
   pid->cache = rbw->shared->pointcache;
@@ -1260,7 +1262,7 @@ static bool foreach_object_ptcache(Scene *scene,
   if (scene != nullptr && (object == nullptr || object->rigidbody_object != nullptr) &&
       scene->rigidbody_world != nullptr)
   {
-    BKE_ptcache_id_from_rigidbody(&pid, object, scene->rigidbody_world);
+    BKE_ptcache_id_from_rigidbody(&pid, scene, scene->rigidbody_world);
     if (!callback(pid, nullptr)) {
       return false;
     }
@@ -1384,11 +1386,29 @@ static size_t ptcache_filepath_ext_append(PTCacheID *pid,
   filename_ext = filepath + filepath_len;
   *filename_ext = '\0';
 
-  /* PointCaches are inserted in object's list on demand, we need a valid index now. */
+  /* Allocate a stable cache index without treating a scene-owned world cache as an Object. */
   if (pid->cache->index < 0) {
-    BLI_assert(GS(pid->owner_id->name) == ID_OB);
-    pid->cache->index = pid->stack_index = BKE_object_insert_ptcache(
-        id_cast<Object *>(pid->owner_id));
+    if (GS(pid->owner_id->name) == ID_OB) {
+      pid->cache->index = pid->stack_index = BKE_object_insert_ptcache(
+          id_cast<Object *>(pid->owner_id));
+    }
+    else {
+      BLI_assert(GS(pid->owner_id->name) == ID_SCE);
+      int index = 0;
+      for (;; index++) {
+        bool in_use = false;
+        for (const PointCache &cache : *pid->ptcaches) {
+          if (cache.index == index) {
+            in_use = true;
+            break;
+          }
+        }
+        if (!in_use) {
+          break;
+        }
+      }
+      pid->cache->index = pid->stack_index = index;
+    }
   }
 
   const char *ext = ptcache_file_extension(pid);
@@ -1451,6 +1471,12 @@ static int ptcache_filepath(PTCacheID *pid,
     newname += len;
   }
   if (pid->cache->name[0] == '\0' && (pid->cache->flag & PTCACHE_EXTERNAL) == 0) {
+    /* Object and scene names can match. Keep unnamed world caches in a separate namespace. */
+    if (GS(pid->owner_id->name) == ID_SCE) {
+      const int prefix_len = BLI_strncpy_rlen(newname, "SC", MAX_PTCACHE_FILE - len);
+      newname += prefix_len;
+      len += prefix_len;
+    }
     idname = (pid->owner_id->name + 2);
     /* convert chars to hex so they are always a valid filename */
     while ('\0' != *idname) {
@@ -2983,7 +3009,7 @@ int BKE_ptcache_object_reset(Scene *scene, Object *ob, int mode)
     if (ob->rigidbody_object) {
       ob->rigidbody_object->flag |= RBO_FLAG_NEEDS_RESHAPE;
     }
-    BKE_ptcache_id_from_rigidbody(&pid, ob, scene->rigidbody_world);
+    BKE_ptcache_id_from_rigidbody(&pid, scene, scene->rigidbody_world);
     /* only flag as outdated, resetting should happen on start frame */
     pid.cache->flag |= PTCACHE_OUTDATED;
   }
@@ -3495,8 +3521,10 @@ void BKE_ptcache_toggle_disk_cache(PTCacheID *pid)
   cache->flag |= PTCACHE_FLAG_INFO_DIRTY;
 
   if ((cache->flag & PTCACHE_DISK_CACHE) == 0) {
-    if (cache->index) {
-      BKE_object_delete_ptcache(id_cast<Object *>(pid->owner_id), cache->index);
+    if (cache->index >= 0) {
+      if (GS(pid->owner_id->name) == ID_OB) {
+        BKE_object_delete_ptcache(id_cast<Object *>(pid->owner_id), cache->index);
+      }
       cache->index = -1;
     }
   }

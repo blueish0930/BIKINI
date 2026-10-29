@@ -25,6 +25,7 @@
  */
 
 #include <atomic>
+#include <functional>
 #include <variant>
 
 #include "FN_lazy_function_graph.hh"
@@ -274,6 +275,8 @@ class GeometryNodesOutputCache;
 struct GeometryNodesOutputCacheEvalState;
 
 struct GeoNodesCallData {
+  /** Optional, thread-safe cancellation check supplied by an interactive modifier evaluation. */
+  std::function<bool()> is_cancelled;
   /**
    * Top-level node tree of the current evaluation.
    */
@@ -353,6 +356,10 @@ struct GeoNodesCallData {
  * Custom user data that can be passed to every geometry nodes related evaluation.
  */
 struct GeoNodesUserData : public fn::UserData {
+  bool is_cancelled() const override
+  {
+    return call_data && call_data->is_cancelled && call_data->is_cancelled();
+  }
   /**
    * Data provided by the root caller of geometry nodes.
    */

@@ -26,6 +26,7 @@
 #include "BKE_layer.hh"
 #include "BKE_material.hh"
 #include "BKE_object.hh"
+#include "BKE_shader_object_transform.hh"
 
 #include "DEG_depsgraph_query.hh"
 
@@ -414,6 +415,12 @@ bool BlenderSync::sync_object_attributes(blender::Object &b_ob,
     if (type == blender::SHD_ATTRIBUTE_OBJECT || type == blender::SHD_ATTRIBUTE_INSTANCER) {
       const bool use_instancer = (type == blender::SHD_ATTRIBUTE_INSTANCER);
       float4 value = lookup_instance_property(b_ob, b_deg_iter_data, real_name, use_instancer);
+      blender::float4 transform_value;
+      if (!use_instancer && blender::bke::lookup_shader_object_transform_attribute(
+                                real_name.c_str(), b_deg_iter_data.graph, transform_value))
+      {
+        value = make_float4(transform_value.x, transform_value.y, transform_value.z, transform_value.w);
+      }
 
       /* Try finding the existing attribute value. */
       ParamValue *param = nullptr;

@@ -117,6 +117,7 @@ struct PTCacheID {
   struct PTCacheID *next, *prev;
 
   struct Scene *scene;
+  /** Object for object caches, scene for the rigid body world cache. */
   struct ID *owner_id;
   void *calldata;
   unsigned int type, file_type;
@@ -284,7 +285,7 @@ void BKE_ptcache_id_from_smoke(PTCacheID *pid, struct Object *ob, struct FluidMo
 void BKE_ptcache_id_from_dynamicpaint(PTCacheID *pid,
                                       struct Object *ob,
                                       struct DynamicPaintSurface *surface);
-void BKE_ptcache_id_from_rigidbody(PTCacheID *pid, struct Object *ob, struct RigidBodyWorld *rbw);
+void BKE_ptcache_id_from_rigidbody(PTCacheID *pid, struct Scene *scene, struct RigidBodyWorld *rbw);
 
 /**
  * \param ob: Optional, may be NULL.

@@ -347,7 +347,7 @@ struct ShaderWrangleOutputItemsAccessor : public socket_items::SocketItemsAccess
   static bool supports_socket_type(const eNodeSocketDatatype socket_type, const int /*ntree_type*/)
   {
     /* Same as the GLSL node: values, not closures. Plug into Emission Color / Displacement. */
-    return ELEM(socket_type, SOCK_FLOAT, SOCK_INT, SOCK_BOOLEAN, SOCK_VECTOR, SOCK_RGBA);
+    return ELEM(socket_type, SOCK_FLOAT, SOCK_INT, SOCK_BOOLEAN, SOCK_VECTOR, SOCK_RGBA, SOCK_MATRIX);
   }
 
   static void init_with_socket_type_and_name(bNode &node,

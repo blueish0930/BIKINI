@@ -247,6 +247,9 @@ void mesh_buffer_cache_create_requested(TaskGraph & /*task_graph*/,
     else if (type == VBOType::AttrViewer) {
       created_vbos[i] = extract_attr_viewer(mr, mbc);
     }
+    else if (type == VBOType::MaterialAttributes) {
+      created_vbos[i] = extract_material_attributes(mr, mbc, cache.material_attr_used.as_span());
+    }
     else if (type >= VBOType::Attr0 && type <= VBOType::Attr15) {
       const int8_t attr_index = int8_t(type) - int8_t(VBOType::Attr0);
       created_vbos[i] = extract_attribute(mr, mbc, cache.attr_used[attr_index]);
@@ -261,6 +264,7 @@ void mesh_buffer_cache_create_requested(TaskGraph & /*task_graph*/,
       case VBOType::VertexNormal:
       case VBOType::Orco:
       case VBOType::AttrViewer:
+      case VBOType::MaterialAttributes:
       case VBOType::Attr0:
       case VBOType::Attr1:
       case VBOType::Attr2:
@@ -569,6 +573,12 @@ void mesh_buffer_cache_create_requested_subdiv(MeshBatchCache &cache,
       buffers.vbos.add_new(request,
                            extract_attribute_subdiv(mr, mbc, subdiv_cache, cache.attr_used[i]));
     }
+  }
+  if (vbos_to_create.contains(VBOType::MaterialAttributes)) {
+    buffers.vbos.add_new(VBOType::MaterialAttributes,
+                         extract_material_attributes(mr, cache.final,
+                                                     cache.material_attr_used.as_span(),
+                                                     &subdiv_cache));
   }
   GPU_render_end();
 }

@@ -2467,6 +2467,9 @@ bool geometry_nodes_output_cache_store(const lf::Context &context,
                                        int64_t &exec_time_ns)
 {
   const GeoNodesUserData &user_data = *static_cast<const GeoNodesUserData *>(context.user_data);
+  if (user_data.is_cancelled()) {
+    return false;
+  }
   if (session.status != OutputCacheSession::Status::Miss) {
     return false;
   }

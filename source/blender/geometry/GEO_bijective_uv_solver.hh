@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <functional>
 #include <limits>
 #include <map>
 #include <stdexcept>
@@ -37,6 +38,8 @@ struct Options
   double tolerance = 1e-8;
   double epsilon = 0;
   double weight = 1;
+  /** Optional cooperative cancellation, checked between optimization and line-search steps. */
+  std::function<bool()> is_cancelled;
 };
 struct Result
 {
@@ -499,6 +502,9 @@ public:
     int head = 0, count = 0, small = 0;
     double gamma = options.method == 0 ? .05 : 1.;
     for (int iteration = 0; iteration < std::max(options.iterations, 0); iteration++) {
+      if (options.is_cancelled && options.is_cancelled()) {
+        break;
+      }
       if (g.norm() <= 1e-12 * std::max(1., std::sqrt(area))) {
         result.status = 1;
         break;
@@ -548,6 +554,9 @@ public:
       Vec un, gn;
       bool accepted = false;
       for (int search = 0; search < 60; search++) {
+        if (options.is_cancelled && options.is_cancelled()) {
+          break;
+        }
         result.trials++;
         un = u + step * direction;
         fn = evaluate(un, gn, en, bn);

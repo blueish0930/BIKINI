@@ -338,12 +338,8 @@ struct GPUSource {
     func->source = reinterpret_cast<void *>(this);
     func->totparam = 0;
     for (auto arg : arguments) {
-      if (func->totparam >= ARRAY_SIZE(func->paramtype)) {
-        print_error(source, source.find(name), "Too many parameters in function");
-        break;
-      }
-      func->paramqual[func->totparam] = convert_qualifier(arg.qualifier);
-      func->paramtype[func->totparam] = convert_type(arg.type);
+      func->paramqual.append(convert_qualifier(arg.qualifier));
+      func->paramtype.append(convert_type(arg.type));
       func->totparam++;
     }
 
@@ -725,7 +721,7 @@ bool GPU_material_library_ensure_function(const char *name,
   if (!name || name[0] == '\0' || !glsl_source || !g_functions || !g_sources) {
     return false;
   }
-  if (totparam < 0 || totparam > MAX_PARAMETER) {
+  if (totparam < 0) {
     return false;
   }
   if (totparam > 0 && (param_types == nullptr || param_quals == nullptr)) {

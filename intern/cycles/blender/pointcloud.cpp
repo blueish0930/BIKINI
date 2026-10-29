@@ -55,7 +55,8 @@ static void attr_create_motion_from_velocity(PointCloud *pointcloud,
 static void copy_attributes(PointCloud *pointcloud,
                             const blender::PointCloud &b_pointcloud,
                             const bool need_motion,
-                            const float motion_scale)
+                            const float motion_scale,
+                            Scene *scene = nullptr)
 {
   const blender::bke::AttributeAccessor b_attributes = b_pointcloud.attributes();
   if (b_attributes.domain_size(blender::bke::AttrDomain::Point) == 0) {
@@ -66,6 +67,12 @@ static void copy_attributes(PointCloud *pointcloud,
   static const ustring u_velocity("velocity");
   b_attributes.foreach_attribute([&](const blender::bke::AttributeIter &iter) {
     const ustring name{std::string_view(iter.name)};
+
+    sync_shader_rotation_attribute(pointcloud, scene, attributes, iter, ATTR_ELEMENT_VERTEX);
+    if (sync_shader_matrix_columns(pointcloud,scene,attributes,iter,
+                                   ATTR_ELEMENT_VERTEX)) {
+      return;
+    }
 
     if (need_motion && name == u_velocity) {
       const blender::VArraySpan b_attr = *iter.get<blender::float3>();
@@ -303,7 +310,7 @@ static void export_pointcloud(Scene *scene,
     pointcloud->set_render_as(PointCloud::RENDER_AS_GSPLATS);
   }
 
-  copy_attributes(pointcloud, b_pointcloud, need_motion, motion_scale);
+  copy_attributes(pointcloud, b_pointcloud, need_motion, motion_scale, scene);
 }
 
 static void export_pointcloud_motion(PointCloud *pointcloud,

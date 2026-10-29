@@ -65,6 +65,11 @@
 #include "BKE_pointcloud.hh"
 #include "BKE_screen.hh"
 #include "BKE_workspace.hh"
+#include "BKE_wm_runtime.hh"
+
+#ifdef _WIN32
+#  include "BLI_winstuff.hh"
+#endif
 
 #include "BLO_read_write.hh"
 
@@ -2213,6 +2218,92 @@ static void add_data_block_items_writeback(const ModifierEvalContext &ctx,
       });
 }
 
+#ifdef _WIN32
+/* Never search other objects for a user of the node tree: a shared node group does not identify
+ * the modifier that the user is editing. Resolve the visible editor's full modifier context. */
+static bool modifier_is_escape_target(const ModifierEvalContext &ctx,
+                                     const NodesModifierData &nmd_orig)
+{
+  if (G.background || !DEG_is_active(ctx.depsgraph) ||
+      DEG_get_mode(ctx.depsgraph) != DAG_EVAL_VIEWPORT || (ctx.flag & MOD_APPLY_TO_ORIGINAL))
+  {
+    return false;
+  }
+  Main *bmain = DEG_get_bmain(ctx.depsgraph);
+  wmWindowManager *wm = bmain->wm.first();
+  const wmWindow *window = wm ? wm->runtime->winactive : nullptr;
+  if (!window || !window->active) {
+    return false;
+  }
+  const bScreen *screen = BKE_workspace_active_screen_get(window->workspace_hook);
+  if (!screen) {
+    return false;
+  }
+  std::optional<ed::space_node::ObjectAndModifier> target;
+  bool ambiguous = false;
+  for (const ScrArea &area : screen->areabase) {
+    const SpaceLink *space = area.spacedata.first();
+    if (!space || space->spacetype != SPACE_NODE) {
+      continue;
+    }
+    const SpaceNode &snode = *reinterpret_cast<const SpaceNode *>(space);
+    if (!STREQ(snode.tree_idname, "GeometryNodeTree")) {
+      continue;
+    }
+    const auto candidate = ed::space_node::get_geometry_nodes_modifier_for_node_editor(snode);
+    if (!candidate) {
+      continue;
+    }
+    /* With several editors, prefer the one the user is working in. Otherwise only act when
+     * all visible geometry editors refer to the same modifier. */
+    for (const ARegion &region : area.regionbase) {
+      if (&region == screen->active_region) {
+        return candidate->object == DEG_get_original(ctx.object) &&
+               candidate->nmd == &nmd_orig;
+      }
+    }
+    if (target && (target->object != candidate->object || target->nmd != candidate->nmd)) {
+      ambiguous = true;
+    }
+    target = candidate;
+  }
+  return !ambiguous && target && target->object == DEG_get_original(ctx.object) &&
+         target->nmd == &nmd_orig;
+}
+
+/** Poll the OS directly: the main event loop cannot dispatch Esc while evaluating the graph. */
+struct ModifierEscapeCancel {
+  HWND window = GetForegroundWindow();
+  std::atomic<bool> cancelled{false};
+  std::atomic<bool> armed{(GetAsyncKeyState(VK_ESCAPE) & 0x8000) == 0};
+  std::atomic<ULONGLONG> next_poll{0};
+
+  bool poll()
+  {
+    if (cancelled.load(std::memory_order_relaxed)) {
+      return true;
+    }
+    const ULONGLONG now = GetTickCount64();
+    ULONGLONG next = next_poll.load(std::memory_order_relaxed);
+    if (now < next || !next_poll.compare_exchange_strong(next, now + 8)) {
+      return false;
+    }
+    /* Esc in another application or another Blender window must not affect this editor. */
+    if (GetForegroundWindow() != window) {
+      return false;
+    }
+    if ((GetAsyncKeyState(VK_ESCAPE) & 0x8000) == 0) {
+      armed.store(true, std::memory_order_relaxed);
+    }
+    else if (armed.load(std::memory_order_relaxed)) {
+      cancelled.store(true, std::memory_order_relaxed);
+      return true;
+    }
+    return false;
+  }
+};
+#endif
+
 static void modifyGeometry(ModifierData *md,
                            const ModifierEvalContext *ctx,
                            bke::GeometrySet &geometry_set)
@@ -2269,6 +2360,21 @@ static void modifyGeometry(ModifierData *md,
   }
 
   nodes::GeoNodesCallData call_data;
+
+#ifdef _WIN32
+  std::optional<ModifierEscapeCancel> escape_cancel;
+  DWORD foreground_process = 0;
+  GetWindowThreadProcessId(GetForegroundWindow(), &foreground_process);
+  if (foreground_process == GetCurrentProcessId() && modifier_is_escape_target(*ctx, *nmd_orig)) {
+    escape_cancel.emplace();
+    call_data.is_cancelled = [&]() { return escape_cancel->poll(); };
+  }
+#endif
+  /* Preserve the input so a cancelled evaluation never publishes a partially computed mesh. */
+  std::optional<bke::GeometrySet> escape_input;
+  if (call_data.is_cancelled) {
+    escape_input = geometry_set;
+  }
 
   nodes::GeoNodesModifierData modifier_eval_data{};
   modifier_eval_data.depsgraph = ctx->depsgraph;
@@ -2419,6 +2525,26 @@ static void modifyGeometry(ModifierData *md,
     else {
       nmd->runtime->output_cache->clear_root_output();
     }
+  }
+
+  if (call_data.is_cancelled && call_data.is_cancelled()) {
+    geometry_set = std::move(*escape_input);
+    Object *object_orig = DEG_get_original(ctx->object);
+    const std::string modifier_name = nmd_orig->modifier.name;
+    deg::sync_writeback::add(*ctx->depsgraph, [object_orig, modifier_name]() {
+      if (NodesModifierData *target = find_nodes_modifier_by_name(*object_orig,
+                                                                 modifier_name.c_str()))
+      {
+        target->modifier.mode &= ~eModifierMode_Realtime;
+        /* Discard results cached during the cancelled run before allowing a later restart. */
+        target->runtime->output_cache.reset();
+        target->runtime->eval_log.reset();
+        DEG_id_tag_update(&object_orig->id, ID_RECALC_GEOMETRY);
+        WM_main_add_notifier(NC_OBJECT | ND_MODIFIER, object_orig);
+        WM_main_add_notifier(NC_SPACE | ND_SPACE_NODE, nullptr);
+      }
+    });
+    return;
   }
 
   if (logging_enabled(ctx) && !keep_log) {

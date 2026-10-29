@@ -1863,7 +1863,8 @@ static void node_geo_exec(GeoNodeExecParams params)
                                         selection,
                                         parms,
                                         lists,
-                                        ramps);
+                                        ramps,
+                                        params.user_data());
   if (profile) {
     const auto profile_end = std::chrono::steady_clock::now();
     const double setup_ms =

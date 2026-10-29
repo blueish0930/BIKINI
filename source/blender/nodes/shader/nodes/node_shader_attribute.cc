@@ -11,6 +11,7 @@
 #include "node_util.hh"
 
 #include "BLI_string.hh"
+#include "BLI_shader_matrix_attribute.hh"
 
 #include "UI_interface_layout.hh"
 #include "UI_resources.hh"
@@ -18,6 +19,7 @@
 #include "BLI_ghash.hh"
 
 #include "RNA_access.hh"
+#include "NOD_socket_search_link.hh"
 
 namespace blender {
 
@@ -52,31 +54,91 @@ static void node_declare(NodeDeclarationBuilder &b)
 {
   const bNodeTree *ntree = b.tree_or_null();
   const bool is_gpu_internal = ntree && (ntree->flag & NTREE_IS_GPU_SHADER_INTERNAL);
+  const bNode *node = b.node_or_null();
+  const int data_type = node && node->storage ?
+                            static_cast<const NodeShaderAttribute *>(node->storage)->data_type :
+                            SHD_ATTRIBUTE_DATA_FLOAT;
+  const bool legacy = data_type == SHD_ATTRIBUTE_DATA_LEGACY;
 
   /* Must stay first: light-iteration wiring uses input socket 0 as LightIndex. */
   b.add_input<decl::Int>("LightIndex"_ustr).available(is_gpu_internal);
   b.add_input<decl::String>("Name"_ustr).is_attribute_name().optional_label();
-  b.add_output<decl::Color>("Color"_ustr);
-  b.add_output<decl::Vector>("Vector"_ustr);
-  b.add_output<decl::Float>("Factor"_ustr, "Fac"_ustr);
-  b.add_output<decl::Float>("Alpha"_ustr);
+  /* Preserve identifiers and indices of existing material links. New nodes expose one typed
+   * Attribute output, as Named Attribute does in Geometry Nodes. */
+  b.add_output<decl::Color>("Color"_ustr).available(legacy);
+  b.add_output<decl::Vector>("Vector"_ustr).available(legacy);
+  b.add_output<decl::Float>("Factor"_ustr, "Fac"_ustr).available(legacy);
+  b.add_output<decl::Float>("Alpha"_ustr).available(legacy);
+  b.add_output<decl::Matrix>("Matrix"_ustr)
+      .available(legacy)
+      .description("4x4 matrix from an ordinary Geometry Nodes matrix attribute");
+  switch (data_type) {
+    case SHD_ATTRIBUTE_DATA_LEGACY:
+      break;
+    case SHD_ATTRIBUTE_DATA_INT:
+      b.add_output<decl::Int>("Attribute"_ustr);
+      break;
+    case SHD_ATTRIBUTE_DATA_VECTOR:
+      b.add_output<decl::Vector>("Attribute"_ustr);
+      break;
+    case SHD_ATTRIBUTE_DATA_ROTATION:
+      b.add_output<decl::Rotation>("Attribute"_ustr);
+      break;
+    case SHD_ATTRIBUTE_DATA_MATRIX:
+      b.add_output<decl::Matrix>("Attribute"_ustr);
+      break;
+    case SHD_ATTRIBUTE_DATA_COLOR:
+      b.add_output<decl::Color>("Attribute"_ustr);
+      break;
+    case SHD_ATTRIBUTE_DATA_BOOLEAN:
+      b.add_output<decl::Bool>("Attribute"_ustr);
+      break;
+    default:
+      b.add_output<decl::Float>("Attribute"_ustr);
+      break;
+  }
 }
 
 static void node_shader_buts_attribute(ui::Layout &layout, bContext * /*C*/, PointerRNA *ptr)
 {
   layout.prop(ptr, "attribute_type", UI_ITEM_NONE, "", ICON_NONE);
+  layout.prop(ptr, "data_type", UI_ITEM_NONE, "", ICON_NONE);
 }
 
 static void node_shader_init_attribute(bNodeTree * /*ntree*/, bNode *node)
 {
   NodeShaderAttribute *attr = MEM_new<NodeShaderAttribute>("NodeShaderAttribute");
-  attr->data_type = SHD_ATTRIBUTE_DATA_LEGACY;
+  attr->data_type = SHD_ATTRIBUTE_DATA_FLOAT;
   node->storage = attr;
 }
 
 static void node_update(bNodeTree * /*ntree*/, bNode *node)
 {
   sync_attribute_name_to_storage(*node);
+}
+
+static void node_gather_link_searches(GatherLinkSearchOpParams &params)
+{
+  if (params.in_out() == SOCK_IN) {
+    search_link_ops_for_shader_material_lighting_node(params);
+    return;
+  }
+  int data_type;
+  switch (params.other_socket().type) {
+    case SOCK_FLOAT: data_type = SHD_ATTRIBUTE_DATA_FLOAT; break;
+    case SOCK_INT: data_type = SHD_ATTRIBUTE_DATA_INT; break;
+    case SOCK_BOOLEAN: data_type = SHD_ATTRIBUTE_DATA_BOOLEAN; break;
+    case SOCK_VECTOR: data_type = SHD_ATTRIBUTE_DATA_VECTOR; break;
+    case SOCK_RGBA: data_type = SHD_ATTRIBUTE_DATA_COLOR; break;
+    case SOCK_ROTATION: data_type = SHD_ATTRIBUTE_DATA_ROTATION; break;
+    case SOCK_MATRIX: data_type = SHD_ATTRIBUTE_DATA_MATRIX; break;
+    default: return;
+  }
+  params.add_item(IFACE_("Attribute"), [data_type](LinkSearchOpParams &params) {
+    bNode &node = params.add_node("ShaderNodeAttribute"_ustr);
+    static_cast<NodeShaderAttribute *>(node.storage)->data_type = data_type;
+    params.update_and_connect_available_socket(node, "Attribute"_ustr);
+  });
 }
 
 static int node_shader_gpu_attribute(GPUMaterial *mat,
@@ -88,6 +150,30 @@ static int node_shader_gpu_attribute(GPUMaterial *mat,
   NodeShaderAttribute *attr = static_cast<NodeShaderAttribute *>(node->storage);
   const char *attr_name = attribute_name_from_node(*node);
   sync_attribute_name_to_storage(*node);
+  const bool need_legacy = out[0].hasoutput || out[1].hasoutput || out[2].hasoutput ||
+                           out[3].hasoutput;
+  const bool need_matrix = out[4].hasoutput;
+  const bool typed = attr->data_type != SHD_ATTRIBUTE_DATA_LEGACY;
+  if ((!need_legacy && !typed) || attr->data_type == SHD_ATTRIBUTE_DATA_MATRIX) {
+    if (attr->data_type == SHD_ATTRIBUTE_DATA_MATRIX) {
+      if (attr->type == SHD_ATTRIBUTE_GEOMETRY) {
+        out[5].link = GPU_attribute_matrix(mat, attr_name);
+      }
+      else {
+        GPU_link(mat, "node_attribute_matrix_zero", &out[5].link);
+      }
+      return 1;
+    }
+    if (need_matrix) {
+      if (attr->type == SHD_ATTRIBUTE_GEOMETRY) {
+        out[4].link = GPU_attribute_matrix(mat, attr_name);
+      }
+      else {
+        GPU_link(mat, "node_attribute_matrix_zero", &out[4].link);
+      }
+    }
+    return 1;
+  }
   float attr_hash = 0.0f;
 
   GPUNodeLink *cd_attr;
@@ -134,7 +220,9 @@ static int node_shader_gpu_attribute(GPUMaterial *mat,
       break;
     }
     case SHD_ATTRIBUTE_GEOMETRY: {
-      cd_attr = GPU_attribute(mat, CD_AUTO_FROM_NAME, attr_name);
+      const std::string request = attr->data_type == SHD_ATTRIBUTE_DATA_ROTATION ?
+                                      shader_rotation_attribute_name(attr_name) : attr_name;
+      cd_attr = GPU_attribute(mat, CD_AUTO_FROM_NAME, request.c_str());
 
       if (STREQ(attr_name, "color")) {
         GPU_link(mat, "node_attribute_color", GPU_kernel_globals(), cd_attr, &cd_attr);
@@ -169,10 +257,46 @@ static int node_shader_gpu_attribute(GPUMaterial *mat,
     }
   }
 
+  if (typed) {
+    const char *function = "node_attribute_as_float";
+    switch (attr->data_type) {
+      case SHD_ATTRIBUTE_DATA_INT:
+        function = "node_attribute_as_int";
+        break;
+      case SHD_ATTRIBUTE_DATA_VECTOR:
+        function = "node_attribute_as_vector";
+        break;
+      case SHD_ATTRIBUTE_DATA_ROTATION:
+        function = "node_attribute_as_rotation";
+        break;
+      case SHD_ATTRIBUTE_DATA_COLOR:
+        function = "node_attribute_as_color";
+        break;
+      case SHD_ATTRIBUTE_DATA_BOOLEAN:
+        function = "node_attribute_as_boolean";
+        break;
+    }
+    GPU_link(mat, function, cd_attr, &out[5].link);
+    if (attr->type == SHD_ATTRIBUTE_GEOMETRY &&
+        attr->data_type != SHD_ATTRIBUTE_DATA_ROTATION)
+    {
+      node_shader_gpu_bump_tex_coord(mat, node, &out[5].link);
+    }
+    return 1;
+  }
   GPU_link(mat, "node_attribute", cd_attr, &out[0].link, &out[1].link, &out[2].link, &out[3].link);
 
+  if (need_matrix) {
+    if (attr->type == SHD_ATTRIBUTE_GEOMETRY) {
+      out[4].link = GPU_attribute_matrix(mat, attr_name);
+    }
+    else {
+      GPU_link(mat, "node_attribute_matrix_zero", &out[4].link);
+    }
+  }
+
   if (attr->type == SHD_ATTRIBUTE_GEOMETRY) {
-    for (const auto [i, sock] : node->outputs.enumerate()) {
+    for (const int i : IndexRange(4)) {
       node_shader_gpu_bump_tex_coord(mat, node, &out[i].link);
     }
   }
@@ -210,7 +334,7 @@ void register_node_type_sh_attribute()
   ntype.updatefunc = file_ns::node_update;
   bke::node_type_storage(
       ntype, "NodeShaderAttribute", node_free_standard_storage, node_copy_standard_storage);
-  ntype.gather_link_search_ops = search_link_ops_for_shader_material_lighting_node;
+  ntype.gather_link_search_ops = file_ns::node_gather_link_searches;
   ntype.gpu_fn = file_ns::node_shader_gpu_attribute;
   ntype.materialx_fn = file_ns::node_shader_materialx;
 

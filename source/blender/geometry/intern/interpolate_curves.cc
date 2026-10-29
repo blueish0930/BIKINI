@@ -875,7 +875,10 @@ static void mix_arrays(const Span<T> from,
   }
   else {
     for (const int i : dst.index_range()) {
-      dst[i] = math::interpolate(from[i], to[i], mix_factor);
+      if constexpr (std::is_same_v<T,float4x4>) {
+        dst[i] = math::interpolate_linear(from[i], to[i], mix_factor);
+      }
+      else { dst[i] = math::interpolate(from[i], to[i], mix_factor); }
     }
   }
 }
@@ -901,7 +904,10 @@ static void mix_arrays(const GSpan src_from,
               dst_typed[curve] = to[curve];
             }
             else {
-              dst_typed[curve] = math::interpolate(from[curve], to[curve], mix_factor);
+              if constexpr (std::is_same_v<T,float4x4>) {
+                dst_typed[curve] = math::interpolate_linear(from[curve],to[curve],mix_factor);
+              }
+              else { dst_typed[curve] = math::interpolate(from[curve],to[curve],mix_factor); }
             }
           },
           exec_mode::grain_size(512));

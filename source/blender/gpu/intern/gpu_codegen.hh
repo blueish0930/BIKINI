@@ -30,8 +30,8 @@ struct GPUCodegenCreateInfo : ShaderCreateInfo {
     using NameEntry = std::array<char, 32>;
 
     /** Duplicate attribute names to avoid reference the GPUNodeGraph directly. */
-    char attr_names[16][GPU_MAX_SAFE_ATTR_NAME + 1];
-    char var_names[16][8];
+    Vector<std::array<char, GPU_MAX_SAFE_ATTR_NAME + 1>> attr_names;
+    Vector<std::array<char, 16>> var_names;
     Vector<std::unique_ptr<NameEntry>, 16> sampler_names;
 
     /* Returns the appended name memory location */

@@ -11,6 +11,8 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "DNA_scene_types.h"
+
 #include "BLI_listbase.hh"
 #include "BLI_utildefines.hh"
 
@@ -35,6 +37,12 @@
 #include "physics_intern.hh"
 
 namespace blender {
+
+static int ptcache_notifier_type(const ID *owner_id)
+{
+  return owner_id && GS(owner_id->name) == ID_SCE ? NC_SCENE | ND_FRAME :
+                                                  NC_OBJECT | ND_POINTCACHE;
+}
 
 static bool ptcache_bake_all_poll(bContext *C)
 {
@@ -158,7 +166,7 @@ static void ptcache_job_endjob(void *customdata)
   WM_locked_interface_set(job->wm, false);
 
   WM_main_add_notifier(NC_SCENE | ND_FRAME, scene);
-  WM_main_add_notifier(NC_OBJECT | ND_POINTCACHE, job->baker->pid.owner_id);
+  WM_main_add_notifier(ptcache_notifier_type(job->baker->pid.owner_id), job->baker->pid.owner_id);
 }
 
 static void ptcache_free_bake(PointCache *cache)
@@ -326,11 +334,9 @@ static wmOperatorStatus ptcache_free_bake_exec(bContext *C, wmOperator * /*op*/)
 {
   PointerRNA ptr = CTX_data_pointer_get_type(C, "point_cache", RNA_PointCache);
   PointCache *cache = static_cast<PointCache *>(ptr.data);
-  Object *ob = id_cast<Object *>(ptr.owner_id);
-
   ptcache_free_bake(cache);
 
-  WM_event_add_notifier(C, NC_OBJECT | ND_POINTCACHE, ob);
+  WM_event_add_notifier(C, ptcache_notifier_type(ptr.owner_id), ptr.owner_id);
 
   return OPERATOR_FINISHED;
 }
@@ -338,11 +344,9 @@ static wmOperatorStatus ptcache_bake_from_cache_exec(bContext *C, wmOperator * /
 {
   PointerRNA ptr = CTX_data_pointer_get_type(C, "point_cache", RNA_PointCache);
   PointCache *cache = static_cast<PointCache *>(ptr.data);
-  Object *ob = id_cast<Object *>(ptr.owner_id);
-
   cache->flag |= PTCACHE_BAKED;
 
-  WM_event_add_notifier(C, NC_OBJECT | ND_POINTCACHE, ob);
+  WM_event_add_notifier(C, ptcache_notifier_type(ptr.owner_id), ptr.owner_id);
 
   return OPERATOR_FINISHED;
 }
@@ -398,7 +402,10 @@ static wmOperatorStatus ptcache_add_new_exec(bContext *C, wmOperator * /*op*/)
 {
   Scene *scene = CTX_data_scene(C);
   PointerRNA ptr = CTX_data_pointer_get_type(C, "point_cache", RNA_PointCache);
-  Object *ob = id_cast<Object *>(ptr.owner_id);
+  Object *ob = GS(ptr.owner_id->name) == ID_OB ? id_cast<Object *>(ptr.owner_id) : nullptr;
+  if (!ob) {
+    scene = id_cast<Scene *>(ptr.owner_id);
+  }
   PointCache *cache = static_cast<PointCache *>(ptr.data);
   PTCacheID pid = BKE_ptcache_id_find(ob, scene, cache);
 
@@ -407,9 +414,9 @@ static wmOperatorStatus ptcache_add_new_exec(bContext *C, wmOperator * /*op*/)
     cache_new->step = pid.default_step;
     *(pid.cache_ptr) = cache_new;
 
-    DEG_id_tag_update(&ob->id, ID_RECALC_POINT_CACHE);
+    DEG_id_tag_update(ptr.owner_id, ob ? ID_RECALC_POINT_CACHE : ID_RECALC_SYNC_TO_EVAL);
     WM_event_add_notifier(C, NC_SCENE | ND_FRAME, scene);
-    WM_event_add_notifier(C, NC_OBJECT | ND_POINTCACHE, ob);
+    WM_event_add_notifier(C, ptcache_notifier_type(ptr.owner_id), ptr.owner_id);
   }
 
   return OPERATOR_FINISHED;
@@ -418,7 +425,10 @@ static wmOperatorStatus ptcache_remove_exec(bContext *C, wmOperator * /*op*/)
 {
   PointerRNA ptr = CTX_data_pointer_get_type(C, "point_cache", RNA_PointCache);
   Scene *scene = CTX_data_scene(C);
-  Object *ob = id_cast<Object *>(ptr.owner_id);
+  Object *ob = GS(ptr.owner_id->name) == ID_OB ? id_cast<Object *>(ptr.owner_id) : nullptr;
+  if (!ob) {
+    scene = id_cast<Scene *>(ptr.owner_id);
+  }
   PointCache *cache = static_cast<PointCache *>(ptr.data);
   PTCacheID pid = BKE_ptcache_id_find(ob, scene, cache);
 
@@ -428,8 +438,8 @@ static wmOperatorStatus ptcache_remove_exec(bContext *C, wmOperator * /*op*/)
     BKE_ptcache_free(pid.cache);
     *(pid.cache_ptr) = pid.ptcaches->first();
 
-    DEG_id_tag_update(&ob->id, ID_RECALC_SYNC_TO_EVAL);
-    WM_event_add_notifier(C, NC_OBJECT | ND_POINTCACHE, ob);
+    DEG_id_tag_update(ptr.owner_id, ID_RECALC_SYNC_TO_EVAL);
+    WM_event_add_notifier(C, ptcache_notifier_type(ptr.owner_id), ptr.owner_id);
   }
 
   return OPERATOR_FINISHED;

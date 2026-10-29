@@ -29,6 +29,8 @@
 
 #include "BKE_crazyspace.hh"
 #include "BKE_curves.hh"
+#include "BKE_shader_matrix_attribute.hh"
+#include "draw_attribute_atlas.hh"
 #include "BKE_curves_utils.hh"
 #include "BKE_customdata.hh"
 #include "BKE_geometry_set.hh"
@@ -142,6 +144,8 @@ static void clear_edit_data(CurvesBatchCache *cache)
 
 void CurvesEvalCache::discard_attributes()
 {
+  material_attribute_atlas.reset();
+  material_attr_used.clear();
   for (const int i : IndexRange(GPU_MAX_ATTR)) {
     this->evaluated_attributes_buf[i].reset();
   }
@@ -590,7 +594,9 @@ static gpu::VertBufPtr ensure_control_point_attribute(const bke::CurvesGeometry 
    * the Blender convention, it should be `float4(s, s, s, 1)`. This could be resolved using a
    * similar texture state swizzle to map the attribute correctly as for volume attributes, so we
    * can control the conversion ourselves. */
-  const bke::AttributeReader<ColorGeometry4f> attribute = attributes.lookup<ColorGeometry4f>(name);
+  const bke::AttributeReader<ColorGeometry4f> attribute = shader_attribute_request(name) ?
+      bke::lookup_shader_attribute_request(attributes,name).typed<ColorGeometry4f>() :
+      attributes.lookup<ColorGeometry4f>(name);
 
   if (!attribute) {
     /* Attribute doesn't exist or is of an incompatible type.
@@ -598,7 +604,8 @@ static gpu::VertBufPtr ensure_control_point_attribute(const bke::CurvesGeometry 
     /* TODO(@fclem): Eventually, this should become unnecessary if we merge
      * all attributes into one buffer and use an indirection table. */
     GPU_vertbuf_data_alloc(*vbo, curves.curves_num());
-    vbo->data<ColorGeometry4f>().fill({0.0f, 0.0f, 0.0f, 1.0f});
+    vbo->data<ColorGeometry4f>().fill(
+        {0.0f, 0.0f, 0.0f, shader_attribute_request(name) ? 0.0f : 1.0f});
     r_is_point_domain = false;
     return vbo;
   }
@@ -628,7 +635,8 @@ static void request_attribute(Curves &curves, const StringRef name)
   VectorSet<std::string> attributes{};
 
   bke::CurvesGeometry &curves_geometry = curves.geometry.wrap();
-  if (!curves_geometry.attributes().contains(name)) {
+  if (!shader_attribute_request(name) &&
+      !bke::shader_attribute_exists(curves_geometry.attributes(), name)) {
     return;
   }
   drw_attributes_add_request(&attributes, name);
@@ -700,16 +708,59 @@ void CurvesEvalCache::ensure_attributes(CurvesModule &module,
   const bke::AttributeAccessor attributes = curves.attributes();
 
   if (gpu_material) {
+    if(GPU_material_flag_get(gpu_material,GPU_MATFLAG_ATTRIBUTE_BUFFER)) {
+      bool changed=false;
+      for(const GPUMaterialAttribute &attr:GPU_material_attributes(gpu_material)) {
+        if(attr.type==CD_AUTO_FROM_NAME && attr.name[0] && !attr.is_default_color) {
+          changed |= material_attr_used.add_as(attr.name);
+        }
+      }
+      if(changed || !material_attribute_atlas) {
+        curves.ensure_can_interpolate_to_evaluated();
+        const bool padded=curves.has_cyclic_curve();
+        const OffsetIndices points=curves.points_by_curve();
+        const OffsetIndices evaluated=curves.evaluated_points_by_curve();
+        Vector<MaterialAttributeColumn> columns;
+        for(const std::string &name:material_attr_used) {
+          const bool matrix=bool(shader_attribute_request(name));
+          auto attr=matrix ? bke::lookup_shader_attribute_request(attributes,name).typed<ColorGeometry4f>() :
+                            attributes.lookup<ColorGeometry4f>(name);
+          MaterialAttributeColumn column;column.name=name;
+          column.curve_domain=attr && attr.domain==bke::AttrDomain::Curve;
+          if(column.curve_domain) {
+            column.values=Array<ColorGeometry4f>(curves.curves_num());attr.varray.materialize(column.values);
+          }
+          else {
+            column.values=Array<ColorGeometry4f>(evaluated_point_count_with_cyclic(curves),
+                ColorGeometry4f(0,0,0,matrix ? 0.0f : 1.0f));
+            if(attr) {
+              const VArraySpan<ColorGeometry4f> src(attr.varray);
+              for(int curve=0;curve<curves.curves_num();curve++) {
+                const IndexRange range=evaluated[curve];
+                const int start=range.start()+(padded ? curve : 0);
+                auto dst=column.values.as_mutable_span().slice(start,range.size());
+                curves.interpolate_to_evaluated(curve,GSpan(src.slice(points[curve])),GMutableSpan(dst));
+                if(padded && !dst.is_empty()){column.values[start+range.size()]=dst.first();}
+              }
+            }
+          }
+          columns.append(std::move(column));
+        }
+        material_attribute_atlas=build_material_attribute_atlas(columns);
+      }
+    }
     VectorSet<std::string> attrs_needed;
     ListBaseT<GPUMaterialAttribute> gpu_attrs = GPU_material_attributes(gpu_material);
     for (GPUMaterialAttribute &gpu_attr : gpu_attrs) {
+      if(GPU_material_flag_get(gpu_material,GPU_MATFLAG_ATTRIBUTE_BUFFER) &&
+         gpu_attr.type==CD_AUTO_FROM_NAME && gpu_attr.name[0] && !gpu_attr.is_default_color){continue;}
       StringRef name = gpu_attr.name;
       if (name.is_empty()) {
         if (std::optional<StringRef> uv_name = get_first_uv_name(attributes)) {
           drw_attributes_add_request(&attrs_needed, *uv_name);
         }
       }
-      if (!attributes.contains(name)) {
+      if (!shader_attribute_request(name) && !bke::shader_attribute_exists(attributes, name)) {
         continue;
       }
       drw_attributes_add_request(&attrs_needed, name);
