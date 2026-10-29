@@ -31,6 +31,7 @@ inputs `Mesh`, `Gravity`, `Progress`; outputs `Transform`, `Trajectory`,
 `Separatrix`, `Stable Poses`, in that order. Gravity defaults to `(0, 0, -1)`
 and Progress defaults to `1`. The RNA type and Gravity's legacy socket identifier
 remain unchanged so existing group links to the initial direction are retained.
+The default node width is 200.
 Use Transform Geometry to apply the matrix to the original mesh.
 
 `Stable Poses` and `Trajectory` are point clouds on the unit Gauss sphere.
@@ -42,12 +43,19 @@ transform original input coordinates to grounded output coordinates.
 
 `Separatrix` exports the ascending manifolds of saddle contacts from the same
 boundary graph used for probability integration. Coplanar triangles belonging to
-one merged stable pose do not introduce basin seams. Each great-circle arc is
-sampled independently into a wire mesh with a maximum angular spacing of 0.02
-radians; there are no edges between unrelated arcs. Its point attribute
-`rest_normal` equals the unit-sphere position. Edge attributes `rest_pose_a` and
-`rest_pose_b` give the adjacent sorted stable-pose indices, and `rest_arc` groups
-the edges of one analytic arc. Uniformly scaling/translating the input does not
+one merged stable pose do not introduce basin seams. Each arc is an independent,
+noncyclic cubic Bezier curve with exactly two control points at its unit-sphere
+endpoints. Aligned handles follow the great-circle tangent at each endpoint:
+for arc-plane normal `n = normalize(a cross b)`, the forward tangents are
+`n cross a` and `n cross b`, with handle length `(4/3) tan(angle/4)`.
+All four handles are set explicitly. Curve evaluation resolution is 32; it does
+not add control points. There are no connections between unrelated arcs.
+An ordinary cubic Bezier approximates the interior of a circular arc; endpoints
+and tangent directions are exact up to floating-point output precision.
+Its point attribute `rest_normal` equals the endpoint direction. Curve-domain
+attributes `rest_pose_a` and `rest_pose_b` give the adjacent sorted stable-pose
+indices, and `rest_arc` identifies the analytic arc. These attributes formerly
+belonged to wire-mesh edges. Uniformly scaling/translating the input does not
 change this sphere geometry. Gravity and Progress affect the selected transform
 and trajectory, not the attraction-basin boundaries.
 

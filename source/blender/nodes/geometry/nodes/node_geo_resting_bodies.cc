@@ -2,6 +2,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later */
 
 #include "BKE_attribute.hh"
+#include "BKE_curves.hh"
 #include "BKE_mesh.hh"
 #include "BKE_pointcloud.hh"
 #include "BLI_math_matrix.hh"
@@ -30,7 +31,7 @@ static void node_declare(NodeDeclarationBuilder &b)
   b.add_output<decl::Geometry>("Trajectory"_ustr)
       .description("Ordered Gauss sphere samples with rest_transform, rest_normal and rest_height attributes");
   b.add_output<decl::Geometry>("Separatrix"_ustr)
-      .description("Great-circle attraction-basin boundaries on the unit Gauss sphere; separate wire arcs with rest_pose_a and rest_pose_b edge attributes");
+      .description("Basin-boundary Bezier curves with two endpoints per arc and spherical tangent handles; rest_pose_a and rest_pose_b are curve attributes");
   b.add_output<decl::Geometry>("Stable Poses"_ustr)
       .description("Gauss sphere points with rest_transform (matrix), rest_probability, rest_normal and rest_height attributes; coplanar poses are merged");
 }
@@ -104,49 +105,49 @@ static GeometrySet pose_points(const std::vector<RRB_Pose> &poses)
 static GeometrySet separatrix_geometry(const std::vector<RRB_Separatrix> &arcs)
 {
   if (arcs.empty()) return {};
-  constexpr double max_angle_step = 0.02;
-  std::vector<int> subdivisions;
-  int vertices_num = 0, edges_num = 0;
-  for (const auto &arc : arcs) {
-    const double3 a(arc.start[0],arc.start[1],arc.start[2]);
-    const double3 b(arc.end[0],arc.end[1],arc.end[2]);
-    const double angle = std::acos(std::clamp(math::dot(a,b),-1.0,1.0));
-    const int count = std::max(1,int(std::ceil(angle/max_angle_step)));
-    subdivisions.push_back(count);
-    vertices_num += count+1; edges_num += count;
-  }
-  Mesh *mesh = BKE_mesh_new_nomain(vertices_num,edges_num,0,0);
-  MutableSpan<float3> positions = mesh->vert_positions_for_write();
-  MutableSpan<int2> edges = mesh->edges_for_write();
-  auto attrs = mesh->attributes_for_write();
+  Curves *curves_id = bke::curves_new_nomain(int(arcs.size())*2,int(arcs.size()));
+  bke::CurvesGeometry &curves = curves_id->geometry.wrap();
+  curves.fill_curve_types(CURVE_TYPE_BEZIER);
+  curves.resolution_for_write().fill(32);
+  curves.cyclic_for_write().fill(false);
+  curves.handle_types_left_for_write().fill(BEZIER_HANDLE_ALIGN);
+  curves.handle_types_right_for_write().fill(BEZIER_HANDLE_ALIGN);
+  MutableSpan<int> offsets = curves.offsets_for_write();
+  for (const int i : offsets.index_range()) offsets[i] = i*2;
+  MutableSpan<float3> positions = curves.positions_for_write();
+  MutableSpan<float3> handles_left = curves.handle_positions_left_for_write();
+  MutableSpan<float3> handles_right = curves.handle_positions_right_for_write();
+  auto attrs = curves.attributes_for_write();
   auto normals = attrs.lookup_or_add_for_write_span<float3>("rest_normal",bke::AttrDomain::Point);
-  auto pose_a = attrs.lookup_or_add_for_write_span<int>("rest_pose_a",bke::AttrDomain::Edge);
-  auto pose_b = attrs.lookup_or_add_for_write_span<int>("rest_pose_b",bke::AttrDomain::Edge);
-  auto arc_index = attrs.lookup_or_add_for_write_span<int>("rest_arc",bke::AttrDomain::Edge);
-  int vertex_offset = 0, edge_offset = 0;
+  auto pose_a = attrs.lookup_or_add_for_write_span<int>("rest_pose_a",bke::AttrDomain::Curve);
+  auto pose_b = attrs.lookup_or_add_for_write_span<int>("rest_pose_b",bke::AttrDomain::Curve);
+  auto arc_index = attrs.lookup_or_add_for_write_span<int>("rest_arc",bke::AttrDomain::Curve);
   for (int i = 0; i < int(arcs.size()); i++) {
     const auto &arc = arcs[i];
     const double3 a(arc.start[0],arc.start[1],arc.start[2]);
     const double3 b(arc.end[0],arc.end[1],arc.end[2]);
-    const double angle = std::acos(std::clamp(math::dot(a,b),-1.0,1.0));
-    const int count = subdivisions[i];
-    for (int j = 0; j <= count; j++) {
-      const double t = double(j)/count;
-      const double3 p = angle < 1e-8 ? math::normalize((1-t)*a+t*b) :
-          math::normalize((std::sin((1-t)*angle)*a+std::sin(t*angle)*b)/std::sin(angle));
-      positions[vertex_offset+j] = float3(p);
-      normals.span[vertex_offset+j] = float3(p);
-    }
-    for (int j = 0; j < count; j++) {
-      edges[edge_offset+j] = int2(vertex_offset+j,vertex_offset+j+1);
-      pose_a.span[edge_offset+j] = arc.pose_a;
-      pose_b.span[edge_offset+j] = arc.pose_b;
-      arc_index.span[edge_offset+j] = i;
-    }
-    vertex_offset += count+1; edge_offset += count;
+    const double3 cross = math::cross(a,b);
+    const double angle = std::atan2(math::length(cross),math::dot(a,b));
+    const double3 plane_normal = math::normalize(cross);
+    const double3 tangent_a = math::cross(plane_normal,a);
+    const double3 tangent_b = math::cross(plane_normal,b);
+    /* Cubic circular-arc approximation. Both derivatives lie in the great-circle
+     * plane and are orthogonal to the corresponding sphere radius. A single
+     * polynomial Bezier is an approximation between its exact sphere endpoints. */
+    const double handle_length = (4.0/3.0)*std::tan(angle/4.0);
+    const int start = 2*i, end = start+1;
+    positions[start] = normals.span[start] = float3(a);
+    positions[end] = normals.span[end] = float3(b);
+    handles_left[start] = float3(a-handle_length*tangent_a);
+    handles_right[start] = float3(a+handle_length*tangent_a);
+    handles_left[end] = float3(b-handle_length*tangent_b);
+    handles_right[end] = float3(b+handle_length*tangent_b);
+    pose_a.span[i] = arc.pose_a;
+    pose_b.span[i] = arc.pose_b;
+    arc_index.span[i] = i;
   }
   normals.finish();pose_a.finish();pose_b.finish();arc_index.finish();
-  return GeometrySet::from_mesh(mesh);
+  return GeometrySet::from_curves(curves_id);
 }
 
 struct CacheEntry {
@@ -233,7 +234,7 @@ static void node_register()
   static bke::bNodeType ntype;
   geo_node_type_base(&ntype,"GeometryNodeRestingBodies"_ustr,GEO_NODE_RESTING_BODIES);
   ntype.ui_name="Putting Rigid Bodies to Rest";
-  ntype.default_width=240;
+  ntype.default_width=200;
   ntype.ui_description="Putting Rigid Bodies to Rest (SIGGRAPH 2025): geometric rolling trajectories and analytical stable orientation probabilities under negligible momentum";
   ntype.enum_name_legacy="RESTING_BODIES";
   ntype.nclass=NODE_CLASS_GEOMETRY;
