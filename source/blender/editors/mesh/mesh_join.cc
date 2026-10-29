@@ -140,7 +140,7 @@ static void join_normals(const Span<const Object *> objects_to_join,
       break;
     }
     case bke::mesh::NormalJoinInfo::Output::CornerFan: {
-      bke::SpanAttributeWriter dst_attr = dst_attributes.lookup_or_add_for_write_only_span<short2>(
+      bke::SpanAttributeWriter dst_attr = dst_attributes.ensure_for_write_only_span<short2>(
           "custom_normal", bke::AttrDomain::Corner);
       for (const int i : objects_to_join.index_range()) {
         const Object &src_object = *objects_to_join[i];
@@ -162,7 +162,7 @@ static void join_normals(const Span<const Object *> objects_to_join,
       break;
     }
     case bke::mesh::NormalJoinInfo::Output::Free: {
-      bke::SpanAttributeWriter dst_attr = dst_attributes.lookup_or_add_for_write_only_span<float3>(
+      bke::SpanAttributeWriter dst_attr = dst_attributes.ensure_for_write_only_span<float3>(
           "custom_normal", *normal_info.result_domain);
       for (const int i : objects_to_join.index_range()) {
         const Object &src_object = *objects_to_join[i];
@@ -469,7 +469,7 @@ static VectorSet<Material *> join_materials(const Span<const Object *> objects_t
     return materials;
   }
 
-  bke::SpanAttributeWriter dst_attr = dst_attributes.lookup_or_add_for_write_only_span<int>(
+  bke::SpanAttributeWriter dst_attr = dst_attributes.ensure_for_write_only_span<int>(
       "material_index", bke::AttrDomain::Face);
   if (!dst_attr) {
     return {};
@@ -535,11 +535,8 @@ static void join_face_sets(const Span<const Object *> objects_to_join,
   }
 
   bke::MutableAttributeAccessor dst_attributes = dst_mesh.attributes_for_write();
-  bke::SpanAttributeWriter dst_face_sets = dst_attributes.lookup_or_add_for_write_span<int>(
+  bke::SpanAttributeWriter dst_face_sets = dst_attributes.ensure_for_write_span<int>(
       ".sculpt_face_set", bke::AttrDomain::Face);
-  if (!dst_face_sets) {
-    return;
-  }
 
   int max_face_set = 0;
   for (const int i : objects_to_join.index_range()) {

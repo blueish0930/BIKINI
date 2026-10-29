@@ -1362,6 +1362,9 @@ void LazyFunctionForReduceForeachGeometryElement::handle_main_items_and_geometry
       /* Actually create the attribute. */
       bke::GSpanAttributeWriter attribute = attributes.lookup_or_add_for_write_only_span(
           attribute_name, component_info.id.domain, cd_type);
+      if (!attribute) {
+        continue;
+      }
 
       /* Fill the elements of the attribute that we didn't iterate over because they were not
        * selected. */
@@ -1593,12 +1596,14 @@ void LazyFunctionForReduceForeachGeometryElement::handle_generation_items_group(
           src_attribute.get_to_uninitialized(element_i, element_value);
 
           /* Actually create the attribute. */
-          bke::GSpanAttributeWriter dst_attribute =
-              dst_attributes.lookup_or_add_for_write_only_span(
-                  name, *propagation_domain, data_type);
-          type.fill_assign_n(element_value, dst_attribute.span.data(), dst_attribute.span.size());
-          dst_attribute.finish();
-
+          if (bke::GSpanAttributeWriter dst_attribute =
+                  dst_attributes.lookup_or_add_for_write_only_span(
+                      name, *propagation_domain, data_type))
+          {
+            type.fill_assign_n(
+                element_value, dst_attribute.span.data(), dst_attribute.span.size());
+            dst_attribute.finish();
+          }
           type.destruct(element_value);
         }
       }
