@@ -65,8 +65,8 @@ std::string quadwild_package_dir_find()
 {
   auto ok = [](const char *dir) -> bool {
     char bridge[FILE_MAX], pkg[FILE_MAX];
-    BLI_path_join(bridge, sizeof(bridge), dir, "qremeshify_bridge.py");
-    BLI_path_join(pkg, sizeof(pkg), dir, "QRemeshify");
+    BLI_path_join(bridge, dir, "qremeshify_bridge.py");
+    BLI_path_join(pkg, dir, "QRemeshify");
     return path_is_file(bridge) && BLI_is_dir(pkg);
   };
 
@@ -77,7 +77,7 @@ std::string quadwild_package_dir_find()
   }
   if (const char *program_dir = BKE_appdir_program_dir()) {
     char candidate[FILE_MAX];
-    BLI_path_join(candidate, sizeof(candidate), program_dir, "quadwild");
+    BLI_path_join(candidate, program_dir, "quadwild");
     if (BLI_is_dir(candidate) && ok(candidate)) {
       return candidate;
     }
@@ -635,20 +635,20 @@ Mesh *mesh_quadwild(const Mesh &src_mesh,
     return fail("Cannot resolve blender.exe path");
   }
 #ifdef _WIN32
-  BLI_path_join(blender_exe, sizeof(blender_exe), program_dir, "blender.exe");
+  BLI_path_join(blender_exe, program_dir, "blender.exe");
 #else
-  BLI_path_join(blender_exe, sizeof(blender_exe), program_dir, "blender");
+  BLI_path_join(blender_exe, program_dir, "blender");
 #endif
   if (!path_is_file(blender_exe)) {
     return fail(std::string("blender executable not found: ") + blender_exe);
   }
 
   char bridge_py[FILE_MAX];
-  BLI_path_join(bridge_py, sizeof(bridge_py), package.c_str(), "qremeshify_bridge.py");
+  BLI_path_join(bridge_py, package.c_str(), "qremeshify_bridge.py");
 
   char temp_root[FILE_MAX];
-  BLI_temp_directory_path_get(temp_root, sizeof(temp_root));
-  BLI_path_slash_ensure(temp_root, sizeof(temp_root));
+  BLI_temp_directory_path_get(temp_root);
+  BLI_path_slash_ensure(temp_root);
   char work_dir[FILE_MAX];
   SNPRINTF(work_dir, "%sqw_bridge_%lld", temp_root, BLI_time_now_seconds_i());
   if (!BLI_dir_create_recursive(work_dir)) {
@@ -656,9 +656,9 @@ Mesh *mesh_quadwild(const Mesh &src_mesh,
   }
 
   char input_obj[FILE_MAX], output_obj[FILE_MAX], log_path[FILE_MAX];
-  BLI_path_join(input_obj, sizeof(input_obj), work_dir, "input.obj");
-  BLI_path_join(output_obj, sizeof(output_obj), work_dir, "output.obj");
-  BLI_path_join(log_path, sizeof(log_path), work_dir, "bridge_log.txt");
+  BLI_path_join(input_obj, work_dir, "input.obj");
+  BLI_path_join(output_obj, work_dir, "output.obj");
+  BLI_path_join(log_path, work_dir, "bridge_log.txt");
 
   if (!write_transfer_obj(input_obj, src_mesh)) {
     BLI_delete(work_dir, true, true);
@@ -668,7 +668,7 @@ Mesh *mesh_quadwild(const Mesh &src_mesh,
   char hard_edges_path[FILE_MAX];
   hard_edges_path[0] = '\0';
   if (!options.hard_edges.is_empty()) {
-    BLI_path_join(hard_edges_path, sizeof(hard_edges_path), work_dir, "input.hard_edges");
+    BLI_path_join(hard_edges_path, work_dir, "input.hard_edges");
     FILE *hf = BLI_fopen(hard_edges_path, "wb");
     if (hf) {
       fprintf(hf, "%d\n", int(options.hard_edges.size()));

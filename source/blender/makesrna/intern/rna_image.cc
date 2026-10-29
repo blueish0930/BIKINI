@@ -190,7 +190,7 @@ static std::optional<std::string> rna_ImagePaintLayer_path(const PointerRNA *ptr
 {
   const ImagePaintLayer *layer = static_cast<const ImagePaintLayer *>(ptr->data);
   char name_esc[64 * 2];
-  BLI_str_escape(name_esc, layer->name, sizeof(name_esc));
+  BLI_str_escape(name_esc, layer->name);
   return fmt::format("paint_layers[\"{}\"]", name_esc);
 }
 
@@ -207,8 +207,8 @@ static std::optional<std::string> rna_ImagePaintMask_path(const PointerRNA *ptr)
     }
     char layer_esc[64 * 2];
     char mask_esc[64 * 2];
-    BLI_str_escape(layer_esc, layer.name, sizeof(layer_esc));
-    BLI_str_escape(mask_esc, mask->name, sizeof(mask_esc));
+    BLI_str_escape(layer_esc, layer.name);
+    BLI_str_escape(mask_esc, mask->name);
     return fmt::format("paint_layers[\"{}\"].masks[\"{}\"]", layer_esc, mask_esc);
   }
   return std::nullopt;

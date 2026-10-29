@@ -220,11 +220,11 @@ static bool add_search_row(ExpressionCompleteData &data,
     return false;
   }
   const int index = data.insert_num++;
-  insert_text.copy_utf8_truncated(data.insert_texts[index], sizeof(data.insert_texts[index]));
+  insert_text.copy_utf8_truncated(data.insert_texts[index]);
   data.insert_parens[index] = insert_parens;
   data.is_header[index] = is_header;
   if (!result_text.is_empty()) {
-    result_text.copy_utf8_truncated(data.result_texts[index], sizeof(data.result_texts[index]));
+    result_text.copy_utf8_truncated(data.result_texts[index]);
   }
   else {
     data.result_texts[index][0] = '\0';

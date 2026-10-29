@@ -1253,7 +1253,7 @@ static uint64_t collect_animated_nodes(const bNodeTree &tree, Set<int32_t> &r_an
     }
     const char *rna_path = fcurve->rna_path_ptr;
     char node_name[256];
-    if (!BLI_str_quoted_substr(rna_path, "nodes[", node_name, sizeof(node_name))) {
+    if (!BLI_str_quoted_substr(rna_path, "nodes[", node_name)) {
       return;
     }
     const bNode *node = node_by_name.lookup_default(node_name, nullptr);

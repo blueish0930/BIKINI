@@ -880,7 +880,7 @@ static void sync_studio_world(Session &session, const SyncOptions &opt)
             BLENDER_DATAFILES, "studiolights/world"))
     {
       char path[FILE_MAX];
-      BLI_path_join(path, sizeof(path), dir->c_str(), opt.studio_light.c_str());
+      BLI_path_join(path, dir->c_str(), opt.studio_light.c_str());
       if (BLI_exists(path)) {
         session.add_infinite_map(
             "studio_infinite", path, math::max(opt.studiolight_intensity, 0.0f), opt.studiolight_rot_z);

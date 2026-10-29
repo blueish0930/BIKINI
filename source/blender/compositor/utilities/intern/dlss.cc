@@ -549,12 +549,12 @@ class CompositorDLSS {
     };
     add_dir(BKE_appdir_program_dir());
     char extra[1024];
-    BLI_path_join(extra, sizeof(extra), BKE_appdir_program_dir(), "dlss5");
+    BLI_path_join(extra, BKE_appdir_program_dir(), "dlss5");
     add_dir(extra);
     if (const std::optional<std::string> scripts = BKE_appdir_folder_id(BLENDER_SYSTEM_SCRIPTS,
                                                                         nullptr))
     {
-      BLI_path_join(extra, sizeof(extra), scripts->c_str(), "addons_core", "cycles");
+      BLI_path_join(extra, scripts->c_str(), "addons_core", "cycles");
       add_dir(extra);
     }
     search_path_ptrs_.clear();
@@ -611,9 +611,9 @@ class CompositorDLSS {
 
     this->collect_search_paths();
     char cache[1024] = {};
-    BKE_appdir_folder_caches(cache, sizeof(cache));
+    BKE_appdir_folder_caches(cache);
     char ngx_cache[1024];
-    BLI_path_join(ngx_cache, sizeof(ngx_cache), cache, "dlss");
+    BLI_path_join(ngx_cache, cache, "dlss");
     BLI_dir_create_recursive(ngx_cache);
     app_data_path_ = utf8_to_wstring(ngx_cache);
 

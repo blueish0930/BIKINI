@@ -364,7 +364,7 @@ static bool save_float_rgba_to_path(Context &context,
   }
 
   char dir[FILE_MAX];
-  BLI_path_split_dir_part(abs_path, dir, sizeof(dir));
+  BLI_path_split_dir_part(abs_path, dir);
   if (dir[0]) {
     BLI_dir_create_recursive(dir);
   }
@@ -380,7 +380,7 @@ static std::string join_dir_filename(const StringRef directory,
 {
   char dir[FILE_MAX];
   STRNCPY(dir, std::string(directory).c_str());
-  BLI_path_slash_ensure(dir, sizeof(dir));
+  BLI_path_slash_ensure(dir);
 
   std::string base(filename_no_ext);
   const size_t dot = base.find_last_of('.');
@@ -399,7 +399,7 @@ static std::string join_dir_filename(const StringRef directory,
   BLI_snprintf(filename, sizeof(filename), "%s%s", safe_base, format_extension(format));
 
   char out[FILE_MAX];
-  BLI_path_join(out, sizeof(out), dir, filename);
+  BLI_path_join(out, dir, filename);
   return out;
 }
 

@@ -2834,7 +2834,7 @@ static std::string node_original_label(const bNodeTree &ntree, const bNode &node
   const std::string type_name = IFACE_(node.typeinfo->ui_name);
   if (node.typeinfo->labelfunc) {
     char label_buffer[MAX_NAME];
-    node.typeinfo->labelfunc(&ntree, &node, label_buffer, MAX_NAME);
+    node.typeinfo->labelfunc(&ntree, &node, MutableCStr(label_buffer));
     if (label_buffer[0] != '\0' && !STREQ(label_buffer, type_name.c_str())) {
       return fmt::format("{} > {}", type_name, label_buffer);
     }

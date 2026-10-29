@@ -87,18 +87,17 @@ static int node_ui_class(const bNode *node)
 
 static void node_label(const bNodeTree * /*ntree*/,
                        const bNode *node,
-                       char *label,
-                       int label_maxncpy)
+                       MutableCStr label)
 {
   switch (node->custom1) {
     case NODE_SHADER_DERIVATIVE_DDY:
-      BLI_strncpy_utf8(label, IFACE_("DDY"), label_maxncpy);
+      STRNCPY_UTF8(label, IFACE_("DDY"));
       break;
     case NODE_SHADER_DERIVATIVE_FWIDTH:
-      BLI_strncpy_utf8(label, IFACE_("Filter Width"), label_maxncpy);
+      STRNCPY_UTF8(label, IFACE_("Filter Width"));
       break;
     default:
-      BLI_strncpy_utf8(label, IFACE_("DDX"), label_maxncpy);
+      STRNCPY_UTF8(label, IFACE_("DDX"));
       break;
   }
 }

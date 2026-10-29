@@ -534,7 +534,6 @@ static RenderEngineType LUX_engine_type = {
     /*update_script_node*/ nullptr,
     /*update_render_passes*/ &render::luxcore::luxcore_update_passes,
     /*update_custom_camera*/ nullptr,
-    /*draw_engine*/ nullptr,
     /*rna_ext*/
     {
         /*data*/ nullptr,

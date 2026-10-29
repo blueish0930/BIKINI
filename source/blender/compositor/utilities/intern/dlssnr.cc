@@ -155,7 +155,7 @@ static bool find_nr_runtime_dir(char r_dir[1024])
 {
   auto has_dll = [](const char *dir) -> bool {
     char path[1024];
-    BLI_path_join(path, sizeof(path), dir, "nvngx_dlssnr.dll");
+    BLI_path_join(path, dir, "nvngx_dlssnr.dll");
     return BLI_exists(path) && !BLI_is_dir(path);
   };
 
@@ -167,7 +167,7 @@ static bool find_nr_runtime_dir(char r_dir[1024])
 
   const char *prog = BKE_appdir_program_dir();
   char candidate[1024];
-  BLI_path_join(candidate, sizeof(candidate), prog, "dlss5");
+  BLI_path_join(candidate, prog, "dlss5");
   if (has_dll(candidate)) {
     BLI_strncpy(r_dir, candidate, 1024);
     return true;
@@ -176,7 +176,7 @@ static bool find_nr_runtime_dir(char r_dir[1024])
     BLI_strncpy(r_dir, prog, 1024);
     return true;
   }
-  BLI_path_join(candidate, sizeof(candidate), prog, "5.3", "scripts", "addons_core", "cycles");
+  BLI_path_join(candidate, prog, "5.3", "scripts", "addons_core", "cycles");
   if (has_dll(candidate)) {
     BLI_strncpy(r_dir, candidate, 1024);
     return true;
@@ -432,9 +432,9 @@ static std::wstring ngx_data_directory()
     return utf8_to_wstring(env);
   }
   char cache[1024] = {};
-  BKE_appdir_folder_caches(cache, sizeof(cache));
+  BKE_appdir_folder_caches(cache);
   char path[1024];
-  BLI_path_join(path, sizeof(path), cache, "dlss5");
+  BLI_path_join(path, cache, "dlss5");
   BLI_dir_create_recursive(path);
   return utf8_to_wstring(path);
 }

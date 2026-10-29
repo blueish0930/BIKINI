@@ -244,7 +244,7 @@ static int wrangle_call_help(const StringRef fn, char (*out)[192], const int max
     if (n >= max_num) {
       return;
     }
-    StringRef(s).copy_utf8_truncated(out[n], 192);
+    StringRef(s).copy_utf8_truncated(out[n]);
     n++;
   };
   if (fn == "delete_geometry" || fn == "deletegeometry" || fn == "deletegeo") {
@@ -620,7 +620,7 @@ static void wrangle_suggest_fn(const char *str,
         if (s.find('\x1f') == std::string::npos && s.size() + types.size() + 2 < 192) {
           s.push_back('\x1f');
           s += types;
-          StringRef(s).copy_utf8_truncated(out[0], 192);
+          StringRef(s).copy_utf8_truncated(out[0]);
         }
       }
       *r_num = help_n;
@@ -683,7 +683,7 @@ static void wrangle_suggest_fn(const char *str,
     if (dup) {
       continue;
     }
-    StringRef(packed).copy_utf8_truncated(out[n], 192);
+    StringRef(packed).copy_utf8_truncated(out[n]);
     n++;
     (void)ins;
   }

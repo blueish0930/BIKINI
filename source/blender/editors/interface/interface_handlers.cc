@@ -4374,9 +4374,9 @@ static bool textedit_apply_search_suggestion(bContext *C, Button *but, HandleBut
   const int buf_size = text_edit.max_string_size > 0 ? text_edit.max_string_size :
                        (button_string_get_maxncpy(but) > 0 ? button_string_get_maxncpy(but) : 1024);
   if (but->rnaprop && edit_buf && buf_size > 0) {
-    button_string_get(but, edit_buf, buf_size);
+    button_string_get(but, MutableCStr(edit_buf, buf_size));
     if (but->editstr && but->editstr != edit_buf) {
-      button_string_get(but, but->editstr, buf_size);
+      button_string_get(but, MutableCStr(but->editstr, buf_size));
     }
     but->pos = int(strlen(edit_buf));
     but->selsta = but->selend = but->pos;

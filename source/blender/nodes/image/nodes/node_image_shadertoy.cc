@@ -1366,10 +1366,9 @@ static void node_blend_read(bNodeTree & /*tree*/, bNode &node, BlendDataReader &
 
 static void node_label(const bNodeTree * /*ntree*/,
                        const bNode * /*node*/,
-                       char *label,
-                       int label_maxncpy)
+                       MutableCStr label)
 {
-  BLI_strncpy(label, IFACE_("ShaderToy"), label_maxncpy);
+  STRNCPY(label, IFACE_("ShaderToy"));
 }
 
 /** \} */
@@ -4500,7 +4499,6 @@ static gpu::Texture *site_cubemap_texture()
   }
   char prog[1024];
   BLI_path_join(prog,
-                sizeof(prog),
                 BKE_appdir_program_dir(),
                 "5.3",
                 "scripts",
@@ -4510,7 +4508,7 @@ static gpu::Texture *site_cubemap_texture()
 
   for (const std::string &dir : dirs) {
     char path[1024];
-    BLI_path_join(path, sizeof(path), dir.c_str(), "uffizi.stcube");
+    BLI_path_join(path, dir.c_str(), "uffizi.stcube");
     if (!BLI_exists(path)) {
       continue;
     }

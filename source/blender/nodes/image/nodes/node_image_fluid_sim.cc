@@ -3071,10 +3071,9 @@ static void node_init(bNodeTree * /*tree*/, bNode *node)
 
 static void node_label(const bNodeTree * /*ntree*/,
                        const bNode * /*node*/,
-                       char *label,
-                       const int label_maxncpy)
+                       MutableCStr label)
 {
-  BLI_strncpy_utf8(label, CTX_IFACE_(BLT_I18NCONTEXT_ID_NODETREE, "Fluid"), label_maxncpy);
+  STRNCPY_UTF8(label, CTX_IFACE_(BLT_I18NCONTEXT_ID_NODETREE, "Fluid"));
 }
 
 static void draw_fluid_props(ui::Layout &layout, PointerRNA *output_ptr)

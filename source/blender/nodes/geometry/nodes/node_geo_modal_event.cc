@@ -40,15 +40,14 @@ static void node_layout(ui::Layout &layout, bContext * /*C*/, PointerRNA *ptr)
 
 static void node_label(const bNodeTree * /*tree*/,
                        const bNode *node,
-                       char *label,
-                       const int label_maxncpy)
+                       MutableCStr label)
 {
   const auto &storage = *static_cast<const GeometryNodeModalEvent *>(node->storage);
   if (storage.name && storage.name[0] != '\0') {
-    BLI_strncpy_utf8(label, storage.name, label_maxncpy);
+    STRNCPY_UTF8(label, storage.name);
   }
   else {
-    BLI_strncpy_utf8(label, CTX_N_(BLT_I18NCONTEXT_ID_NODETREE, "Modal Event"), label_maxncpy);
+    STRNCPY_UTF8(label, CTX_N_(BLT_I18NCONTEXT_ID_NODETREE, "Modal Event"));
   }
 }
 

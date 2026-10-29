@@ -279,10 +279,9 @@ static void node_init(bNodeTree * /*node_tree*/, bNode *node)
 
 static void node_labelfunc(const bNodeTree * /*ntree*/,
                            const bNode * /*node*/,
-                           char *label,
-                           const int label_maxncpy)
+                           MutableCStr label)
 {
-  BLI_strncpy_utf8(label, IFACE_("Paint"), label_maxncpy);
+  STRNCPY_UTF8(label, IFACE_("Paint"));
 }
 
 static void node_layout(ui::Layout &layout, bContext * /*C*/, PointerRNA *ptr)

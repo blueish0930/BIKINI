@@ -894,7 +894,7 @@ void code_editor_draw_tools(Layout &layout,
                             CodeSearchState &search,
                             TextboxState &editor)
 {
-  char *buffer = RNA_string_get_alloc(&node_ptr, "code", nullptr, 0, nullptr);
+  char *buffer = RNA_string_get_alloc(&node_ptr, "code", std::nullopt, nullptr);
   search.update(buffer ? buffer : "");
   MEM_SAFE_DELETE(buffer);
   Layout &find_row = layout.row(true);
@@ -915,7 +915,7 @@ void code_editor_draw_tools(Layout &layout,
   find_row.label(fmt::format("{} / {}", search.current + 1, search.matches.size()), ICON_NONE);
   find_row.button(IFACE_("Format Code"), ICON_ALIGN_JUSTIFY,
                   [node_ptr, &search, &editor](bContext &C) mutable {
-    char *raw = RNA_string_get_alloc(&node_ptr, "code", nullptr, 0, nullptr);
+    char *raw = RNA_string_get_alloc(&node_ptr, "code", std::nullopt, nullptr);
     const std::string old_code = raw ? raw : "";
     MEM_SAFE_DELETE(raw);
     const std::string formatted = code_editor_format(old_code);
@@ -934,7 +934,7 @@ void code_editor_draw_tools(Layout &layout,
                              sizeof(search.replace) - 1, "Replacement text");
   button_placeholder_set(replace, IFACE_("Replace"));
   auto replace_matches = [node_ptr, &search](bContext &C, const bool all) mutable {
-    char *raw = RNA_string_get_alloc(&node_ptr, "code", nullptr, 0, nullptr);
+    char *raw = RNA_string_get_alloc(&node_ptr, "code", std::nullopt, nullptr);
     std::string text = raw ? raw : "";
     MEM_SAFE_DELETE(raw);
     search.update(text);

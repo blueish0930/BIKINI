@@ -320,7 +320,7 @@ static void wrangle_suggest_fn(const char *str,
     if (dup) {
       continue;
     }
-    StringRef(packed).copy_utf8_truncated(out[n], 192);
+    StringRef(packed).copy_utf8_truncated(out[n]);
     n++;
     (void)ins;
   }
