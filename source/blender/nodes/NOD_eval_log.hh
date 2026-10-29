@@ -64,6 +64,7 @@ struct Report;
 struct ImBuf;
 struct Object;
 struct wmWindowManager;
+struct bContext;
 
 namespace fn {
 class GField;
@@ -729,7 +730,7 @@ class NodesEvalLog {
   get_context_hash_by_zone_for_node_editor(const SpaceNode &snode,
                                            bke::ComputeContextCache &compute_context_cache);
 
-  static ContextualNodeTreeLogs get_contextual_tree_logs(const SpaceNode &snode);
+  static ContextualNodeTreeLogs get_contextual_tree_logs(const bContext &C);
   /** Evaluation log for the node editor's current geometry/compositor/image context. */
   static NodesEvalLog *from_space_node(const SpaceNode &snode);
   static const ViewerNodeLog *find_viewer_node_log_for_path(const ViewerPath &viewer_path);
