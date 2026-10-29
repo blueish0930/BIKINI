@@ -477,6 +477,7 @@ static void rna_GpencilColorData_stroke_image_set(PointerRNA *ptr,
   MaterialGPencilStyle *pcolor = static_cast<MaterialGPencilStyle *>(ptr->data);
   ID *id = static_cast<ID *>(value.data);
 
+  id_us_min(id_cast<ID *>(pcolor->sima));
   id_us_plus(id);
   pcolor->sima = id_cast<Image *>(id);
 }
@@ -488,6 +489,7 @@ static void rna_GpencilColorData_fill_image_set(PointerRNA *ptr,
   MaterialGPencilStyle *pcolor = static_cast<MaterialGPencilStyle *>(ptr->data);
   ID *id = static_cast<ID *>(value.data);
 
+  id_us_min(id_cast<ID *>(pcolor->ima));
   id_us_plus(id);
   pcolor->ima = id_cast<Image *>(id);
 }
