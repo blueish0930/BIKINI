@@ -300,7 +300,8 @@ string(APPEND PLATFORM_LINKFLAGS_DEBUG " /debug /IGNORE:4099 /NODEFAULTLIB:libcm
 
 # Ignore meaningless for us linker warnings.
 string(APPEND PLATFORM_LINKFLAGS " /ignore:4049 /ignore:4217 /ignore:4221")
-set(PLATFORM_LINKFLAGS_RELEASE "${PLATFORM_LINKFLAGS} ${PDB_INFO_OVERRIDE_LINKER_FLAGS}")
+# Preserve the /MD CRT exclusions when adding common and PDB link flags.
+string(APPEND PLATFORM_LINKFLAGS_RELEASE " ${PLATFORM_LINKFLAGS} ${PDB_INFO_OVERRIDE_LINKER_FLAGS}")
 string(APPEND CMAKE_STATIC_LINKER_FLAGS " /ignore:4221")
 
 if(CMAKE_CL_64)

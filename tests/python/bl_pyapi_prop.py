@@ -553,7 +553,7 @@ class TestPropCollectionAndPointer(unittest.TestCase):
         ma_users = ma.users
         id_inst.test_pointer_ID = ma
         self.assertEqual(id_inst.test_pointer_ID, ma)
-        self.assertEqual(win_man.users, ma_users + 1)
+        self.assertEqual(ma.users, ma_users + 1)
         id_inst.test_pointer_ID = None
         self.assertEqual(id_inst.test_pointer_ID, None)
         self.assertEqual(ma.users, ma_users)
