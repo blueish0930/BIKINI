@@ -130,10 +130,8 @@ static GeometrySet separatrix_geometry(const std::vector<RRB_Separatrix> &arcs)
   MutableSpan<float3> handles_left = curves.handle_positions_left_for_write();
   MutableSpan<float3> handles_right = curves.handle_positions_right_for_write();
   auto attrs = curves.attributes_for_write();
-  auto normals = attrs.lookup_or_add_for_write_span<float3>("rest_normal",bke::AttrDomain::Point);
   auto pose_a = attrs.lookup_or_add_for_write_span<int>("rest_pose_a",bke::AttrDomain::Curve);
   auto pose_b = attrs.lookup_or_add_for_write_span<int>("rest_pose_b",bke::AttrDomain::Curve);
-  auto arc_index = attrs.lookup_or_add_for_write_span<int>("rest_arc",bke::AttrDomain::Curve);
   for (int i = 0; i < int(arcs.size()); i++) {
     const auto &arc = arcs[i];
     const double3 a(arc.start[0],arc.start[1],arc.start[2]);
@@ -148,17 +146,16 @@ static GeometrySet separatrix_geometry(const std::vector<RRB_Separatrix> &arcs)
      * polynomial Bezier is an approximation between its exact sphere endpoints. */
     const double handle_length = (4.0/3.0)*std::tan(angle/4.0);
     const int start = 2*i, end = start+1;
-    positions[start] = normals.span[start] = float3(a);
-    positions[end] = normals.span[end] = float3(b);
+    positions[start] = float3(a);
+    positions[end] = float3(b);
     handles_left[start] = float3(a-handle_length*tangent_a);
     handles_right[start] = float3(a+handle_length*tangent_a);
     handles_left[end] = float3(b-handle_length*tangent_b);
     handles_right[end] = float3(b+handle_length*tangent_b);
     pose_a.span[i] = arc.pose_a;
     pose_b.span[i] = arc.pose_b;
-    arc_index.span[i] = i;
   }
-  normals.finish();pose_a.finish();pose_b.finish();arc_index.finish();
+  pose_a.finish();pose_b.finish();
   return GeometrySet::from_curves(curves_id);
 }
 

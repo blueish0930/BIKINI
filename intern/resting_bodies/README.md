@@ -58,14 +58,14 @@ All four handles are set explicitly. Curve evaluation resolution is 32; it does
 not add control points. There are no connections between unrelated arcs.
 An ordinary cubic Bezier approximates the interior of a circular arc; endpoints
 and tangent directions are exact up to floating-point output precision.
-Its point attribute `rest_normal` equals the endpoint direction. Curve-domain
-attributes `rest_pose_a` and `rest_pose_b` give the adjacent sorted stable-pose
-indices, and `rest_arc` identifies the analytic arc. These attributes formerly
-belonged to wire-mesh edges. Pose indices are zero-based indices into the
+Its only custom attributes are `rest_pose_a` and `rest_pose_b`, on the curve
+domain. They give the adjacent sorted stable-pose indices. These attributes
+formerly belonged to wire-mesh edges. Pose indices are zero-based indices into the
 `Stable Poses` output, whose points are ordered by decreasing probability;
-they are not persistent IDs when the shape changes. The endpoint `rest_normal`
-duplicates Position, and `rest_arc` currently duplicates the curve index.
-These are descriptive metadata, not inputs required to generate or render the
+they are not persistent IDs when the shape changes. Endpoint directions can be
+read from Position and arc indices from the curve Index; neither is stored as
+an extra named attribute. The two pose indices are descriptive metadata,
+not inputs required to generate or render the
 Bezier geometry. Uniformly scaling/translating the input does not
 change this sphere geometry. Gravity and Progress affect the selected transform
 and trajectory, not the attraction-basin boundaries.
