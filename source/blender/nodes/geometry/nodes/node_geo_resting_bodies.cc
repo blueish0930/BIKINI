@@ -29,7 +29,7 @@ static void node_declare(NodeDeclarationBuilder &b)
       .description("Progress along the contact trajectory, measured by accumulated rotation angle");
   b.add_output<decl::Matrix>("Transform"_ustr).description("Rigid transform applied to the input mesh");
   b.add_output<decl::Geometry>("Trajectory"_ustr)
-      .description("Ordered Gauss sphere samples with rest_transform, rest_normal and rest_height attributes");
+      .description("Noncyclic poly curve following the ordered rolling directions on the unit Gauss sphere");
   b.add_output<decl::Geometry>("Separatrix"_ustr)
       .description("Basin-boundary Bezier curves with two endpoints per arc and spherical tangent handles; rest_pose_a and rest_pose_b are curve attributes");
   b.add_output<decl::Geometry>("Stable Poses"_ustr)
@@ -100,6 +100,18 @@ static GeometrySet pose_points(const std::vector<RRB_Pose> &poses)
   }
   transforms.finish();probabilities.finish();normals.finish();heights.finish();
   return GeometrySet::from_pointcloud(cloud);
+}
+
+static GeometrySet trajectory_curve(const std::vector<RRB_Pose> &trajectory)
+{
+  if (trajectory.empty()) return {};
+  Curves *curves_id = bke::curves_new_nomain_single(int(trajectory.size()),CURVE_TYPE_POLY);
+  MutableSpan<float3> positions = curves_id->geometry.wrap().positions_for_write();
+  for (int i = 0; i < int(trajectory.size()); i++) {
+    const auto &normal = trajectory[i].normal;
+    positions[i] = float3(float(normal[0]),float(normal[1]),float(normal[2]));
+  }
+  return GeometrySet::from_curves(curves_id);
 }
 
 static GeometrySet separatrix_geometry(const std::vector<RRB_Separatrix> &arcs)
@@ -225,7 +237,7 @@ static void node_geo_exec(GeoNodeExecParams params)
   }
   const float4x4 transform=trace_required ? matrix_of(selected) : float4x4::identity();
   params.set_output("Stable Poses"_ustr,pose_points(poses));
-  params.set_output("Trajectory"_ustr,pose_points(trajectory));
+  params.set_output("Trajectory"_ustr,trajectory_curve(trajectory));
   params.set_output("Separatrix"_ustr,separatrix_geometry(separatrices));
   params.set_output("Transform"_ustr,transform);
 }

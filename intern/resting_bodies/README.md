@@ -34,12 +34,18 @@ remain unchanged so existing group links to the initial direction are retained.
 The default node width is 200.
 Use Transform Geometry to apply the matrix to the original mesh.
 
-`Stable Poses` and `Trajectory` are point clouds on the unit Gauss sphere.
-Their attributes are `rest_transform` (4x4 matrix), `rest_normal` (vector),
-`rest_height` (float), and `rest_probability` (float, stable poses only).
+`Stable Poses` is a point cloud on the unit Gauss sphere. Its attributes are
+`rest_transform` (4x4 matrix), `rest_normal` (vector), `rest_height` (float),
+and `rest_probability` (float).
 Normals point downward in the input object's coordinate system. Matrices
 transform original input coordinates to grounded output coordinates.
 `Progress` follows accumulated rotation angle, not physical time.
+
+`Trajectory` is one noncyclic Poly curve connecting the ordered rolling-direction
+samples on the unit Gauss sphere. It has no custom attributes: only position and
+the built-in curve representation are stored. It always describes the complete
+path; Progress selects the Transform along that path. An initially stable
+orientation produces a one-point curve, not an invented segment or closing edge.
 
 `Separatrix` exports the ascending manifolds of saddle contacts from the same
 boundary graph used for probability integration. Coplanar triangles belonging to
@@ -55,7 +61,12 @@ and tangent directions are exact up to floating-point output precision.
 Its point attribute `rest_normal` equals the endpoint direction. Curve-domain
 attributes `rest_pose_a` and `rest_pose_b` give the adjacent sorted stable-pose
 indices, and `rest_arc` identifies the analytic arc. These attributes formerly
-belonged to wire-mesh edges. Uniformly scaling/translating the input does not
+belonged to wire-mesh edges. Pose indices are zero-based indices into the
+`Stable Poses` output, whose points are ordered by decreasing probability;
+they are not persistent IDs when the shape changes. The endpoint `rest_normal`
+duplicates Position, and `rest_arc` currently duplicates the curve index.
+These are descriptive metadata, not inputs required to generate or render the
+Bezier geometry. Uniformly scaling/translating the input does not
 change this sphere geometry. Gravity and Progress affect the selected transform
 and trajectory, not the attraction-basin boundaries.
 
