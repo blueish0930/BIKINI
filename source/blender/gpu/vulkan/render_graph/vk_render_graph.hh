@@ -289,6 +289,7 @@ class VKRenderGraph : public NonCopyable {
   ADD_NODE(VKUpdateBufferNode)
   ADD_NODE(VKUpdateMipmapsNode)
   ADD_NODE(VKSynchronizationNode)
+  ADD_NODE(VKSynchronizeReadbackNode)
 #undef ADD_NODE
 
   /**
