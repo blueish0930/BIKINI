@@ -935,7 +935,7 @@ static void rna_Modifier_name_set(PointerRNA *ptr, const char *value)
                            RNA_path_name_to_infix(oldname),
                            RNA_path_name_to_infix(md->name),
                            /*verify_paths=*/true,
-                           *G_MAIN);
+                           *ob->id.owner_bmain_for_write());
   }
 }
 
@@ -2548,7 +2548,7 @@ static void rna_GreasePencilDashModifierSegment_name_set(PointerRNA *ptr, const 
                          RNA_path_name_to_infix(oldname),
                          RNA_path_name_to_infix(dash_segment->name),
                          /*verify_paths=*/true,
-                         *G_MAIN);
+                         *ptr->owner_id->owner_bmain_for_write());
 }
 
 static void rna_GreasePencilDashModifier_segments_begin(CollectionPropertyIterator *iter,
@@ -2657,7 +2657,7 @@ static void rna_GreasePencilTimeModifierSegment_name_set(PointerRNA *ptr, const 
                          RNA_path_name_to_infix(oldname),
                          RNA_path_name_to_infix(segment->name),
                          /*verify_paths=*/true,
-                         *G_MAIN);
+                         *ptr->owner_id->owner_bmain_for_write());
 }
 
 static void rna_GreasePencilTimeModifier_segments_begin(CollectionPropertyIterator *iter,
@@ -10229,6 +10229,7 @@ static void rna_def_modifier_grease_pencil_dash_segment(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Name", "Name of the dash segment");
   RNA_def_property_string_funcs(
       prop, nullptr, nullptr, "rna_GreasePencilDashModifierSegment_name_set");
+  RNA_def_property_editable_func(prop, "rna_ID_owner_editable_if_in_bmain");
   RNA_def_struct_name_property(srna, prop);
   RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER | NA_RENAME, nullptr);
 
@@ -10791,6 +10792,7 @@ static void rna_def_modifier_grease_pencil_time_segment(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Name", "Name of the dash segment");
   RNA_def_property_string_funcs(
       prop, nullptr, nullptr, "rna_GreasePencilTimeModifierSegment_name_set");
+  RNA_def_property_editable_func(prop, "rna_ID_owner_editable_if_in_bmain");
   RNA_def_struct_name_property(srna, prop);
   RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER | NA_RENAME, nullptr);
 
@@ -11560,6 +11562,7 @@ void RNA_def_modifier(BlenderRNA *brna)
   /* strings */
   prop = RNA_def_property(srna, "name", PROP_STRING, PROP_NONE);
   RNA_def_property_string_funcs(prop, nullptr, nullptr, "rna_Modifier_name_set");
+  RNA_def_property_editable_func(prop, "rna_ID_owner_editable_if_in_bmain");
   RNA_def_property_ui_text(prop, "Name", "Modifier name");
   RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER | NA_RENAME, "rna_Modifier_name_update");
   RNA_def_struct_name_property(srna, prop);

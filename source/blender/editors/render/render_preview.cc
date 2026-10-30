@@ -373,6 +373,7 @@ static World *preview_get_localized_world(ShaderPreview *sp, World *world)
                                    LIB_ID_COPY_NO_ANIMDATA);
   sp->worldcopy = id_cast<World *>(id_copy);
   BLI_addtail(&sp->pr_main->worlds, sp->worldcopy);
+  BKE_libblock_owner_bmain_set(sp->worldcopy->id, sp->pr_main);
   return sp->worldcopy;
 }
 
@@ -583,6 +584,7 @@ static Scene *preview_prepare_scene(
         mat = sp->matcopy = id_cast<Material *>(sp->id_copy);
         sp->id_copy = nullptr;
         BLI_addtail(&pr_main->materials, mat);
+        BKE_libblock_owner_bmain_set(mat->id, pr_main);
 
         /* Use current scene world for lighting. */
         if (mat->pr_flag == MA_PREVIEW_WORLD && sp->pr_method == PR_BUTS_RENDER) {
@@ -641,6 +643,7 @@ static Scene *preview_prepare_scene(
         tex = sp->texcopy = id_cast<Tex *>(sp->id_copy);
         sp->id_copy = nullptr;
         BLI_addtail(&pr_main->textures, tex);
+        BKE_libblock_owner_bmain_set(tex->id, pr_main);
       }
     }
     else if (id_type == ID_LA) {
@@ -652,6 +655,7 @@ static Scene *preview_prepare_scene(
         la = sp->lampcopy = id_cast<Light *>(sp->id_copy);
         sp->id_copy = nullptr;
         BLI_addtail(&pr_main->lights, la);
+        BKE_libblock_owner_bmain_set(la->id, pr_main);
       }
 
       ED_preview_set_visibility(pr_main, sce, view_layer, MA_LAMP, sp->pr_method);
@@ -680,6 +684,7 @@ static Scene *preview_prepare_scene(
         wrld = sp->worldcopy = id_cast<World *>(sp->id_copy);
         sp->id_copy = nullptr;
         BLI_addtail(&pr_main->worlds, wrld);
+        BKE_libblock_owner_bmain_set(wrld->id, pr_main);
       }
 
       ED_preview_set_visibility(pr_main, sce, view_layer, MA_SKY, sp->pr_method);
@@ -887,6 +892,7 @@ static Scene *object_preview_scene_create(const ObjectPreviewData *preview_data,
 
   BLI_assert(preview_data->object != nullptr);
   BLI_addtail(&preview_data->pr_main->objects, preview_data->object);
+  BKE_libblock_owner_bmain_set(preview_data->object->id, preview_data->pr_main);
 
   BKE_collection_object_add(preview_data->pr_main, scene->master_collection, preview_data->object);
 
@@ -1378,6 +1384,7 @@ static void shader_preview_free(void *customdata)
     if (pr_main) {
       BLI_remlink(&pr_main->materials, sp->matcopy);
     }
+    BKE_libblock_owner_bmain_set(*main_id_copy, nullptr);
   }
   if (sp->texcopy) {
     BLI_assert(main_id_copy == nullptr);
@@ -1385,6 +1392,7 @@ static void shader_preview_free(void *customdata)
     if (pr_main) {
       BLI_remlink(&pr_main->textures, sp->texcopy);
     }
+    BKE_libblock_owner_bmain_set(*main_id_copy, nullptr);
   }
   if (sp->worldcopy) {
     /* worldcopy is also created for material with `Preview World` enabled */
@@ -1397,6 +1405,7 @@ static void shader_preview_free(void *customdata)
     if (pr_main) {
       BLI_remlink(&pr_main->worlds, sp->worldcopy);
     }
+    BKE_libblock_owner_bmain_set(sp->worldcopy->id, nullptr);
   }
   if (sp->lampcopy) {
     BLI_assert(main_id_copy == nullptr);
@@ -1404,6 +1413,7 @@ static void shader_preview_free(void *customdata)
     if (pr_main) {
       BLI_remlink(&pr_main->lights, sp->lampcopy);
     }
+    BKE_libblock_owner_bmain_set(*main_id_copy, nullptr);
   }
   if (sp->world_simple) {
     BKE_id_free_ex(
