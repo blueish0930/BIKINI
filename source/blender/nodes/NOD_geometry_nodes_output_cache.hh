@@ -416,12 +416,14 @@ bool geometry_nodes_output_cache_site_enabled(const GeoNodesUserData &user_data,
  *
  * \param body_runs_for_side_effects: The caller evaluates the body afterwards for an inner
  * viewer. Usage outputs are then left to the body and inputs stay requestable.
+ * \param force_miss: Cook once to record recursive call inputs missing from an older log.
  */
 OutputCacheLookup geometry_nodes_output_cache_restore(const fn::lazy_function::Context &context,
                                                       fn::lazy_function::Params &params,
                                                       const OutputCacheSite &site,
                                                       OutputCacheSession &session,
-                                                      bool body_runs_for_side_effects = false);
+                                                      bool body_runs_for_side_effects = false,
+                                                      bool force_miss = false);
 
 /**
  * Add the outputs captured in this pass and store the entry once every used output is there.

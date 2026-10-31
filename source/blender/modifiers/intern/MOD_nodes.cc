@@ -7,6 +7,7 @@
  */
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstring>
 #include <fmt/format.h>
 #include <limits>
@@ -449,6 +450,18 @@ const NodesModifierBake *NodesModifierData::find_bake(const int id) const
   return nullptr;
 }
 
+static const nodes::GeometryNodesLazyFunctionGraphInfo *side_effect_graph_info(
+    const bNodeTree &tree)
+{
+  /* A self-referencing group points to the localized tree that is already being executed.
+   * Building another graph for that copy produces different FunctionNode pointers, so the
+   * executor cannot recognize its Viewer side effects. */
+  if (tree.runtime->self_geometry_nodes_lazy_function_graph_info) {
+    return tree.runtime->self_geometry_nodes_lazy_function_graph_info;
+  }
+  return nodes::ensure_geometry_nodes_lazy_function_graph(tree).get();
+}
+
 /**
  * Setup side effects nodes so that the given node in the given compute context will be executed.
  * To make sure that it is executed, all parent group nodes and zones have to be set to have side
@@ -492,10 +505,15 @@ static void try_add_side_effect_node(const ModifierEvalContext &ctx,
     if (current_zones == nullptr) {
       return;
     }
-    const nodes::GeometryNodesLazyFunctionGraphInfo *lf_graph_info =
-        nodes::ensure_geometry_nodes_lazy_function_graph(*current_tree).get();
+    const nodes::GeometryNodesLazyFunctionGraphInfo *lf_graph_info = side_effect_graph_info(
+        *current_tree);
     if (lf_graph_info == nullptr) {
       return;
+    }
+    current_tree = lf_graph_info->tree.get();
+    current_zones = current_tree->zones();
+    if (current_zone) {
+      current_zone = current_zones->get_zone_by_node(*current_zone->output_node_id);
     }
     const ComputeContextHash &parent_compute_context_hash =
         compute_context_generic->parent()->hash();
@@ -650,8 +668,8 @@ static void try_add_side_effect_node(const ModifierEvalContext &ctx,
   if (final_node == nullptr) {
     return;
   }
-  const nodes::GeometryNodesLazyFunctionGraphInfo *lf_graph_info =
-      nodes::ensure_geometry_nodes_lazy_function_graph(*current_tree).get();
+  const nodes::GeometryNodesLazyFunctionGraphInfo *lf_graph_info = side_effect_graph_info(
+      *current_tree);
   if (lf_graph_info == nullptr) {
     return;
   }
@@ -2404,6 +2422,7 @@ static void modifyGeometry(ModifierData *md,
     modifier_eval_data.viewport_camera = &viewport_camera;
   }
   auto eval_log = std::make_unique<nodes::eval_log::NodesEvalLog>();
+  eval_log->previous_cache_log = nmd_orig->runtime->eval_log;
   call_data.modifier_data = &modifier_eval_data;
 
   time_shift::ModifierParams time_shift_params{*nmd, *ctx};
@@ -2462,6 +2481,8 @@ static void modifyGeometry(ModifierData *md,
    * with its own snapshot. */
   const std::shared_ptr<const nodes::GeometryNodesOutputCacheEvalState> output_cache_eval =
       nmd->runtime->output_cache->prepare_for_eval(output_cache_params);
+  eval_log->output_cache = nmd->runtime->output_cache;
+  eval_log->output_cache_eval = output_cache_eval;
   if (output_cache_eval && nodes::GeometryNodesOutputCache::has_cached_nodes(*output_cache_eval)) {
     call_data.output_cache = nmd->runtime->output_cache.get();
     call_data.output_cache_eval = output_cache_eval.get();
@@ -2560,6 +2581,10 @@ static void modifyGeometry(ModifierData *md,
       eval_log->inherit_missing_execution_times(*nmd_orig->runtime->eval_log);
     }
     nmd_orig->runtime->eval_log = std::move(eval_log);
+  }
+  else if (keep_log && nmd_orig->runtime->eval_log) {
+    nmd_orig->runtime->eval_log->output_cache = nmd->runtime->output_cache;
+    nmd_orig->runtime->eval_log->output_cache_eval = output_cache_eval;
   }
 
   if (DEG_is_active(ctx->depsgraph) && !(ctx->flag & MOD_APPLY_TO_ORIGINAL)) {
@@ -2679,6 +2704,14 @@ bool MOD_nodes_evaluate_recursive_call(Depsgraph &depsgraph,
   /* Log everything, only the inspected call and what is nested in it is evaluated. */
   call_data.eval_log = eval_log.get();
   call_data.recorded_recursive_calls = recorded_log;
+  /* Inspection uses the same cache and caller state as the full evaluation, rather than
+   * recooking the selected invocation with caching disabled or with root input tokens. */
+  const std::shared_ptr<nodes::GeometryNodesOutputCache> output_cache =
+      recorded_log->output_cache.lock();
+  if (output_cache && output_cache == nmd.runtime->output_cache && recorded_log->output_cache_eval) {
+    call_data.output_cache = output_cache.get();
+    call_data.output_cache_eval = recorded_log->output_cache_eval.get();
+  }
   nodes::GeoNodesSideEffectNodes side_effect_nodes;
   Set<ComputeContextHash> unused_verbose_log_contexts;
   find_side_effect_nodes(*nmd_eval, ctx, side_effect_nodes, unused_verbose_log_contexts);
@@ -2687,6 +2720,7 @@ bool MOD_nodes_evaluate_recursive_call(Depsgraph &depsgraph,
   nodes::GeoNodesUserData user_data;
   user_data.call_data = &call_data;
   user_data.compute_context = &call_context;
+  user_data.output_cache_caller_token = call->output_cache_caller_token;
   nodes::GeoNodesLocalUserData local_user_data(user_data);
   lf::Context lf_context(lazy_function.init_storage(allocator), &user_data, &local_user_data);
   lf::BasicParams lf_params{lazy_function,
@@ -2706,6 +2740,15 @@ bool MOD_nodes_evaluate_recursive_call(Depsgraph &depsgraph,
     }
   }
 
+  if (std::getenv("BLENDER_GN_CACHE_DEBUG")) {
+    nodes::eval_log::NodeTreeLog &tree_log = eval_log->get_tree_log(call_context.hash());
+    tree_log.ensure_viewer_node_logs();
+    fprintf(stderr,
+            "GN_RECURSION inspect cache=%d viewers=%lld\n",
+            call_data.output_cache != nullptr,
+            static_cast<long long>(tree_log.viewer_node_logs.size()));
+    fflush(stderr);
+  }
   recorded_log->set_inspection_overlay(std::move(eval_log), call_context.hash());
   return true;
 }

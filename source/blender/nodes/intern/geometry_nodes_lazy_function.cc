@@ -33,6 +33,7 @@
 #include "NOD_shader_nodes_multi_function.hh"
 #include "NOD_socket_declarations.hh"
 
+#include <cstdlib>
 #include <optional>
 
 #include "BKE_colortools.hh"
@@ -1344,6 +1345,20 @@ class LazyFunctionForViewerNode : public LazyFunction {
 
     auto log = allocator.construct<eval_log::ViewerNodeLog>();
     geo_viewer_node_log(bnode_, values, *log);
+    static const bool debug_viewer = std::getenv("BLENDER_GN_VIEWER_DEBUG") != nullptr;
+    if (debug_viewer) {
+      if (const GeometrySet *geometry = log->main_geometry()) {
+        if (const Mesh *mesh = geometry->get_mesh()) {
+          const Span<float3> positions = mesh->vert_positions();
+          const float3 first = positions.is_empty() ? float3(0) : positions.first();
+          const ComputeContextHash &hash = user_data.compute_context->hash();
+          fprintf(stderr, "GN_VIEWER node=\"%s\" hash=%llu:%llu points=%d first=%.9g,%.9g,%.9g\n",
+                  bnode_.name, (unsigned long long)hash.v1, (unsigned long long)hash.v2,
+                  int(positions.size()), double(first.x), double(first.y), double(first.z));
+          fflush(stderr);
+        }
+      }
+    }
     tree_logger->viewer_node_logs.append(allocator, {bnode_.identifier, std::move(log)});
   }
 };
@@ -1706,7 +1721,61 @@ struct GeometryNodesLazyFunctionBuildScope {
     for (int i = 0; i < pushed; i++) {
       stack.pop_last();
     }
+    if (stack.is_empty()) {
+      /* Release TLS scratch memory before Blender's shutdown allocation check. */
+      stack.clear_and_shrink();
+    }
   }
+};
+
+/** Capture recursive inputs before the called graph can move them into its outputs. */
+class RecursiveInputCaptureParams : public lf::Params {
+  lf::Params &base_;
+  IndexRange main_inputs_;
+  MutableSpan<std::optional<SocketValueVariant>> captured_;
+
+  void capture_input(const int index, const void *value) const
+  {
+    if (value && main_inputs_.contains(index) && !captured_[index - main_inputs_.start()]) {
+      auto &copy = captured_[index - main_inputs_.start()];
+      copy = *static_cast<const SocketValueVariant *>(value);
+      copy->ensure_owns_direct_data();
+    }
+  }
+
+ public:
+  RecursiveInputCaptureParams(const lf::LazyFunction &fn,
+                              lf::Params &base,
+                              const IndexRange main_inputs,
+                              MutableSpan<std::optional<SocketValueVariant>> captured)
+      : Params(fn, true), base_(base), main_inputs_(main_inputs), captured_(captured)
+  {
+  }
+
+  void *try_get_input_data_ptr_impl(const int index) const override
+  {
+    void *value = base_.try_get_input_data_ptr(index);
+    this->capture_input(index, value);
+    return value;
+  }
+  void *try_get_input_data_ptr_or_request_impl(const int index) override
+  {
+    void *value = base_.try_get_input_data_ptr_or_request(index);
+    this->capture_input(index, value);
+    return value;
+  }
+  void *get_output_data_ptr_impl(const int index) override
+  {
+    return base_.get_output_data_ptr(index);
+  }
+  void output_set_impl(const int index) override { base_.output_set(index); }
+  bool output_was_set_impl(const int index) const override { return base_.output_was_set(index); }
+  lf::ValueUsage get_output_usage_impl(const int index) const override
+  {
+    return base_.get_output_usage(index);
+  }
+  void set_input_unused_impl(const int index) override { base_.set_input_unused(index); }
+  bool try_enable_multi_threading_impl() override { return base_.try_enable_multi_threading(); }
 };
 
 /**
@@ -1731,6 +1800,8 @@ class LazyFunctionForRecursiveGroupNode : public LazyFunction {
     LinearAllocator<> allocator;
     void *group_storage = nullptr;
     const GeometryNodesGroupFunction *group_fn = nullptr;
+    OutputCacheSession cache_session;
+    int64_t accumulated_cook_ns = 0;
   };
 
   class CallParams : public lf::Params {
@@ -1974,6 +2045,47 @@ class LazyFunctionForRecursiveGroupNode : public LazyFunction {
     lazy_threading::send_hint();
 
     Storage *storage = static_cast<Storage *>(context.storage);
+    const OutputCacheSite cache_site{&group_node_.owner_tree(), &group_node_};
+    bke::GroupNodeComputeContext compute_context{
+        user_data->compute_context, group_node_.identifier, &group_node_.owner_tree()};
+    const bool has_inner_side_effects = user_data->call_data->side_effect_nodes &&
+        !user_data->call_data->side_effect_nodes->nodes_by_context.lookup(compute_context.hash())
+             .is_empty();
+    eval_log::NodesEvalLog *record_log = user_data->call_data->record_recursive_calls ?
+                                             user_data->call_data->eval_log : nullptr;
+    const std::shared_ptr<eval_log::NodesEvalLog> previous_log = record_log ?
+        record_log->previous_cache_log.lock() : nullptr;
+    OutputCacheSession &cache_session = storage->cache_session;
+    if (const std::optional<FoundNestedNodeID> nested = find_nested_node_id(*user_data,
+                                                                         group_node_.identifier))
+    {
+      if (nested->is_in_loop || nested->is_in_simulation) {
+        cache_session.status = OutputCacheSession::Status::Disabled;
+      }
+    }
+    /* A cache predating recursion inspection has no recorded call inputs. Cook it once to
+     * record those; cached nodes in the body still reuse their outputs. */
+    const bool record_missing_call = record_log &&
+        (!previous_log || !previous_log->find_recursive_call(compute_context.hash()));
+    bool body_only_for_side_effects = false;
+    switch (geometry_nodes_output_cache_restore(
+        context, params, cache_site, cache_session, has_inner_side_effects, record_missing_call))
+    {
+      case OutputCacheLookup::Pending:
+        return;
+      case OutputCacheLookup::Hit:
+        if (record_log && previous_log) {
+          record_log->inherit_cached_recursive_calls(*previous_log, compute_context.hash());
+        }
+        if (!has_inner_side_effects) {
+          return;
+        }
+        body_only_for_side_effects = true;
+        break;
+      case OutputCacheLookup::Miss:
+      case OutputCacheLookup::Disabled:
+        break;
+    }
     if (storage->group_fn == nullptr) {
       if (info->function.inputs.main.size() != main_inputs_num_ ||
           info->function.outputs.main.size() != main_outputs_num_ ||
@@ -2014,10 +2126,10 @@ class LazyFunctionForRecursiveGroupNode : public LazyFunction {
     const ScopedNodeTimer node_timer{context, group_node_};
     /* The group node belongs to the localized caller tree. Keep that tree in the compute
      * context so the node identifier resolves correctly when inspecting a call. */
-    bke::GroupNodeComputeContext compute_context{
-        user_data->compute_context, group_node_.identifier, &group_node_.owner_tree()};
     if (eval_log::NodesEvalLog *recorded_log = user_data->call_data->recorded_recursive_calls) {
-      if (this->try_restore_recorded_call(params, *recorded_log, compute_context.hash())) {
+      if (!has_inner_side_effects &&
+          this->try_restore_recorded_call(params, *recorded_log, compute_context.hash()))
+      {
         return;
       }
     }
@@ -2025,6 +2137,8 @@ class LazyFunctionForRecursiveGroupNode : public LazyFunction {
     group_user_data.compute_context = &compute_context;
     group_user_data.verbose_log = should_log_verbose_in_context(*user_data,
                                                                 compute_context.hash());
+    group_user_data.output_cache_caller_token = geometry_nodes_output_cache_child_token(
+        *user_data, {&group_node_.owner_tree(), &group_node_});
     GeoNodesLocalUserData group_local_user_data{group_user_data};
     /* The Recursion Tree reads child compute contexts from the evaluation log. Record every
      * executed call even when socket-value logging is disabled for deeper group instances. */
@@ -2034,27 +2148,40 @@ class LazyFunctionForRecursiveGroupNode : public LazyFunction {
     lf::Context group_context{
         storage->group_storage, &group_user_data, &group_local_user_data};
 
-    eval_log::NodesEvalLog *record_log = user_data->call_data->record_recursive_calls ?
-                                             user_data->call_data->eval_log :
-                                             nullptr;
+    if (body_only_for_side_effects) {
+      GeometryNodesOutputCacheSideEffectParams side_effect_params{*this, params};
+      CallParams call_params{*group_fn.function, side_effect_params, input_to_outer, output_to_outer};
+      ScopedComputeContextTimer timer(group_context);
+      group_fn.function->execute(call_params, group_context);
+      return;
+    }
     Array<std::optional<SocketValueVariant>> recorded_outputs(record_log ? main_outputs_num_ :
                                                                            0);
+    Array<std::optional<SocketValueVariant>> recorded_inputs(record_log ? main_inputs_num_ : 0);
+    RecursiveInputCaptureParams input_capture{
+        *this, params, record_log ? IndexRange(main_inputs_num_) : IndexRange(), recorded_inputs};
+    GeometryNodesOutputCaptureParams capture{*this, record_log ? input_capture : params};
     CallParams call_params{
-        *group_fn.function, params, input_to_outer, output_to_outer, recorded_outputs};
+        *group_fn.function, capture, input_to_outer, output_to_outer, recorded_outputs};
     {
       ScopedComputeContextTimer timer(group_context);
       group_fn.function->execute(call_params, group_context);
     }
-    (void)node_timer.elapsed_ns();
+    storage->accumulated_cook_ns += node_timer.elapsed_ns();
 
     if (record_log != nullptr) {
-      Array<const SocketValueVariant *> recorded_inputs(main_inputs_num_);
+      Array<const SocketValueVariant *> input_pointers(main_inputs_num_);
       for (const int i : IndexRange(main_inputs_num_)) {
-        recorded_inputs[i] = static_cast<const SocketValueVariant *>(
-            params.try_get_input_data_ptr(i));
+        input_pointers[i] = recorded_inputs[i] ? &*recorded_inputs[i] : nullptr;
       }
-      record_log->record_recursive_call(compute_context.hash(), recorded_inputs, recorded_outputs);
+      record_log->record_recursive_call(compute_context.hash(),
+                                       input_pointers,
+                                       recorded_outputs,
+                                       group_user_data.output_cache_caller_token);
     }
+    int64_t frozen_ns = storage->accumulated_cook_ns;
+    geometry_nodes_output_cache_store(
+        context, params, cache_site, cache_session, std::move(capture.captured()), frozen_ns);
   }
 
   std::string name() const override
@@ -2165,19 +2292,31 @@ class LazyFunctionForGroupNode : public LazyFunction {
     }();
     Storage *storage = static_cast<Storage *>(context.storage);
     const OutputCacheSite cache_site{&group_node_.owner_tree(), &group_node_};
+    bke::GroupNodeComputeContext compute_context{
+        user_data->compute_context, group_node_.identifier, &group_node_.owner_tree()};
+    eval_log::NodesEvalLog *recursive_log =
+        recursive_tree_ && user_data->call_data->record_recursive_calls ?
+            user_data->call_data->eval_log : nullptr;
+    const std::shared_ptr<eval_log::NodesEvalLog> previous_log = recursive_log ?
+        recursive_log->previous_cache_log.lock() : nullptr;
     OutputCacheSession &cache_session = storage->cache_session;
     if (recursion_limit_reached || skip_output_cache) {
       cache_session.status = OutputCacheSession::Status::Disabled;
     }
+    const bool record_missing_call = recursive_log &&
+        (!previous_log || !previous_log->find_recursive_call(compute_context.hash()));
     /* An inner viewer needs the group body, but only what the viewer pulls: the group's own
      * outputs still come from the cache. */
     bool body_only_for_side_effects = false;
     switch (geometry_nodes_output_cache_restore(
-        context, params, cache_site, cache_session, group_has_inner_side_effects))
+        context, params, cache_site, cache_session, group_has_inner_side_effects, record_missing_call))
     {
       case OutputCacheLookup::Pending:
         return;
       case OutputCacheLookup::Hit:
+        if (recursive_log && previous_log) {
+          recursive_log->inherit_cached_recursive_calls(*previous_log, compute_context.hash());
+        }
         if (!group_has_inner_side_effects) {
           return;
         }
@@ -2215,10 +2354,6 @@ class LazyFunctionForGroupNode : public LazyFunction {
       lazy_threading::send_hint();
     }
 
-    /* The compute context changes when entering a node group. */
-    bke::GroupNodeComputeContext compute_context{
-        user_data->compute_context, group_node_.identifier, &group_node_.owner_tree()};
-
     GeoNodesUserData group_user_data = *user_data;
     group_user_data.compute_context = &compute_context;
     group_user_data.verbose_log = should_log_verbose_in_context(*user_data,
@@ -2235,7 +2370,14 @@ class LazyFunctionForGroupNode : public LazyFunction {
       group_lazy_function_.function->execute(side_effect_params, group_context);
       return;
     }
-    GeometryNodesOutputCaptureParams capture{*this, params};
+    Array<std::optional<SocketValueVariant>> recorded_inputs(
+        recursive_log ? group_lazy_function_.inputs.main.size() : 0);
+    RecursiveInputCaptureParams input_capture{*this,
+                                              params,
+                                              recursive_log ? group_lazy_function_.inputs.main :
+                                                              IndexRange(),
+                                              recorded_inputs};
+    GeometryNodesOutputCaptureParams capture{*this, recursive_log ? input_capture : params};
     group_lazy_function_.function->execute(capture, group_context);
 
     storage->accumulated_cook_ns += node_timer.elapsed_ns();
@@ -2248,10 +2390,9 @@ class LazyFunctionForGroupNode : public LazyFunction {
     {
       const IndexRange main_inputs = group_lazy_function_.inputs.main;
       const IndexRange main_outputs = group_lazy_function_.outputs.main;
-      Array<const SocketValueVariant *> recorded_inputs(main_inputs.size());
+      Array<const SocketValueVariant *> input_pointers(main_inputs.size());
       for (const int i : main_inputs.index_range()) {
-        recorded_inputs[i] = static_cast<const SocketValueVariant *>(
-            params.try_get_input_data_ptr(main_inputs[i]));
+        input_pointers[i] = recorded_inputs[i] ? &*recorded_inputs[i] : nullptr;
       }
       Array<std::optional<SocketValueVariant>> recorded_outputs(main_outputs.size());
       for (const GeometryNodesOutputCache::CachedSocket &socket : capture.captured()) {
@@ -2260,7 +2401,10 @@ class LazyFunctionForGroupNode : public LazyFunction {
         }
       }
       user_data->call_data->eval_log->record_recursive_call(
-          compute_context.hash(), recorded_inputs, recorded_outputs);
+          compute_context.hash(),
+          input_pointers,
+          recorded_outputs,
+          group_user_data.output_cache_caller_token);
     }
 
     int64_t frozen_ns = cook_ns;

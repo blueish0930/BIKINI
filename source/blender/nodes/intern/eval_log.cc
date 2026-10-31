@@ -1188,7 +1188,8 @@ NodeTreeLog &NodesEvalLog::get_tree_log(const ComputeContextHash &compute_contex
 void NodesEvalLog::record_recursive_call(
     const ComputeContextHash &call_hash,
     const Span<const bke::SocketValueVariant *> inputs,
-    const Span<std::optional<bke::SocketValueVariant>> outputs)
+    const Span<std::optional<bke::SocketValueVariant>> outputs,
+    const uint64_t output_cache_caller_token)
 {
   /* Every recorded value keeps its data alive, so very large recursions are not recorded. */
   constexpr int64_t max_recorded_calls = 4096;
@@ -1197,6 +1198,7 @@ void NodesEvalLog::record_recursive_call(
     return;
   }
   RecursiveCall &call = recursive_calls_.lookup_or_add_default(call_hash);
+  call.output_cache_caller_token = output_cache_caller_token;
   call.inputs.resize(std::max(call.inputs.size(), inputs.size()));
   call.outputs.resize(std::max(call.outputs.size(), outputs.size()));
   for (const int i : inputs.index_range()) {
@@ -1221,6 +1223,26 @@ const NodesEvalLog::RecursiveCall *NodesEvalLog::find_recursive_call(
     }
   }
   return base_log_ ? base_log_->find_recursive_call(call_hash) : nullptr;
+}
+
+void NodesEvalLog::inherit_cached_recursive_calls(NodesEvalLog &previous,
+                                                 const ComputeContextHash &root_hash)
+{
+  Set<ComputeContextHash> contexts;
+  contexts.add(root_hash);
+  for (NodesEvalLog *log = &previous; log; log = log->base_log_.get()) {
+    for (const ComputeContextHash &hash : log->logged_contexts_in(root_hash)) {
+      contexts.add(hash);
+    }
+  }
+  for (const ComputeContextHash &hash : contexts) {
+    if (const RecursiveCall *call = previous.find_recursive_call(hash)) {
+      std::lock_guard lock{recursive_calls_mutex_};
+      if (recursive_calls_.size() < 4096 || recursive_calls_.contains(hash)) {
+        recursive_calls_.add_overwrite(hash, *call);
+      }
+    }
+  }
 }
 
 void NodesEvalLog::set_base_log(std::shared_ptr<NodesEvalLog> previous)

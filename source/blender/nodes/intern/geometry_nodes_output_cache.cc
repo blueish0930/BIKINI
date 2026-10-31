@@ -2382,7 +2382,8 @@ OutputCacheLookup geometry_nodes_output_cache_restore(const lf::Context &context
                                                       lf::Params &params,
                                                       const OutputCacheSite &site,
                                                       OutputCacheSession &session,
-                                                      const bool body_runs_for_side_effects)
+                                                      const bool body_runs_for_side_effects,
+                                                      const bool force_miss)
 {
   using Status = OutputCacheSession::Status;
   const GeoNodesUserData &user_data = *static_cast<const GeoNodesUserData *>(context.user_data);
@@ -2409,6 +2410,13 @@ OutputCacheLookup geometry_nodes_output_cache_restore(const lf::Context &context
     session.key.node_id = site.node->identifier;
     session.key.context_hash = user_data.compute_context->hash();
     session.state = site_state_token(*state, user_data, site);
+    if (force_miss) {
+      /* Keep a complete key and requirements when recording previously uninspected calls.
+       * Merely setting Status::Miss in the caller would store under an uninitialized key. */
+      debug_print("miss ", *site.node, "(record recursive inputs)");
+      session.status = Status::Miss;
+      return OutputCacheLookup::Miss;
+    }
   }
 
   int64_t exec_time_ns = 0;

@@ -69,6 +69,11 @@ namespace fn {
 class GField;
 }
 
+namespace nodes {
+class GeometryNodesOutputCache;
+struct GeometryNodesOutputCacheEvalState;
+}
+
 namespace nodes::eval_log {
 
 using fn::GField;
@@ -649,7 +654,14 @@ class NodesEvalLog {
   struct RecursiveCall {
     Vector<std::optional<bke::SocketValueVariant>> inputs;
     Vector<std::optional<bke::SocketValueVariant>> outputs;
+    uint64_t output_cache_caller_token = 0;
   };
+
+  /** The full evaluation's cache snapshot, also used when inspecting one recorded call. */
+  std::weak_ptr<GeometryNodesOutputCache> output_cache;
+  std::shared_ptr<const GeometryNodesOutputCacheEvalState> output_cache_eval;
+  /** Source of recorded recursive calls when a group output is restored from cache. */
+  std::weak_ptr<NodesEvalLog> previous_cache_log;
 
  private:
   Mutex recursive_calls_mutex_;
@@ -674,9 +686,12 @@ class NodesEvalLog {
    */
   void record_recursive_call(const ComputeContextHash &call_hash,
                              Span<const bke::SocketValueVariant *> inputs,
-                             Span<std::optional<bke::SocketValueVariant>> outputs);
+                             Span<std::optional<bke::SocketValueVariant>> outputs,
+                             uint64_t output_cache_caller_token);
   /** Thread-safe while evaluation is running. The pointer stays valid until the next record. */
   const RecursiveCall *find_recursive_call(const ComputeContextHash &call_hash);
+  /** Retain inspection inputs for a subtree whose unchanged outputs came from the cache. */
+  void inherit_cached_recursive_calls(NodesEvalLog &previous, const ComputeContextHash &root_hash);
 
   /**
    * Replace the inspection overlay with the log of a call evaluated on its own. It is used for
