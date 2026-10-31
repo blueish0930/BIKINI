@@ -2131,7 +2131,7 @@ static bool node_link_use_angled(const SpaceNode &snode)
 
 static void calculate_inner_link_bezier_points(std::array<float2, 4> &points)
 {
-  const int curving = ui::theme::get_value_type(TH_NODE_CURVING, SPACE_NODE);
+  const int curving = U.noodle_curving;
   if (curving == 0) {
     /* Straight line: align all points. */
     points[1] = math::interpolate(points[0], points[3], 1.0f / 3.0f);
