@@ -306,6 +306,24 @@ void snode_set_context(const bContext &C)
     }
   }
 
+  /* Assigning a pinned Geometry Nodes datablock can leave the editor without its object.
+   * Restore the modifier context so nested inspection and Viewer paths can be evaluated.
+   * Keep the existing tree path and view: restarting it would exit any open node groups. */
+  if ((snode->flag & SNODE_PIN) && ntree && ntree->type == NTREE_GEOMETRY &&
+      snode->node_tree_sub_type == SNODE_GEOMETRY_MODIFIER && id == nullptr)
+  {
+    if (const std::optional<ObjectAndModifier> context =
+            find_object_and_nodes_modifier_for_geometry_edit(&C, *snode))
+    {
+      id = from = &const_cast<Object *>(context->object)->id;
+      snode->id = id;
+      snode->from = from;
+      if (bNodeTreePath *root_path = snode->treepath.first()) {
+        STRNCPY_UTF8(root_path->display_name, id->name + 2);
+      }
+    }
+  }
+
   /* Image Process: keep selected_node_group in sync with active tree for sticky restore. */
   if (ED_node_is_image(snode) && ntree && ntree->type == NTREE_IMAGE) {
     snode->selected_node_group = ntree;
