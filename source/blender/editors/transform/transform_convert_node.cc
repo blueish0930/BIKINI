@@ -1096,7 +1096,7 @@ static void flushTransNodes(TransInfo *t)
     if (t->state == TRANS_CANCEL) {
       view2d_edge_pan_cancel(t->context, &customdata->edgepan_data);
     }
-    else {
+    else if (t->region) {
       /* Edge panning functions expect window coordinates, mval is relative to region. */
       const int xy[2] = {
           t->region->winrct.xmin + int(t->mval[0]),
