@@ -2636,13 +2636,16 @@ class ShaderNodesInliner {
       if (dst_socket.flag & SOCK_HIDE_VALUE) {
         /* Can't store the primitive value directly on the socket. So create a new input node and
          * link it instead. */
-        const NodeAndSocket node_and_socket = this->primitive_value_to_output_socket(
+        const NodeAndSocket node_and_socket = this->try_primitive_value_to_output_socket(
             *primitive_value);
-        if (node_and_socket.node != nullptr && node_and_socket.socket != nullptr &&
-            node_and_socket.socket->typeinfo != nullptr && dst_socket.typeinfo != nullptr &&
-            dst_tree_.typeinfo != nullptr &&
-            dst_tree_.typeinfo->validate_link(node_and_socket.socket->typeinfo->type,
-                                              dst_socket.typeinfo->type))
+        if (!node_and_socket.socket) {
+          /* There is no input node for this value type, so store it on the socket after all. */
+          this->set_primitive_value_on_socket(dst_socket, *primitive_value);
+        }
+        else if (node_and_socket.node != nullptr && node_and_socket.socket->typeinfo != nullptr &&
+                 dst_socket.typeinfo != nullptr && dst_tree_.typeinfo != nullptr &&
+                 dst_tree_.typeinfo->validate_link(node_and_socket.socket->typeinfo->type,
+                                                   dst_socket.typeinfo->type))
         {
           bke::node_add_link(
               dst_tree_, *node_and_socket.node, *node_and_socket.socket, dst_node, dst_socket);
@@ -2708,7 +2711,7 @@ class ShaderNodesInliner {
     BLI_assert_unreachable();
   }
 
-  NodeAndSocket primitive_value_to_output_socket(const PrimitiveSocketValue &value)
+  NodeAndSocket try_primitive_value_to_output_socket(const PrimitiveSocketValue &value)
   {
     const auto add_node_with_output = [this](const UString idname) -> NodeAndSocket {
       bNode *node = this->add_node(idname);
@@ -2816,6 +2819,10 @@ class ShaderNodesInliner {
       }
       socket_assign_curve(*result.socket, *curve);
       return result;
+    }
+    if (std::get_if<std::string>(&value.value) || std::get_if<MenuValue>(&value.value)) {
+      /* There is no node that outputs these values in the destination tree. */
+      return {};
     }
     BLI_assert_unreachable();
     return {};
