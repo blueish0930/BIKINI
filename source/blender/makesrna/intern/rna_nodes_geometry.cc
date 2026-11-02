@@ -2844,6 +2844,7 @@ void RNA_def_nodes_geometry(BlenderRNA *brna)
   define("GeometryNode", "GeometryNodeDeformCurvesOnSurface");
   define("GeometryNode", "GeometryNodeDebug");
   /* GeometryNodeDelaunay3D deleted (non-CGAL Bowyer–Watson; use GeometryNodeCgalDelaunay3D) */
+  define("GeometryNode", "GeometryNodeDelaunayTriangulation");
   define("GeometryNode", "GeometryNodeDeleteGeometry");
   define("GeometryNode", "GeometryNodeDissolveEdges");
   define("GeometryNode", "GeometryNodeDistributePointsInGrid");
