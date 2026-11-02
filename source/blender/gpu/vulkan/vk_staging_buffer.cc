@@ -20,25 +20,26 @@ VKStagingBuffer::VKStagingBuffer(const VKBuffer &device_buffer,
       region_size_(region_size == UINT64_MAX ? device_buffer.size_in_bytes() : region_size)
 {
   VkBufferUsageFlags usage;
-  VmaMemoryUsage memory_usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
-  VmaAllocationCreateFlags allocation_flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
+  VmaMemoryUsage vma_memory_usage;
+  VmaAllocationCreateFlags vma_allocation_flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
   switch (direction) {
     case Direction::HostToDevice:
       usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-      allocation_flags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+      vma_memory_usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+      vma_allocation_flags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
       break;
     case Direction::DeviceToHost:
       usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-      /* The host reads this buffer. Sequential-write memory preferred on the device is
-       * write-combined video memory: filling it is fast, but reading it back was measured at
-       * about 20 MB/s. Ask for cached system memory instead. */
-      memory_usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
-      allocation_flags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT;
+      /* Prefer host cached memory for readback, as uncached memory can be very slow to read on the
+       * host. VMA falls back to compatible host visible memory when no cached type is available.
+       */
+      vma_memory_usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+      vma_allocation_flags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT;
       break;
   }
 
   host_buffer_.create(
-      region_size_, usage, memory_usage, allocation_flags, 0.4f, false, "StagingBuffer");
+      region_size_, usage, vma_memory_usage, vma_allocation_flags, 0.4f, false, "StagingBuffer");
 }
 
 void VKStagingBuffer::copy_to_device(VKContext &context)
