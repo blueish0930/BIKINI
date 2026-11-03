@@ -1163,6 +1163,8 @@ using LoadSampleFn = Value (*)(void *user,
                                std::string &r_error);
 
 using LoadParmFn = Value (*)(void *user, StringRef name, int index, std::string &r_error);
+/** Only a bound, immutable single numeric parameter may return true. No attribute fallback. */
+using LoadUniformParmFn = bool (*)(void *user, StringRef name, Value &r_value);
 
 /** Evaluate the ramp or curve parameter  name at  input. */
 using EvalRampFn = Value (*)(void *user, StringRef name, RampKind kind, const Value &input);
@@ -1193,10 +1195,14 @@ struct VMEnv {
   /** Typed spans for static cross-domain/secondary-geometry samples. Empty entries intentionally
    * fall back to #load_sample for computed attributes and same-domain Jacobi snapshots. */
   Span<AttrRT> static_samples;
+  /** #static_samples plus same-domain samples, bound to the array #load_sample reads for an
+   * in-range index. Only native JIT code reads them; other reads still call #load_sample. */
+  Span<AttrRT> jit_samples;
   /** Mesh face offsets for the current geometry. Size is faces + 1. */
   Span<int> face_offsets;
   void *parm_user = nullptr;
   LoadParmFn load_parm = nullptr;
+  LoadUniformParmFn load_uniform_parm = nullptr;
   /** Uses #parm_user. Without it ramps are a linear gray ramp and curves the identity. */
   EvalRampFn eval_ramp = nullptr;
   void *topo_user = nullptr;

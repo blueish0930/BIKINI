@@ -1025,6 +1025,146 @@ Value load_sample_fn(void *user,
   return load_elem_fn(user, sample.geo, sample.domain, sample.name, index, Type::Float, error);
 }
 
+/**
+ * The typed array #load_sample_fn reads for an in-range index of a same-domain sample of
+ * geometry 0: the Jacobi snapshot of a written attribute, otherwise the prebound sample. Empty
+ * when that read is not a plain Bool/Int/Float/Vector load, so native code calls the function.
+ */
+static AttrRT jit_self_sample(const ElemUser &u, const ElemUser::ElementSampleCache &sample)
+{
+  const std::string lookup = sample_attr_name(sample.name);
+  if (!u.sample_attrs.is_empty()) {
+    const int n = int(std::min(u.attr_infos.size(), u.sample_attrs.size()));
+    for (int i = 0; i < n; i++) {
+      if (u.attr_infos[i].name != lookup) {
+        continue;
+      }
+      const AttrRT &a = u.sample_attrs[i];
+      if (a.size <= 0) {
+        break;
+      }
+      AttrRT view;
+      view.type = a.type;
+      view.size = a.size;
+      switch (a.type) {
+        case Type::Bool:
+          view.rb = a.rb ? a.rb : a.wb;
+          break;
+        case Type::Int:
+          view.ri = a.ri ? a.ri : a.wi;
+          break;
+        case Type::Float:
+          view.rf = a.rf ? a.rf : a.wf;
+          break;
+        case Type::Vector:
+          view.rv = a.rv ? a.rv : a.wv;
+          break;
+        case Type::Vector2:
+          if (a.r2 || a.w2) {
+            return {};
+          }
+          break;
+        case Type::Vector4:
+        case Type::Color:
+          if (a.r4 || a.w4) {
+            return {};
+          }
+          break;
+        default:
+          break;
+      }
+      if (view.rb || view.ri || view.rf || view.rv) {
+        return view;
+      }
+      break;
+    }
+  }
+  const ElemUser::ElementSampleCache *source = nullptr;
+  if (u.sample_attrs.is_empty() && sample.values) {
+    source = &sample;
+  }
+  else {
+    for (const ElemUser::ElementSampleCache &other : u.element_samples) {
+      if (other.geo == 0 && other.domain == sample.domain && other.name == lookup) {
+        source = &other;
+        break;
+      }
+    }
+  }
+  if (source == nullptr) {
+    return {};
+  }
+  const AttrRT &direct = source->direct;
+  AttrRT view;
+  view.type = direct.type;
+  view.size = direct.size;
+  switch (direct.type) {
+    case Type::Bool:
+      view.rb = direct.rb;
+      break;
+    case Type::Int:
+      view.ri = direct.ri;
+      break;
+    case Type::Float:
+      view.rf = direct.rf;
+      break;
+    case Type::Vector:
+      view.rv = direct.rv;
+      break;
+    default:
+      return {};
+  }
+  return view;
+}
+
+/**
+ * A sample of an array attribute stored as a span, when #load_sample_fn reads it with
+ * value_from_varray() of that span: native code then decodes the element directly (`rarr`, see
+ * jit_sample()). Same-domain samples qualify when no Jacobi snapshot answers first and the
+ * prebound lookup finds this sample.
+ */
+static AttrRT jit_packed_sample(const ElemUser &u, const int slot, const int bind_domain)
+{
+  const ElemUser::ElementSampleCache &sample = u.element_samples[slot];
+  if (sample.geo < 0 || !sample.values || !sample.values.type().is<bke::WrangleArrayValue>() ||
+      !sample.values.is_span())
+  {
+    return {};
+  }
+  if (sample.geo == 0 && sample.domain == bind_domain && !u.sample_attrs.is_empty()) {
+    const std::string lookup = sample_attr_name(sample.name);
+    const int n = int(std::min(u.attr_infos.size(), u.sample_attrs.size()));
+    for (int i = 0; i < n; i++) {
+      if (u.attr_infos[i].name != lookup) {
+        continue;
+      }
+      const AttrRT &a = u.sample_attrs[i];
+      if (a.rb || a.wb || a.ri || a.wi || a.rf || a.wf || a.rv || a.wv || a.r2 || a.w2 || a.r4 ||
+          a.w4)
+      {
+        return {};
+      }
+      break;
+    }
+    bool prebound = false;
+    for (const int i : u.element_samples.index_range()) {
+      const ElemUser::ElementSampleCache &other = u.element_samples[i];
+      if (other.geo == 0 && other.domain == sample.domain && other.name == lookup) {
+        prebound = i == slot;
+        break;
+      }
+    }
+    if (!prebound) {
+      return {};
+    }
+  }
+  AttrRT view;
+  view.type = Type::Void;
+  view.size = int(sample.values.size());
+  view.rarr = sample.values.get_internal_span().typed<bke::WrangleArrayValue>().data();
+  return view;
+}
+
 /** Slot of a channel name: a list channel, a parameter, or neither (an attribute read). */
 static int resolve_parm_slot(const ElemUser &u, const StringRef name)
 {
@@ -1039,6 +1179,31 @@ static int resolve_parm_slot(const ElemUser &u, const StringRef name)
     }
   }
   return -1;
+}
+
+static bool load_uniform_parm_fn(void *user, const StringRef name, Value &r_value)
+{
+  const auto *u = static_cast<const ElemUser *>(user);
+  if (!u || name.is_empty()) {
+    return false;
+  }
+  const int slot = resolve_parm_slot(*u, name);
+  if (slot < (1 << 20)) {
+    return false; /* Lists and missing parameters retain the existing runtime semantics. */
+  }
+  const GVArray &values = u->parm_arrays[slot - (1 << 20)];
+  if (!values || values.is_empty() || !values.is_single()) {
+    return false;
+  }
+  const CPPType &type = values.type();
+  if (!(type.is<float>() || type.is<int>() || type.is<bool>() || type.is<float2>() ||
+        type.is<float3>() || type.is<float4>() || type.is<math::Quaternion>() ||
+        type.is<ColorGeometry4f>()))
+  {
+    return false; /* Never capture string, array or matrix pool handles in cached code. */
+  }
+  r_value = value_from_varray(values, 0, nullptr);
+  return true;
 }
 
 Value load_parm_fn(void *user, const StringRef name, const int index, std::string & /*error*/)
@@ -1248,6 +1413,43 @@ static bool bind_type_converts(const Type type)
   }
 }
 
+/**
+ * Attributes that only name a sample of another domain (`face(0, "x", f)` in a point Wrangle) are
+ * listed for the GLSL emitter. The interpreter and the JIT read #AttrRT only through the
+ * attribute instructions and the spatial/Jacobi kernels, so such an attribute needs no binding.
+ */
+static Array<bool> attrs_bound_unused(const Program &program)
+{
+  Array<bool> unused(program.attrs.size(), false);
+  if (program.gpu_ok || program.prox_batch || program.ray_batch || program.sample_batch ||
+      program.spatial_only || program.jacobi_smooth || program.array_passes != 1)
+  {
+    return unused;
+  }
+  for (const int i : program.attrs.index_range()) {
+    const AttrInfo &info = program.attrs[i];
+    unused[i] = !info.write && !ELEM(StringRef(info.name), "position", "P") &&
+                !attr_name_is_normal(info.name);
+  }
+  auto use = [&](const int i) {
+    if (i >= 0 && i < unused.size()) {
+      unused[i] = false;
+    }
+  };
+  for (const Inst &in : program.code) {
+    if (ELEM(in.op, Op::PushAttr, Op::StoreAttr, Op::AttrAdd, Op::AttrMulAdd)) {
+      use(in.imm);
+    }
+  }
+  for (const WhileCmpAddSpec &w : program.while_adds) {
+    use(w.attr);
+    for (const int counter : w.counters) {
+      use(counter);
+    }
+  }
+  return unused;
+}
+
 bool bind_attrs(bke::MutableAttributeAccessor attributes,
                 const bke::AttrDomain domain,
                 const int domain_size,
@@ -1256,6 +1458,7 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
                 BindState &state,
                 const VArray<float3> &normals)
 {
+  const Array<bool> unused = attrs_bound_unused(program);
   /* `v@N` without a stored attribute of that name reads the computed normals of this domain. */
   const bool use_normals = normals && normals.size() == domain_size;
   state.rt.reinitialize(program.attrs.size());
@@ -1451,6 +1654,13 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
       }
     }
     else {
+      if (unused[i]) {
+        /* Reading it here would interpolate another domain for nothing. */
+        const std::optional<bke::AttributeMetaData> meta = attributes.lookup_meta_data(info.name);
+        if (meta && meta->domain != domain) {
+          continue;
+        }
+      }
       bke::GAttributeReader reader = attributes.lookup(info.name, domain);
       if (!reader) {
         if (use_normals && attr_name_is_normal(info.name) && info.type == Type::Vector) {
@@ -7557,6 +7767,7 @@ ExecOutput run_on_accessor(const Program &program,
   }
   env.parm_user = &elem_user;
   env.load_parm = load_parm_fn;
+  env.load_uniform_parm = load_uniform_parm_fn;
   env.eval_ramp = eval_ramp_fn;
   env.addpoints = &addpoints;
   env.topo_user = &topo;
@@ -7614,6 +7825,17 @@ ExecOutput run_on_accessor(const Program &program,
     take_snapshot();
     elem_user.sample_attrs = sample_rt;
   }
+  Array<AttrRT> jit_samples(static_samples.as_span());
+  for (const int i : elem_user.element_samples.index_range()) {
+    const ElemUser::ElementSampleCache &sample = elem_user.element_samples[i];
+    if (sample.geo == 0 && sample.domain == vex_bind_domain) {
+      jit_samples[i] = jit_self_sample(elem_user, sample);
+    }
+    if (jit_samples[i].size == 0) {
+      jit_samples[i] = jit_packed_sample(elem_user, i, vex_bind_domain);
+    }
+  }
+  env.jit_samples = jit_samples;
 
   Span<int> nbr_off;
   Span<int> nbr_idx;

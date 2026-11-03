@@ -269,6 +269,28 @@ if(WITH_OPENSUBDIV)
   add_definitions(-DWITH_OPENSUBDIV)
 endif()
 
+option(WITH_VEX_LLVM_JIT "Compile eligible Geometry Wrangles to native machine code" OFF)
+if(WITH_VEX_LLVM_JIT)
+  list(APPEND SRC intern/vex/vex_jit.cc intern/vex/vex_jit.hh intern/vex/vex_lane_ops.inc)
+  if(WIN32)
+    # Blender's precompiled LLVM bundle omits standalone tools referenced by
+    # LLVMConfig.cmake. Link its static libraries without importing those tools.
+    set(VEX_LLVM_ROOT "${LIBDIR}/llvm" CACHE PATH "LLVM installation for Wrangle JIT")
+    if(NOT EXISTS "${VEX_LLVM_ROOT}/include/llvm/ExecutionEngine/Orc/LLJIT.h")
+      message(FATAL_ERROR "Wrangle JIT requires LLVM development headers")
+    endif()
+    file(GLOB VEX_LLVM_LIBRARIES "${VEX_LLVM_ROOT}/lib/LLVM*.lib")
+    set_source_files_properties(intern/vex/vex_jit.cc PROPERTIES INCLUDE_DIRECTORIES "${VEX_LLVM_ROOT}/include")
+    list(APPEND LIB ${VEX_LLVM_LIBRARIES} psapi shell32 ole32 uuid advapi32 ws2_32 ntdll delayimp)
+  else()
+    find_package(LLVM REQUIRED CONFIG)
+    llvm_map_components_to_libnames(VEX_LLVM_LIBRARIES core orcjit native passes)
+    set_source_files_properties(intern/vex/vex_jit.cc PROPERTIES INCLUDE_DIRECTORIES "${LLVM_INCLUDE_DIRS}")
+    list(APPEND LIB ${VEX_LLVM_LIBRARIES})
+  endif()
+  set_property(SOURCE intern/vex/vex_vm.cc intern/vex/vex_jit.cc APPEND PROPERTY COMPILE_DEFINITIONS WITH_VEX_LLVM_JIT)
+endif()
+
 blender_add_lib(bf_nodes "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
 add_library(bf::nodes ALIAS bf_nodes)
 

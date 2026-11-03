@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -39,6 +40,10 @@
 #include "BLI_vector.hh"
 
 #include "vex_program.hh"
+#ifdef WITH_VEX_LLVM_JIT
+#  include "vex_jit.hh"
+#endif
+#include <optional>
 
 namespace blender::nodes::vex {
 
@@ -67,14 +72,25 @@ struct VMThreadLocalStorage {
   int rays_used = 0;
 };
 
-static VMThreadLocalStorage &vm_thread_local_storage()
+static VMThreadLocalStorage *vm_thread_local_storage_create()
 {
   /* TBB worker threads can outlive Blender's guarded allocator leak check. Keep the per-thread
    * caches owned by one enumerable container so its process-exit destructor releases every
-   * worker's storage before the leak detector runs. The thread-local pointer keeps lookup cost
-   * out of the VM's hot path. */
+   * worker's storage before the leak detector runs. */
   static threading::EnumerableThreadSpecific<VMThreadLocalStorage> storage_by_thread;
-  thread_local VMThreadLocalStorage *storage = &storage_by_thread.local();
+  return &storage_by_thread.local();
+}
+
+/* Constant-initialized, so a lookup is one TLS load without the guard checks of a function-local
+ * `thread_local`. Every `tls_*` pool access goes through here. */
+static thread_local VMThreadLocalStorage *vm_thread_storage = nullptr;
+
+BLI_INLINE VMThreadLocalStorage &vm_thread_local_storage()
+{
+  VMThreadLocalStorage *storage = vm_thread_storage;
+  if (UNLIKELY(storage == nullptr)) {
+    storage = vm_thread_storage = vm_thread_local_storage_create();
+  }
   return *storage;
 }
 
@@ -109,31 +125,33 @@ Value intern_thread_string(const StringRef value)
 
 void tls_arrays_begin()
 {
-  tls_mats_used = 0;
-  tls_mat3s_used = 0;
-  tls_iarr_used = 0;
-  tls_farr_used = 0;
-  tls_varr_used = 0;
-  tls_v4arr_used = 0;
-  tls_sarr_used = 0;
-  tls_marr_used = 0;
-  tls_rarr_used = 0;
-  tls_str_used = 0;
-  tls_rays_used = 0;
-  tls_str_tmp.clear();
+  /* Runs before every element: one thread-local lookup, not one per pool. */
+  VMThreadLocalStorage &storage = vm_thread_local_storage();
+  storage.mats_used = 0;
+  storage.mat3s_used = 0;
+  storage.iarr_used = 0;
+  storage.farr_used = 0;
+  storage.varr_used = 0;
+  storage.v4arr_used = 0;
+  storage.sarr_used = 0;
+  storage.marr_used = 0;
+  storage.rarr_used = 0;
+  storage.str_used = 0;
+  storage.rays_used = 0;
+  storage.str_tmp.clear();
   /* Keep the outer pools from reallocating (which would invalidate iarr_mut
    * pointers held by foreach while the body calls nearestpoints again). */
-  if (tls_iarr.capacity() < 1024) {
-    tls_iarr.reserve(1024);
+  if (storage.iarr.capacity() < 1024) {
+    storage.iarr.reserve(1024);
   }
-  if (tls_farr.capacity() < 256) {
-    tls_farr.reserve(256);
+  if (storage.farr.capacity() < 256) {
+    storage.farr.reserve(256);
   }
-  if (tls_varr.capacity() < 256) {
-    tls_varr.reserve(256);
+  if (storage.varr.capacity() < 256) {
+    storage.varr.reserve(256);
   }
-  if (tls_v4arr.capacity() < 64) {
-    tls_v4arr.reserve(64);
+  if (storage.v4arr.capacity() < 64) {
+    storage.v4arr.reserve(64);
   }
 }
 
@@ -875,36 +893,37 @@ Value packed_to_value(const bke::WrangleArrayValue &p)
     return value_from_string_array(std::move(vals));
   }
   if (p.kind == bke::WrangleArrayKind::Float3) {
-    Vector<float3> vals;
-    vals.reserve(p.count);
-    for (int i = 0; i < p.count; i++) {
-      vals.append(float3(p.d.f[i * 3], p.d.f[i * 3 + 1], p.d.f[i * 3 + 2]));
-    }
-    return value_from_vec_array(std::move(vals));
+    Value result;
+    result.type = Type::VecArray;
+    result.i = prepare_tls_array(tls_varr, tls_varr_used, p.count);
+    static_assert(sizeof(float3) == 3 * sizeof(float));
+    memcpy(tls_varr[result.i].data(), p.d.f, size_t(p.count) * sizeof(float3));
+    return result;
   }
   if (p.kind == bke::WrangleArrayKind::Float4) {
-    Vector<float4> vals;
-    vals.reserve(p.count);
-    for (int i = 0; i < p.count; i++) {
-      vals.append(float4(p.d.f[i * 4], p.d.f[i * 4 + 1], p.d.f[i * 4 + 2], p.d.f[i * 4 + 3]));
-    }
-    return value_from_vec4_array(std::move(vals));
+    Value result;
+    result.type = Type::Vec4Array;
+    result.i = prepare_tls_array(tls_v4arr, tls_v4arr_used, p.count);
+    static_assert(sizeof(float4) == 4 * sizeof(float));
+    memcpy(tls_v4arr[result.i].data(), p.d.f, size_t(p.count) * sizeof(float4));
+    return result;
   }
   if (p.kind == bke::WrangleArrayKind::Float2) {
-    Vector<float3> vals;
-    vals.reserve(p.count);
+    Value result;
+    result.type = Type::VecArray;
+    result.i = prepare_tls_array(tls_varr, tls_varr_used, p.count);
+    auto &values = tls_varr[result.i];
     for (int i = 0; i < p.count; i++) {
-      vals.append(float3(p.d.f[i * 2], p.d.f[i * 2 + 1], 0.0f));
+      values[i] = float3(p.d.f[i * 2], p.d.f[i * 2 + 1], 0.0f);
     }
-    return value_from_vec_array(std::move(vals));
+    return result;
   }
   if (p.kind == bke::WrangleArrayKind::Float) {
-    Vector<float> vals;
-    vals.reserve(p.count);
-    for (int i = 0; i < p.count; i++) {
-      vals.append(p.d.f[i]);
-    }
-    return value_from_float_array(std::move(vals));
+    Value result;
+    result.type = Type::FloatArray;
+    result.i = prepare_tls_array(tls_farr, tls_farr_used, p.count);
+    memcpy(tls_farr[result.i].data(), p.d.f, size_t(p.count) * sizeof(float));
+    return result;
   }
   if (p.kind == bke::WrangleArrayKind::Matrix) {
     Vector<float4x4> vals;
@@ -935,12 +954,7 @@ Value packed_to_value(const bke::WrangleArrayValue &p)
     }
     return value_from_ray_array(std::move(vals));
   }
-  Vector<int> vals;
-  vals.reserve(p.count);
-  for (int i = 0; i < p.count; i++) {
-    vals.append(p.d.i[i]);
-  }
-  return value_from_int_array(std::move(vals));
+  return value_from_int_span(Span<int>(p.d.i, p.count));
 }
 
 /**
@@ -967,50 +981,50 @@ static Value packed_to_typed_value(const bke::WrangleArrayValue &p, const Type t
   }
   if (type_is_vec4_array(runtime_type)) {
     /* The array is read as the declared flavor, whatever kind of vectors were stored. */
-    Vector<float4> vals;
-    vals.reserve(p.count);
-    if (p.kind == bke::WrangleArrayKind::Float4) {
+    if (ELEM(p.kind, bke::WrangleArrayKind::Float4, bke::WrangleArrayKind::Float3,
+                    bke::WrangleArrayKind::Float2)) {
+      Value result;
+      result.type = runtime_type;
+      result.i = prepare_tls_array(tls_v4arr, tls_v4arr_used, p.count);
+      auto &values = tls_v4arr[result.i];
+      const int width = bke::WrangleArrayValue::item_words(p.kind);
       for (int i = 0; i < p.count; i++) {
-        vals.append(float4(p.d.f[i * 4], p.d.f[i * 4 + 1], p.d.f[i * 4 + 2], p.d.f[i * 4 + 3]));
+        values[i] = float4(p.d.f[i * width], p.d.f[i * width + 1],
+                           width >= 3 ? p.d.f[i * width + 2] : 0.0f,
+                           width == 4 ? p.d.f[i * width + 3] : 0.0f);
       }
-      return value_from_vec4_array(std::move(vals), runtime_type);
-    }
-    if (p.kind == bke::WrangleArrayKind::Float3) {
-      for (int i = 0; i < p.count; i++) {
-        vals.append(float4(p.d.f[i * 3], p.d.f[i * 3 + 1], p.d.f[i * 3 + 2], 0.0f));
-      }
-      return value_from_vec4_array(std::move(vals), runtime_type);
-    }
-    if (p.kind == bke::WrangleArrayKind::Float2) {
-      for (int i = 0; i < p.count; i++) {
-        vals.append(float4(p.d.f[i * 2], p.d.f[i * 2 + 1], 0.0f, 0.0f));
-      }
-      return value_from_vec4_array(std::move(vals), runtime_type);
+      return result;
     }
   }
   if (runtime_type == Type::VecArray && p.kind == bke::WrangleArrayKind::Float4) {
-    Vector<float3> vals;
-    vals.reserve(p.count);
+    Value result;
+    result.type = Type::VecArray;
+    result.i = prepare_tls_array(tls_varr, tls_varr_used, p.count);
+    auto &values = tls_varr[result.i];
     for (int i = 0; i < p.count; i++) {
-      vals.append(float3(p.d.f[i * 4], p.d.f[i * 4 + 1], p.d.f[i * 4 + 2]));
+      values[i] = float3(p.d.f[i * 4], p.d.f[i * 4 + 1], p.d.f[i * 4 + 2]);
     }
-    return value_from_vec_array(std::move(vals));
+    return result;
   }
   if (type == Type::FloatArray && p.kind == bke::WrangleArrayKind::Int) {
-    Vector<float> vals;
-    vals.reserve(p.count);
+    Value result;
+    result.type = Type::FloatArray;
+    result.i = prepare_tls_array(tls_farr, tls_farr_used, p.count);
+    auto &values = tls_farr[result.i];
     for (int i = 0; i < p.count; i++) {
-      vals.append(float(p.d.i[i]));
+      values[i] = float(p.d.i[i]);
     }
-    return value_from_float_array(std::move(vals));
+    return result;
   }
   if (type == Type::IntArray && p.kind == bke::WrangleArrayKind::Float) {
-    Vector<int> vals;
-    vals.reserve(p.count);
+    Value result;
+    result.type = Type::IntArray;
+    result.i = prepare_tls_array(tls_iarr, tls_iarr_used, p.count);
+    auto &values = tls_iarr[result.i];
     for (int i = 0; i < p.count; i++) {
-      vals.append(int(p.d.f[i]));
+      values[i] = int(p.d.f[i]);
     }
-    return value_from_int_array(std::move(vals));
+    return result;
   }
   return packed_to_value(p);
 }
@@ -3566,6 +3580,47 @@ static math::EulerOrder parse_euler_order(const Value &v, const VMEnv &env)
   return (order >= 0 && order <= 5) ? math::EulerOrder(order + 1) : math::EulerOrder::XYZ;
 }
 
+static Value channel_scalar_value(const Builtin id, const Value loaded)
+{
+  switch (id) {
+    case Builtin::Chi:
+      return Value::from_int(loaded.as_int());
+    case Builtin::Chb:
+      return Value::from_bool(loaded.as_bool());
+    case Builtin::Chv:
+      return Value::from_vec(loaded.as_vec());
+    case Builtin::Chc: {
+      if (loaded.type == Type::Color) {
+        return loaded;
+      }
+      const float3 rgb = loaded.as_vec();
+      return Value::from_vec4(float4(rgb.x, rgb.y, rgb.z, 1.0f), Type::Color);
+    }
+    case Builtin::Chm:
+      if (loaded.type == Type::Matrix) {
+        return loaded;
+      }
+      return Value::from_matrix(float4x4::identity());
+    case Builtin::Chu:
+      return Value::from_vec2(loaded.as_vec2());
+    case Builtin::Chq:
+      return Value::from_vec4(loaded.as_vec4(), Type::Vector4);
+    case Builtin::Chr:
+      if (loaded.type == Type::Rotation) {
+        return loaded;
+      }
+      return value_from_quat(value_as_quat(loaded));
+    case Builtin::Chs:
+      if (loaded.type == Type::String) {
+        return loaded;
+      }
+      return Value::from_str_i(0);
+    case Builtin::Chf:
+    default:
+      return Value::from_float(loaded.as_float());
+  }
+}
+
 Value call_builtin(const Builtin id,
                    const Span<Value> args,
                    VMEnv &env,
@@ -4460,43 +4515,7 @@ Value call_builtin(const Builtin id,
         const float4x4 first = items->is_empty() ? float4x4::identity() : items->first();
         loaded = Value::from_matrix(first);
       }
-      switch (id) {
-        case Builtin::Chi:
-          return Value::from_int(loaded.as_int());
-        case Builtin::Chb:
-          return Value::from_bool(loaded.as_bool());
-        case Builtin::Chv:
-          return Value::from_vec(loaded.as_vec());
-        case Builtin::Chc: {
-          if (loaded.type == Type::Color) {
-            return loaded;
-          }
-          const float3 rgb = loaded.as_vec();
-          return Value::from_vec4(float4(rgb.x, rgb.y, rgb.z, 1.0f), Type::Color);
-        }
-        case Builtin::Chm:
-          if (loaded.type == Type::Matrix) {
-            return loaded;
-          }
-          return Value::from_matrix(float4x4::identity());
-        case Builtin::Chu:
-          return Value::from_vec2(loaded.as_vec2());
-        case Builtin::Chq:
-          return Value::from_vec4(loaded.as_vec4(), Type::Vector4);
-        case Builtin::Chr:
-          if (loaded.type == Type::Rotation) {
-            return loaded;
-          }
-          return value_from_quat(value_as_quat(loaded));
-        case Builtin::Chs:
-          if (loaded.type == Type::String) {
-            return loaded;
-          }
-          return Value::from_str_i(0);
-        case Builtin::Chf:
-        default:
-          return Value::from_float(loaded.as_float());
-      }
+      return channel_scalar_value(id, loaded);
     }
     case Builtin::ChiArr:
     case Builtin::ChfArr:
@@ -8106,6 +8125,358 @@ static bool fuse_tile_code(const Program &program, Vector<Inst> &r_code)
 
 /** \} */
 
+
+#ifdef WITH_VEX_LLVM_JIT
+template<Op operation>
+static bool jit_step(JitFrame *frame, int immediate, int argument_count, int stack_depth)
+{
+  const Program &program = *frame->program;
+  VMEnv &local = *frame->env;
+  Value *stack = frame->stack, *locals_s = frame->locals;
+  const int local_n = frame->local_count, stack_cap = frame->stack_capacity;
+  int sp = stack_depth;
+  std::string &err = *frame->error;
+  bool lane_ok = true;
+  const Inst in{operation, uint8_t(argument_count), immediate};
+  auto push = [&](const Value &value) { if (sp < stack_cap) stack[sp++] = value; };
+  auto pop = [&]() -> Value { return sp > 0 ? stack[--sp] : Value::from_float(0.0f); };
+  switch (operation) {
+#define VEX_JIT_OPERATION
+#include "vex_lane_ops.inc"
+#undef VEX_JIT_OPERATION
+    default: lane_ok = false; err = "Unsupported JIT operation"; break;
+  }
+  return lane_ok;
+}
+
+void *jit_operation_address(const Op op)
+{
+  switch (op) {
+    case Op::Nop: return reinterpret_cast<void *>(&jit_step<Op::Nop>);
+    case Op::PushF: return reinterpret_cast<void *>(&jit_step<Op::PushF>);
+    case Op::PushI: return reinterpret_cast<void *>(&jit_step<Op::PushI>);
+    case Op::PushV: return reinterpret_cast<void *>(&jit_step<Op::PushV>);
+    case Op::PushB: return reinterpret_cast<void *>(&jit_step<Op::PushB>);
+    case Op::PushS: return reinterpret_cast<void *>(&jit_step<Op::PushS>);
+    case Op::PushLocal: return reinterpret_cast<void *>(&jit_step<Op::PushLocal>);
+    case Op::PushLocalIndex: return reinterpret_cast<void *>(&jit_step<Op::PushLocalIndex>);
+    case Op::PushLocalMember: return reinterpret_cast<void *>(&jit_step<Op::PushLocalMember>);
+    case Op::StoreLocal: return reinterpret_cast<void *>(&jit_step<Op::StoreLocal>);
+    case Op::IncLocal: return reinterpret_cast<void *>(&jit_step<Op::IncLocal>);
+    case Op::DecLocal: return reinterpret_cast<void *>(&jit_step<Op::DecLocal>);
+    case Op::Dup: return reinterpret_cast<void *>(&jit_step<Op::Dup>);
+    case Op::Pop: return reinterpret_cast<void *>(&jit_step<Op::Pop>);
+    case Op::PushAttr: return reinterpret_cast<void *>(&jit_step<Op::PushAttr>);
+    case Op::StoreAttr: return reinterpret_cast<void *>(&jit_step<Op::StoreAttr>);
+    case Op::AttrAdd: return reinterpret_cast<void *>(&jit_step<Op::AttrAdd>);
+    case Op::AttrMulAdd: return reinterpret_cast<void *>(&jit_step<Op::AttrMulAdd>);
+    case Op::PushIndex: return reinterpret_cast<void *>(&jit_step<Op::PushIndex>);
+    case Op::PushNpoints: return reinterpret_cast<void *>(&jit_step<Op::PushNpoints>);
+    case Op::PushNedges: return reinterpret_cast<void *>(&jit_step<Op::PushNedges>);
+    case Op::PushNfaces: return reinterpret_cast<void *>(&jit_step<Op::PushNfaces>);
+    case Op::PushNcorners: return reinterpret_cast<void *>(&jit_step<Op::PushNcorners>);
+    case Op::PushHitPos: return reinterpret_cast<void *>(&jit_step<Op::PushHitPos>);
+    case Op::Add: return reinterpret_cast<void *>(&jit_step<Op::Add>);
+    case Op::Sub: return reinterpret_cast<void *>(&jit_step<Op::Sub>);
+    case Op::Mul: return reinterpret_cast<void *>(&jit_step<Op::Mul>);
+    case Op::Div: return reinterpret_cast<void *>(&jit_step<Op::Div>);
+    case Op::AddFF: return reinterpret_cast<void *>(&jit_step<Op::AddFF>);
+    case Op::AddVV: return reinterpret_cast<void *>(&jit_step<Op::AddVV>);
+    case Op::SubFF: return reinterpret_cast<void *>(&jit_step<Op::SubFF>);
+    case Op::SubVV: return reinterpret_cast<void *>(&jit_step<Op::SubVV>);
+    case Op::MulFF: return reinterpret_cast<void *>(&jit_step<Op::MulFF>);
+    case Op::MulFV: return reinterpret_cast<void *>(&jit_step<Op::MulFV>);
+    case Op::MulVF: return reinterpret_cast<void *>(&jit_step<Op::MulVF>);
+    case Op::MulVV: return reinterpret_cast<void *>(&jit_step<Op::MulVV>);
+    case Op::DivFF: return reinterpret_cast<void *>(&jit_step<Op::DivFF>);
+    case Op::DivVF: return reinterpret_cast<void *>(&jit_step<Op::DivVF>);
+    case Op::DivVV: return reinterpret_cast<void *>(&jit_step<Op::DivVV>);
+    case Op::Mod: return reinterpret_cast<void *>(&jit_step<Op::Mod>);
+    case Op::Neg: return reinterpret_cast<void *>(&jit_step<Op::Neg>);
+    case Op::Lt: return reinterpret_cast<void *>(&jit_step<Op::Lt>);
+    case Op::Le: return reinterpret_cast<void *>(&jit_step<Op::Le>);
+    case Op::Gt: return reinterpret_cast<void *>(&jit_step<Op::Gt>);
+    case Op::Ge: return reinterpret_cast<void *>(&jit_step<Op::Ge>);
+    case Op::Eq: return reinterpret_cast<void *>(&jit_step<Op::Eq>);
+    case Op::Ne: return reinterpret_cast<void *>(&jit_step<Op::Ne>);
+    case Op::And: return reinterpret_cast<void *>(&jit_step<Op::And>);
+    case Op::Or: return reinterpret_cast<void *>(&jit_step<Op::Or>);
+    case Op::Not: return reinterpret_cast<void *>(&jit_step<Op::Not>);
+    case Op::LengthV3: return reinterpret_cast<void *>(&jit_step<Op::LengthV3>);
+    case Op::DotV3: return reinterpret_cast<void *>(&jit_step<Op::DotV3>);
+    case Op::CrossV3: return reinterpret_cast<void *>(&jit_step<Op::CrossV3>);
+    case Op::SqrtF: return reinterpret_cast<void *>(&jit_step<Op::SqrtF>);
+    case Op::LogF: return reinterpret_cast<void *>(&jit_step<Op::LogF>);
+    case Op::AbsF: return reinterpret_cast<void *>(&jit_step<Op::AbsF>);
+    case Op::ArrayLen: return reinterpret_cast<void *>(&jit_step<Op::ArrayLen>);
+    case Op::Call: return reinterpret_cast<void *>(&jit_step<Op::Call>);
+    case Op::SampleElem: return reinterpret_cast<void *>(&jit_step<Op::SampleElem>);
+    case Op::FaceCorners: return reinterpret_cast<void *>(&jit_step<Op::FaceCorners>);
+    case Op::GatherSamples: return reinterpret_cast<void *>(&jit_step<Op::GatherSamples>);
+    case Op::CallUser: return reinterpret_cast<void *>(&jit_step<Op::CallUser>);
+    case Op::Pow: return reinterpret_cast<void *>(&jit_step<Op::Pow>);
+    case Op::GetMember: return reinterpret_cast<void *>(&jit_step<Op::GetMember>);
+    case Op::SetMember: return reinterpret_cast<void *>(&jit_step<Op::SetMember>);
+    case Op::GetIndex: return reinterpret_cast<void *>(&jit_step<Op::GetIndex>);
+    case Op::SetIndex: return reinterpret_cast<void *>(&jit_step<Op::SetIndex>);
+    case Op::MakeVec: return reinterpret_cast<void *>(&jit_step<Op::MakeVec>);
+    case Op::WhileCmpAdd: return reinterpret_cast<void *>(&jit_step<Op::WhileCmpAdd>);
+    default: return nullptr;
+  }
+}
+
+template<Op operation> static float jit_scalar_math(const float input)
+{
+  const Value value = Value::from_float(input);
+  if constexpr (operation == Op::SqrtF) return typed_sqrt_f(value).v.x;
+  if constexpr (operation == Op::LogF) return typed_log_f(value).v.x;
+  return typed_abs_f(value).v.x;
+}
+
+void *jit_scalar_math_address(const Op op)
+{
+  switch (op) {
+    case Op::SqrtF: return reinterpret_cast<void *>(&jit_scalar_math<Op::SqrtF>);
+    case Op::LogF: return reinterpret_cast<void *>(&jit_scalar_math<Op::LogF>);
+    case Op::AbsF: return reinterpret_cast<void *>(&jit_scalar_math<Op::AbsF>);
+    default: return nullptr;
+  }
+}
+
+bool jit_sample(JitFrame *frame, const int slot, const Value *index, Value *result)
+{
+  const int element = index ? index->as_int() : frame->env->index;
+  if (slot >= 0 && slot < frame->static_samples_num) {
+    /* An array attribute bound by the geometry executor: the value_from_varray() result of the
+     * generic path. Arrays continued in chunk attributes keep that path. */
+    const AttrRT &packed = frame->static_samples[slot];
+    if (packed.rarr && element >= 0 && element < packed.size &&
+        packed.rarr[element].truncated != bke::WrangleArrayValue::continued)
+    {
+      *result = packed_to_value(packed.rarr[element]);
+      return true;
+    }
+  }
+  *result = load_static_sample(slot, element, *frame->env, *frame->error);
+  return frame->error->empty();
+}
+
+template<Builtin builtin> static float jit_scalar_builtin(const float x, const float y)
+{
+  if constexpr (builtin == Builtin::Sin) return sinf(x);
+  if constexpr (builtin == Builtin::Cos) return cosf(x);
+  if constexpr (builtin == Builtin::Tan) return tanf(x);
+  if constexpr (builtin == Builtin::Asin) return asinf(x);
+  if constexpr (builtin == Builtin::Acos) return acosf(x);
+  if constexpr (builtin == Builtin::Atan) return atanf(x);
+  if constexpr (builtin == Builtin::Atan2) return atan2f(x, y);
+  if constexpr (builtin == Builtin::Exp) return expf(x);
+  if constexpr (builtin == Builtin::Pow) return powf(x, y);
+  return 0.0f;
+}
+
+bool jit_array_view(const int type, const int handle, JitArrayView *view)
+{
+  auto &storage = vm_thread_local_storage();
+  if (Type(type) == Type::IntArray && handle >= 0 && handle < storage.iarr.size()) {
+    view->data = storage.iarr[handle].data();
+    view->size = int(storage.iarr[handle].size());
+    return true;
+  }
+  if (Type(type) == Type::FloatArray && handle >= 0 && handle < storage.farr.size()) {
+    view->data = storage.farr[handle].data();
+    view->size = int(storage.farr[handle].size());
+    return true;
+  }
+  if (Type(type) == Type::VecArray && handle >= 0 && handle < storage.varr.size()) {
+    view->data = storage.varr[handle].data();
+    view->size = int(storage.varr[handle].size());
+    return true;
+  }
+  return false;
+}
+
+void *jit_scalar_builtin_address(const Builtin builtin)
+{
+  switch (builtin) {
+#define SCALAR_BUILTIN(name) case Builtin::name: return reinterpret_cast<void *>(&jit_scalar_builtin<Builtin::name>);
+    SCALAR_BUILTIN(Sin)
+    SCALAR_BUILTIN(Cos)
+    SCALAR_BUILTIN(Tan)
+    SCALAR_BUILTIN(Asin)
+    SCALAR_BUILTIN(Acos)
+    SCALAR_BUILTIN(Atan)
+    SCALAR_BUILTIN(Atan2)
+    SCALAR_BUILTIN(Exp)
+    SCALAR_BUILTIN(Pow)
+#undef SCALAR_BUILTIN
+    default: return nullptr;
+  }
+}
+
+bool jit_branch_guard(JitFrame *frame)
+{
+  if (++frame->jumps > 100000000) {
+    *frame->error = "Instruction limit exceeded (infinite loop?)";
+    return false;
+  }
+  return jit_cancel_guard(frame);
+}
+
+bool jit_cancel_guard(JitFrame *frame)
+{
+  if (frame->env->cancel_data && frame->env->cancel_data->is_cancelled()) {
+    *frame->error = "Evaluation cancelled";
+    return false;
+  }
+  return true;
+}
+
+static Vector<JitUniformParm> jit_uniform_parms(const Program &program, VMEnv &env)
+{
+  Vector<JitUniformParm> result;
+  if (!env.load_uniform_parm || std::getenv("BLENDER_VEX_JIT_DISABLE_UNIFORM_PARAMETERS")) {
+    return result;
+  }
+  Array<bool> targets(program.code.size(), false);
+  for (const Inst &in : program.code) {
+    if (ELEM(in.op, Op::Jmp, Op::JmpIfTrue, Op::JmpIfFalse) &&
+        in.imm >= 0 && in.imm < targets.size())
+    {
+      targets[in.imm] = true;
+    }
+  }
+  for (int pc = 1; pc < program.code.size(); pc++) {
+    const Inst &in = program.code[pc];
+    const Inst &name = program.code[pc - 1];
+    const Builtin id = Builtin(in.imm);
+    if (in.op != Op::Call || in.a != 1 || targets[pc] || name.op != Op::PushS ||
+        name.imm < 0 || name.imm >= program.const_s.size() ||
+        !ELEM(id, Builtin::Chi, Builtin::Chf, Builtin::Chb, Builtin::Chv,
+              Builtin::Chu, Builtin::Chq, Builtin::Chc, Builtin::Chr))
+    {
+      continue;
+    }
+    Value loaded;
+    if (!env.load_uniform_parm(env.parm_user, program.const_s[name.imm], loaded) ||
+        !(ELEM(loaded.type, Type::Int, Type::Bool, Type::Float) ||
+          type_is_vec_like(loaded.type)))
+    {
+      continue;
+    }
+    bool finite = true;
+    for (int axis = 0; axis < 4; axis++) {
+      finite &= std::isfinite(loaded.v[axis]);
+    }
+    /* Do not introduce an invalid float-to-int conversion while discovering a call that
+     * might be in an unexecuted branch. Its original helper remains in place. */
+    if (!finite || (id == Builtin::Chi && !ELEM(loaded.type, Type::Int, Type::Bool) &&
+                    (loaded.v.x < -2147483648.0f || loaded.v.x >= 2147483648.0f)))
+    {
+      continue;
+    }
+    const Value value = channel_scalar_value(id, loaded);
+    for (int axis = 0; axis < 4; axis++) {
+      finite &= std::isfinite(value.v[axis]);
+    }
+    if (finite) {
+      result.append({pc, value});
+    }
+  }
+  return result;
+}
+
+/**
+ * Tasks of about 40 microseconds once a kernel has run: scheduling a small kernel over a few
+ * thousand elements costs more than executing it. The first run uses the code-size grain.
+ */
+static int64_t jit_lane_grain(const JitKernel &kernel, const Program &program, const int64_t size)
+{
+  const float ns = kernel.ns_per_element.load(std::memory_order_relaxed);
+  if (ns <= 0.0f || std::getenv("BLENDER_VEX_GRAIN")) {
+    return vm_lane_grain(int(program.code.size()));
+  }
+  return int64_t(std::clamp(40000.0 / double(ns), 1.0, double(std::max<int64_t>(size, 1))));
+}
+
+static std::optional<bool> vm_try_jit(const Program &program, VMEnv &env,
+                                      const IndexMask &mask, std::string &r_error)
+{
+  if (std::getenv("BLENDER_VEX_DISABLE_JIT")) return std::nullopt;
+  const bool force = std::getenv("BLENDER_VEX_JIT_FORCE") != nullptr;
+  if (!force && int64_t(program.code.size()) * mask.size() < 65536) return std::nullopt;
+  const Vector<JitUniformParm> uniform_parms = jit_uniform_parms(program, env);
+  Vector<Value> uniform_values;
+  for (const JitUniformParm &parm : uniform_parms) {
+    uniform_values.append(parm.value);
+  }
+  auto kernel = jit_kernel_get(program, uniform_parms);
+  if (!kernel) return std::nullopt;
+  Array<uint8_t> sample_may_allocate(program.element_samples.size(), uint8_t(1));
+  for (const int slot : sample_may_allocate.index_range()) {
+    if (slot < env.static_samples.size() && env.static_samples[slot].size > 0 &&
+        !type_is_array(env.static_samples[slot].type)) {
+      sample_may_allocate[slot] = 0;
+    }
+  }
+  std::atomic<bool> ok{true}; std::mutex error_mutex;
+  std::atomic<int64_t> busy_ns{0};
+  mask.foreach_segment([&](const index_mask::IndexMaskSegment segment) {
+    const auto task_start = std::chrono::steady_clock::now();
+    VMEnv local = env; local.const_s = program.const_s.as_span();
+    const int local_n = std::max(program.local_count, 1);
+    Vector<Value, 32> stack(kernel->stack_capacity), locals(local_n);
+    JitArrayCache array_cache;
+    std::string error;
+    JitFrame frame{&program, &local, stack.data(), locals.data(), &error,
+                   local_n, kernel->stack_capacity};
+    frame.attrs = local.attrs.data();
+    frame.attrs_num = int(local.attrs.size());
+    frame.array_cache = &array_cache;
+    frame.sample_may_allocate = sample_may_allocate.data();
+    const Span<AttrRT> samples = local.jit_samples.is_empty() ? local.static_samples :
+                                                                local.jit_samples;
+    frame.static_samples = samples.data();
+    frame.static_samples_num = int(samples.size());
+    frame.uniform_parms = uniform_values.data();
+    uint32_t elements_done = 0;
+    for (const int64_t index : segment) {
+      if (!ok.load(std::memory_order_relaxed)) return;
+      local.index = int(index); local.rand_seq = 0; tls_arrays_begin();
+      ++array_cache.generation;
+      if (!kernel->private_storage)
+        std::fill(locals.begin(), locals.end(), Value{});
+      error.clear();
+      frame.jumps = 0;
+      /* Kernels poll inside long code and loops; between elements every 32 is enough. */
+      if ((elements_done++ & 31) == 0 && local.cancel_data && local.cancel_data->is_cancelled()) {
+        error = "Evaluation cancelled";
+      }
+      if (!error.empty() || !kernel->entry(&frame)) {
+        ok.store(false, std::memory_order_relaxed);
+        std::lock_guard lock(error_mutex); if (r_error.empty()) r_error = error;
+        return;
+      }
+    }
+    busy_ns.fetch_add(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                          std::chrono::steady_clock::now() - task_start).count(),
+                      std::memory_order_relaxed);
+  }, exec_mode::grain_size(jit_lane_grain(*kernel, program, mask.size())));
+  if (ok.load() && !mask.is_empty()) {
+    /* Averaged with earlier runs: data-dependent loops change the cost between runs. */
+    const float measured = float(double(busy_ns.load()) / double(mask.size()));
+    const float previous = kernel->ns_per_element.load(std::memory_order_relaxed);
+    kernel->ns_per_element.store(previous > 0.0f ? 0.5f * (previous + measured) : measured,
+                                 std::memory_order_relaxed);
+  }
+  if (std::getenv("BLENDER_VEX_PROFILE")) {
+    std::fprintf(stderr, "VEX_VM_EXEC path=jit code=%lld native=%d helpers=%d\n",
+       static_cast<long long>(program.code.size()), kernel->native_ops, kernel->helper_ops);
+  }
+  return ok.load();
+}
+#endif
+
 static bool vm_run_tiles_scalar(const Program &program,
                                 VMEnv &env,
                                 const IndexMask &mask,
@@ -8185,492 +8556,7 @@ static bool vm_run_tiles_scalar(const Program &program,
               }
               const Inst &in = code[pc];
               switch (in.op) {
-                case Op::Nop:
-                  break;
-                case Op::PushF:
-                  push(Value::from_float(program.const_f[in.imm]));
-                  break;
-                case Op::PushI:
-                  push(Value::from_int(program.const_i[in.imm]));
-                  break;
-                case Op::PushV:
-                  push(Value::from_vec(program.const_v[in.imm]));
-                  break;
-                case Op::PushB:
-                  push(Value::from_bool(in.imm != 0));
-                  break;
-                case Op::PushS:
-                  push(Value::from_str_i(in.imm));
-                  break;
-                case Op::PushLocal:
-                  push((in.imm >= 0 && in.imm < local_n) ? locals_s[in.imm] :
-                                                           Value::from_float(0.0f));
-                  break;
-                case Op::PushLocalIndex:
-                  push(load_local_index(program, in, locals_s, local_n, &local));
-                  break;
-                case Op::PushLocalMember:
-                  if (in.imm >= 0 && in.imm < local_n) {
-                    push(apply_get_member(locals_s[in.imm], int(in.a)));
-                  }
-                  else {
-                    push(Value::from_float(0.0f));
-                  }
-                  break;
-                case Op::StoreLocal: {
-                  Value v = pop();
-                  if (in.imm >= 0 && in.imm < local_n) {
-                    locals_s[in.imm] = v;
-                  }
-                  break;
-                }
-                case Op::IncLocal:
-                  if (in.imm >= 0 && in.imm < local_n) {
-                    locals_s[in.imm].type = Type::Int;
-                    locals_s[in.imm].i += 1;
-                    locals_s[in.imm].v.x = float(locals_s[in.imm].i);
-                  }
-                  break;
-                case Op::DecLocal:
-                  if (in.imm >= 0 && in.imm < local_n) {
-                    locals_s[in.imm].type = Type::Int;
-                    locals_s[in.imm].i -= 1;
-                    locals_s[in.imm].v.x = float(locals_s[in.imm].i);
-                  }
-                  break;
-                case Op::Dup:
-                  if (sp > 0 && sp < stack_cap) {
-                    stack[sp] = stack[sp - 1];
-                    sp++;
-                  }
-                  break;
-                case Op::Pop:
-                  if (sp > 0) {
-                    sp--;
-                  }
-                  break;
-                case Op::PushAttr:
-                  if (in.imm >= 0 && in.imm < local.attrs.size()) {
-                    push(load_attr_value(local.attrs[in.imm], local.index, local));
-                  }
-                  else {
-                    push(Value::from_float(0.0f));
-                  }
-                  break;
-                case Op::StoreAttr: {
-                  Value v = pop();
-                  if (in.imm >= 0 && in.imm < local.attrs.size()) {
-                    store_attr_value(local.attrs[in.imm], local.index, v, local);
-                  }
-                  break;
-                }
-                case Op::AttrAdd: {
-                  Value v = pop();
-                  if (in.imm >= 0 && in.imm < local.attrs.size()) {
-                    attr_add_inplace(local.attrs[in.imm], local.index, v);
-                  }
-                  break;
-                }
-                case Op::AttrMulAdd: {
-                  Value k = pop();
-                  Value b = pop();
-                  if (in.imm >= 0 && in.imm < local.attrs.size()) {
-                    attr_add_inplace(
-                        local.attrs[in.imm], local.index, scale_value(b, k.as_int()));
-                  }
-                  break;
-                }
-                case Op::PushIndex:
-                  push(Value::from_int(local.index));
-                  break;
-                case Op::PushNpoints:
-                  push(Value::from_int(local.npoints));
-                  break;
-                case Op::PushNedges:
-                  push(Value::from_int(local.nedges));
-                  break;
-                case Op::PushNfaces:
-                  push(Value::from_int(local.nfaces));
-                  break;
-                case Op::PushNcorners:
-                  push(Value::from_int(local.ncorners));
-                  break;
-                case Op::PushHitPos:
-                  push(Value::from_vec(local.hit_pos));
-                  break;
-                case Op::Add:
-                  if (sp >= 2) {
-                    Value b = pop();
-                    add_inplace(stack[sp - 1], b);
-                  }
-                  break;
-                case Op::Sub: {
-                  Value b = pop();
-                  Value a = pop();
-                  push(numeric_sub(a, b));
-                  break;
-                }
-                case Op::Mul: {
-                  Value b = pop();
-                  Value a = pop();
-                  push(numeric_mul(a, b, nullptr));
-                  break;
-                }
-                case Op::Div: {
-                  Value b = pop();
-                  Value a = pop();
-                  push(numeric_div(a, b));
-                  break;
-                }
-                case Op::AddFF: {
-                  const Value b = pop(), a = pop();
-                  push(Value::from_float(a.v.x + b.v.x));
-                  break;
-                }
-                case Op::AddVV: {
-                  const Value b = pop(), a = pop();
-                  push(Value::from_vec(float3(a.v.x + b.v.x, a.v.y + b.v.y, a.v.z + b.v.z)));
-                  break;
-                }
-                case Op::SubFF: {
-                  const Value b = pop(), a = pop();
-                  push(Value::from_float(a.v.x - b.v.x));
-                  break;
-                }
-                case Op::SubVV: {
-                  const Value b = pop(), a = pop();
-                  push(Value::from_vec(float3(a.v.x - b.v.x, a.v.y - b.v.y, a.v.z - b.v.z)));
-                  break;
-                }
-                case Op::MulFF: {
-                  const Value b = pop(), a = pop();
-                  push(Value::from_float(a.v.x * b.v.x));
-                  break;
-                }
-                case Op::MulFV: {
-                  const Value b = pop(), a = pop();
-                  push(Value::from_vec(float3(a.v.x * b.v.x, a.v.x * b.v.y, a.v.x * b.v.z)));
-                  break;
-                }
-                case Op::MulVF: {
-                  const Value b = pop(), a = pop();
-                  push(Value::from_vec(float3(a.v.x * b.v.x, a.v.y * b.v.x, a.v.z * b.v.x)));
-                  break;
-                }
-                case Op::MulVV: {
-                  const Value b = pop(), a = pop();
-                  push(Value::from_vec(float3(a.v.x * b.v.x, a.v.y * b.v.y, a.v.z * b.v.z)));
-                  break;
-                }
-                case Op::DivFF: {
-                  const Value b = pop(), a = pop();
-                  push(Value::from_float(b.v.x != 0.0f ? a.v.x / b.v.x : 0.0f));
-                  break;
-                }
-                case Op::DivVF: {
-                  const Value b = pop(), a = pop();
-                  const float inv = b.v.x != 0.0f ? 1.0f / b.v.x : 0.0f;
-                  push(Value::from_vec(float3(a.v.x * inv, a.v.y * inv, a.v.z * inv)));
-                  break;
-                }
-                case Op::DivVV: {
-                  const Value b = pop(), a = pop();
-                  push(Value::from_vec(float3(a.v.x / b.v.x, a.v.y / b.v.y, a.v.z / b.v.z)));
-                  break;
-                }
-                case Op::Mod: {
-                  Value b = pop();
-                  Value a = pop();
-                  if (a.type == Type::Int && b.type == Type::Int) {
-                    const int d = b.as_int();
-                    push(Value::from_int(d != 0 ? a.as_int() % d : 0));
-                  }
-                  else {
-                    const float d = b.as_float();
-                    push(Value::from_float(d != 0.0f ? fmodf(a.as_float(), d) : 0.0f));
-                  }
-                  break;
-                }
-                case Op::Neg: {
-                  Value a = pop();
-                  if (a.type == Type::Vector4) {
-                    push(Value::from_vec4(-a.as_vec4(), Type::Vector4));
-                  }
-                  else if (a.type == Type::Vector) {
-                    push(Value::from_vec(-a.as_vec()));
-                  }
-                  else if (a.type == Type::Vector2) {
-                    push(Value::from_vec2(-a.as_vec2()));
-                  }
-                  else if (a.type == Type::Matrix) {
-                    push(Value::from_matrix(-value_as_matrix(a)));
-                  }
-                  else if (a.type == Type::Matrix3) {
-                    push(Value::from_matrix3(-value_as_matrix3(a)));
-                  }
-                  else if (a.type == Type::Matrix2) {
-                    push(Value::from_matrix2(-a.as_matrix2()));
-                  }
-                  else if (a.type == Type::Int) {
-                    push(Value::from_int(-a.as_int()));
-                  }
-                  else {
-                    push(Value::from_float(-a.as_float()));
-                  }
-                  break;
-                }
-                case Op::Lt: {
-                  Value b = pop();
-                  Value a = pop();
-                  push(Value::from_bool(a.as_float() < b.as_float()));
-                  break;
-                }
-                case Op::Le: {
-                  Value b = pop();
-                  Value a = pop();
-                  push(Value::from_bool(a.as_float() <= b.as_float()));
-                  break;
-                }
-                case Op::Gt: {
-                  Value b = pop();
-                  Value a = pop();
-                  push(Value::from_bool(a.as_float() > b.as_float()));
-                  break;
-                }
-                case Op::Ge: {
-                  Value b = pop();
-                  Value a = pop();
-                  push(Value::from_bool(a.as_float() >= b.as_float()));
-                  break;
-                }
-                case Op::Eq: {
-                  Value b = pop();
-                  Value a = pop();
-                  push(Value::from_bool(a.as_float() == b.as_float()));
-                  break;
-                }
-                case Op::Ne: {
-                  Value b = pop();
-                  Value a = pop();
-                  push(Value::from_bool(a.as_float() != b.as_float()));
-                  break;
-                }
-                case Op::And: {
-                  Value b = pop();
-                  Value a = pop();
-                  push(Value::from_bool(a.as_bool() && b.as_bool()));
-                  break;
-                }
-                case Op::Or: {
-                  Value b = pop();
-                  Value a = pop();
-                  push(Value::from_bool(a.as_bool() || b.as_bool()));
-                  break;
-                }
-                case Op::Not:
-                  push(Value::from_bool(!pop().as_bool()));
-                  break;
-                case Op::Jmp:
-                  if (++jumps > 100000000) {
-                    err = "Instruction limit exceeded (infinite loop?)";
-                    lane_ok = false;
-                    break;
-                  }
-                  pc = in.imm;
-                  continue;
-                case Op::JmpIfFalse:
-                  if (++jumps > 100000000) {
-                    err = "Instruction limit exceeded (infinite loop?)";
-                    lane_ok = false;
-                    break;
-                  }
-                  if (!pop().as_bool()) {
-                    pc = in.imm;
-                    continue;
-                  }
-                  break;
-                case Op::JmpIfTrue:
-                  if (++jumps > 100000000) {
-                    err = "Instruction limit exceeded (infinite loop?)";
-                    lane_ok = false;
-                    break;
-                  }
-                  if (pop().as_bool()) {
-                    pc = in.imm;
-                    continue;
-                  }
-                  break;
-                case Op::LengthV3:
-                  push(typed_length_v3(pop()));
-                  break;
-                case Op::DotV3: {
-                  const Value b = pop();
-                  const Value a = pop();
-                  push(typed_dot_v3(a, b));
-                  break;
-                }
-                case Op::CrossV3: {
-                  const Value b = pop();
-                  const Value a = pop();
-                  push(typed_cross_v3(a, b));
-                  break;
-                }
-                case Op::SqrtF:
-                  push(typed_sqrt_f(pop()));
-                  break;
-                case Op::LogF:
-                  push(typed_log_f(pop()));
-                  break;
-                case Op::AbsF:
-                  push(typed_abs_f(pop()));
-                  break;
-                case Op::ArrayLen:
-                  push(typed_array_len(pop()));
-                  break;
-                case Op::Call: {
-                  const int na = std::min(int(in.a), 32);
-                  Value result;
-                  if (sp >= na) {
-                    /* The arguments are the top na stack values, in order: no copy. */
-                    sp -= na;
-                    result = call_builtin(
-                        Builtin(in.imm), Span<Value>(stack + sp, na), local, err);
-                  }
-                  else {
-                    Value args_buf[32];
-                    for (int a = na - 1; a >= 0; a--) {
-                      args_buf[a] = pop();
-                    }
-                    result = call_builtin(
-                        Builtin(in.imm), Span<Value>(args_buf, na), local, err);
-                  }
-                  if (!err.empty()) {
-                    lane_ok = false;
-                    break;
-                  }
-                  push(result);
-                  break;
-                }
-                case Op::SampleElem: {
-                  const int na = std::min(int(in.a & 0x1f), 32);
-                  Value result;
-                  if (sp >= na) {
-                    sp -= na;
-                    result = call_static_sample(in, Span<Value>(stack + sp, na), local, err);
-                  }
-                  else {
-                    Value args_buf[32];
-                    for (int a = na - 1; a >= 0; a--) {
-                      args_buf[a] = pop();
-                    }
-                    result = call_static_sample(in, Span<Value>(args_buf, na), local, err);
-                  }
-                  push(result);
-                  if (!err.empty()) {
-                    lane_ok = false;
-                  }
-                  break;
-                }
-                case Op::FaceCorners: {
-                  const int nargs = int(in.a);
-                  Value args_buf[2];
-                  const int na = std::min(nargs, 2);
-                  for (int a = na - 1; a >= 0; a--) {
-                    args_buf[a] = pop();
-                  }
-                  push(face_corners_direct(in, Span<Value>(args_buf, na), local));
-                  break;
-                }
-                case Op::GatherSamples:
-                  if (!gather_samples_direct(
-                          program, in, locals_s, local_n, local, err))
-                  {
-                    lane_ok = false;
-                  }
-                  break;
-                case Op::CallUser: {
-                  if (in.imm < 0 || in.imm >= int(program.user_fns.size())) {
-                    lane_ok = false;
-                    err = "Invalid function call";
-                    break;
-                  }
-                  const UserFn &fn = program.user_fns[in.imm];
-                  const int nargs = int(in.a);
-                  const int fn_n = std::max(fn.local_count, std::max(nargs, 1));
-                  Vector<Value> fn_locals(fn_n);
-                  for (int i = nargs - 1; i >= 0; i--) {
-                    fn_locals[i] = pop();
-                  }
-                  Value ret = Value::from_int(0);
-                  if (!vm_interp(program, local, err, &ret, fn.entry, fn_locals.data(), fn_n, 1))
-                  {
-                    lane_ok = false;
-                    break;
-                  }
-                  push(ret);
-                  break;
-                }
-                case Op::Pow: {
-                  const Value b = pop();
-                  const Value a = pop();
-                  push(Value::from_float(powf(a.as_float(), b.as_float())));
-                  break;
-                }
-                case Op::GetMember: {
-                  push(apply_get_member(pop(), in.imm));
-                  break;
-                }
-                case Op::SetMember: {
-                  const Value obj = pop();
-                  const Value mem = pop();
-                  push(apply_set_member(obj, mem, in.imm));
-                  break;
-                }
-                case Op::GetIndex: {
-                  const Value ix = pop();
-                  const Value arr = pop();
-                  push(get_index_value(arr, ix.as_int()));
-                  break;
-                }
-                case Op::SetIndex: {
-                  const Value ix = pop();
-                  const Value arr = pop();
-                  const Value elem = pop();
-                  push(set_index_value(arr, ix.as_int(), elem, local));
-                  break;
-                }
-                case Op::MakeVec: {
-                  const int cn = in.imm;
-                  float w = 0.0f;
-                  float z = 0.0f;
-                  float y = 0.0f;
-                  float x = 0.0f;
-                  if (cn >= 4) {
-                    w = pop().as_float();
-                  }
-                  if (cn >= 3) {
-                    z = pop().as_float();
-                  }
-                  if (cn >= 2) {
-                    y = pop().as_float();
-                  }
-                  if (cn >= 1) {
-                    x = pop().as_float();
-                  }
-                  push(make_vec_value(cn, x, y, z, w));
-                  break;
-                }
-                case Op::WhileCmpAdd:
-                  if (in.imm >= 0 && in.imm < program.while_adds.size() &&
-                      program.while_adds[in.imm].attr >= 0 &&
-                      program.while_adds[in.imm].attr < local.attrs.size())
-                  {
-                    while_cmp_add_one(local.attrs, program.while_adds[in.imm], local.index);
-                  }
-                  break;
-                case Op::Return:
-                  pc = code_n;
-                  continue;
+#include "vex_lane_ops.inc"
                 case Op::AddFF_LL: {
                   const Value B = locals_s[int((uint32_t(in.imm) >> 10) & 1023u)];
                   const Value A = locals_s[int(uint32_t(in.imm) & 1023u)];
@@ -9446,6 +9332,14 @@ static bool try_broadcast_uniform_stores(const Program &program,
 {
   r_varying_stores = 0;
   r_lane_code.clear();
+  /* A whole-attribute write must not precede an earlier captured array read,
+   * including mixed array flavors sharing one packed attribute buffer. */
+  for (const AttrInfo &read : program.attrs) {
+    if (!read.read || !type_is_array(read.type)) continue;
+    for (const AttrInfo &write : program.attrs) {
+      if (write.write && read.name == write.name) return false;
+    }
+  }
   if (program_has_jumps(program)) {
     return false;
   }
@@ -9801,6 +9695,11 @@ bool vm_run_array(const Program &program,
                   const IndexMask &mask,
                   std::string &r_error)
 {
+#ifdef WITH_VEX_LLVM_JIT
+  if (!program_can_array_exec(program) || std::getenv("BLENDER_VEX_JIT_FORCE")) {
+    if (const std::optional<bool> result = vm_try_jit(program, env, mask, r_error)) return *result;
+  }
+#endif
   if (!program_can_array_exec(program)) {
     if (!program_has_jumps(program)) {
       Vector<Inst> lane_code;
