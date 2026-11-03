@@ -383,10 +383,6 @@ class Context : public compositor::Context {
 
   void evaluate()
   {
-    /* Reset log before evaluation. */
-    DRW_context_get()->rv3d->runtime->nodes_evaluation_log =
-        std::make_unique<nodes::eval_log::NodesEvalLog>();
-
     const compositor::NodeGroupOutputTypes needed_outputs =
         compositor::to_node_group_output_types(this->needed_side_effect_output_types());
     compositor::SceneCompositorEffectsOperation operation(*this, needed_outputs);
@@ -430,6 +426,12 @@ class Instance : public DrawEngine {
 
   void draw(Manager & /*manager*/) final
   {
+    /* Reset log before evaluation, but not for rendering since we do not log in those cases. */
+    if (!DRW_context_get()->is_viewport_image_render()) {
+      DRW_context_get()->rv3d->runtime->nodes_evaluation_log =
+          std::make_unique<nodes::eval_log::NodesEvalLog>();
+    }
+
     bke::ComputeContextCache compute_context_cache;
     Context context(cache_manager_,
                     compute_context_cache,
