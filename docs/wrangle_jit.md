@@ -255,3 +255,57 @@ per cached solve with default settings (VM-only path 6.6 s to 6.2 s). Results
 are bit-identical: 36 energy/method/model hashes of positions and attributes,
 the 373-case corpus, the 44-case parameter test, and new JIT-versus-VM cases for
 mixed-type arithmetic, NaN/inf, vector builtins and same/cross-domain samples.
+
+Array pools read in native code
+-------------------------------
+
+Array values are handles into the thread's `Vector<Vector<T>>` pools. Native
+code now reads the pool vectors directly (`JitFrame::array_pools`) instead of
+caching views that every allocating helper invalidated: `begin_`, `end_` and
+`capacity_end_` lead a `Vector`, which jit_array_pools_native() checks once at
+runtime on real vectors (without it the view cache is kept). With the pools
+readable, the common array helpers run natively when the pool array has room,
+and fall back to the helpers unchanged when it does not (a new pool entry, a
+reallocation, a continued array, another kind):
+
+- `int a[]; float a[]; vector a[];` take the next pool array (cleared, capacity
+  kept), like store_tls_array() of an empty Vector.
+- `a[i] = x` past the end zero-fills the gap within the capacity, like
+  array_write_index(); `append(a, x)` of one int, float or vector item.
+- `i[]@a`, `f[]@a`, `v[]@a` stored as the same kind and not continued are copied
+  into a pool array; stores that fit one packed value write it like
+  set_ints()/set_floats()/set_float3s(), unless ArrayOverflow::any is set.
+- Packed array samples (`point(0, "a", i)` of an array attribute) copy Int,
+  Float and Float3 arrays like packed_to_value().
+- `facepoints(0, f)` / `facepoints(f)` of the wrangled mesh copy its corner
+  vertices (`VMEnv::corner_verts`, bound beside `face_offsets`).
+
+`AttrAdd` of float, vector and int attributes, `sqrt` (as `sqrtf(max(x, 0))`),
+`abs` and `length` are native as well. On the Bunny preset these remove about
+110 million helper calls per solve; the energy kernel no longer calls a helper
+in its inner loops.
+
+Measured as before (Bunny, 250 steps, interleaved with a build of the previous
+commit): 1.40 s to 1.20 s per cached solve. Results are bit-identical: the 36
+energy/method/model hashes, the corpus (now 391 cases, JIT against VM), and the
+parameter test. The new `native array pools` cases cover growth past the
+capacity, negative and huge indices, declarations in loops, every append form,
+long (continued) array attributes and samples, array stores that overflow, and
+`facepoints` outside the faces and of other geometry.
+
+Samples of attributes the program replaces
+------------------------------------------
+
+A same-domain sample of an attribute the program also writes reads the Jacobi
+snapshot, which holds the values in the type the program writes. When the input
+attribute has another type (`point(0, "x", i)` of an `int[]` while writing
+`f@x`), that read returned the converted values: empty arrays, truncated floats,
+averaged vectors, in the interpreter and the JIT alike. The executor now drops
+such a snapshot, so the sample reads the input values as it does when the name is
+not written. bind_attrs() replaces the attribute in that case (and when the
+written attribute moves to another domain), so the prebound sample keeps a
+sharing reference to the input data; before, a cross-domain sample of such an
+attribute could read freed memory. Same-type writes keep the snapshot and take no
+reference, which would copy the attribute on write. The cases are in
+`wrangle_jit_cases.json` under "same-name samples of attributes the program
+replaces".

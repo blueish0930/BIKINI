@@ -49,6 +49,7 @@
 #include "BLI_execution_mode.hh"
 #include "BLI_index_mask.hh"
 #include "BLI_implicit_sharing.hh"
+#include "BLI_implicit_sharing_ptr.hh"
 #include "BLI_kdtree_new.hh"
 #include "BLI_map.hh"
 #include "BLI_math_base.hh"
@@ -218,6 +219,9 @@ struct ElemUser {
     Array<ColorGeometry4f> owned_color;
     /** Array attributes: the attributes with the rest of arrays that are longer than a value. */
     Vector<GVArray> array_chunks;
+    /** The data of an attribute the program replaces (another type or domain): bind_attrs()
+     * frees it otherwise, while samples must still read the input values. */
+    Vector<ImplicitSharingPtr<>> replaced_data;
   };
   Vector<const bke::GeometrySet *> geos;
   const bke::GeometrySet *self = nullptr; /* geometry currently being wrangled (geo 0) */
@@ -279,6 +283,27 @@ static VArray<float3> computed_normals(
     }
   }
   return {};
+}
+
+/**
+ * Whether bind_attrs() replaces the attribute a geometry 0 sample reads: the program writes the
+ * name with another type, or the sample reads it on another domain (the written attribute moves
+ * to the bind domain). Same type and domain writes keep the attribute and use the snapshot.
+ */
+static bool program_replaces_attribute(const Program &program,
+                                       const bke::AttrDomain bind_domain,
+                                       const ElemUser::ElementSampleCache &sample,
+                                       const bke::GAttributeReader &reader)
+{
+  const std::string name = sample_attr_name(sample.name);
+  for (const AttrInfo &info : program.attrs) {
+    if (!info.write || info.name != name) {
+      continue;
+    }
+    return reader.domain != bind_domain ||
+           bke::cpp_type_to_attribute_type(reader.varray.type()) != to_attr_type(info.type);
+  }
+  return false;
 }
 
 static void prewarm_element_samples(const Program &program, ElemUser &user)
@@ -352,6 +377,15 @@ static void prewarm_element_samples(const Program &program, ElemUser &user)
       return reader;
     };
     bke::GAttributeReader reader = find_reader(sample.name);
+    const bool replaced = reader && sample.geo == 0 &&
+                          program_replaces_attribute(program, user.attr_domain, cache, reader);
+    auto keep_replaced = [&](const bke::GAttributeReader &input) {
+      if (replaced && input.sharing_info) {
+        input.sharing_info->add_user();
+        cache.replaced_data.append(ImplicitSharingPtr<>(input.sharing_info));
+      }
+    };
+    keep_replaced(reader);
     if (reader && reader.varray.type().is<bke::WrangleArrayValue>()) {
       for (int chunk = 1;; chunk++) {
         bke::GAttributeReader part = find_reader(
@@ -361,6 +395,7 @@ static void prewarm_element_samples(const Program &program, ElemUser &user)
         {
           break;
         }
+        keep_replaced(part);
         cache.array_chunks.append(std::move(part.varray));
       }
     }
@@ -7764,6 +7799,7 @@ ExecOutput run_on_accessor(const Program &program,
   env.static_samples = static_samples;
   if (topo.mesh) {
     env.face_offsets = topo.mesh->face_offsets();
+    env.corner_verts = topo.mesh->corner_verts();
   }
   env.parm_user = &elem_user;
   env.load_parm = load_parm_fn;
@@ -7823,6 +7859,24 @@ ExecOutput run_on_accessor(const Program &program,
                               !program.sampled_self_attrs.is_empty();
   if (domain_size > 0 && needs_snapshot) {
     take_snapshot();
+    /* A snapshot holds the values in the type the program writes. When that is not the type of
+     * the input attribute, same-domain samples read the input values (kept alive by
+     * prewarm_element_samples()) like they do when the program does not write the name. */
+    for (const int i : sample_rt.index_range()) {
+      if (sample_rt[i].size == 0 || i >= program.attrs.size()) {
+        continue;
+      }
+      for (const ElemUser::ElementSampleCache &sample : elem_user.element_samples) {
+        if (sample.geo == 0 && sample.domain == vex_bind_domain && sample.values &&
+            sample_attr_name(sample.name) == program.attrs[i].name &&
+            bke::cpp_type_to_attribute_type(sample.values.type()) !=
+                to_attr_type(program.attrs[i].type))
+        {
+          sample_rt[i] = AttrRT();
+          break;
+        }
+      }
+    }
     elem_user.sample_attrs = sample_rt;
   }
   Array<AttrRT> jit_samples(static_samples.as_span());

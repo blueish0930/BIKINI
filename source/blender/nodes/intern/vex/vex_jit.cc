@@ -3,6 +3,8 @@
 
 #include "vex_jit.hh"
 
+#include "BKE_wrangle_array.hh"
+
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -334,6 +336,7 @@ class Lowering {
   std::vector<llvm::BasicBlock *> blocks;
   llvm::BasicBlock *failed;
   const std::vector<int> &depth;
+  const bool native_pools = jit_array_pools_native();
 
   llvm::Value *offset(llvm::Value *base, size_t bytes) {
     return b.CreateConstGEP1_64(b.getInt8Ty(), base, bytes);
@@ -400,6 +403,12 @@ class Lowering {
   }
   llvm::Value *is_type(llvm::Value *tag, const Type type) {
     return b.CreateICmpEQ(tag, b.getInt8(uint8_t(type)));
+  }
+  /* `sqrtf(std::max(x, 0.0f))` of the VM: NaN and -0 pass through the clamp. */
+  llvm::Value *sqrt_clamped(llvm::Value *x) {
+    auto *zero = llvm::ConstantFP::get(f32, 0.0);
+    return b.CreateUnaryIntrinsic(
+        llvm::Intrinsic::sqrt, b.CreateSelect(b.CreateFCmpOLT(x, zero), zero, x));
   }
   llvm::Value *axis(llvm::Value *value, const int index) {
     auto *type = load(value, offsetof(Value, type), b.getInt8Ty());
@@ -504,6 +513,183 @@ class Lowering {
 
   /* vector()/set() of three scalars or one scalar/vector, and normalize(),
    * as call_builtin(). Anything else uses the helper. */
+  /* The #Vector of pool array `handle` (an IntArray, FloatArray or VecArray by `is_int` and
+   * `is_float`): two loads for the pool range. Branches to `generic` outside the pool. */
+  llvm::Value *pool_array(llvm::Value *is_int, llvm::Value *is_float, llvm::Value *handle,
+                          llvm::BasicBlock *generic) {
+    auto *i64 = b.getInt64Ty();
+    auto *pools = offset(frame, offsetof(JitFrame, array_pools));
+    auto *pool = b.CreateSelect(is_int, load(pools, 0, ptr),
+                                b.CreateSelect(is_float, load(pools, sizeof(void *), ptr),
+                                               load(pools, 2 * sizeof(void *), ptr)));
+    auto *pool_begin = load(pool, 0, ptr);
+    auto *pool_bytes = b.CreateSub(b.CreatePtrToInt(load(pool, sizeof(void *), ptr), i64),
+                                   b.CreatePtrToInt(pool_begin, i64));
+    auto *item_bytes = b.CreateSelect(
+        is_int, b.getInt64(sizeof(Vector<int>)),
+        b.CreateSelect(is_float, b.getInt64(sizeof(Vector<float>)),
+                       b.getInt64(sizeof(Vector<float3>))));
+    auto *item_offset = b.CreateMul(b.CreateZExt(handle, i64), item_bytes);
+    auto *present = llvm::BasicBlock::Create(context, "array_present", function);
+    b.CreateCondBr(b.CreateAnd(b.CreateICmpSGE(handle, b.getInt32(0)),
+                               b.CreateICmpULT(item_offset, pool_bytes)),
+                   present, generic);
+    b.SetInsertPoint(present);
+    return b.CreateGEP(b.getInt8Ty(), pool_begin, item_offset);
+  }
+
+  /* `append(a, x)` of one int, float or vector item, the case of call_builtin() that returns `a`
+   * itself, within the capacity of the pool array. Returns true with the insert point in the
+   * generic block, like emit_vector_builtin(). */
+  bool emit_append(const Inst &in, const int sp, llvm::BasicBlock *next) {
+    if (!native_pools || Builtin(in.imm) != Builtin::Append || in.a != 2)
+      return false;
+    auto *array = slot(stack, sp - 2);
+    auto *item = slot(stack, sp - 1);
+    auto *tag = load(array, offsetof(Value, type), b.getInt8Ty());
+    auto *item_tag = load(item, offsetof(Value, type), b.getInt8Ty());
+    auto *is_int = is_type(tag, Type::IntArray);
+    auto *is_float = is_type(tag, Type::FloatArray);
+    auto *is_vector = is_type(tag, Type::VecArray);
+    auto *integer_item = b.CreateOr(is_type(item_tag, Type::Int), is_type(item_tag, Type::Bool));
+    auto *scalar_item = is_scalar(item_tag);
+    auto *eligible = b.CreateOr(
+        b.CreateAnd(is_int, integer_item),
+        b.CreateOr(b.CreateAnd(is_float, scalar_item),
+                   b.CreateAnd(is_vector,
+                               b.CreateOr(scalar_item, is_type(item_tag, Type::Vector)))));
+    auto *native = llvm::BasicBlock::Create(context, "append", function);
+    auto *generic = llvm::BasicBlock::Create(context, "generic_builtin", function);
+    b.CreateCondBr(eligible, native, generic);
+    b.SetInsertPoint(native);
+    auto *i64 = b.getInt64Ty();
+    auto *items = pool_array(is_int, is_float, load(array, offsetof(Value, i), i32), generic);
+    auto *end = load(items, sizeof(void *), ptr);
+    auto *stride = b.CreateSelect(is_vector, b.getInt64(12), b.getInt64(4));
+    auto *new_end = b.CreateGEP(b.getInt8Ty(), end, stride);
+    auto *fits = b.CreateICmpULE(b.CreatePtrToInt(new_end, i64),
+                                 b.CreatePtrToInt(load(items, 2 * sizeof(void *), ptr), i64));
+    auto *store = llvm::BasicBlock::Create(context, "append_store", function);
+    b.CreateCondBr(fits, store, generic);
+    b.SetInsertPoint(store);
+    b.CreateStore(new_end, offset(items, sizeof(void *)));
+    auto *int_case = llvm::BasicBlock::Create(context, "append_int", function);
+    auto *float_case = llvm::BasicBlock::Create(context, "append_float", function);
+    auto *vector_case = llvm::BasicBlock::Create(context, "append_vector", function);
+    auto *other = llvm::BasicBlock::Create(context, "append_nonint", function);
+    b.CreateCondBr(is_int, int_case, other);
+    b.SetInsertPoint(other);
+    b.CreateCondBr(is_float, float_case, vector_case);
+    b.SetInsertPoint(int_case);
+    b.CreateStore(load(item, offsetof(Value, i), i32), end);
+    b.CreateBr(next);
+    b.SetInsertPoint(float_case);
+    b.CreateStore(as_float(item), end);
+    b.CreateBr(next);
+    b.SetInsertPoint(vector_case);
+    for (int axis = 0; axis < 3; axis++)
+      b.CreateStore(as_vec_component(item, axis), offset(end, 4 * axis));
+    b.CreateBr(next);
+    b.SetInsertPoint(generic);
+    return true;
+  }
+
+  /* Takes the next array of pool `kind` (int, float, vector) like prepare_tls_array(): its size
+   * becomes `bytes`, its capacity is kept. Branches to `generic` when the pool or the capacity
+   * is too small, which the helpers grow. Returns the handle; `r_data` is the first item. */
+  llvm::Value *take_pool_array(const int kind, llvm::Value *bytes, llvm::BasicBlock *generic,
+                               llvm::Value *&r_data) {
+    const size_t item_bytes = kind == 0   ? sizeof(Vector<int>)
+                              : kind == 1 ? sizeof(Vector<float>)
+                                          : sizeof(Vector<float3>);
+    auto *i64 = b.getInt64Ty();
+    auto *pool = load(frame, offsetof(JitFrame, array_pools) + kind * sizeof(void *), ptr);
+    auto *used = load(frame, offsetof(JitFrame, array_pools_used) + kind * sizeof(void *), ptr);
+    auto *handle = b.CreateLoad(i32, used);
+    auto *pool_begin = load(pool, 0, ptr);
+    auto *pool_bytes = b.CreateSub(b.CreatePtrToInt(load(pool, sizeof(void *), ptr), i64),
+                                   b.CreatePtrToInt(pool_begin, i64));
+    auto *item_offset = b.CreateMul(b.CreateZExt(handle, i64), b.getInt64(item_bytes));
+    auto *present = llvm::BasicBlock::Create(context, "pool_array", function);
+    b.CreateCondBr(b.CreateAnd(b.CreateICmpSGE(handle, b.getInt32(0)),
+                               b.CreateICmpULT(item_offset, pool_bytes)),
+                   present, generic);
+    b.SetInsertPoint(present);
+    auto *items = b.CreateGEP(b.getInt8Ty(), pool_begin, item_offset);
+    r_data = load(items, 0, ptr);
+    auto *capacity = b.CreateSub(b.CreatePtrToInt(load(items, 2 * sizeof(void *), ptr), i64),
+                                 b.CreatePtrToInt(r_data, i64));
+    auto *fits = llvm::BasicBlock::Create(context, "pool_array_fits", function);
+    b.CreateCondBr(b.CreateICmpULE(bytes, capacity), fits, generic);
+    b.SetInsertPoint(fits);
+    b.CreateStore(b.CreateGEP(b.getInt8Ty(), r_data, bytes), offset(items, sizeof(void *)));
+    b.CreateStore(b.CreateAdd(handle, b.getInt32(1)), used);
+    return handle;
+  }
+
+  /* `facepoints(0, f)` and `facepoints(f)` of the mesh being wrangled: the corner vertices of
+   * face `f` copied into an int pool array, an empty one outside the faces (geo_builtin_fn()).
+   * Returns true with the insert point in the generic block, like emit_vector_builtin(). */
+  bool emit_face_points(const Inst &in, const int sp, llvm::BasicBlock *next) {
+    if (!native_pools || Builtin(in.imm) != Builtin::FacePoints || !ELEM(in.a, 1, 2))
+      return false;
+    auto *dst = slot(stack, sp - in.a);
+    auto *face_arg = slot(stack, sp - 1);
+    auto integer = [&](llvm::Value *value) {
+      auto *tag = load(value, offsetof(Value, type), b.getInt8Ty());
+      return b.CreateOr(is_type(tag, Type::Int), is_type(tag, Type::Bool));
+    };
+    auto *offsets = load(frame, offsetof(JitFrame, face_offsets), ptr);
+    llvm::Value *eligible = b.CreateAnd(b.CreateIsNotNull(offsets), integer(face_arg));
+    if (in.a == 2)
+      eligible = b.CreateAnd(
+          eligible, b.CreateAnd(integer(dst), b.CreateICmpEQ(load(dst, offsetof(Value, i), i32),
+                                                              b.getInt32(0))));
+    auto *native = llvm::BasicBlock::Create(context, "face_points", function);
+    auto *generic = llvm::BasicBlock::Create(context, "generic_builtin", function);
+    b.CreateCondBr(eligible, native, generic);
+    b.SetInsertPoint(native);
+    auto *i64 = b.getInt64Ty();
+    auto *face = load(face_arg, offsetof(Value, i), i32);
+    auto *inside = b.CreateICmpULT(face, load(frame, offsetof(JitFrame, faces_num), i32));
+    auto *safe = b.CreateZExt(b.CreateSelect(inside, face, b.getInt32(0)), i64);
+    auto *start = b.CreateSExt(
+        b.CreateLoad(i32, b.CreateGEP(i32, offsets, safe)), i64);
+    auto *end = b.CreateSExt(
+        b.CreateLoad(i32, b.CreateGEP(i32, offsets, b.CreateAdd(safe, b.getInt64(1)))), i64);
+    auto *bytes = b.CreateSelect(inside, b.CreateMul(b.CreateSub(end, start), b.getInt64(4)),
+                                 b.getInt64(0));
+    llvm::Value *data;
+    auto *handle = take_pool_array(0, bytes, generic, data);
+    auto *corner_verts = load(frame, offsetof(JitFrame, corner_verts), ptr);
+    b.CreateMemCpy(data, llvm::MaybeAlign(4), b.CreateGEP(i32, corner_verts, start),
+                   llvm::MaybeAlign(4), bytes);
+    store_value(dst, Type::IntArray, llvm::ConstantFP::get(f32, 0), nullptr, nullptr, handle);
+    b.CreateBr(next);
+    b.SetInsertPoint(generic);
+    return true;
+  }
+
+  /* `int a[];`, `float a[];` and `vector a[];`: store_tls_array() of an empty Vector. Returns
+   * true with the insert point in the generic block, like emit_vector_builtin(). */
+  bool emit_empty_array(const Inst &in, const int sp, llvm::BasicBlock *next) {
+    const Builtin builtin = Builtin(in.imm);
+    const int kind = builtin == Builtin::ArrayInt     ? 0
+                     : builtin == Builtin::ArrayFloat ? 1
+                     : builtin == Builtin::ArrayVec   ? 2
+                                                      : -1;
+    if (!native_pools || kind < 0 || in.a != 0)
+      return false;
+    const Type type = kind == 0 ? Type::IntArray : kind == 1 ? Type::FloatArray : Type::VecArray;
+    auto *generic = llvm::BasicBlock::Create(context, "generic_builtin", function);
+    llvm::Value *data;
+    auto *handle = take_pool_array(kind, b.getInt64(0), generic, data);
+    store_value(slot(stack, sp), type, llvm::ConstantFP::get(f32, 0), nullptr, nullptr, handle);
+    b.CreateBr(next);
+    b.SetInsertPoint(generic);
+    return true;
+  }
+
   bool emit_vector_builtin(const Inst &in, const int sp,
                            llvm::BasicBlock *next) {
     const Builtin builtin = Builtin(in.imm);
@@ -608,6 +794,8 @@ class Lowering {
   }
 
   void invalidate_array_views() {
+    if (native_pools)
+      return;
     auto *cache = load(frame, offsetof(JitFrame, array_cache), ptr);
     auto *generation = offset(cache, offsetof(JitArrayCache, generation));
     b.CreateStore(
@@ -749,47 +937,63 @@ class Lowering {
     auto *lookup = llvm::BasicBlock::Create(context, "array_lookup", function);
     auto *fallback =
         llvm::BasicBlock::Create(context, "array_generic", function);
-    auto *resolve =
-        llvm::BasicBlock::Create(context, "array_resolve", function);
-    auto *resolved =
-        llvm::BasicBlock::Create(context, "array_resolved", function);
     auto *ready = llvm::BasicBlock::Create(context, "array_ready", function);
     b.CreateCondBr(eligible, lookup, fallback);
     b.SetInsertPoint(lookup);
-    auto *cache = load(frame, offsetof(JitFrame, array_cache), ptr);
-    auto *generation =
-        load(cache, offsetof(JitArrayCache, generation), b.getInt64Ty());
-    auto *tag32 = b.CreateZExt(tag, i32);
-    auto *hash =
-        b.CreateAnd(b.CreateAdd(b.CreateMul(tag32, b.getInt32(17)), handle),
-                    b.getInt32(63));
-    auto *view = b.CreateGEP(b.getInt8Ty(),
-                             offset(cache, offsetof(JitArrayCache, views)),
-                             b.CreateMul(b.CreateZExt(hash, b.getInt64Ty()),
-                                         b.getInt64(sizeof(JitArrayView))));
-    auto *hit = b.CreateAnd(
-        b.CreateICmpEQ(
-            generation,
-            load(view, offsetof(JitArrayView, generation), b.getInt64Ty())),
-        b.CreateAnd(
-            b.CreateICmpEQ(tag32,
-                           load(view, offsetof(JitArrayView, type), i32)),
-            b.CreateICmpEQ(handle,
-                           load(view, offsetof(JitArrayView, handle), i32))));
-    b.CreateCondBr(hit, ready, resolve);
-    b.SetInsertPoint(resolve);
-    emit_count(254);
-    auto *ok =
-        call_pointer(reinterpret_cast<void *>(&jit_array_view), b.getInt1Ty(),
-                     {i32, i32, ptr}, {tag32, handle, view});
-    b.CreateCondBr(ok, resolved, fallback);
-    b.SetInsertPoint(resolved);
-    b.CreateStore(tag32, offset(view, offsetof(JitArrayView, type)));
-    b.CreateStore(handle, offset(view, offsetof(JitArrayView, handle)));
-    b.CreateStore(generation, offset(view, offsetof(JitArrayView, generation)));
-    b.CreateBr(ready);
+    /* `items` is the #Vector object of a pool array, only on the native path. */
+    llvm::Value *size = nullptr, *data = nullptr, *items = nullptr;
+    if (native_pools) {
+      auto *i64 = b.getInt64Ty();
+      items = pool_array(is_int, is_float, handle, fallback);
+      data = load(items, 0, ptr);
+      auto *bytes = b.CreateSub(b.CreatePtrToInt(load(items, sizeof(void *), ptr), i64),
+                                b.CreatePtrToInt(data, i64));
+      size = b.CreateTrunc(b.CreateSelect(is_vector, b.CreateUDiv(bytes, b.getInt64(12)),
+                                          b.CreateLShr(bytes, b.getInt64(2))),
+                           i32);
+      b.CreateBr(ready);
+    } else {
+      auto *resolve =
+          llvm::BasicBlock::Create(context, "array_resolve", function);
+      auto *resolved =
+          llvm::BasicBlock::Create(context, "array_resolved", function);
+      auto *cache = load(frame, offsetof(JitFrame, array_cache), ptr);
+      auto *generation =
+          load(cache, offsetof(JitArrayCache, generation), b.getInt64Ty());
+      auto *tag32 = b.CreateZExt(tag, i32);
+      auto *hash =
+          b.CreateAnd(b.CreateAdd(b.CreateMul(tag32, b.getInt32(17)), handle),
+                      b.getInt32(63));
+      auto *view = b.CreateGEP(b.getInt8Ty(),
+                               offset(cache, offsetof(JitArrayCache, views)),
+                               b.CreateMul(b.CreateZExt(hash, b.getInt64Ty()),
+                                           b.getInt64(sizeof(JitArrayView))));
+      auto *hit = b.CreateAnd(
+          b.CreateICmpEQ(
+              generation,
+              load(view, offsetof(JitArrayView, generation), b.getInt64Ty())),
+          b.CreateAnd(
+              b.CreateICmpEQ(tag32,
+                             load(view, offsetof(JitArrayView, type), i32)),
+              b.CreateICmpEQ(handle,
+                             load(view, offsetof(JitArrayView, handle), i32))));
+      b.CreateCondBr(hit, ready, resolve);
+      b.SetInsertPoint(resolve);
+      emit_count(254);
+      auto *ok =
+          call_pointer(reinterpret_cast<void *>(&jit_array_view), b.getInt1Ty(),
+                       {i32, i32, ptr}, {tag32, handle, view});
+      b.CreateCondBr(ok, resolved, fallback);
+      b.SetInsertPoint(resolved);
+      b.CreateStore(tag32, offset(view, offsetof(JitArrayView, type)));
+      b.CreateStore(handle, offset(view, offsetof(JitArrayView, handle)));
+      b.CreateStore(generation, offset(view, offsetof(JitArrayView, generation)));
+      b.CreateBr(ready);
+      b.SetInsertPoint(ready);
+      size = load(view, offsetof(JitArrayView, size), i32);
+      data = load(view, offsetof(JitArrayView, data), ptr);
+    }
     b.SetInsertPoint(ready);
-    auto *size = load(view, offsetof(JitArrayView, size), i32);
     if (length) {
       store_value(dst, Type::Int, b.CreateSIToFP(size, f32), nullptr, nullptr,
                   size);
@@ -801,9 +1005,33 @@ class Lowering {
       auto *access =
           llvm::BasicBlock::Create(context, "array_access", function);
       auto *missing =
-          write ? fallback
-                : llvm::BasicBlock::Create(context, "array_zero", function);
+          write && items ? llvm::BasicBlock::Create(context, "array_grow", function)
+          : write        ? fallback
+                         : llvm::BasicBlock::Create(context, "array_zero", function);
       b.CreateCondBr(valid, access, missing);
+      if (write && items) {
+        /* `a[i] = x` past the end zero-fills the gap like array_write_index(). Within the
+         * capacity the pool array only moves its end, otherwise the helper reallocates. */
+        b.SetInsertPoint(missing);
+        auto *i64 = b.getInt64Ty();
+        auto *stride = b.CreateSelect(is_vector, b.getInt64(12), b.getInt64(4));
+        auto *end = b.CreateMul(b.CreateZExt(b.CreateAdd(raw, b.getInt32(1)), i64), stride);
+        auto *capacity = b.CreateSub(
+            b.CreatePtrToInt(load(items, 2 * sizeof(void *), ptr), i64),
+            b.CreatePtrToInt(data, i64));
+        auto *fits = b.CreateAnd(
+            b.CreateICmpSGE(raw, b.getInt32(0)),
+            b.CreateAnd(b.CreateICmpSLT(raw, b.getInt32(k_jit_array_grow_max)),
+                        b.CreateICmpULE(end, capacity)));
+        auto *grow = llvm::BasicBlock::Create(context, "array_grow_fill", function);
+        b.CreateCondBr(fits, grow, fallback);
+        b.SetInsertPoint(grow);
+        auto *filled = b.CreateMul(b.CreateZExt(size, i64), stride);
+        b.CreateMemSet(b.CreateGEP(b.getInt8Ty(), data, filled), b.getInt8(0),
+                       b.CreateSub(end, filled), llvm::MaybeAlign(4));
+        b.CreateStore(b.CreateGEP(b.getInt8Ty(), data, end), offset(items, sizeof(void *)));
+        b.CreateBr(access);
+      }
       if (!write) {
         b.SetInsertPoint(missing);
         store_value(dst, Type::Float, llvm::ConstantFP::get(f32, 0));
@@ -816,7 +1044,6 @@ class Lowering {
         finish_index_read(in, dst, next);
       }
       b.SetInsertPoint(access);
-      auto *data = load(view, offsetof(JitArrayView, data), ptr);
       auto *stride = b.CreateSelect(is_vector, b.getInt64(12), b.getInt64(4));
       auto *item =
           b.CreateGEP(b.getInt8Ty(), data,
@@ -875,11 +1102,148 @@ class Lowering {
     return emit_helper(in, sp, next);
   }
 
+  /* `i[]@a`, `f[]@a` and `v[]@a` stored as the same kind and not continued in chunk attributes:
+   * load_attr_value() copies the packed items into a pool array (packed_to_value()). */
+  bool emit_array_attribute(const Inst &in, const int sp, llvm::BasicBlock *next,
+                            const Type type) {
+    using bke::WrangleArrayKind;
+    using bke::WrangleArrayValue;
+    const int kind = type == Type::IntArray ? 0 : type == Type::FloatArray ? 1 : 2;
+    const WrangleArrayKind stored = kind == 0   ? WrangleArrayKind::Int
+                                    : kind == 1 ? WrangleArrayKind::Float
+                                                : WrangleArrayKind::Float3;
+    auto *available = llvm::BasicBlock::Create(context, "array_attribute", function);
+    auto *packed = llvm::BasicBlock::Create(context, "array_attribute_packed", function);
+    auto *fallback = llvm::BasicBlock::Create(context, "attribute_generic", function);
+    auto *count = load(frame, offsetof(JitFrame, attrs_num), i32);
+    b.CreateCondBr(b.CreateICmpSGT(count, b.getInt32(in.imm)), available, fallback);
+    b.SetInsertPoint(available);
+    auto *attr = offset(load(frame, offsetof(JitFrame, attrs), ptr), sizeof(AttrRT) * in.imm);
+    auto *index = load(load(frame, offsetof(JitFrame, env), ptr), offsetof(VMEnv, index), i32);
+    auto *written = load(attr, offsetof(AttrRT, warr), ptr);
+    auto *heads = b.CreateSelect(b.CreateIsNotNull(written), written,
+                                 load(attr, offsetof(AttrRT, rarr), ptr));
+    b.CreateCondBr(
+        b.CreateAnd(b.CreateAnd(is_type(load(attr, offsetof(AttrRT, type), b.getInt8Ty()), type),
+                                b.CreateIsNotNull(heads)),
+                    b.CreateICmpULT(index, load(attr, offsetof(AttrRT, size), i32))),
+        packed, fallback);
+    b.SetInsertPoint(packed);
+    auto *head = b.CreateGEP(
+        b.getInt8Ty(), heads,
+        b.CreateMul(b.CreateSExt(index, b.getInt64Ty()), b.getInt64(sizeof(WrangleArrayValue))));
+    auto *same_kind = b.CreateAnd(
+        b.CreateICmpEQ(load(head, offsetof(WrangleArrayValue, kind), b.getInt8Ty()),
+                       b.getInt8(uint8_t(stored))),
+        b.CreateICmpNE(load(head, offsetof(WrangleArrayValue, truncated), b.getInt8Ty()),
+                       b.getInt8(WrangleArrayValue::continued)));
+    auto *copy_block = llvm::BasicBlock::Create(context, "array_attribute_copy", function);
+    b.CreateCondBr(same_kind, copy_block, fallback);
+    b.SetInsertPoint(copy_block);
+    copy_packed(head, kind, slot(stack, sp), fallback, next);
+    b.SetInsertPoint(fallback);
+    return emit_helper(in, sp, next);
+  }
+
+  /* `i[]@a = ints`, `f[]@a = floats` and `v[]@a = vectors` that fit one packed value: the
+   * set_ints(), set_floats() and set_float3s() of store_attr_value(). An earlier long array of
+   * this evaluation (ArrayOverflow::any) and every other case take the helper. */
+  bool emit_array_store(const Inst &in, const int sp, llvm::BasicBlock *next, const Type type) {
+    using bke::WrangleArrayKind;
+    using bke::WrangleArrayValue;
+    const int kind = type == Type::IntArray ? 0 : type == Type::FloatArray ? 1 : 2;
+    const WrangleArrayKind stored = kind == 0   ? WrangleArrayKind::Int
+                                    : kind == 1 ? WrangleArrayKind::Float
+                                                : WrangleArrayKind::Float3;
+    const int max_items = kind == 2 ? WrangleArrayValue::max_values / 3
+                                    : WrangleArrayValue::max_values;
+    auto *value = slot(stack, sp - 1);
+    auto *available = llvm::BasicBlock::Create(context, "array_store", function);
+    auto *bound = llvm::BasicBlock::Create(context, "array_store_bound", function);
+    auto *overflow_check = llvm::BasicBlock::Create(context, "array_store_overflow", function);
+    auto *fallback = llvm::BasicBlock::Create(context, "attribute_generic", function);
+    auto *count = load(frame, offsetof(JitFrame, attrs_num), i32);
+    b.CreateCondBr(
+        b.CreateAnd(b.CreateICmpSGT(count, b.getInt32(in.imm)),
+                    is_type(load(value, offsetof(Value, type), b.getInt8Ty()), type)),
+        available, fallback);
+    b.SetInsertPoint(available);
+    auto *attr = offset(load(frame, offsetof(JitFrame, attrs), ptr), sizeof(AttrRT) * in.imm);
+    auto *index = load(load(frame, offsetof(JitFrame, env), ptr), offsetof(VMEnv, index), i32);
+    auto *heads = load(attr, offsetof(AttrRT, warr), ptr);
+    b.CreateCondBr(
+        b.CreateAnd(b.CreateAnd(is_type(load(attr, offsetof(AttrRT, type), b.getInt8Ty()), type),
+                                b.CreateIsNotNull(heads)),
+                    b.CreateICmpULT(index, load(attr, offsetof(AttrRT, size), i32))),
+        bound, fallback);
+    b.SetInsertPoint(bound);
+    auto *overflow = load(attr, offsetof(AttrRT, array_overflow), ptr);
+    auto *no_overflow = llvm::BasicBlock::Create(context, "array_store_pool", function);
+    b.CreateCondBr(b.CreateIsNull(overflow), no_overflow, overflow_check);
+    b.SetInsertPoint(overflow_check);
+    b.CreateCondBr(b.CreateICmpEQ(load(overflow, jit_array_overflow_any_offset(), b.getInt8Ty()),
+                                  b.getInt8(0)),
+                   no_overflow, fallback);
+    b.SetInsertPoint(no_overflow);
+    auto *i64 = b.getInt64Ty();
+    auto *items = pool_array(b.getInt1(kind == 0), b.getInt1(kind == 1),
+                             load(value, offsetof(Value, i), i32), fallback);
+    auto *data = load(items, 0, ptr);
+    auto *bytes = b.CreateSub(b.CreatePtrToInt(load(items, sizeof(void *), ptr), i64),
+                              b.CreatePtrToInt(data, i64));
+    auto *size = b.CreateUDiv(bytes, b.getInt64(kind == 2 ? 12 : 4));
+    auto *write = llvm::BasicBlock::Create(context, "array_store_write", function);
+    b.CreateCondBr(b.CreateICmpULE(size, b.getInt64(max_items)), write, fallback);
+    b.SetInsertPoint(write);
+    auto *head = b.CreateGEP(
+        b.getInt8Ty(), heads,
+        b.CreateMul(b.CreateSExt(index, i64), b.getInt64(sizeof(WrangleArrayValue))));
+    b.CreateMemSet(head, b.getInt8(0), sizeof(WrangleArrayValue), llvm::MaybeAlign(4));
+    auto *count16 = b.CreateTrunc(size, b.getInt16Ty());
+    b.CreateStore(count16, offset(head, offsetof(WrangleArrayValue, count)));
+    b.CreateStore(count16, offset(head, offsetof(WrangleArrayValue, total)));
+    b.CreateStore(b.getInt8(uint8_t(stored)), offset(head, offsetof(WrangleArrayValue, kind)));
+    b.CreateMemCpy(offset(head, offsetof(WrangleArrayValue, d)), llvm::MaybeAlign(4), data,
+                   llvm::MaybeAlign(4), bytes);
+    b.CreateBr(next);
+    b.SetInsertPoint(fallback);
+    return emit_helper(in, sp, next);
+  }
+
+  /* packed_to_value() of a packed Int, Float or Float3 array (`kind` 0, 1, 2) into `dst`. */
+  void copy_packed(llvm::Value *head, const int kind, llvm::Value *dst,
+                   llvm::BasicBlock *generic, llvm::BasicBlock *next) {
+    using bke::WrangleArrayValue;
+    auto *items = b.CreateZExt(load(head, offsetof(WrangleArrayValue, count), b.getInt16Ty()),
+                               b.getInt64Ty());
+    auto *bytes = b.CreateMul(items, b.getInt64(kind == 2 ? 12 : 4));
+    llvm::Value *data;
+    auto *handle = take_pool_array(kind, bytes, generic, data);
+    b.CreateMemCpy(data, llvm::MaybeAlign(4), offset(head, offsetof(WrangleArrayValue, d)),
+                   llvm::MaybeAlign(4), bytes);
+    store_value(dst,
+                kind == 0   ? Type::IntArray
+                : kind == 1 ? Type::FloatArray
+                            : Type::VecArray,
+                llvm::ConstantFP::get(f32, 0), nullptr, nullptr, handle);
+    b.CreateBr(next);
+  }
+
   bool emit_attribute(const Inst &in, const int sp, llvm::BasicBlock *next) {
     if (in.imm < 0 || in.imm >= program.attrs.size())
       return emit_helper(in, sp, next);
     const Type type = program.attrs[in.imm].type;
-    const bool write = in.op == Op::StoreAttr;
+    if (in.op == Op::PushAttr && native_pools &&
+        ELEM(type, Type::IntArray, Type::FloatArray, Type::VecArray))
+      return emit_array_attribute(in, sp, next, type);
+    if (in.op == Op::StoreAttr && native_pools &&
+        ELEM(type, Type::IntArray, Type::FloatArray, Type::VecArray))
+      return emit_array_store(in, sp, next, type);
+    /* AttrAdd is attr_add_inplace(): `+=` into the writable array only. */
+    const bool add = in.op == Op::AttrAdd;
+    const bool write = in.op == Op::StoreAttr || add;
+    if (add && type == Type::Bool)
+      return emit_helper(in, sp, next);
     size_t writable, readable;
     int width = 1;
     switch (type) {
@@ -938,16 +1302,27 @@ class Lowering {
         b.CreateMul(b.CreateSExt(index, b.getInt64Ty()),
                     b.getInt64(type == Type::Bool ? 1 : width * 4)));
     if (write) {
-      if (type == Type::Int)
-        b.CreateStore(load(value, offsetof(Value, i), i32), element);
+      if (type == Type::Int) {
+        llvm::Value *integer = load(value, offsetof(Value, i), i32);
+        if (add)
+          integer = b.CreateAdd(b.CreateLoad(i32, element), integer);
+        b.CreateStore(integer, element);
+      }
       else if (type == Type::Bool)
         b.CreateStore(b.CreateZExt(truth(value), b.getInt8Ty()), element);
-      else if (type == Type::Float)
-        b.CreateStore(as_float(value), element);
+      else if (type == Type::Float) {
+        llvm::Value *x = as_float(value);
+        if (add)
+          x = b.CreateFAdd(b.CreateLoad(f32, element), x);
+        b.CreateStore(x, element);
+      }
       else {
-        for (int axis = 0; axis < 3; axis++)
-          b.CreateStore(as_vec_component(value, axis),
-                        offset(element, 4 * axis));
+        for (int axis = 0; axis < 3; axis++) {
+          llvm::Value *x = as_vec_component(value, axis);
+          if (add)
+            x = b.CreateFAdd(b.CreateLoad(f32, offset(element, 4 * axis)), x);
+          b.CreateStore(x, offset(element, 4 * axis));
+        }
       }
     } else if (type == Type::Int || type == Type::Bool) {
       auto *integer =
@@ -1076,6 +1451,7 @@ public:
         break;
       case Op::PushAttr:
       case Op::StoreAttr:
+      case Op::AttrAdd:
         if (!emit_attribute(in, sp, next))
           return false;
         continue;
@@ -1206,8 +1582,12 @@ public:
       case Op::SqrtF:
       case Op::LogF:
       case Op::AbsF: {
-        auto *result = call_pointer(jit_scalar_math_address(in.op), f32, {f32},
-                                    {as_float(slot(stack, sp - 1))});
+        auto *input = as_float(slot(stack, sp - 1));
+        auto *result =
+            in.op == Op::SqrtF  ? sqrt_clamped(input)
+            : in.op == Op::AbsF ? b.CreateUnaryIntrinsic(llvm::Intrinsic::fabs, input)
+                                : call_pointer(jit_scalar_math_address(in.op), f32, {f32},
+                                               {input});
         store_value(slot(stack, sp - 1), Type::Float, result);
         break;
       }
@@ -1235,8 +1615,7 @@ public:
               b.CreateFAdd(b.CreateFMul(a[0], v[0]), b.CreateFMul(a[1], v[1])),
               b.CreateFMul(a[2], v[2]));
           if (unary)
-            result = call_pointer(jit_scalar_math_address(Op::SqrtF), f32,
-                                  {f32}, {result});
+            result = sqrt_clamped(result);
           store_value(src_a, Type::Float, result);
         }
         break;
@@ -1427,6 +1806,39 @@ public:
           }
           b.CreateBr(next);
         }
+        if (native_pools) {
+          /* A packed array sample (`rarr`, see jit_sample()): Int, Float and Float3 arrays are
+           * copied like packed_to_value(), other kinds and continued arrays take the helper. */
+          using bke::WrangleArrayKind;
+          using bke::WrangleArrayValue;
+          auto *packed = llvm::BasicBlock::Create(context, "sample_packed", function);
+          auto *head_block = llvm::BasicBlock::Create(context, "sample_packed_head", function);
+          switch_type->addCase(b.getInt8(uint8_t(Type::Void)), packed);
+          b.SetInsertPoint(packed);
+          auto *heads = load(sample_attr, offsetof(AttrRT, rarr), ptr);
+          b.CreateCondBr(b.CreateIsNotNull(heads), head_block, fallback_sample);
+          b.SetInsertPoint(head_block);
+          auto *head = b.CreateGEP(b.getInt8Ty(), heads,
+                                   b.CreateMul(b.CreateSExt(sample_index, b.getInt64Ty()),
+                                               b.getInt64(sizeof(WrangleArrayValue))));
+          auto *whole = llvm::BasicBlock::Create(context, "sample_packed_whole", function);
+          b.CreateCondBr(
+              b.CreateICmpNE(load(head, offsetof(WrangleArrayValue, truncated), b.getInt8Ty()),
+                             b.getInt8(WrangleArrayValue::continued)),
+              whole, fallback_sample);
+          b.SetInsertPoint(whole);
+          auto *switch_kind = b.CreateSwitch(
+              load(head, offsetof(WrangleArrayValue, kind), b.getInt8Ty()), fallback_sample, 3);
+          for (const int kind : {0, 1, 2}) {
+            const WrangleArrayKind stored = kind == 0   ? WrangleArrayKind::Int
+                                            : kind == 1 ? WrangleArrayKind::Float
+                                                        : WrangleArrayKind::Float3;
+            auto *copy_block = llvm::BasicBlock::Create(context, "sample_packed_copy", function);
+            switch_kind->addCase(b.getInt8(uint8_t(stored)), copy_block);
+            b.SetInsertPoint(copy_block);
+            copy_packed(head, kind, slot(stack, sp - sample_count), fallback_sample, next);
+          }
+        }
         b.SetInsertPoint(fallback_sample);
         if (in.imm >= 0 && in.imm < program.element_samples.size()) {
           auto *flags =
@@ -1477,7 +1889,9 @@ public:
           copy(slot(stack, sp - 1), uniform_slots[uniform_index]);
           break;
         }
-        if (emit_vector_builtin(in, sp, next)) {
+        if (emit_empty_array(in, sp, next) || emit_append(in, sp, next) ||
+            emit_face_points(in, sp, next) ||
+            emit_vector_builtin(in, sp, next)) {
           if (!emit_helper(in, sp, next))
             return false;
           continue;

@@ -43,6 +43,15 @@ struct JitFrame {
   const AttrRT *static_samples = nullptr;
   int static_samples_num = 0;
   const Value *uniform_parms = nullptr;
+  /* This thread's IntArray, FloatArray and VecArray pools (`Vector<Vector<T>>`). Native code
+   * reads them directly when jit_array_pools_native() holds, so no view can become stale. */
+  const void *array_pools[3] = {};
+  /* The matching `*_used` counters: the next free entry of each pool. */
+  int *array_pools_used[3] = {};
+  /* VMEnv::face_offsets and corner_verts of the mesh being wrangled, null without one. */
+  const int *face_offsets = nullptr;
+  int faces_num = 0;
+  const int *corner_verts = nullptr;
 };
 
 struct JitUniformParm {
@@ -75,6 +84,14 @@ void *jit_scalar_math_address(Op op);
 bool jit_sample(JitFrame *frame, int slot, const Value *index, Value *result);
 void *jit_scalar_builtin_address(Builtin builtin);
 bool jit_array_view(int type, int handle, JitArrayView *view);
+/* True when a #Vector begins with its `begin_`, `end_` and `capacity_end_` pointers (checked at
+ * runtime), so native code can read #JitFrame::array_pools without calling jit_array_view() and
+ * grow an array within its capacity. */
+bool jit_array_pools_native();
+/* Indexed writes at or past this index fail instead of growing the array (k_array_grow_max). */
+constexpr int k_jit_array_grow_max = 1 << 20;
+/* Byte offset of ArrayOverflow::any, which native array stores read before writing. */
+size_t jit_array_overflow_any_offset();
 bool jit_branch_guard(JitFrame *frame);
 bool jit_cancel_guard(JitFrame *frame);
 

@@ -2326,5 +2326,118 @@
     "origin": "generic arithmetic, vector builtins and sample binding",
     "setup_code": "v@fx = set(i@index, 1, 2); i@fb = i@index % 2; f@fy = 4.5;",
     "setup_domain": "FACE"
+  },
+  {
+    "name": "pool_growth_writes",
+    "code": "int a[]; a[3] = 7; a[1] = 2; a[5] = 2.7; float f[]; f[2] = 1.5; f[-1] = 4; f[7] = @ptnum; vector v[]; v[@ptnum % 5] = @P; v[0] = 1;\nint big[]; big[200 + @ptnum] = 1; int neg[]; neg[-3] = 5; float m[]; m[1048576] = 1;\ni@la = len(a); i@a3 = a[3]; i@a0 = a[0]; i@a5 = a[5]; i@lf = len(f); f@f2 = f[2]; f@f7 = f[7]; f@fm1 = f[-1];\ni@lv = len(v); v@v0 = v[0]; v@vl = v[len(v)-1]; i@lb = len(big); i@bl = big[len(big)-1]; i@ln = len(neg); i@lm = len(m);",
+    "domain": "POINT",
+    "origin": "native array pools"
+  },
+  {
+    "name": "pool_declarations_in_loops",
+    "code": "float s = 0;\nfor (int k = 0; k < 6; k++) { vector t[]; t[k] = set(k, @ptnum, 1); int u[]; append(u, k); append(u, @ptnum); float w[]; w[k*20] = k; s += len(t) + len(u) * 10 + len(w) * 100 + w[k*20] + t[k].y; }\nf@s = s;",
+    "domain": "POINT",
+    "origin": "native array pools"
+  },
+  {
+    "name": "pool_append_forms",
+    "code": "int a[]; for (int k = 0; k < 150 + @ptnum % 3; k++) append(a, k * 3); i@la = len(a); i@a149 = a[149];\nfloat b[]; append(b, 2); append(b, @P.x); append(b, true); i@lb = len(b); f@b0 = b[0]; f@b1 = b[1]; f@b2 = b[2];\nvector c[]; append(c, 2.5); append(c, @P); append(c, c); i@lc = len(c); v@c0 = c[0]; v@c3 = c[3];\nint d[]; append(d, 2.9); append(d, array(4, 5)); append(d, true); i@ld = len(d); i@d0 = d[0]; i@d2 = d[2]; i@d3 = d[3];\nint r[] = array(1, 2); append(r, @ptnum); i@lr = len(r); i@r2 = r[2];",
+    "domain": "POINT",
+    "origin": "native array pools"
+  },
+  {
+    "name": "pool_array_attributes",
+    "code": "int a[] = i[]@ia; float b[] = f[]@fa; vector c[] = v[]@va;\ni@la = len(a); i@sa = len(a) > 0 ? a[len(a)-1] : -1; i@lb = len(b); f@sb = len(b) > 0 ? b[0] : -1; i@lc = len(c); v@sc = len(c) > 0 ? c[len(c)-1] : 0;\nappend(a, 5); i[]@ia = a; b[3] = 9; f[]@fa = b; c[0] = set(1, 2, 3); v[]@va = c; i[]@ib = array(1, 2, @ptnum); f[]@fb = array(); v[]@vb = array(@P, @P * 2);",
+    "domain": "POINT",
+    "origin": "native array pools",
+    "setup_code": "int t[]; for (int q = 0; q < (@ptnum % 4 == 0 ? 130 : @ptnum % 7); q++) append(t, q * @ptnum); i[]@ia = t;\nfloat u[]; for (int q = 0; q < @ptnum % 5; q++) append(u, q + 0.25); f[]@fa = u;\nvector w[]; for (int q = 0; q < (@ptnum % 8 == 0 ? 45 : 2); q++) append(w, set(q, @ptnum, 1)); v[]@va = w;"
+  },
+  {
+    "name": "pool_long_array_samples",
+    "code": "int s[] = point(0, 'sb', (@ptnum + 4) % 64); i@ls = len(s); i@ss = len(s) > 0 ? s[len(s)-1] : -1; float g[] = point(0, 'sf', @ptnum); f@sg = len(g) > 1 ? g[1] : -1; vector w[] = point(0, 'sv', 63 - @ptnum); v@sw = len(w) > 0 ? w[len(w)-1] : 0;",
+    "domain": "POINT",
+    "origin": "native array pools",
+    "setup_code": "int t[]; for (int q = 0; q < (@ptnum % 4 == 0 ? 130 : @ptnum % 7); q++) append(t, q * @ptnum); i[]@sb = t;\nfloat u[]; for (int q = 0; q < @ptnum % 5; q++) append(u, q + 0.25); f[]@sf = u;\nvector w[]; for (int q = 0; q < (@ptnum % 8 == 0 ? 45 : 2); q++) append(w, set(q, @ptnum, 1)); v[]@sv = w;"
+  },
+  {
+    "name": "pool_array_store_overflow",
+    "code": "int t[]; int n = @ptnum % 3 == 0 ? 125 : 3; for (int q = 0; q < n; q++) append(t, q + @ptnum); i[]@long = t; int back[] = i[]@long; i@lback = len(back);\nint u[]; for (int q = 0; q < 2; q++) append(u, q); i[]@long = u; i@lu = len(i[]@long);",
+    "domain": "POINT",
+    "origin": "native array pools"
+  },
+  {
+    "name": "pool_face_points",
+    "code": "int a[] = facepoints(0, i@index); int b[] = facepoints(i@index + 1); int c[] = facepoints(0, -1); int d[] = facepoints(0, 1000); int e[] = facepoints(1, 0); int g[] = facepoints(0, (i@index * 7) % 98);\ni@la = len(a); i@a0 = a[0]; i@a2 = a[2]; i@lb = len(b); i@b1 = len(b) > 1 ? b[1] : -1; i@lc = len(c); i@ld = len(d); i@le = len(e); i@lg = len(g); i@g1 = g[1];",
+    "domain": "FACE",
+    "origin": "native array pools"
+  },
+  {
+    "name": "pool_face_points_from_points",
+    "code": "int a[] = facepoints(0, i@index % 98); i@la = len(a); i@a1 = a[1]; int b[] = facepoints(i@index * 3); i@lb = len(b);",
+    "domain": "POINT",
+    "origin": "native array pools"
+  },
+  {
+    "name": "native_sqrt_abs_attr_add",
+    "code": "float x = (@ptnum - 30) * 0.1; f@s1 = sqrt(x); f@s2 = sqrt(-0.0); f@s3 = abs(x); f@s4 = abs(-0.0); f@s6 = length(@P - set(0.5, 0.5, 0)); f@s7 = abs(i@ptnum - 20); f@s8 = sqrt(i@ptnum);\nf@acc = 1.5; f@acc += x; v@vacc = @P; v@vacc += x; v@vacc -= set(1, 2, 3); i@iacc = 3; i@iacc += @ptnum; i@iacc += 2.7; f@facc = 0; f@facc += @ptnum;",
+    "domain": "POINT",
+    "origin": "native array pools"
+  },
+  {
+    "name": "sample_array_while_writing_float",
+    "code": "int s[] = point(0, 'sb', (@ptnum + 4) % 64); i@ls = len(s); i@last = s[-1]; f@sb = 7;",
+    "domain": "POINT",
+    "setup_code": "int t[]; for (int q = 0; q < 1 + @ptnum % 7; q++) append(t, q * @ptnum); i[]@sb = t; f@fs = @ptnum * 0.5; v@vs = set(@ptnum, 1, 2);",
+    "origin": "same-name samples of attributes the program replaces"
+  },
+  {
+    "name": "sample_array_while_writing_array",
+    "code": "int s[] = point(0, 'sb', (@ptnum + 4) % 64); i@ls = len(s); i@last = s[-1]; i[]@sb = array(9);",
+    "domain": "POINT",
+    "setup_code": "int t[]; for (int q = 0; q < 1 + @ptnum % 7; q++) append(t, q * @ptnum); i[]@sb = t; f@fs = @ptnum * 0.5; v@vs = set(@ptnum, 1, 2);",
+    "origin": "same-name samples of attributes the program replaces"
+  },
+  {
+    "name": "sample_float_while_writing_int",
+    "code": "float x = point(0, 'fs', (@ptnum + 1) % 64); f@x = x; i@fs = 3;",
+    "domain": "POINT",
+    "setup_code": "int t[]; for (int q = 0; q < 1 + @ptnum % 7; q++) append(t, q * @ptnum); i[]@sb = t; f@fs = @ptnum * 0.5; v@vs = set(@ptnum, 1, 2);",
+    "origin": "same-name samples of attributes the program replaces"
+  },
+  {
+    "name": "sample_float_while_writing_vector",
+    "code": "float x = point(0, 'fs', (@ptnum + 1) % 64); f@x = x; v@fs = 3;",
+    "domain": "POINT",
+    "setup_code": "int t[]; for (int q = 0; q < 1 + @ptnum % 7; q++) append(t, q * @ptnum); i[]@sb = t; f@fs = @ptnum * 0.5; v@vs = set(@ptnum, 1, 2);",
+    "origin": "same-name samples of attributes the program replaces"
+  },
+  {
+    "name": "sample_vector_while_writing_float",
+    "code": "vector x = point(0, 'vs', (@ptnum + 1) % 64); v@x = x; f@vs = 3;",
+    "domain": "POINT",
+    "setup_code": "int t[]; for (int q = 0; q < 1 + @ptnum % 7; q++) append(t, q * @ptnum); i[]@sb = t; f@fs = @ptnum * 0.5; v@vs = set(@ptnum, 1, 2);",
+    "origin": "same-name samples of attributes the program replaces"
+  },
+  {
+    "name": "sample_float_while_writing_float",
+    "code": "float x = point(0, 'fs', (@ptnum + 1) % 64); f@x = x; f@fs = 3;",
+    "domain": "POINT",
+    "setup_code": "int t[]; for (int q = 0; q < 1 + @ptnum % 7; q++) append(t, q * @ptnum); i[]@sb = t; f@fs = @ptnum * 0.5; v@vs = set(@ptnum, 1, 2);",
+    "origin": "same-name samples of attributes the program replaces"
+  },
+  {
+    "name": "sample_face_attribute_replaced_by_point_write",
+    "domain": "POINT",
+    "setup_domain": "FACE",
+    "setup_code": "f@fq = i@index * 0.25; i[]@fa = array(i@index, 2);",
+    "code": "f@x = face(0, 'fq', (@ptnum * 3) % 98); int a[] = face(0, 'fa', @ptnum % 98); i@la = len(a); i@a0 = a[0]; f@fq = 1; i@fa = 2;",
+    "origin": "same-name samples of attributes the program replaces"
+  },
+  {
+    "name": "sample_bool_while_writing_int",
+    "domain": "POINT",
+    "setup_code": "i@m = @ptnum % 3 == 0; b@bm = @ptnum % 3 == 0;",
+    "code": "int k = point(0, 'bm', (@ptnum + 1) % 64); i@x = k; i@bm = 5;",
+    "origin": "same-name samples of attributes the program replaces"
   }
 ]

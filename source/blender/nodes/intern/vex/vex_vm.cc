@@ -8296,6 +8296,38 @@ bool jit_array_view(const int type, const int handle, JitArrayView *view)
   return false;
 }
 
+static_assert(k_jit_array_grow_max == k_array_grow_max);
+
+size_t jit_array_overflow_any_offset()
+{
+  static const size_t offset = [] {
+    const ArrayOverflow probe;
+    return size_t(reinterpret_cast<const char *>(&probe.any) -
+                  reinterpret_cast<const char *>(&probe));
+  }();
+  return offset;
+}
+
+bool jit_array_pools_native()
+{
+  static const bool native = [] {
+    const auto begins_with_range = [](const auto &values) {
+      const void *words[3];
+      memcpy(words, &values, sizeof(words));
+      return words[0] == values.data() && words[1] == values.data() + values.size() &&
+             words[2] == values.data() + values.capacity();
+    };
+    Vector<Vector<int>> pool(3);
+    pool[1] = {1, 2};
+    pool[2].resize(9);
+    const Vector<float3> heap(9, float3(0.0f));
+    const Vector<float> empty;
+    return begins_with_range(pool) && begins_with_range(pool[1]) &&
+           begins_with_range(pool[2]) && begins_with_range(heap) && begins_with_range(empty);
+  }();
+  return native;
+}
+
 void *jit_scalar_builtin_address(const Builtin builtin)
 {
   switch (builtin) {
@@ -8439,6 +8471,18 @@ static std::optional<bool> vm_try_jit(const Program &program, VMEnv &env,
     frame.static_samples = samples.data();
     frame.static_samples_num = int(samples.size());
     frame.uniform_parms = uniform_values.data();
+    VMThreadLocalStorage &storage = vm_thread_local_storage();
+    frame.array_pools[0] = &storage.iarr;
+    frame.array_pools[1] = &storage.farr;
+    frame.array_pools[2] = &storage.varr;
+    frame.array_pools_used[0] = &storage.iarr_used;
+    frame.array_pools_used[1] = &storage.farr_used;
+    frame.array_pools_used[2] = &storage.varr_used;
+    if (!local.face_offsets.is_empty() && !local.corner_verts.is_empty()) {
+      frame.face_offsets = local.face_offsets.data();
+      frame.faces_num = int(local.face_offsets.size() - 1);
+      frame.corner_verts = local.corner_verts.data();
+    }
     uint32_t elements_done = 0;
     for (const int64_t index : segment) {
       if (!ok.load(std::memory_order_relaxed)) return;

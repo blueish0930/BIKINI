@@ -1200,6 +1200,8 @@ struct VMEnv {
   Span<AttrRT> jit_samples;
   /** Mesh face offsets for the current geometry. Size is faces + 1. */
   Span<int> face_offsets;
+  /** Mesh corner vertices of the same geometry. Only native JIT code reads them. */
+  Span<int> corner_verts;
   void *parm_user = nullptr;
   LoadParmFn load_parm = nullptr;
   LoadUniformParmFn load_uniform_parm = nullptr;
