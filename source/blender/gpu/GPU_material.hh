@@ -108,6 +108,10 @@ enum eGPUMaterialFlag {
   /** Mesh named attributes are fetched from a packed buffer instead of vertex inputs. */
   GPU_MATFLAG_ATTRIBUTE_BUFFER = (1 << 26),
 
+  /* Signals that diffuse closures might have a non-zero roughness, which require extra space in
+     GBuffer to store the roughness. */
+  GPU_MATFLAG_DIFFUSE_ROUGHNESS = (1 << 26),
+
   /* Tells the render engine the material was just compiled or updated. */
   GPU_MATFLAG_UPDATED = (1 << 29),
 };
