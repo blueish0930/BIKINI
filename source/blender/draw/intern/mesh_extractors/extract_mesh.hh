@@ -32,7 +32,7 @@ namespace blender {
 
 struct BMVert;
 struct BMEdge;
-struct BMEditMesh;
+struct EditMesh;
 struct BMFace;
 struct BMLoop;
 
@@ -69,9 +69,9 @@ struct MeshRenderData {
 
   const ToolSettings *toolsettings;
   /** Edit Mesh */
-  BMEditMesh *edit_bmesh;
+  EditMesh *edit_mesh;
   BMesh *bm;
-  bke::EditMeshData *edit_data;
+  bke::MeshWrapperCacheData *bmesh_wrapper_data;
 
   /** BIKINI: mirror-editing settings of the original mesh (Mesh::symmetry), used to
    * highlight the mirrored side of the edit-mode selection. 0 when not applicable. */

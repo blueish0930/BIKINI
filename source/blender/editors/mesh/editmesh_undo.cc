@@ -935,7 +935,7 @@ static UndoMesh **mesh_undostep_reference_elems_from_objects(Object **object, in
  * \note See #undomesh_to_editmesh for an explanation for why passing in data-blocks is avoided.
  */
 static void *undomesh_from_editmesh(UndoMesh *um,
-                                    BMEditMesh *em,
+                                    EditMesh *em,
                                     Key *key,
                                     const ListBaseT<bDeformGroup> *vertex_group_names,
                                     const int vertex_group_active_index,
@@ -1032,11 +1032,11 @@ static void *undomesh_from_editmesh(UndoMesh *um,
  * what the source of truth is for mesh data - which can make the logic difficult to reason about.
  */
 static void undomesh_to_editmesh(UndoMesh *um,
-                                 BMEditMesh *em,
+                                 EditMesh *em,
                                  ListBaseT<bDeformGroup> *vertex_group_names,
                                  int *vertex_group_active_index)
 {
-  BMEditMesh *em_tmp;
+  EditMesh *em_tmp;
 
 #ifdef USE_ARRAY_STORE
 #  ifdef USE_ARRAY_STORE_THREAD
@@ -1212,7 +1212,7 @@ static bool mesh_undosys_step_encode(bContext *C, Main *bmain, UndoStep *us_p)
 
     elem->obedit_ref.ptr = obedit;
     Mesh *mesh = id_cast<Mesh *>(elem->obedit_ref.ptr->data);
-    BMEditMesh *em = mesh->runtime->edit_mesh.get();
+    EditMesh *em = mesh->runtime->edit_mesh.get();
     undomesh_from_editmesh(&elem->data,
                            em,
                            mesh->key,
@@ -1264,7 +1264,7 @@ static void mesh_undosys_step_decode(
                  obedit->id.name);
       continue;
     }
-    BMEditMesh *em = mesh->runtime->edit_mesh.get();
+    EditMesh *em = mesh->runtime->edit_mesh.get();
     undomesh_to_editmesh(
         &elem->data, em, &mesh->vertex_group_names, &mesh->vertex_group_active_index);
 

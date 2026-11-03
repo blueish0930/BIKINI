@@ -73,7 +73,7 @@ static const float value_start[NUM_VALUE_KINDS] = {0.0f, 0.0f, 0.5f, 1.0f};
 static const float value_scale_per_inch[NUM_VALUE_KINDS] = {0.0f, 100.0f, 1.0f, 4.0f};
 
 struct BevelObjectStore {
-  /** Every object must have a valid #BMEditMesh. */
+  /** Every object must have a valid #EditMesh. */
   Object *ob;
   BMBackup mesh_backup;
   /** BIKINI: the user's side before the selection was mirror-expanded. */
@@ -354,7 +354,7 @@ static bool edbm_bevel_calc(wmOperator *op)
   for (BevelObjectStore &ob_store : opdata->ob_store) {
     Object *obedit = ob_store.ob;
     Mesh *mesh = id_cast<Mesh *>(obedit->data);
-    BMEditMesh *em = mesh->runtime->edit_mesh.get();
+    EditMesh *em = mesh->runtime->edit_mesh.get();
     BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
 
     /* revert to original mesh */
@@ -444,7 +444,7 @@ static void edbm_bevel_exit(bContext *C, wmOperator *op)
   }
 
   for (BevelObjectStore &ob_store : opdata->ob_store) {
-    BMEditMesh *em = BKE_editmesh_from_object(ob_store.ob);
+    EditMesh *em = BKE_editmesh_from_object(ob_store.ob);
     BMesh *bm = BKE_editmesh_bmesh_get_for_write(ob_store.ob);
     /* BIKINI: the bevel ran on both sides, only the user's side stays selected. */
     if (ob_store.has_mirror_side) {
@@ -475,7 +475,7 @@ static void edbm_bevel_cancel(bContext *C, wmOperator *op)
   if (opdata->is_modal) {
     for (BevelObjectStore &ob_store : opdata->ob_store) {
       Object *obedit = ob_store.ob;
-      BMEditMesh *em = BKE_editmesh_from_object(obedit);
+      EditMesh *em = BKE_editmesh_from_object(obedit);
       BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
       EDBM_redo_state_restore_and_free(&ob_store.mesh_backup, em, bm, true);
 

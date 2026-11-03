@@ -233,7 +233,7 @@ struct KnifeObjectInfo {
   Array<int3> tri_indices;
 
   /** Only assigned for convenient access. */
-  BMEditMesh *em;
+  EditMesh *em;
   BMesh *bm;
 };
 
@@ -1410,7 +1410,7 @@ static bool knife_bm_face_is_not_hidden(BMFace *f)
 static void knife_bvh_init(KnifeTool_OpData *kcd)
 {
   Object *ob;
-  BMEditMesh *em;
+  EditMesh *em;
 
   /* Test Function. */
   bool (*test_fn)(BMFace *);
@@ -1509,7 +1509,7 @@ static void knife_bvh_raycast_cb(void *userdata,
   KnifeTool_OpData *kcd = static_cast<KnifeTool_OpData *>(userdata);
   BMLoop *const *ltri = nullptr;
   Object *ob;
-  BMEditMesh *em;
+  EditMesh *em;
 
   float dist;
   bool isect;
@@ -3781,7 +3781,7 @@ static void knife_finish_cut(KnifeTool_OpData *kcd)
  * to hash lookup routine; will reverse this in the get routine.
  * Doing this lazily rather than all at once for all faces.
  */
-static void set_lowest_face_tri(KnifeTool_OpData *kcd, BMEditMesh *em, BMFace *f, int index)
+static void set_lowest_face_tri(KnifeTool_OpData *kcd, EditMesh *em, BMFace *f, int index)
 {
   int i;
 
@@ -3834,7 +3834,7 @@ static bool knife_ray_intersect_face(KnifeTool_OpData *kcd,
                                      float hit_cageco[3])
 {
   Object *ob = kcd->objects[ob_index];
-  BMEditMesh *em = BKE_editmesh_from_object(ob);
+  EditMesh *em = BKE_editmesh_from_object(ob);
 
   int tottri, tri_i;
   float raydir[3];
@@ -4221,7 +4221,7 @@ static void knife_find_line_hits(KnifeTool_OpData *kcd)
   Set<KnifeVert *> kfvs;
 
   Object *ob;
-  BMEditMesh *em;
+  EditMesh *em;
 
   for (i = 0, result = results; i < tot; i++, result++) {
     uint ob_index = 0;
@@ -5262,7 +5262,7 @@ static void knifetool_init_obinfo(KnifeTool_OpData *kcd,
 
   if (BKE_editmesh_eval_orig_map_available(mesh_eval, &mesh_orig)) {
     BMesh *bm = BKE_editmesh_bmesh_get_for_write(ob);
-    BMEditMesh &em_eval = *mesh_eval.runtime->edit_mesh;
+    EditMesh &em_eval = *mesh_eval.runtime->edit_mesh;
     obinfo->em = &em_eval;
     obinfo->bm = bm;
     obinfo->positions_cage = BKE_editmesh_vert_coords_alloc(
@@ -5342,7 +5342,7 @@ static void knifetool_init(ViewContext *vc,
   kcd->objects = std::move(objects);
 
   Object *ob;
-  BMEditMesh *em;
+  EditMesh *em;
   kcd->objects_info.reinitialize(kcd->objects.size());
   for (int ob_index = 0; ob_index < kcd->objects.size(); ob_index++) {
     ob = kcd->objects[ob_index];
@@ -5506,7 +5506,7 @@ static void knifetool_finish_single_pre(KnifeTool_OpData *kcd, int ob_index)
  */
 static void knifetool_finish_single_post(KnifeTool_OpData *kcd, Object *ob)
 {
-  BMEditMesh *em = BKE_editmesh_from_object(ob);
+  EditMesh *em = BKE_editmesh_from_object(ob);
   /* Vanilla flush first. In face mode this wipes isolated cut edges after a
    * deselect-all; #knife_restore_user_active re-selects the user's cut edges
    * afterwards so the orange/cyan overlay survives. */

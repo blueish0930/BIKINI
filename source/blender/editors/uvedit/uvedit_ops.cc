@@ -2349,7 +2349,7 @@ static bool bm_face_is_all_uv_sel(const ToolSettings *ts,
   return true;
 }
 
-static bool uv_mesh_hide_select_sync(const ToolSettings *ts, Object *ob, BMEditMesh *em, bool swap)
+static bool uv_mesh_hide_select_sync(const ToolSettings *ts, Object *ob, EditMesh *em, bool swap)
 {
   const bool select_to_hide = !swap;
   BMesh *bm = BKE_editmesh_bmesh_get_for_write(ob);
@@ -2473,7 +2473,7 @@ static bool uv_mesh_hide_select_sync(const ToolSettings *ts, Object *ob, BMEditM
 /**
  * \return true when a change was made to the geometry or UV selection.
  */
-static bool uv_mesh_hide_no_sync(const Scene *scene, Object *ob, BMEditMesh *em, bool swap)
+static bool uv_mesh_hide_no_sync(const Scene *scene, Object *ob, EditMesh *em, bool swap)
 {
   const ToolSettings *ts = scene->toolsettings;
   BLI_assert(!(ts->uv_flag & UV_FLAG_SELECT_SYNC));
@@ -2726,7 +2726,7 @@ static wmOperatorStatus uv_hide_exec(bContext *C, wmOperator *op)
       *bmain, scene, view_layer, nullptr);
 
   for (Object *ob : objects) {
-    BMEditMesh *em = BKE_editmesh_from_object(ob);
+    EditMesh *em = BKE_editmesh_from_object(ob);
     if (!swap) {
       ED_uvedit_mirror_select_partners(scene, ts, em, id_cast<Mesh *>(ob->data));
     }
@@ -2782,7 +2782,7 @@ static wmOperatorStatus uv_reveal_exec(bContext *C, wmOperator *op)
       *bmain, scene, view_layer, nullptr);
 
   for (Object *ob : objects) {
-    BMEditMesh *em = BKE_editmesh_from_object(ob);
+    EditMesh *em = BKE_editmesh_from_object(ob);
     BMesh *bm = BKE_editmesh_bmesh_get_for_write(ob);
     BMFace *efa;
     BMLoop *l;
