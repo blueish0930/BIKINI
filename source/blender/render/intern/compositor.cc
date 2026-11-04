@@ -673,6 +673,10 @@ class Context : public compositor::Context {
         },
         false);
 
+    if (pass.meta_data.is_cryptomatte_layer()) {
+      pass.domain().realization_options.interpolation = compositor::Interpolation::Nearest;
+    }
+
     return pass;
   }
 
