@@ -62,6 +62,7 @@ const EnumPropertyItem rna_enum_node_socket_data_type_items[] = {
     {SOCK_INT_VECTOR, "INT_VECTOR", ICON_NODE_SOCKET_INT_VECTOR, "Integer Vector", ""},
     {SOCK_COLOR_RAMP, "COLOR_RAMP", ICON_COLOR, "Color Ramp", ""},
     {SOCK_CURVE, "CURVE", ICON_LINCURVE, "Curve", ""},
+    {SOCK_DYNAMIC, "DYNAMIC", ICON_NODE_SOCKET_DYNAMIC, "Dynamic", ""},
     {0, nullptr, 0, nullptr, nullptr},
 };
 

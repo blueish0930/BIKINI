@@ -396,6 +396,9 @@ static bool socket_type_to_static_decl_type(const eNodeSocketDatatype socket_typ
     case SOCK_CURVE:
       fn.template operator()<decl::Curve>();
       return true;
+    case SOCK_DYNAMIC:
+      fn.template operator()<decl::Dynamic>();
+      return true;
     default:
       return false;
   }

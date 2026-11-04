@@ -52,6 +52,7 @@ const EnumPropertyItem rna_enum_node_socket_type_items[] = {
     {SOCK_INT_VECTOR, "INT_VECTOR", ICON_NODE_SOCKET_INT_VECTOR, "Integer Vector", ""},
     {SOCK_COLOR_RAMP, "COLOR_RAMP", ICON_COLOR, "Color Ramp", ""},
     {SOCK_CURVE, "CURVE", ICON_LINCURVE, "Curve", ""},
+    {SOCK_DYNAMIC, "DYNAMIC", ICON_NODE_SOCKET_DYNAMIC, "Dynamic", ""},
     {0, nullptr, 0, nullptr, nullptr},
 };
 
@@ -2406,6 +2407,26 @@ static void rna_def_node_socket_interface_sound(BlenderRNA *brna, const char *id
   RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
 }
 
+static void rna_def_node_socket_dynamic(BlenderRNA *brna, const char *identifier)
+{
+  StructRNA *srna;
+
+  srna = RNA_def_struct(brna, identifier, "NodeSocketStandard");
+  RNA_def_struct_ui_icon(srna, ICON_NODE_SOCKET_DYNAMIC);
+  RNA_def_struct_ui_text(srna, "Dynamic Node Socket", "Dynamic socket of a node");
+  RNA_def_struct_sdna(srna, "bNodeSocket");
+}
+
+static void rna_def_node_socket_interface_dynamic(BlenderRNA *brna, const char *identifier)
+{
+  StructRNA *srna;
+
+  srna = RNA_def_struct(brna, identifier, "NodeTreeInterfaceSocket");
+  RNA_def_struct_ui_icon(srna, ICON_NODE_SOCKET_DYNAMIC);
+  RNA_def_struct_ui_text(srna, "Dynamic Node Socket Interface", "Dynamic socket of a node");
+  RNA_def_struct_sdna(srna, "bNodeTreeInterfaceSocket");
+}
+
 static void rna_def_node_socket_virtual(BlenderRNA *brna, const char *identifier)
 {
   StructRNA *srna;
@@ -2613,6 +2634,7 @@ static const bNodeSocketStaticTypeInfo node_socket_subtypes[] = {
     {"NodeSocketSound", "NodeTreeInterfaceSocketSound", SOCK_SOUND, PROP_NONE},
     {"NodeSocketColorRamp", "NodeTreeInterfaceSocketColorRamp", SOCK_COLOR_RAMP, PROP_NONE},
     {"NodeSocketCurve", "NodeTreeInterfaceSocketCurve", SOCK_CURVE, PROP_NONE},
+    {"NodeSocketDynamic", "NodeTreeInterfaceSocketDynamic", SOCK_DYNAMIC, PROP_NONE},
 };
 
 static void rna_def_node_socket_color_ramp(BlenderRNA *brna, const char *identifier)
@@ -2815,6 +2837,9 @@ static void rna_def_node_socket_subtypes(BlenderRNA *brna)
       case SOCK_CURVE:
         rna_def_node_socket_curve(brna, identifier);
         break;
+      case SOCK_DYNAMIC:
+        rna_def_node_socket_dynamic(brna, identifier);
+        break;
 
       case SOCK_CUSTOM:
         break;
@@ -2924,6 +2949,9 @@ void rna_def_node_socket_interface_subtypes(BlenderRNA *brna)
         break;
       case SOCK_CURVE:
         rna_def_node_socket_interface_curve(brna, identifier);
+        break;
+      case SOCK_DYNAMIC:
+        rna_def_node_socket_interface_dynamic(brna, identifier);
         break;
 
       case SOCK_CUSTOM:

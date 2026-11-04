@@ -356,6 +356,7 @@ mf::Variable *MultiFunctionProcedureOperation::get_constant_input_variable(
     }
     case SOCK_BUNDLE:
     case SOCK_CLOSURE:
+    case SOCK_DYNAMIC:
     default:
       constant_function = &procedure_.construct_function<mf::CustomMF_Constant<float>>(0.0f);
       break;

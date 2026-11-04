@@ -821,6 +821,12 @@ static bke::bNodeSocketType *make_socket_type_virtual()
   return stype;
 }
 
+static bke::bNodeSocketType *make_socket_type_dynamic()
+{
+  bke::bNodeSocketType *socket_type = make_standard_socket_type(SOCK_DYNAMIC, PROP_NONE);
+  return socket_type;
+}
+
 static void make_common_type_prop(StructRNA &srna,
                                   const bNodeTreeInterfaceSocket &socket,
                                   const EnumPropertyItem *items,
@@ -2406,6 +2412,8 @@ void register_standard_node_socket_types()
   bke::node_register_socket_type(*make_socket_type_curve());
 
   bke::node_register_socket_type(*make_socket_type_virtual());
+
+  bke::node_register_socket_type(*make_socket_type_dynamic());
 }
 
 }  // namespace blender

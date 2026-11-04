@@ -368,6 +368,7 @@ bke::SocketValueVariant init_socket_cpp_value(const GeoNodesCallData *call_data,
     }
     case SOCK_CUSTOM:
     case SOCK_INT_VECTOR:
+    case SOCK_DYNAMIC:
       break;
   }
 

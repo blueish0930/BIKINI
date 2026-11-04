@@ -122,6 +122,9 @@ enum eNodeSocketDatatype : short {
   SOCK_COLOR_RAMP = 25,
   /** Curve mapping stored on the socket. Shown as a one-row preview; click opens the editor. */
   SOCK_CURVE = 26,
+  /** Official value is 25, which BIKINI already uses for #SOCK_COLOR_RAMP. Sockets are
+   * matched by idname when files are read, so the different number is harmless. */
+  SOCK_DYNAMIC = 27,
 };
 
 /** Socket shape. */

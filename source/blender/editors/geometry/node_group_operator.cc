@@ -855,6 +855,7 @@ static std::optional<ID_Type> socket_type_to_id_type(const eNodeSocketDatatype s
     case SOCK_CLOSURE:
     case SOCK_COLOR_RAMP:
     case SOCK_CURVE:
+    case SOCK_DYNAMIC:
       return std::nullopt;
     case SOCK_OBJECT:
       return ID_OB;

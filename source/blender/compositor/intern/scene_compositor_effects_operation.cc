@@ -166,6 +166,7 @@ static Result *get_effect_input(Context &context,
     case SOCK_CLOSURE:
     case SOCK_SHADER:
     case SOCK_CUSTOM:
+    case SOCK_DYNAMIC:
       break;
   }
 
