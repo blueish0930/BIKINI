@@ -644,15 +644,11 @@ class NODE_MT_shader_node_utilities_base(node_add_menu.NodeMenu):
         self.draw_menu(layout, "Utilities/Matrix")
         self.draw_menu(layout, "Utilities/Rotation")
         layout.separator()
+        self.draw_menu(layout, path="Utilities/Bundle")
+        self.draw_menu(layout, path="Utilities/Closure")
+        layout.separator()
         self.node_operator(layout, "NodeImplicitConversion")
         self.repeat_zone(layout, label="Repeat")
-        layout.separator()
-        self.closure_zone(layout, label="Closure")
-        self.node_operator(layout, "NodeEvaluateClosure")
-        layout.separator()
-        self.node_operator(layout, "NodeCombineBundle")
-        self.node_operator(layout, "NodeJoinBundle")
-        self.node_operator(layout, "NodeSeparateBundle")
         layout.separator()
         self.node_operator(layout, "GeometryNodeIndexSwitch")
         self.node_operator(layout, "GeometryNodeMenuSwitch")
@@ -666,6 +662,33 @@ class NODE_MT_shader_node_utilities_base(node_add_menu.NodeMenu):
             self.node_operator(layout, "ShaderNodeScript")
 
         self.draw_assets_for_catalog(layout, self.bl_label)
+
+
+class NODE_MT_category_utilities_bundle_base(node_add_menu.NodeMenu):
+    bl_label = "Bundle"
+    menu_path = "Utilities/Bundle"
+
+    def draw(self, _context):
+        layout = self.layout
+
+        self.node_operator(layout, "NodeCombineBundle")
+        self.node_operator(layout, "NodeJoinBundle")
+        self.node_operator(layout, "NodeSeparateBundle")
+
+        self.draw_assets_for_catalog(layout, self.menu_path)
+
+
+class NODE_MT_category_utilities_closure_base(node_add_menu.NodeMenu):
+    bl_label = "Closure"
+    menu_path = "Utilities/Closure"
+
+    def draw(self, _context):
+        layout = self.layout
+        
+        self.closure_zone(layout, label="Closure")
+        self.node_operator(layout, "NodeEvaluateClosure")
+
+        self.draw_assets_for_catalog(layout, self.menu_path)
 
 
 class NODE_MT_shader_node_all_base(node_add_menu.NodeMenu):
@@ -711,6 +734,8 @@ add_menus = {
     "NODE_MT_category_shader_matrix": NODE_MT_shader_node_matrix_base,
     "NODE_MT_category_shader_rotation": NODE_MT_shader_node_rotation_base,
     "NODE_MT_category_shader_utilities": NODE_MT_shader_node_utilities_base,
+    "NODE_MT_category_shader_utilities_bundle": NODE_MT_category_utilities_bundle_base,
+    "NODE_MT_category_shader_utilities_closure": NODE_MT_category_utilities_closure_base,
     "NODE_MT_shader_node_add_all": NODE_MT_shader_node_all_base,
 }
 add_menus = node_add_menu.generate_menus(
@@ -735,6 +760,8 @@ swap_menus = {
     "NODE_MT_shader_node_matrix_swap": NODE_MT_shader_node_matrix_base,
     "NODE_MT_shader_node_rotation_swap": NODE_MT_shader_node_rotation_base,
     "NODE_MT_shader_node_utilities_swap": NODE_MT_shader_node_utilities_base,
+    "NODE_MT_shader_node_utilities_bundle_swap": NODE_MT_category_utilities_bundle_base,
+    "NODE_MT_shader_node_utilities_closure_swap": NODE_MT_category_utilities_closure_base,
     "NODE_MT_shader_node_swap_all": NODE_MT_shader_node_all_base,
 }
 swap_menus = node_add_menu.generate_menus(
