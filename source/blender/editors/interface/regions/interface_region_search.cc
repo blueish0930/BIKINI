@@ -440,7 +440,13 @@ bool searchbox_apply(Button *but, ARegion *region)
      * Suggestion menus (e.g. Expression autocomplete) show usage labels like "pow(a, b)"
      * that must not be written into the field — the search exec rewrites via insert form. */
     if (but->hardmax != 0 && !search_but->results_are_suggestions) {
-      BLI_strncpy(but->editstr, name, name_sep ? (name_sep - name) + 1 : data->items.maxstrlen);
+      const size_t name_maxncpy = name_sep ? (name_sep - name) + 1 : data->items.maxstrlen;
+      if (but_is_utf8(but)) {
+        BLI_strncpy_utf8(but->editstr, name, name_maxncpy);
+      }
+      else {
+        BLI_strncpy(but->editstr, name, name_maxncpy);
+      }
     }
 
     search_but->item_active = data->items.pointers[active];
