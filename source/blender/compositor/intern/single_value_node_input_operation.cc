@@ -186,7 +186,6 @@ void SingleValueNodeInputOperation::execute()
       result.set_single_value(std::string(""));
       break;
     default:
-      BLI_assert_unreachable();
       break;
   }
 }

@@ -130,7 +130,6 @@ ResultType socket_data_type_to_result_type(const eNodeSocketDatatype data_type,
       /* Edited on the socket, not a compositor image. Keep the group evaluating. */
       return ResultType::Float;
     default:
-      BLI_assert_unreachable();
       return ResultType::Float;
   }
 }
