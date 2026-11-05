@@ -2913,7 +2913,7 @@ static wmOperatorStatus view_item_click_select(bContext &C,
   }
 
   if (!extend) {
-    view.foreach_view_item([](AbstractViewItem &item) { item.set_selected(false); });
+    view.foreach_view_item([&](AbstractViewItem &item) { item.set_selected(C, false); });
   }
 
   if (clicked_item == nullptr) {
@@ -2927,7 +2927,7 @@ static wmOperatorStatus view_item_click_select(bContext &C,
       if (item.is_active() ^ (&item == clicked_item)) {
         is_inside_range = !is_inside_range;
         /* Select end items from the range. */
-        item.set_selected(true);
+        item.set_selected(C, true);
       }
 
       if (!item.is_filtered_visible()) {
@@ -2937,7 +2937,7 @@ static wmOperatorStatus view_item_click_select(bContext &C,
 
       if (is_inside_range) {
         /* Select items within the range. */
-        item.set_selected(true);
+        item.set_selected(C, true);
       }
     });
     return OPERATOR_FINISHED;
