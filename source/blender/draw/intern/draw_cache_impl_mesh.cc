@@ -179,9 +179,11 @@ static std::optional<bke::AttributeMetaData> lookup_meta_data(const Mesh &mesh,
   const auto column = shader_attribute_request(name);
   const StringRef source_name = column ? column->name : name;
   std::optional<bke::AttributeMetaData> metadata;
-  if (const BMesh *bm = BKE_editmesh_bmesh_get(&mesh)) {
-    if (const BMDataLayerLookup attr = BM_data_layer_lookup(*bm, source_name)) {
-      metadata = bke::AttributeMetaData{attr.domain, attr.type};
+  if (mesh.runtime->wrapper_type == ME_WRAPPER_TYPE_BMESH) {
+    if (const BMesh *bm = BKE_editmesh_bmesh_get(&mesh)) {
+      if (const BMDataLayerLookup attr = BM_data_layer_lookup(*bm, source_name)) {
+        metadata = bke::AttributeMetaData{attr.domain, attr.type};
+      }
     }
   }
   else {
