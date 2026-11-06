@@ -272,7 +272,6 @@ class ExpressionNodeOutputComputeContext : public ComputeContext {
 
 class ClosureToListComputeContext : public NodeComputeContext {
  private:
-  int32_t node_id_;
   int list_index_;
 
  public:
