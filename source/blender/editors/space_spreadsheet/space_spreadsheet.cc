@@ -803,6 +803,12 @@ static void spreadsheet_dataset_region_listener(const wmRegionListenerParams *pa
     case NC_GEOM:
       ED_region_tag_redraw(region);
       break;
+    case NC_ID: {
+      if (wmn->action == NA_RENAME) {
+        ED_region_tag_redraw(region);
+      }
+      break;
+    }
   }
 
   spreadsheet_header_region_listener(params);
