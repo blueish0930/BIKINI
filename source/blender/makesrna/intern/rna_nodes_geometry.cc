@@ -1590,7 +1590,7 @@ static void rna_def_geo_capture_attribute(BlenderRNA *brna, StructRNA *srna)
   RNA_def_property_update(prop, NC_NODE, nullptr);
 
   prop = RNA_def_property(srna, "active_item", PROP_POINTER, PROP_NONE);
-  RNA_def_property_struct_type(prop, "RepeatItem");
+  RNA_def_property_struct_type(prop, "NodeGeometryCaptureAttributeItem");
   RNA_def_property_pointer_funcs(prop,
                                  "rna_Node_ItemArray_active_get<CaptureAttributeItemsAccessor>",
                                  "rna_Node_ItemArray_active_set<CaptureAttributeItemsAccessor>",
@@ -1674,7 +1674,7 @@ static void rna_def_geo_bake(BlenderRNA *brna, StructRNA *srna)
   RNA_def_property_update(prop, NC_NODE, nullptr);
 
   prop = RNA_def_property(srna, "active_item", PROP_POINTER, PROP_NONE);
-  RNA_def_property_struct_type(prop, "RepeatItem");
+  RNA_def_property_struct_type(prop, "NodeGeometryBakeItem");
   RNA_def_property_pointer_funcs(prop,
                                  "rna_Node_ItemArray_active_get<BakeItemsAccessor>",
                                  "rna_Node_ItemArray_active_set<BakeItemsAccessor>",
@@ -2181,7 +2181,7 @@ static void def_geo_closure_to_list(BlenderRNA *brna, StructRNA *srna)
   RNA_def_property_update(prop, NC_NODE, nullptr);
 
   prop = RNA_def_property(srna, "active_item", PROP_POINTER, PROP_NONE);
-  RNA_def_property_struct_type(prop, "RepeatItem");
+  RNA_def_property_struct_type(prop, "GeometryNodeClosureToListItem");
   RNA_def_property_pointer_funcs(prop,
                                  "rna_Node_ItemArray_active_get<ClosureToListItemsAccessor>",
                                  "rna_Node_ItemArray_active_set<ClosureToListItemsAccessor>",
@@ -2215,7 +2215,7 @@ static void def_geo_field_to_grid(BlenderRNA *brna, StructRNA *srna)
   RNA_def_property_update(prop, NC_NODE, nullptr);
 
   prop = RNA_def_property(srna, "active_item", PROP_POINTER, PROP_NONE);
-  RNA_def_property_struct_type(prop, "RepeatItem");
+  RNA_def_property_struct_type(prop, "GeometryNodeFieldToGridItem");
   RNA_def_property_pointer_funcs(prop,
                                  "rna_Node_ItemArray_active_get<FieldToGridItemsAccessor>",
                                  "rna_Node_ItemArray_active_set<FieldToGridItemsAccessor>",
