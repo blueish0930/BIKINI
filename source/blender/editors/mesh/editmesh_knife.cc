@@ -3912,7 +3912,7 @@ static void calc_ortho_extent(KnifeTool_OpData *kcd)
 
   for (int ob_index = 0; ob_index < kcd->objects.size(); ob_index++) {
     ob = kcd->objects[ob_index];
-    BMesh *bm = BKE_editmesh_bmesh_get_for_write(ob);
+    BMesh *bm = BKE_editmesh_bmesh_ensure(ob);
 
     const Span<float3> positions_cage = kcd->objects_info[ob_index].positions_cage;
     if (!positions_cage.is_empty()) {
@@ -5261,7 +5261,7 @@ static void knifetool_init_obinfo(KnifeTool_OpData *kcd,
   KnifeObjectInfo *obinfo = &kcd->objects_info[ob_index];
 
   if (BKE_editmesh_eval_orig_map_available(mesh_eval, &mesh_orig)) {
-    BMesh *bm = BKE_editmesh_bmesh_get_for_write(ob);
+    BMesh *bm = BKE_editmesh_bmesh_ensure(ob);
     EditMesh &em_eval = *mesh_eval.runtime->edit_mesh;
     obinfo->em = &em_eval;
     obinfo->bm = bm;
@@ -5270,7 +5270,7 @@ static void knifetool_init_obinfo(KnifeTool_OpData *kcd,
   }
   else {
     obinfo->em = mesh_orig.runtime->edit_mesh.get();
-    obinfo->bm = BKE_editmesh_bmesh_get_for_write(ob);
+    obinfo->bm = BKE_editmesh_bmesh_ensure(ob);
     obinfo->positions_cage = BM_mesh_vert_coords_alloc(obinfo->bm);
   }
 
@@ -5510,7 +5510,7 @@ static void knifetool_finish_single_post(KnifeTool_OpData *kcd, Object *ob)
   /* Vanilla flush first. In face mode this wipes isolated cut edges after a
    * deselect-all; #knife_restore_user_active re-selects the user's cut edges
    * afterwards so the orange/cyan overlay survives. */
-  BMesh *bm = BKE_editmesh_bmesh_get_for_write(ob);
+  BMesh *bm = BKE_editmesh_bmesh_ensure(ob);
   EDBM_selectmode_flush(bm, em->selectmode);
   EDBM_uvselect_clear(bm);
 
@@ -6015,7 +6015,7 @@ static wmOperatorStatus knifetool_invoke(bContext *C, wmOperator *op, const wmEv
   if (only_select) {
     bool faces_selected = false;
     for (Object *obedit : kcd->objects) {
-      const BMesh *bm = BKE_editmesh_bmesh_get(obedit);
+      const BMesh *bm = BKE_editmesh_bmesh_ensure(obedit);
       if (bm->totfacesel != 0) {
         faces_selected = true;
       }
@@ -6209,7 +6209,7 @@ void EDBM_mesh_knife(ViewContext *vc,
     /* See #knifetool_finish_ex for why multiple passes are needed. */
     for (int ob_index : kcd->objects.index_range()) {
       Object *ob = kcd->objects[ob_index];
-      BMesh *bm = BKE_editmesh_bmesh_get_for_write(ob);
+      BMesh *bm = BKE_editmesh_bmesh_ensure(ob);
 
       if (use_tag) {
         BM_mesh_elem_hflag_enable_all(bm, BM_EDGE, BM_ELEM_TAG, false);
@@ -6219,7 +6219,7 @@ void EDBM_mesh_knife(ViewContext *vc,
     }
 
     for (Object *ob : kcd->objects) {
-      BMesh *bm = BKE_editmesh_bmesh_get_for_write(ob);
+      BMesh *bm = BKE_editmesh_bmesh_ensure(ob);
 
       /* Tag faces inside! */
       if (use_tag) {

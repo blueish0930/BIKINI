@@ -755,7 +755,7 @@ static void store_result_geometry(const bContext &C,
           else {
             EDBM_mesh_make_from_mesh(&object, new_mesh, scene.toolsettings->selectmode, true);
             BKE_editmesh_looptris_and_normals_calc(mesh.runtime->edit_mesh.get(),
-                                                   BKE_editmesh_bmesh_get_for_write(&mesh));
+                                                   BKE_editmesh_bmesh_ensure(&mesh));
             BKE_id_free(nullptr, new_mesh);
             DEG_id_tag_update(&mesh.id, ID_RECALC_GEOMETRY);
           }

@@ -149,10 +149,10 @@ static bool edbm_inset_init(bContext *C, wmOperator *op, const bool is_modal)
       float scale = mat4_to_scale(obedit->object_to_world().ptr());
       opdata->max_obj_scale = max_ff(opdata->max_obj_scale, scale);
       bool has_active = false;
-      BMEditMesh *em = BKE_editmesh_from_object(obedit);
+      EditMesh *em = BKE_editmesh_from_object(obedit);
       const float3 active_side_co = EDBM_mirror_active_center_capture(
           obedit, em, has_active);
-      const BMesh *bm = BKE_editmesh_bmesh_get(obedit);
+      const BMesh *bm = BKE_editmesh_bmesh_ensure(obedit);
       if (bm->totvertsel > 0) {
         opdata->ob_store[objects_used_len].ob = obedit;
         opdata->ob_store[objects_used_len].active_side_co = active_side_co;
@@ -181,7 +181,7 @@ static bool edbm_inset_init(bContext *C, wmOperator *op, const bool is_modal)
 
     for (uint ob_index = 0; ob_index < opdata->ob_store_len; ob_index++) {
       Object *obedit = opdata->ob_store[ob_index].ob;
-      BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
+      BMesh *bm = BKE_editmesh_bmesh_ensure(obedit);
       opdata->ob_store[ob_index].mesh_backup = EDBM_redo_state_store(bm);
     }
 
@@ -228,7 +228,7 @@ static void edbm_inset_cancel(bContext *C, wmOperator *op)
     for (uint ob_index = 0; ob_index < opdata->ob_store_len; ob_index++) {
       Object *obedit = opdata->ob_store[ob_index].ob;
       EditMesh *em = BKE_editmesh_from_object(obedit);
-      BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
+      BMesh *bm = BKE_editmesh_bmesh_ensure(obedit);
       EDBM_redo_state_restore_and_free(&opdata->ob_store[ob_index].mesh_backup, em, bm, true);
       EDBMUpdate_Params params{};
       params.calc_looptris = false;
@@ -267,7 +267,7 @@ static bool edbm_inset_calc(wmOperator *op)
   for (uint ob_index = 0; ob_index < opdata->ob_store_len; ob_index++) {
     Object *obedit = opdata->ob_store[ob_index].ob;
     EditMesh *em = BKE_editmesh_from_object(obedit);
-    BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
+    BMesh *bm = BKE_editmesh_bmesh_ensure(obedit);
 
     if (opdata->is_modal) {
       EDBM_redo_state_restore(&opdata->ob_store[ob_index].mesh_backup, em, bm, false);

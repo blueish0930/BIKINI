@@ -64,7 +64,7 @@ static wmOperatorStatus edbm_spin_exec(bContext *C, wmOperator *op)
 
   for (Object *obedit : objects) {
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
-    BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
+    BMesh *bm = BKE_editmesh_bmesh_ensure(obedit);
     BMOperator spinop;
 
     bool has_active_side = false;

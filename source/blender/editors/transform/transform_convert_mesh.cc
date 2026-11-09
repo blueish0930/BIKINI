@@ -376,7 +376,7 @@ static void mesh_customdatacorrect_init_container_merge_group(TransDataContainer
 static TransCustomDataLayer *mesh_customdatacorrect_create_impl(TransDataContainer *tc,
                                                                 const bool use_merge_group)
 {
-  BMesh *bm = BKE_editmesh_bmesh_get_for_write(tc->obedit);
+  BMesh *bm = BKE_editmesh_bmesh_ensure(tc->obedit);
 
   if (bm->shapenr > 1) {
     /* Don't do this at all for non-basis shape keys, too easy to
@@ -1405,7 +1405,7 @@ void transform_convert_mesh_crazyspace_detect(TransInfo *t,
     {
       const Array<float3> mappedcos = BKE_crazyspace_get_mapped_editverts(t->depsgraph,
                                                                           tc->obedit);
-      BMesh *bm = BKE_editmesh_bmesh_get_for_write(tc->obedit);
+      BMesh *bm = BKE_editmesh_bmesh_ensure(tc->obedit);
       quats = MEM_new_array_uninitialized<float[4]>(bm->totvert, "crazy quats");
       BKE_crazyspace_set_quats_editmesh(bm, defcos, mappedcos, quats, !prop_mode);
     }
@@ -1526,7 +1526,7 @@ static void createTransEditVerts(bContext * /*C*/, TransInfo *t)
   FOREACH_TRANS_DATA_CONTAINER (t, tc) {
     EditMesh *em = BKE_editmesh_from_object(tc->obedit);
     Mesh *mesh = id_cast<Mesh *>(tc->obedit->data);
-    BMesh *bm = BKE_editmesh_bmesh_get_for_write(mesh);
+    BMesh *bm = BKE_editmesh_bmesh_ensure(mesh);
     BMVert *eve;
     BMIter iter;
     float mtx[3][3], smtx[3][3];
@@ -1797,7 +1797,7 @@ static BMPartialUpdate *mesh_partial_ensure(TransInfo *t,
     pupdate->cache = nullptr;
   }
 
-  BMesh *bm = BKE_editmesh_bmesh_get_for_write(tc->obedit);
+  BMesh *bm = BKE_editmesh_bmesh_ensure(tc->obedit);
 
   BM_mesh_elem_index_ensure(bm, BM_VERT);
 
@@ -2000,7 +2000,7 @@ static void mesh_partial_update(TransInfo *t,
                                 const PartialTypeState *partial_state)
 {
   EditMesh *em = BKE_editmesh_from_object(tc->obedit);
-  BMesh *bm = BKE_editmesh_bmesh_get_for_write(tc->obedit);
+  BMesh *bm = BKE_editmesh_bmesh_ensure(tc->obedit);
 
   TransCustomDataMesh *tcmd = mesh_customdata_ensure(tc);
 
@@ -2166,7 +2166,7 @@ static void special_aftertrans_update__mesh(bContext * /*C*/, TransInfo *t)
   if (use_automerge) {
     FOREACH_TRANS_DATA_CONTAINER (t, tc) {
       EditMesh *em = BKE_editmesh_from_object(tc->obedit);
-      BMesh *bm = BKE_editmesh_bmesh_get_for_write(tc->obedit);
+      BMesh *bm = BKE_editmesh_bmesh_ensure(tc->obedit);
       char hflag;
       bool has_face_sel = (bm->totfacesel != 0);
 
@@ -2368,7 +2368,7 @@ static float3 isect_face_dst(const BMLoop *l)
 Array<TransDataEdgeSlideVert> transform_mesh_edge_slide_data_create(const TransDataContainer *tc,
                                                                     int *r_group_len)
 {
-  BMesh *bm = BKE_editmesh_bmesh_get_for_write(tc->obedit);
+  BMesh *bm = BKE_editmesh_bmesh_ensure(tc->obedit);
   int td_selected_len = 0;
 
   /* Ensure valid selection. */

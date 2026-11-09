@@ -525,7 +525,7 @@ static int edbm_rip_invoke__vert(Object *obedit,
                                  const float4x4 *obmat_override)
 {
   Array<UnorderedLoopPair> fill_uloop_pairs;
-  BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
+  BMesh *bm = BKE_editmesh_bmesh_ensure(obedit);
   BMIter iter, liter;
   BMLoop *l;
   BMEdge *e_best;
@@ -890,7 +890,7 @@ static int edbm_rip_invoke__edge(Object *obedit,
                                  const float4x4 *obmat_override)
 {
   Array<UnorderedLoopPair> fill_uloop_pairs;
-  BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
+  BMesh *bm = BKE_editmesh_bmesh_ensure(obedit);
   BMIter iter, eiter;
   BMLoop *l;
   BMEdge *e_best;
@@ -1035,7 +1035,7 @@ static wmOperatorStatus edbm_rip_exec(bContext *C, wmOperator *op)
 
   for (Object *obedit : objects) {
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
-    BMesh *bm = BKE_editmesh_bmesh_get_for_write(obedit);
+    BMesh *bm = BKE_editmesh_bmesh_ensure(obedit);
     BMIter iter;
     BMEdge *e;
     BMVert *v;
