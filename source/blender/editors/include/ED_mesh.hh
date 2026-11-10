@@ -387,16 +387,6 @@ void ED_mesh_undosys_type(UndoType *ut);
 void EDBM_select_mirrored(
     EditMesh *em, Mesh *mesh, int axis, bool extend, int *r_totmirr, int *r_totfail);
 
-#if 0 /* Unused but seems useful to keep. */
-/**
- * Select mirrored elements on all enabled axis.
- * Does nothing if selection symmetry isn't enabled.
- *
- * \return true if the selection changed.
- */
-bool EDBM_select_mirrored_extend_all(Object *obedit, EditMesh *em);
-#endif
-
 /**
  * Nearest vertex under the cursor.
  *
