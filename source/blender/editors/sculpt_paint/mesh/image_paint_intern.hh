@@ -29,9 +29,53 @@ struct TileColorspaceProcessor : NonCopyable {
 using BufferType = std::variant<std::monostate, MutableSpan<float4>, MutableSpan<uchar4>>;
 using MaskBufferType = std::variant<std::monostate, Span<float4>, Span<uchar4>>;
 
+constexpr int SCRATCH_TILE_BITS = 6;
+constexpr int SCRATCH_TILE_SIZE = (1 << SCRATCH_TILE_BITS);
+constexpr int SCRATCH_TILE_AREA = SCRATCH_TILE_SIZE * SCRATCH_TILE_SIZE;
+
+/**
+ * The per image tile buffers of brushes that read other pixels, which have to finish reading
+ * before anything is written.
+ */
+struct ScratchTiles {
+  Array<uint32_t> allocated;
+
+  /**
+   * Intermediate tracking for tiles that have been modified to perform final blending without
+   * needing to refer to the BVH nodes being processed.
+   */
+  Array<bool> modified;
+
+  /**
+   * Intermediate storage of color / factor data when it cannot be blended with the image as the
+   * pixel is processed.
+   *
+   * Stored as 64x64 contiguous tiles.
+   */
+  Vector<Vector<float4>, 0> colors;
+  Vector<Vector<float>, 0> factors;
+
+  /**
+   * Position of every pixel with a non-zero factor in #factors.
+   *
+   * Needed because border extension pixels cannot easily map to their original location.
+   */
+  Vector<Vector<float3>, 0> positions;
+
+  explicit ScratchTiles(const int64_t tiles_num)
+      : allocated(tiles_num, 0),
+        modified(tiles_num, false),
+        colors(tiles_num),
+        factors(tiles_num),
+        positions(tiles_num)
+  {
+  }
+};
+
 struct ImageData : NonCopyable {
   Image *image = nullptr;
   CanvasImageUser image_user;
+  bool is_data_colorspace = false;
 
   Map<bke::image::TileNumber, ImBuf *> image_buffers = {};
   Map<bke::image::TileNumber, BufferType> data_buffers = {};
@@ -47,6 +91,10 @@ struct ImageData : NonCopyable {
   /** Dirty image-space rect painted this dab; used to composite extra layers. */
   rcti paint_dirty{};
   bool paint_dirty_valid = false;
+
+  /** Intermediate storage helper to allow creating scratch tiles in parallel. */
+  Mutex scratch_mutex;
+  Map<bke::image::TileNumber, ScratchTiles> scratch_tiles = {};
 
   ~ImageData();
 
@@ -64,6 +112,21 @@ struct ImageData : NonCopyable {
 
 void do_3d_image_paint_brush(const Depsgraph &depsgraph,
                              const ImagePaintSettings &paint_settings,
+                             const Brush &brush,
+                             Object &ob,
+                             ImageData &image_data,
+                             ImageData *mask_data,
+                             const IndexMask &node_mask);
+
+void do_3d_image_mask_brush(const Depsgraph &depsgraph,
+                            const ImagePaintSettings &paint_settings,
+                            const Brush &brush,
+                            Object &ob,
+                            ImageData &mask_image,
+                            const IndexMask &node_mask);
+
+void do_3d_image_smear_brush(const Depsgraph &depsgraph,
+                             const ImagePaintSettings &paint,
                              const Brush &brush,
                              Object &ob,
                              ImageData &image_data,
