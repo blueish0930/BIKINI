@@ -92,10 +92,14 @@ Tree &Tree::operator=(Tree &&other)
 Tree::~Tree()
 {
 #ifdef WITH_EMBREE
-  rtcReleaseScene(this->rtc_scene_);
-  this->rtc_scene_ = nullptr;
-  /* Process-wide shared device — do not release. */
-  this->rtc_device_ = nullptr;
+  if (this->rtc_scene_) {
+    rtcReleaseScene(this->rtc_scene_);
+    this->rtc_scene_ = nullptr;
+  }
+  if (this->rtc_device_) {
+    rtcReleaseDevice(this->rtc_device_);
+    this->rtc_device_ = nullptr;
+  }
   this->query_verts_ = nullptr;
   this->query_indices_ = nullptr;
   index_map_by_geom_.clear_and_shrink();
@@ -112,18 +116,6 @@ static void rtc_error_func(void * /*userPtr*/, RTCError /*error*/, const char * 
 static bool rtc_memory_monitor_func(void * /*userPtr*/, const ssize_t /*bytes*/, const bool)
 {
   return true;
-}
-
-static RTCDevice embree_shared_device()
-{
-  static RTCDevice device = nullptr;
-  static std::once_flag once;
-  std::call_once(once, []() {
-    device = rtcNewDevice("verbose=0");
-    rtcSetDeviceErrorFunction(device, rtc_error_func, nullptr);
-    rtcSetDeviceMemoryMonitorFunction(device, rtc_memory_monitor_func, nullptr);
-  });
-  return device;
 }
 
 void Tree::bind_query_buffers(const int tris_n)
@@ -169,10 +161,25 @@ struct BvhBuildContext {
   RTCBuildQuality build_quality;
 };
 
-/** Create the Embree device and scene used to build every tree. */
+/* Creating an Embree device is expensive, so share one between all trees. */
+static RTCDevice get_device()
+{
+  using DevicePtr = std::unique_ptr<RTCDeviceTy, decltype(&rtcReleaseDevice)>;
+  static const DevicePtr device = []() {
+    DevicePtr device(rtcNewDevice("verbose=0"), rtcReleaseDevice);
+    rtcSetDeviceErrorFunction(device.get(), rtc_error_func, nullptr);
+    rtcSetDeviceMemoryMonitorFunction(device.get(), rtc_memory_monitor_func, nullptr);
+    return device;
+  }();
+  return device.get();
+}
+
+/** Create a scene and retain its Embree device for the tree. */
 static BvhBuildContext build_context_create(const bool fast_query = false)
 {
-  RTCDevice device = embree_shared_device();
+  RTCDevice device = get_device();
+  /* Every tree owns a reference, including if it outlives the shared device pointer. */
+  rtcRetainDevice(device);
 
   RTCScene scene = rtcNewScene(device);
   RTCSceneFlags scene_flags = RTC_SCENE_FLAG_NONE;
@@ -264,7 +271,7 @@ static void add_mesh_faces(const BvhBuildContext &ctx,
             SimpleVectorSetSlot<int, int>,
             GuardedAllocator>
       used_verts;
-  used_verts.reserve(faces.size());
+  used_verts.reserve(face_mask.size());
   face_mask.foreach_index(
       [&](const int face) { used_verts.add_multiple(corner_verts.slice(faces[face])); });
 
