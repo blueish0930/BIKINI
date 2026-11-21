@@ -417,16 +417,14 @@ static void rna_SetGreasePencilDepth_depth_order_set(PointerRNA *ptr, int value)
   socket->default_value_typed<bNodeSocketValueMenu>()->value = value;
 }
 
-}  // namespace blender
-
-static int rna_GeometryNodeModalKeymapItem_map_type_get(PointerRNA *ptr)
+int rna_GeometryNodeModalKeymapItem_map_type_get(PointerRNA *ptr)
 {
   const auto &item = *static_cast<const GeometryNodeModalKeymapItem *>(ptr->data);
   return WM_keymap_map_type_from_event_type(item.type);
 }
 
 /** Mirrors #rna_wmKeyMapItem_map_type_set: the map type is derived from the event type. */
-static void rna_GeometryNodeModalKeymapItem_map_type_set(PointerRNA *ptr, const int value)
+void rna_GeometryNodeModalKeymapItem_map_type_set(PointerRNA *ptr, const int value)
 {
   auto &item = *static_cast<GeometryNodeModalKeymapItem *>(ptr->data);
   if (value == WM_keymap_map_type_from_event_type(item.type)) {
@@ -456,7 +454,7 @@ static void rna_GeometryNodeModalKeymapItem_map_type_set(PointerRNA *ptr, const 
   }
 }
 
-static void rna_GeometryNodeModalKeymapItem_update(Main *bmain, Scene *scene, PointerRNA *ptr)
+void rna_GeometryNodeModalKeymapItem_update(Main *bmain, Scene *scene, PointerRNA *ptr)
 {
   bNodeTree *ntree = reinterpret_cast<bNodeTree *>(ptr->owner_id);
   BKE_ntree_update_tag_modal_keymap(ntree);
@@ -557,6 +555,8 @@ static void rna_NodeImageFluid_solver_update(Main *bmain, Scene * /*scene*/, Poi
 {
   rna_Node_update(bmain, nullptr, ptr);
 }
+
+}  // namespace blender
 
 #else
 
@@ -1953,7 +1953,7 @@ static void rna_def_expression_items(BlenderRNA *brna)
   rna_def_node_item_array_common_functions(srna, "NodeExpressionItem", "ExpressionItemsAccessor");
 }
 
-static void def_expression(BlenderRNA *brna, StructRNA *srna)
+void def_expression(BlenderRNA *brna, StructRNA *srna)
 {
   PropertyRNA *prop;
 
@@ -2440,7 +2440,7 @@ static void def_geo_modal_event(BlenderRNA * /*brna*/, StructRNA *srna)
   RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
 }
 
-static void rna_def_geometry_node_modal_keymap_item(BlenderRNA *brna)
+void rna_def_geometry_node_modal_keymap_item(BlenderRNA *brna)
 {
   PropertyRNA *prop;
 

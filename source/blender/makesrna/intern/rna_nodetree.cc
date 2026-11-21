@@ -934,7 +934,7 @@ static void rna_NodeTree_recursive_flag_update(Main *bmain, Scene *scene, Pointe
   DEG_relations_tag_update(bmain);
 }
 
-static void rna_NodeTree_update_asset(Main *bmain, Scene *scene, PointerRNA *ptr)
+void rna_NodeTree_update_asset(Main *bmain, Scene *scene, PointerRNA *ptr)
 {
   rna_NodeTree_update(bmain, scene, ptr);
   WM_main_add_notifier(NC_NODE | ND_NODE_ASSET_DATA, nullptr);
@@ -2267,8 +2267,8 @@ StructRNA *rna_FunctionNode_register(Main *bmain,
 }
 
 /* --- IMAGE_NODES_MVP begin --- */
-static StructRNA *rna_ImageNode_register(Main *bmain,
-                                         ReportList *reports,
+StructRNA *rna_ImageNode_register(Main *bmain,
+                                  ReportList *reports,
                                          void *data,
                                          const char *identifier,
                                          StructValidateFunc validate,
@@ -2978,7 +2978,7 @@ static std::string rna_format_node_search_input_hint(const Span<StringRef> names
   return hint;
 }
 
-static void rna_NodeInternal_search_input_hint(StructRNA *srna, char *result)
+void rna_NodeInternal_search_input_hint(StructRNA *srna, char *result)
 {
   result[0] = '\0';
   bke::bNodeType *ntype = static_cast<bke::bNodeType *>(RNA_struct_blender_type_get(srna));
@@ -3381,16 +3381,14 @@ static const EnumPropertyItem *rna_NodeImplicitConversion_data_type_itemf(bConte
       });
 }
 
-}  // namespace blender
-
 /** Compositor "GPU Texture Editor" node: pick a GPU Texture Editor (NTREE_IMAGE) group only. */
-static bool rna_CompositorImageProcess_node_tree_poll(PointerRNA * /*ptr*/, const PointerRNA value)
+bool rna_CompositorImageProcess_node_tree_poll(PointerRNA * /*ptr*/, const PointerRNA value)
 {
   const bNodeTree *ngroup = static_cast<const bNodeTree *>(value.data);
   return ngroup && ngroup->type == NTREE_IMAGE;
 }
 
-static void rna_CompositorImageProcess_node_tree_set(PointerRNA *ptr,
+void rna_CompositorImageProcess_node_tree_set(PointerRNA *ptr,
                                                      const PointerRNA value,
                                                      ReportList * /*reports*/)
 {
@@ -3413,6 +3411,8 @@ static void rna_CompositorImageProcess_node_tree_set(PointerRNA *ptr,
   /* Relations/invariants refreshed via property update (rna_NodeGroup_update). */
   BKE_ntree_update_tag_node_property(ntree, node);
 }
+
+}  // namespace blender
 
 #else
 
@@ -3594,7 +3594,7 @@ void def_group(BlenderRNA * /*brna*/, StructRNA *srna)
   RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_NodeGroup_update");
 }
 
-static void def_cmp_image_process(BlenderRNA * /*brna*/, StructRNA *srna)
+void def_cmp_image_process(BlenderRNA * /*brna*/, StructRNA *srna)
 {
   PropertyRNA *prop;
 

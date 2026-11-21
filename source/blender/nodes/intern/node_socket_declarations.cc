@@ -1152,7 +1152,7 @@ bNodeSocket &ColorRamp::build(bNodeTree &ntree, bNode &node) const
   bNodeSocket &socket = *bke::node_add_socket(ntree,
                                               node,
                                               this->in_out,
-                                              "NodeSocketColorRamp",
+                                              "NodeSocketColorRamp"_ustr,
                                               this->identifier.ref(),
                                               this->name.ref());
   this->set_common_flags(socket);
@@ -1192,7 +1192,7 @@ bool ColorRamp::can_connect(const bNodeSocket &socket) const
 bNodeSocket &Curve::build(bNodeTree &ntree, bNode &node) const
 {
   bNodeSocket &socket = *bke::node_add_socket(
-      ntree, node, this->in_out, "NodeSocketCurve", this->identifier.ref(), this->name.ref());
+      ntree, node, this->in_out, "NodeSocketCurve"_ustr, this->identifier.ref(), this->name.ref());
   this->set_common_flags(socket);
   if (auto *value = socket.default_value_typed<bNodeSocketValueCurve>()) {
     bke::socket_value_curve_subtype_set(*value, this->subtype);

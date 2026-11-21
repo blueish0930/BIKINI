@@ -92,7 +92,7 @@ static void execute_k_nearest(const KDTree<float3> &tree,
   threading::parallel_for(source_positions.index_range(), 128, [&](const IndexRange range) {
     Vector<KDTree<float3>::Nearest, 16> nearest(search_count);
     for (const int source_i : range) {
-      const int found = tree.find_nearest_n(source_positions[source_i], nearest);
+      const int found = tree.find_nearest_n(source_positions[source_i], std::numeric_limits<float>::max(), nearest);
       const int64_t offset = int64_t(source_i) * k;
       for (const int neighbor_i : IndexRange(found)) {
         r_indices[offset + neighbor_i] = nearest[neighbor_i].index;

@@ -2171,7 +2171,7 @@ static std::array<float2, 4> node_link_bezier_points(const bNodeLink &link)
 
 static float angled_corner_radius()
 {
-  const int curving = ui::theme::get_value_type(TH_NODE_CURVING, SPACE_NODE);
+  const int curving = U.noodle_curving;
   if (curving <= 0) {
     return 0.0f;
   }

@@ -2503,7 +2503,7 @@ static BMVert *knife_spatial_vert(const KDTree<float3> *tree, BMesh *bm, const f
     return nullptr;
   }
   float dist_sq;
-  const int index = tree->find_nearest(float3(co), &dist_sq);
+  const int index = tree->find_nearest(float3(co), std::numeric_limits<float>::max(), &dist_sq);
   if (index == -1) {
     return nullptr;
   }
@@ -2523,7 +2523,7 @@ static BMEdge *knife_spatial_edge(const KDTree<float3> *tree, BMesh *bm, const f
     return nullptr;
   }
   KDTree<float3>::Nearest nearest[12];
-  const int found = tree->find_nearest_n(float3(co), MutableSpan(nearest, 12));
+  const int found = tree->find_nearest_n(float3(co), std::numeric_limits<float>::max(), MutableSpan(nearest, 12));
   BMEdge *best = nullptr;
   float best_d = 1e9f;
   Set<BMEdge *> seen;
@@ -2804,7 +2804,7 @@ static BMFace *knife_face_at_point(const KDTree<float3> *tree, BMesh *bm, const 
     return nullptr;
   }
   KDTree<float3>::Nearest nearest[16];
-  const int found = tree->find_nearest_n(float3(co), MutableSpan(nearest, 16));
+  const int found = tree->find_nearest_n(float3(co), std::numeric_limits<float>::max(), MutableSpan(nearest, 16));
   BMFace *best = nullptr;
   float best_d = 1e9f;
   Set<BMFace *> seen;

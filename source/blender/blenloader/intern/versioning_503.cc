@@ -300,12 +300,10 @@ void do_versions_after_linking_503(FileData * /*fd*/, Main *bmain)
     for (Scene &scene : bmain->scenes) {
       /* BIKINI files written at 503.16-26 still have a single compositing_node_group.
        * Official 503.15+ files already have compositor_effects; do not duplicate. */
-      if (scene.compositor_effects.is_empty()) {
-        compositing_node_group_to_effect(*bmain, scene);
+      if (scene.compositor_effects.is_empty() && scene.compositing_node_group) {
+        version_compositing_node_group_to_effect(scene, *scene.compositing_node_group);
       }
-      else {
-        scene.compositing_node_group = nullptr;
-      }
+      scene.compositing_node_group = nullptr;
     }
   }
   else {

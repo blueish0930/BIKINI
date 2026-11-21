@@ -111,7 +111,7 @@ static constexpr uchar UV_MIRROR_FACE_EF = 1 << 2;
 
 static void extract_edituv_mirror_flags(const MeshRenderData &mr, MutableSpan<EditLoopData> vbo_data)
 {
-  if (mr.bm == nullptr || mr.edit_bmesh == nullptr || mr.toolsettings == nullptr) {
+  if (mr.bm == nullptr || mr.edit_mesh == nullptr || mr.toolsettings == nullptr) {
     return;
   }
   /* The cage/evaluated mesh does not reliably carry #Mesh::uv_symmetry. */
@@ -123,7 +123,7 @@ static void extract_edituv_mirror_flags(const MeshRenderData &mr, MutableSpan<Ed
   if (!ED_uvedit_mirror_settings(mr.toolsettings, uv_mesh, &settings)) {
     return;
   }
-  UVMirrorIndex *index = ED_uvedit_mirror_index_create(mr.toolsettings, mr.edit_bmesh, uv_mesh);
+  UVMirrorIndex *index = ED_uvedit_mirror_index_create(mr.toolsettings, mr.edit_mesh, uv_mesh);
   if (index == nullptr) {
     return;
   }
@@ -236,7 +236,7 @@ static void extract_edituv_mirror_flags(const MeshRenderData &mr, MutableSpan<Ed
 
 void extract_edituv_mirror_face_dots(const MeshRenderData &mr, MutableSpan<EditLoopData> face_data)
 {
-  if (face_data.is_empty() || mr.bm == nullptr || mr.edit_bmesh == nullptr ||
+  if (face_data.is_empty() || mr.bm == nullptr || mr.edit_mesh == nullptr ||
       mr.toolsettings == nullptr)
   {
     return;
@@ -249,7 +249,7 @@ void extract_edituv_mirror_face_dots(const MeshRenderData &mr, MutableSpan<EditL
   if (!ED_uvedit_mirror_settings(mr.toolsettings, uv_mesh, &settings)) {
     return;
   }
-  UVMirrorIndex *index = ED_uvedit_mirror_index_create(mr.toolsettings, mr.edit_bmesh, uv_mesh);
+  UVMirrorIndex *index = ED_uvedit_mirror_index_create(mr.toolsettings, mr.edit_mesh, uv_mesh);
   if (index == nullptr) {
     return;
   }

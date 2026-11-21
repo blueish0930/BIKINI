@@ -417,12 +417,12 @@ static bool apply_socket_type(bContext *C, SocketTypeTarget &target, const eNode
       /* Must use NodeSocket* idnames (e.g. NodeSocketFloat), same as RNA/Python.
        * NodeTreeInterfaceSocket* idnames from node_static_socket_interface_type_new()
        * are rejected / do not update group instances correctly. */
-      const std::optional<StringRefNull> idname = bke::node_static_socket_type(type, PROP_NONE);
+      const std::optional<UString> idname = bke::node_static_socket_type(type, PROP_NONE);
       if (!idname) {
         return false;
       }
       auto *io = static_cast<bNodeTreeInterfaceSocket *>(target.ptr.data);
-      if (!io->set_socket_type(*idname)) {
+      if (!io->set_socket_type(idname->ref())) {
         return false;
       }
       target.owner_tree->tree_interface.tag_item_property_changed();

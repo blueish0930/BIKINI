@@ -739,7 +739,7 @@ BMVert *EditMeshMirrorLookup::Impl::compute(BMVert *v, const int axis_mask)
   }
 
   KDTree<float3>::Nearest nearest[16];
-  const int found = this->tree->find_nearest_n(query, MutableSpan(nearest, 16));
+  const int found = this->tree->find_nearest_n(query, std::numeric_limits<float>::max(), MutableSpan(nearest, 16));
   /* Skip the source vert (it is often nearest when close to the plane). */
   BMVert *best = nullptr;
   float cluster_dist = -1.0f;
@@ -784,7 +784,7 @@ BMVert *EditMeshMirrorLookup::Impl::compute(BMVert *v, const int axis_mask)
     back_query[a] = -back_query[a];
   }
   KDTree<float3>::Nearest back_n[16];
-  const int back_found = this->tree->find_nearest_n(back_query, MutableSpan(back_n, 16));
+  const int back_found = this->tree->find_nearest_n(back_query, std::numeric_limits<float>::max(), MutableSpan(back_n, 16));
   BMVert *back = nullptr;
   float back_dist = -1.0f;
   int back_ties = 0;

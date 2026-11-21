@@ -274,7 +274,7 @@ struct MirrorHighlightMaps {
 
   bool init(const MeshRenderData &mr)
   {
-    if (mr.edit_mirror_symmetry == 0 || mr.edit_bmesh == nullptr || mr.bm == nullptr ||
+    if (mr.edit_mirror_symmetry == 0 || mr.edit_mesh == nullptr || mr.bm == nullptr ||
         mr.bm->totvertsel == 0)
     {
       return false;
@@ -324,7 +324,7 @@ struct MirrorHighlightMaps {
         return nullptr; /* On-plane / self, not a counterpart. */
       }
       KDTree<float3>::Nearest nearest[2];
-      const int found = tree.find_nearest_n(query, MutableSpan(nearest, 2));
+      const int found = tree.find_nearest_n(query, std::numeric_limits<float>::max(), MutableSpan(nearest, 2));
       const float maxdist_sq = maxdist * maxdist;
       if (found < 1 || nearest[0].distance_sq > maxdist_sq) {
         return nullptr;

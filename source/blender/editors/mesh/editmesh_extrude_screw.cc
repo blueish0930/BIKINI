@@ -151,7 +151,7 @@ static void edbm_screw_mirror_result(BMesh *bm, const int symmetry, const Set<BM
     bool any_weld = false;
     for (BMVert *dv : dup_verts) {
       float dist_sq;
-      const int i = tree.find_nearest(float3(dv->co), &dist_sq);
+      const int i = tree.find_nearest(float3(dv->co), std::numeric_limits<float>::max(), &dist_sq);
       if (i != -1 && dist_sq <= weld_dist * weld_dist) {
         BMO_slot_map_elem_insert(&weldop, slot_targetmap, dv, old_list[i]);
         any_weld = true;

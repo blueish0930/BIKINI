@@ -2864,7 +2864,10 @@ class ShaderNodesInliner {
       case SOCK_ROTATION: {
         /* Matrix sockets have an identity fallback, not storage for an arbitrary matrix.
          * Materialize folded values as nodes so groups and constants retain all components. */
-        const NodeAndSocket result = this->primitive_value_to_output_socket(value);
+        const NodeAndSocket result = this->try_primitive_value_to_output_socket(value);
+        if (!result.socket) {
+          break;
+        }
         for (bNode &owner : dst_tree_.nodes) {
           for (bNodeSocket &input : owner.inputs) {
             if (&input == &socket) {

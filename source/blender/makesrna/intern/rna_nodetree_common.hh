@@ -42,6 +42,7 @@
 #  include "WM_types.hh"
 
 /* BIKINI */
+#  include "IMB_colormanagement.hh"
 #  include "BLI_vector.hh"
 #  include "NOD_node_declaration.hh"
 #  include "NOD_image.hh" /* IMAGE_NODES_MVP */
@@ -62,6 +63,8 @@ struct BlenderRNA;
 struct StructRNA;
 
 extern const EnumPropertyItem prop_shader_output_target_items[];
+/* BIKINI: shared by the Image Texture definitions of several node types. */
+extern const EnumPropertyItem sh_tex_prop_interpolation_items[];
 
 #ifdef RNA_RUNTIME
 
@@ -83,6 +86,24 @@ struct IDProperty;
 struct Main;
 struct ReportList;
 struct Scene;
+
+/* BIKINI runtime callbacks used by definitions in other rna_nodes_*.cc files. */
+StructRNA *rna_ImageNode_register(Main *bmain,
+                                  ReportList *reports,
+                                  void *data,
+                                  const char *identifier,
+                                  StructValidateFunc validate,
+                                  StructCallbackFunc call,
+                                  StructFreeFunc free);
+void rna_NodeInternal_search_input_hint(StructRNA *srna, char *result);
+bool rna_CompositorImageProcess_node_tree_poll(PointerRNA *ptr, PointerRNA value);
+void rna_CompositorImageProcess_node_tree_set(PointerRNA *ptr,
+                                              PointerRNA value,
+                                              ReportList *reports);
+void rna_NodeTree_update_asset(Main *bmain, Scene *scene, PointerRNA *ptr);
+int rna_GeometryNodeModalKeymapItem_map_type_get(PointerRNA *ptr);
+void rna_GeometryNodeModalKeymapItem_map_type_set(PointerRNA *ptr, int value);
+void rna_GeometryNodeModalKeymapItem_update(Main *bmain, Scene *scene, PointerRNA *ptr);
 
 StructRNA *rna_Node_refine(PointerRNA *ptr);
 std::optional<std::string> rna_Node_path(const PointerRNA *ptr);
@@ -317,6 +338,13 @@ bool rna_NodeGroup_node_tree_poll(PointerRNA *ptr, PointerRNA value);
 StructRNA *define_specific_node(BlenderRNA *brna, const char *struct_name, const char *base_name);
 
 void def_group(BlenderRNA *brna, StructRNA *srna);
+
+/* BIKINI node definitions used from another rna_nodes_*.cc file than their own. */
+void def_cmp_image_process(BlenderRNA *brna, StructRNA *srna);
+void def_expression(BlenderRNA *brna, StructRNA *srna);
+void def_geo_python(BlenderRNA *brna, StructRNA *srna);
+void def_geo_wrangle(BlenderRNA *brna, StructRNA *srna);
+void rna_def_geometry_node_modal_keymap_item(BlenderRNA *brna);
 void def_math(BlenderRNA *brna, StructRNA *srna);
 void def_mix_rgb(BlenderRNA *brna, StructRNA *srna);
 void def_rgb_curve(BlenderRNA *brna, StructRNA *srna);

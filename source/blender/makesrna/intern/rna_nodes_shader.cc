@@ -718,8 +718,6 @@ static const EnumPropertyItem *rna_NodeShaderVectTransform_space_itemf(bContext 
       });
 }
 
-}  // namespace blender
-
 static void rna_ShaderNodeAttribute_name_update(Main *bmain, Scene *scene, PointerRNA *ptr)
 {
   bNode *node = ptr->data_as<bNode>();
@@ -733,6 +731,8 @@ static void rna_ShaderNodeAttribute_name_update(Main *bmain, Scene *scene, Point
   }
   rna_Node_update_relations(bmain, scene, ptr);
 }
+
+}  // namespace blender
 
 #else
 
@@ -1105,7 +1105,7 @@ static void def_terrain_combine(BlenderRNA * /*brna*/, StructRNA *srna)
                    rna_enum_node_terrain_combine_items);
 }
 
-static const EnumPropertyItem sh_tex_prop_interpolation_items[] = {
+const EnumPropertyItem sh_tex_prop_interpolation_items[] = {
     {SHD_INTERP_LINEAR, "Linear", 0, "Linear", "Linear interpolation"},
     {SHD_INTERP_CLOSEST, "Closest", 0, "Closest", "No interpolation (sample closest texel)"},
     {SHD_INTERP_CUBIC, "Cubic", 0, "Cubic", "Cubic interpolation"},
@@ -3088,7 +3088,7 @@ static void rna_def_sh_hlsl_output_items(BlenderRNA *brna)
       srna, "NodeShaderHLSLOutputItem", "HLSLOutputItemsAccessor");
 }
 
-static void def_geo_python(BlenderRNA * /*brna*/, StructRNA *srna)
+void def_geo_python(BlenderRNA * /*brna*/, StructRNA *srna)
 {
   PropertyRNA *prop;
 
@@ -3104,7 +3104,7 @@ static void def_geo_python(BlenderRNA * /*brna*/, StructRNA *srna)
   RNA_def_property_pointer_sdna(prop, nullptr, "textbox_state");
 }
 
-static void def_geo_wrangle(BlenderRNA *brna, StructRNA *srna)
+void def_geo_wrangle(BlenderRNA *brna, StructRNA *srna)
 {
   PropertyRNA *prop;
 

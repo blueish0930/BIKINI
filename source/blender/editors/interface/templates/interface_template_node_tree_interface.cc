@@ -343,9 +343,9 @@ class NodeSimpleViewItem : public BasicTreeViewItem {
     return message.flag & NODE_INTERFACE_MESSAGE_SELECT;
   }
 
-  void set_selected(const bool select) override
+  void set_selected(const bContext &C, const bool select) override
   {
-    AbstractViewItem::set_selected(select);
+    AbstractViewItem::set_selected(C, select);
     item_.set_selected(select);
   }
 

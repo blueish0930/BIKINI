@@ -424,11 +424,11 @@ template<> UString socket_type_from_data_impl(const bNodeSocketValueIntVector &d
 }
 /* Non-template overloads. MSVC /OPT:REF drops the explicit specializations for these
  * types even though socket_type_from_data calls them. */
-StringRefNull socket_type_from_data_impl(const bNodeSocketValueColorRamp & /*data*/)
+UString socket_type_from_data_impl(const bNodeSocketValueColorRamp & /*data*/)
 {
   return *bke::node_static_socket_type(SOCK_COLOR_RAMP, PROP_NONE);
 }
-StringRefNull socket_type_from_data_impl(const bNodeSocketValueCurve & /*data*/)
+UString socket_type_from_data_impl(const bNodeSocketValueCurve & /*data*/)
 {
   return *bke::node_static_socket_type(SOCK_CURVE, PROP_NONE);
 }

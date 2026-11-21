@@ -1543,13 +1543,13 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
       }
       else if (bind_type_converts(info.type) && attributes.lookup(info.name, domain, at)) {
         /* `i@mask += 1` on a boolean attribute: convert the stored values, do not drop them. */
-        aw = attributes.convert_or_add_for_write(
+        aw = attributes.ensure_for_write(
             info.name, domain, at, bke::AttributeInitDefaultValue());
       }
       else {
         /* i[]@pts must replace an existing float3 `pts`, otherwise the spreadsheet
          * still shows Vector and the packed list is never stored. */
-        aw = attributes.convert_or_add_for_write_only(info.name, domain, at);
+        aw = attributes.ensure_for_write_only(info.name, domain, at);
         fill_default = bool(aw);
       }
       if (!aw) {
@@ -1645,7 +1645,7 @@ bool bind_attrs(bke::MutableAttributeAccessor attributes,
           if (!span.data() || span.size() < domain_size) {
             return false;
           }
-          /* Write-only lists: convert_or_add_for_write_only already gave a unique
+          /* Write-only lists: ensure_for_write_only already gave a unique
            * span. Cloning 512-byte slots for every point was slower than a 100-iter
            * Jacobi on P. */
           if (!info.read) {
@@ -5496,7 +5496,7 @@ Value geo_builtin_fn(void *user,
         }
         const int want = k + (skip_id >= 0 ? 1 : 0);
         Array<KDTree<float3>::Nearest> nearest(want);
-        const int nfound = tree->tree.find_nearest_n(pos, nearest);
+        const int nfound = tree->tree.find_nearest_n(pos, std::numeric_limits<float>::max(), nearest);
         const float radius_sq = radius * radius;
         Vector<int> ids;
         ids.reserve(k);
@@ -5513,7 +5513,7 @@ Value geo_builtin_fn(void *user,
       }
       const int want = k + (skip_id >= 0 ? 1 : 0);
       Array<KDTree<float3>::Nearest> nearest(want);
-      const int nfound = tree->tree.find_nearest_n(pos, nearest);
+      const int nfound = tree->tree.find_nearest_n(pos, std::numeric_limits<float>::max(), nearest);
       Vector<int> ids;
       ids.reserve(k);
       for (int i = 0; i < nfound && ids.size() < k; i++) {
@@ -6632,7 +6632,7 @@ bool get_knn_neighbor_table(TopoUser &u,
     Array<KDTree<float3>::Nearest> nearest(std::max(want, 1));
     for (const int64_t i64 : range) {
       const int i = int(i64);
-      const int found = tree->tree.find_nearest_n(pos[i], nearest);
+      const int found = tree->tree.find_nearest_n(pos[i], std::numeric_limits<float>::max(), nearest);
       int c = 0;
       int *out = packed.data() + i * k;
       for (int j = 0; j < found && c < k; j++) {
@@ -6711,14 +6711,14 @@ static bool write_int_csr_attr(bke::MutableAttributeAccessor attributes,
   if (name.is_empty() || domain_size <= 0 || off.size() != domain_size + 1) {
     return false;
   }
-  bke::GSpanAttributeWriter writer = attributes.convert_or_add_for_write_only_span(
+  bke::GSpanAttributeWriter writer = attributes.ensure_for_write_only_span(
       name, domain, bke::AttrType::WrangleArray);
   if (!writer) {
     const std::optional<bke::AttributeMetaData> meta = attributes.lookup_meta_data(name);
     if (meta && (meta->domain != domain || meta->data_type != bke::AttrType::WrangleArray)) {
       attributes.remove(name);
     }
-    writer = attributes.convert_or_add_for_write_only_span(
+    writer = attributes.ensure_for_write_only_span(
         name, domain, bke::AttrType::WrangleArray);
   }
   if (!writer) {
@@ -7316,7 +7316,7 @@ bool try_spatial_direct(const Program &program,
       return nullptr;
     }
     bke::SpanAttributeWriter<float3> tmp =
-        attributes.convert_or_add_for_write_only_span<float3>(info->name, bind_domain);
+        attributes.ensure_for_write_only_span<float3>(info->name, bind_domain);
     if (!tmp || tmp.span.size() < domain_size) {
       return nullptr;
     }
@@ -7330,7 +7330,7 @@ bool try_spatial_direct(const Program &program,
       return nullptr;
     }
     bke::SpanAttributeWriter<float> tmp =
-        attributes.convert_or_add_for_write_only_span<float>(info->name, bind_domain);
+        attributes.ensure_for_write_only_span<float>(info->name, bind_domain);
     if (!tmp || tmp.span.size() < domain_size) {
       return nullptr;
     }
@@ -7344,7 +7344,7 @@ bool try_spatial_direct(const Program &program,
       return nullptr;
     }
     bke::SpanAttributeWriter<int> tmp =
-        attributes.convert_or_add_for_write_only_span<int>(info->name, bind_domain);
+        attributes.ensure_for_write_only_span<int>(info->name, bind_domain);
     if (!tmp || tmp.span.size() < domain_size) {
       return nullptr;
     }
@@ -7358,7 +7358,7 @@ bool try_spatial_direct(const Program &program,
       return nullptr;
     }
     bke::SpanAttributeWriter<bool> tmp =
-        attributes.convert_or_add_for_write_only_span<bool>(info->name, bind_domain);
+        attributes.ensure_for_write_only_span<bool>(info->name, bind_domain);
     if (!tmp || tmp.span.size() < domain_size) {
       return nullptr;
     }
