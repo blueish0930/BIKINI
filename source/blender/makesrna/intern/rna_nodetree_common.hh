@@ -65,6 +65,20 @@ extern const EnumPropertyItem prop_shader_output_target_items[];
 
 #ifdef RNA_RUNTIME
 
+/* Item accessors of BIKINI nodes. The node definitions that use them are spread over the split
+ * rna_nodes_*.cc files, so declare them for all of them. */
+using nodes::ExpressionInputItemsAccessor;
+using nodes::ExpressionItemsAccessor;
+using nodes::FluidColorItemsAccessor;
+using nodes::HLSLInputItemsAccessor;
+using nodes::HLSLOutputItemsAccessor;
+using nodes::ImageBakeItemsAccessor;
+using nodes::ShaderWrangleFieldItemsAccessor;
+using nodes::ShaderWrangleInputItemsAccessor;
+using nodes::ShaderWrangleOutputItemsAccessor;
+using nodes::WrangleGeoItemsAccessor;
+using nodes::WrangleInputItemsAccessor;
+
 struct IDProperty;
 struct Main;
 struct ReportList;

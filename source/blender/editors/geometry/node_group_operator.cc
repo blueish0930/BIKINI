@@ -654,7 +654,7 @@ static void get_geometry_active_indices(ViewContext &vc,
   switch (object.type) {
     case OB_MESH: {
       const Mesh *mesh = id_cast<const Mesh *>(object.data);
-      if (std::shared_ptr<BMEditMesh> &em = mesh->runtime->edit_mesh) {
+      if (std::shared_ptr<EditMesh> &em = mesh->runtime->edit_mesh) {
         operator_data.active_point_index = BM_mesh_active_vert_index_get(em->bm);
         operator_data.active_edge_index = BM_mesh_active_edge_index_get(em->bm);
         operator_data.active_face_index = BM_mesh_active_face_index_get(em->bm, false, true);

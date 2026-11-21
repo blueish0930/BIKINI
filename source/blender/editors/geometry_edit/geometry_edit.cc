@@ -206,7 +206,7 @@ static BMesh *session_edit_bmesh()
   if (!state.temp_object || state.temp_object->type != OB_MESH) {
     return nullptr;
   }
-  BMEditMesh *em = BKE_editmesh_from_object(state.temp_object);
+  EditMesh *em = BKE_editmesh_from_object(state.temp_object);
   return em ? em->bm : nullptr;
 }
 
@@ -1314,7 +1314,7 @@ bool session_begin(bContext *C, const SessionParams &params, ReportList *reports
     }
 
     if (is_mesh) {
-      BMEditMesh *em = BKE_editmesh_from_object(ob);
+      EditMesh *em = BKE_editmesh_from_object(ob);
       if (!em || !em->bm) {
         session_free_data(C, state);
         BKE_report(reports, RPT_ERROR, "No edit mesh");
@@ -1508,7 +1508,7 @@ void session_set_domain(const bke::AttrDomain domain)
     return;
   }
   state.domain = domain;
-  BMEditMesh *em = BKE_editmesh_from_object(state.temp_object);
+  EditMesh *em = BKE_editmesh_from_object(state.temp_object);
   if (em) {
     EDBM_selectmode_set(em, em->bm, domain_to_selectmode(domain));
   }

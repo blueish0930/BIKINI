@@ -59,7 +59,7 @@ struct MeshCoordsCache {
   Span<float3> vert_positions;
 };
 
-static Vector<BMEdge *> loopcut_mirrored_ring_edges(BMEditMesh *em, const Mesh *mesh, BMEdge *eed)
+static Vector<BMEdge *> loopcut_mirrored_ring_edges(EditMesh *em, const Mesh *mesh, BMEdge *eed)
 {
   Vector<BMEdge *> ring_starts;
   if (eed == nullptr) {
@@ -181,7 +181,7 @@ static void edgering_select(RingSelOpData *lcd)
     }
   }
 
-  BMEditMesh *em = lcd->em;
+  EditMesh *em = lcd->em;
   BMesh *bm = BKE_editmesh_bmesh_ensure(lcd->ob);
   Mesh *mesh = id_cast<Mesh *>(lcd->ob->data);
 

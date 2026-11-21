@@ -433,7 +433,7 @@ void ED_uvedit_mirror_co_axes(const UVMirrorSettings &settings,
 void ED_uvedit_mirror_co(const UVMirrorSettings &settings, const float src[2], float dst[2]);
 
 UVMirrorIndex *ED_uvedit_mirror_index_create(const ToolSettings *ts,
-                                            BMEditMesh *em,
+                                            EditMesh *em,
                                             const Mesh *mesh);
 void ED_uvedit_mirror_index_free(UVMirrorIndex *index);
 
@@ -450,14 +450,14 @@ int ED_uvedit_mirror_partners(const UVMirrorIndex *index,
 
 /** Run \a fn for every partner of the current UV selection. */
 void ED_uvedit_mirror_foreach_selected(const ToolSettings *ts,
-                                       BMEditMesh *em,
+                                       EditMesh *em,
                                        const Mesh *mesh,
                                        const FunctionRef<void(BMLoop *src, BMLoop *dst)> fn);
 
 /** Select the mirror loops of the current UV selection. No-op when UV mirror is off. */
 void ED_uvedit_mirror_select_partners(const Scene *scene,
                                       const ToolSettings *ts,
-                                      BMEditMesh *em,
+                                      EditMesh *em,
                                       const Mesh *mesh);
 
 /** \} */

@@ -570,7 +570,7 @@ static wmOperatorStatus edbm_extrude_verts_exec(bContext *C, wmOperator *op)
       *bmain, scene, view_layer, CTX_wm_view3d(C));
 
   for (Object *obedit : objects) {
-    BMEditMesh *em = BKE_editmesh_from_object(obedit);
+    EditMesh *em = BKE_editmesh_from_object(obedit);
     bool has_active_side;
     float3 active_side_co = EDBM_mirror_active_center_capture(obedit, em, has_active_side);
     EDBM_select_expand_mirrored(obedit, em, EDBM_mirror_pair_threshold(scene));
@@ -629,7 +629,7 @@ static wmOperatorStatus edbm_extrude_edges_exec(bContext *C, wmOperator *op)
       *bmain, scene, view_layer, CTX_wm_view3d(C));
 
   for (Object *obedit : objects) {
-    BMEditMesh *em = BKE_editmesh_from_object(obedit);
+    EditMesh *em = BKE_editmesh_from_object(obedit);
     bool has_active_side;
     float3 active_side_co = EDBM_mirror_active_center_capture(obedit, em, has_active_side);
     EDBM_select_expand_mirrored(obedit, em, EDBM_mirror_pair_threshold(scene));
@@ -688,7 +688,7 @@ static wmOperatorStatus edbm_extrude_faces_exec(bContext *C, wmOperator *op)
       *bmain, scene, view_layer, CTX_wm_view3d(C));
 
   for (Object *obedit : objects) {
-    BMEditMesh *em = BKE_editmesh_from_object(obedit);
+    EditMesh *em = BKE_editmesh_from_object(obedit);
     bool has_active_side;
     float3 active_side_co = EDBM_mirror_active_center_capture(obedit, em, has_active_side);
     EDBM_select_expand_mirrored(obedit, em, EDBM_mirror_pair_threshold(scene));

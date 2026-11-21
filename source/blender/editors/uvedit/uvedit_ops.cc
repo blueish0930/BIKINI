@@ -948,7 +948,7 @@ static bool uv_weld_loops(Scene *scene, BMesh *bm, const BMUVOffsets &offsets, c
 /** Weld each side of the UV mirror on its own, so a 2-vert weld does not collapse across the center. */
 static bool uv_mirror_weld_object(Scene *scene, Object *obedit, const UVMirrorSettings &settings)
 {
-  BMEditMesh *em = BKE_editmesh_from_object(obedit);
+  EditMesh *em = BKE_editmesh_from_object(obedit);
   BMesh *bm = em->bm;
   UVMirrorIndex *index = ED_uvedit_mirror_index_create(scene->toolsettings, em, id_cast<Mesh *>(obedit->data));
   if (index == nullptr) {
@@ -1609,7 +1609,7 @@ void ED_uvedit_mirror_co(const UVMirrorSettings &settings, const float src[2], f
   ED_uvedit_mirror_co_axes(settings, settings.axis_mask, src, dst);
 }
 
-UVMirrorIndex *ED_uvedit_mirror_index_create(const ToolSettings *ts, BMEditMesh *em, const Mesh *mesh)
+UVMirrorIndex *ED_uvedit_mirror_index_create(const ToolSettings *ts, EditMesh *em, const Mesh *mesh)
 {
   UVMirrorSettings settings;
   if (ts == nullptr || em == nullptr || em->bm == nullptr ||
@@ -1827,7 +1827,7 @@ int ED_uvedit_mirror_partners(const UVMirrorIndex *index,
 }
 
 void ED_uvedit_mirror_foreach_selected(const ToolSettings *ts,
-                                       BMEditMesh *em,
+                                       EditMesh *em,
                                        const Mesh *mesh,
                                        const FunctionRef<void(BMLoop *src, BMLoop *dst)> fn)
 {
@@ -1855,7 +1855,7 @@ void ED_uvedit_mirror_foreach_selected(const ToolSettings *ts,
 
 void ED_uvedit_mirror_select_partners(const Scene *scene,
                                       const ToolSettings *ts,
-                                      BMEditMesh *em,
+                                      EditMesh *em,
                                       const Mesh *mesh)
 {
   ED_uvedit_mirror_foreach_selected(ts, em, mesh, [&](BMLoop * /*src*/, BMLoop *dst) {

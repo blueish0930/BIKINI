@@ -622,7 +622,7 @@ void EditMeshMirrorLookup::Impl::tree_build_full()
   this->tree.emplace(this->positions, indices.as_span());
 }
 
-EditMeshMirrorLookup::EditMeshMirrorLookup(BMEditMesh *em,
+EditMeshMirrorLookup::EditMeshMirrorLookup(EditMesh *em,
                                            const bool use_topology,
                                            const bool respecthide,
                                            const float maxdist,
@@ -650,7 +650,7 @@ EditMeshMirrorLookup::EditMeshMirrorLookup(BMEditMesh *em,
   }
 }
 
-EditMeshMirrorLookup::EditMeshMirrorLookup(BMEditMesh *em,
+EditMeshMirrorLookup::EditMeshMirrorLookup(EditMesh *em,
                                            const bool use_topology,
                                            const bool respecthide,
                                            const float maxdist,
@@ -1357,7 +1357,7 @@ static bool face_spans_mirror_plane(const BMFace *f, const short symmetry)
 /* Per-axis helper maps only store partners of the *original* selection. With
  * X+Y that is Q1 and Q3 of a Q4 face, not Q2. Query every non-empty subset of
  * enabled axes in one spatial flip so the diagonal octant is selected too. */
-static void expand_flood_mirror_lookup(BMEditMesh *em,
+static void expand_flood_mirror_lookup(EditMesh *em,
                                           const Mesh *mesh,
                                           const uchar htype,
                                           const float pair_dist)
@@ -1547,7 +1547,7 @@ static bool mirror_selection_gather(BMesh *bm, MirrorSelection &r_selection)
          (r_selection.faces.size() == bm->totfacesel);
 }
 
-static void expand_mirrored_from_selection(BMEditMesh *em,
+static void expand_mirrored_from_selection(EditMesh *em,
                                            const Mesh *mesh,
                                            const MirrorSelection &selection,
                                            const uchar htype,
@@ -1772,7 +1772,7 @@ float EDBM_mirror_pair_threshold(const Scene *scene)
   return (threshold > 0.0f) ? threshold : fallback;
 }
 
-void EDBM_select_expand_mirrored(Object *ob, BMEditMesh *em, const float pair_dist)
+void EDBM_select_expand_mirrored(Object *ob, EditMesh *em, const float pair_dist)
 {
   BMesh *bm = em->bm;
   const float maxdist = (pair_dist > 0.0f) ? pair_dist : 0.00002f;
@@ -1917,7 +1917,7 @@ static bool mirror_ele_center(const BMElem *ele, const char htype, float r_co[3]
   return false;
 }
 
-float3 EDBM_mirror_active_center_capture(Object *ob, BMEditMesh *em, bool &r_has_active)
+float3 EDBM_mirror_active_center_capture(Object *ob, EditMesh *em, bool &r_has_active)
 {
   float3 co(0.0f);
   r_has_active = false;
@@ -1963,7 +1963,7 @@ static bool co_on_user_side(const float co[3], const int want[3])
 }
 
 void EDBM_mirror_active_side_restore(Object *ob,
-                                     BMEditMesh *em,
+                                     EditMesh *em,
                                      const float3 &ref_co,
                                      const bool deselect_other)
 {
@@ -2102,7 +2102,7 @@ void EDBM_mirror_active_side_restore(Object *ob,
   }
 }
 
-float3 EDBM_mirror_user_side_capture(Object *ob, BMEditMesh *em, bool &r_has_side)
+float3 EDBM_mirror_user_side_capture(Object *ob, EditMesh *em, bool &r_has_side)
 {
   float3 co(0.0f);
   r_has_side = false;
@@ -2138,7 +2138,7 @@ float3 EDBM_mirror_user_side_capture(Object *ob, BMEditMesh *em, bool &r_has_sid
   return co;
 }
 
-void EDBM_mirror_user_side_restore(Object *ob, BMEditMesh *em, const float3 &side_co)
+void EDBM_mirror_user_side_restore(Object *ob, EditMesh *em, const float3 &side_co)
 {
   Mesh *mesh = id_cast<Mesh *>(ob->data);
   if (mesh->symmetry == 0) {
@@ -2268,7 +2268,7 @@ void EDBM_mirror_user_side_restore(Object *ob, BMEditMesh *em, const float3 &sid
   }
 }
 
-EditMeshMirrorUserSideScope::EditMeshMirrorUserSideScope(Object *ob, BMEditMesh *em)
+EditMeshMirrorUserSideScope::EditMeshMirrorUserSideScope(Object *ob, EditMesh *em)
     : ob_(ob), em_(em)
 {
   side_co_ = EDBM_mirror_user_side_capture(ob, em, has_side_);
@@ -2287,7 +2287,7 @@ static std::pair<BMVert *, BMVert *> mirror_edge_vert_key(const BMEdge *e)
 }
 
 EditMeshMirrorDiagonals::EditMeshMirrorDiagonals(Object *ob,
-                                                 BMEditMesh *em,
+                                                 EditMesh *em,
                                                  const float pair_dist)
     : ob_(ob), em_(em), pair_dist_(pair_dist)
 {
@@ -2296,7 +2296,7 @@ EditMeshMirrorDiagonals::EditMeshMirrorDiagonals(Object *ob,
 }
 
 EditMeshMirrorDiagonals::EditMeshMirrorDiagonals(Object *ob,
-                                                 BMEditMesh *em,
+                                                 EditMesh *em,
                                                  const float pair_dist,
                                                  const float3 &side_co)
     : ob_(ob), em_(em), pair_dist_(pair_dist), side_co_(side_co)

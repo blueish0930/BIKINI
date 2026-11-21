@@ -416,12 +416,12 @@ class MirrorSelectionFilter {
  */
 class EditMeshMirrorDiagonals {
  public:
-  EditMeshMirrorDiagonals(Object *ob, BMEditMesh *em, float pair_dist);
+  EditMeshMirrorDiagonals(Object *ob, EditMesh *em, float pair_dist);
   /**
    * For tools that do not work on the selection (knife):  side_co gives, per axis, the
    * sign of the user's side (0 = unknown, that axis is left alone).
    */
-  EditMeshMirrorDiagonals(Object *ob, BMEditMesh *em, float pair_dist, const float3 &side_co);
+  EditMeshMirrorDiagonals(Object *ob, EditMesh *em, float pair_dist, const float3 &side_co);
   /** Returns true when the mesh was changed. */
   bool apply();
   EditMeshMirrorDiagonals(const EditMeshMirrorDiagonals &) = delete;
@@ -429,7 +429,7 @@ class EditMeshMirrorDiagonals {
 
  private:
   Object *ob_;
-  BMEditMesh *em_;
+  EditMesh *em_;
   float pair_dist_;
   float3 side_co_;
   bool has_side_ = false;

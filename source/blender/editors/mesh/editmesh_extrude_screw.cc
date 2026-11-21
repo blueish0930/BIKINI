@@ -236,7 +236,7 @@ static wmOperatorStatus edbm_screw_exec(bContext *C, wmOperator *op)
 
     /* BIKINI: remember the mesh before the spin to mirror what it adds, see
      * #edbm_screw_mirror_result. Only axes the selection is on one side of. */
-    BMEditMesh *em = BKE_editmesh_from_object(obedit);
+    EditMesh *em = BKE_editmesh_from_object(obedit);
     bool one_side = false;
     const float3 side_co = EDBM_mirror_user_side_capture(obedit, em, one_side);
     int mirror_mask = 0;

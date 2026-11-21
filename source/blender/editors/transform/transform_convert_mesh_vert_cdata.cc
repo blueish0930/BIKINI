@@ -226,7 +226,7 @@ static void recalcData_mesh_cdata(TransInfo *t)
     if (std::optional<EditMeshSymmetryHelper> symmetry =
             EditMeshSymmetryHelper::create_if_needed(tc->obedit, BM_VERT))
     {
-      BMEditMesh *em = BKE_editmesh_from_object(tc->obedit);
+      EditMesh *em = BKE_editmesh_from_object(tc->obedit);
       const char *layer_name = (t->mode == TFM_BWEIGHT) ? "bevel_weight_vert" : "crease_vert";
       const int cd_offset = CustomData_get_offset_named(
           &em->bm->vdata, CD_PROP_FLOAT, layer_name);

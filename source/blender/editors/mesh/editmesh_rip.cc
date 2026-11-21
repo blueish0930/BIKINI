@@ -1034,7 +1034,7 @@ static wmOperatorStatus edbm_rip_exec(bContext *C, wmOperator *op)
   bool error_rip_failed = true;
 
   for (Object *obedit : objects) {
-    BMEditMesh *em = BKE_editmesh_from_object(obedit);
+    EditMesh *em = BKE_editmesh_from_object(obedit);
     BMesh *bm = BKE_editmesh_bmesh_ensure(obedit);
     BMIter iter;
     BMEdge *e;

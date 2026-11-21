@@ -125,7 +125,7 @@ static void recalcData_mesh_edge(TransInfo *t)
     if (std::optional<EditMeshSymmetryHelper> symmetry =
             EditMeshSymmetryHelper::create_if_needed(tc->obedit, BM_EDGE))
     {
-      BMEditMesh *em = BKE_editmesh_from_object(tc->obedit);
+      EditMesh *em = BKE_editmesh_from_object(tc->obedit);
       const char *layer_name = (t->mode == TFM_BWEIGHT) ? "bevel_weight_edge" : "crease_edge";
       const int cd_offset = CustomData_get_offset_named(
           &em->bm->edata, CD_PROP_FLOAT, layer_name);

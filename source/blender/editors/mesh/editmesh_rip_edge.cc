@@ -51,7 +51,7 @@ static wmOperatorStatus edbm_rip_edge_exec(bContext *C, wmOperator *op)
   normalize_v3(ray_dir);
 
   for (Object *obedit : objects) {
-    BMEditMesh *em = BKE_editmesh_from_object(obedit);
+    EditMesh *em = BKE_editmesh_from_object(obedit);
     BMesh *bm = BKE_editmesh_bmesh_ensure(obedit);
 
     BMIter viter;

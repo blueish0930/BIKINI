@@ -3543,7 +3543,7 @@ static void knife_restore_user_active(KnifeTool_OpData *kcd, Object *ob, const i
   if (mesh->symmetry == 0) {
     return;
   }
-  BMEditMesh *em = BKE_editmesh_from_object(ob);
+  EditMesh *em = BKE_editmesh_from_object(ob);
   BMesh *bm = em->bm;
   bm->selectmode = em->selectmode;
 

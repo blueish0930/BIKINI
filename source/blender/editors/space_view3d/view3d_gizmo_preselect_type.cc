@@ -448,7 +448,7 @@ static int gizmo_preselect_edgering_test_select(bContext *C, wmGizmo *gz, const 
       Mesh *mesh = id_cast<Mesh *>(ob->data);
       if (mesh->symmetry != 0) {
         const bool use_topology = (mesh->editflag & ME_EDIT_MIRROR_TOPO) != 0;
-        BMEditMesh *em = BKE_editmesh_from_object(ob);
+        EditMesh *em = BKE_editmesh_from_object(ob);
         /* Only the hovered edge is looked up. A tree over a whole dense mesh for every
          * edge the cursor passes made the preview stutter. */
         BMVert *sources[2] = {best.eed->v1, best.eed->v2};
