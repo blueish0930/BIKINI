@@ -216,7 +216,7 @@ static bool mesh_attribute_valid(const Mesh &mesh,
                                  const bke::AttrType data_type,
                                  ReportList *reports)
 {
-  if (mesh.runtime->edit_mesh) {
+  if (BKE_editmesh_bmesh_get(&mesh)) {
     if (BM_attribute_stored_in_bmesh_builtin(name)) {
       BKE_report(reports, RPT_ERROR, "Unable to create attribute in edit mode");
       return false;

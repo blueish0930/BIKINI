@@ -75,6 +75,7 @@ ImageProcessRenderMaterialFreeFn image_process_render_material_free_fn = nullptr
 void image_process_clear_session_caches()
 {
   nodes::node_image_shadertoy_cc::free_session_caches();
+  nodes::node_image_wrangle_cc::free_session_caches();
   nodes::image_points::clear_session_geometry_caches();
   if (image_process_render_material_free_fn) {
     image_process_render_material_free_fn();

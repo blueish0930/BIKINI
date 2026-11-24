@@ -1938,8 +1938,8 @@ static ui::Block *wrangle_edit_popup(bContext *C, ARegion *region, void *arg_v)
     return gone;
   }
   NodeShaderWrangle &storage = node_storage(*live_node);
-  /* Font and window size are shared by every Wrangle node. */
-  ui::wrangle_editor_state_load(arg->editor_state);
+  /* Font preference is shared; an open editor keeps its own size and scroll state. */
+  arg->editor_state.font_scale = ui::wrangle_editor_font_scale();
 
   const uiStyle *style = ui::style_get_dpi();
   ui::Block *block = ui::block_begin(C, region, "shader_wrangle_code_editor", ui::EmbossType::Emboss);
@@ -2047,6 +2047,7 @@ static wmOperatorStatus wrangle_edit_invoke(bContext *C, wmOperator *op, const w
   arg->node = static_cast<bNode *>(node_ptr.data);
   arg->ntree = reinterpret_cast<bNodeTree *>(node_ptr.owner_id);
   arg->node_identifier = arg->node ? arg->node->identifier : 0;
+  ui::wrangle_editor_state_load(arg->editor_state);
   ui::popup_block_invoke(C, wrangle_edit_popup, arg, wrangle_edit_popup_free);
   return OPERATOR_CANCELLED;
 }

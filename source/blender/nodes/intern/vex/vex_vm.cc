@@ -848,6 +848,7 @@ bool is_geo_builtin(const Builtin id)
     case Builtin::ElemNum:
     case Builtin::NearestPoints:
     case Builtin::NearPoints:
+    case Builtin::ValueToIndex:
     case Builtin::Raycast:
     case Builtin::RaycastAll:
     case Builtin::RayIsHit:
@@ -3476,6 +3477,52 @@ template<typename T> static Vector<T> items_at(const Span<T> items, const Span<i
   return result;
 }
 
+/** A new array of the same kind with the items of \a arr at \a indices (all in range). */
+static Value array_items_at(const Value &arr, const Span<int> indices)
+{
+  if (arr.type == Type::IntArray) {
+    const Vector<int> values = int_array_values(arr);
+    return value_from_int_array(items_at<int>(values, indices));
+  }
+  if (const Vector<float> *a = farr_mut(arr)) {
+    return value_from_float_array(items_at<float>(*a, indices));
+  }
+  if (const Vector<float3> *a = varr_mut(arr)) {
+    return value_from_vec_array(items_at<float3>(*a, indices));
+  }
+  if (const Vector<float4> *a = v4arr_mut(arr)) {
+    return value_from_vec4_array(items_at<float4>(*a, indices), arr.type);
+  }
+  if (const Vector<std::string> *a = sarr_mut(arr)) {
+    return value_from_string_array(items_at<std::string>(*a, indices));
+  }
+  if (const Vector<float4x4> *a = marr_mut(arr)) {
+    return value_from_mat_array(items_at<float4x4>(*a, indices));
+  }
+  if (const Vector<RayHit> *a = rayarr_mut(arr)) {
+    return value_from_ray_array(items_at<RayHit>(*a, indices));
+  }
+  return arr;
+}
+
+/**
+ * `sortorder(arr, sign)`: the indices that put the items in increasing order (`sign >= 0`) or
+ * decreasing order (`sign < 0`). The sort is stable in both directions, equal items keep the
+ * order they have in the array. Vectors compare by x, then y, then z (like `sort`).
+ */
+template<typename T, typename Less>
+static Vector<int> sort_order_of(const Span<T> items, const bool decreasing, const Less &less)
+{
+  Vector<int> order(items.size());
+  for (const int i : order.index_range()) {
+    order[i] = i;
+  }
+  std::stable_sort(order.begin(), order.end(), [&](const int a, const int b) {
+    return decreasing ? less(items[b], items[a]) : less(items[a], items[b]);
+  });
+  return order;
+}
+
 /** Key that makes -0 and +0 the same value in a set. */
 static float set_key(const float value)
 {
@@ -5247,29 +5294,49 @@ Value call_builtin(const Builtin id,
                                                 arg(2).as_int(),
                                                 args.size() > 2,
                                                 args.size() > 3 ? arg(3).as_int() : 1);
+      return array_items_at(arr, indices);
+    }
+    case Builtin::ArrayReverse: {
+      const Value &arr = arg(0);
+      Vector<int> indices(std::max(array_len(arr), 0));
+      for (const int i : indices.index_range()) {
+        indices[i] = int(indices.size()) - 1 - i;
+      }
+      return array_items_at(arr, indices);
+    }
+    case Builtin::SortOrder: {
+      const Value &arr = arg(0);
+      const bool decreasing = args.size() > 1 && arg(1).as_float() < 0.0f;
+      auto less = [](const auto &a, const auto &b) { return a < b; };
       if (arr.type == Type::IntArray) {
         const Vector<int> values = int_array_values(arr);
-        return value_from_int_array(items_at<int>(values, indices));
+        return value_from_int_array(sort_order_of<int>(values, decreasing, less));
       }
       if (const Vector<float> *a = farr_mut(arr)) {
-        return value_from_float_array(items_at<float>(*a, indices));
+        return value_from_int_array(sort_order_of<float>(*a, decreasing, less));
       }
       if (const Vector<float3> *a = varr_mut(arr)) {
-        return value_from_vec_array(items_at<float3>(*a, indices));
-      }
-      if (const Vector<float4> *a = v4arr_mut(arr)) {
-        return value_from_vec4_array(items_at<float4>(*a, indices), arr.type);
+        return value_from_int_array(
+            sort_order_of<float3>(*a, decreasing, [](const float3 &p, const float3 &q) {
+              return p.x != q.x ? p.x < q.x : (p.y != q.y ? p.y < q.y : p.z < q.z);
+            }));
       }
       if (const Vector<std::string> *a = sarr_mut(arr)) {
-        return value_from_string_array(items_at<std::string>(*a, indices));
+        return value_from_int_array(sort_order_of<std::string>(*a, decreasing, less));
       }
-      if (const Vector<float4x4> *a = marr_mut(arr)) {
-        return value_from_mat_array(items_at<float4x4>(*a, indices));
+      return value_from_int_array({});
+    }
+    case Builtin::SortByOrder: {
+      /* Indices out of range are skipped, an index can be used more than once. */
+      const Value &arr = arg(0);
+      const int size = array_len(arr);
+      Vector<int> indices;
+      for (const int i : int_array_values(arg(1))) {
+        if (i >= 0 && i < size) {
+          indices.append(i);
+        }
       }
-      if (const Vector<RayHit> *a = rayarr_mut(arr)) {
-        return value_from_ray_array(items_at<RayHit>(*a, indices));
-      }
-      return arr;
+      return array_items_at(arr, indices);
     }
     case Builtin::SortArr: {
       Value arr = arg(0);

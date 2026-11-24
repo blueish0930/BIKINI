@@ -56,7 +56,7 @@ static int img_node_ui_icon(const UString &idname)
   if (idname == "ImageNodeFFT"_ustr) {
     return ICON_IPO_ELASTIC;
   }
-  if (idname == "ImageNodeShaderToy"_ustr) {
+  if (idname == "ImageNodeShaderToy"_ustr || idname == "ImageNodeWrangle"_ustr) {
     return ICON_SCRIPT;
   }
   if (idname == "ImageNodeTerrainPrimitive"_ustr) {

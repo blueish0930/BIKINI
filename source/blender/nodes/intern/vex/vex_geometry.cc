@@ -2690,6 +2690,251 @@ struct TopoUser {
     local_trees.add_new(std::move(name), tree);
     return tree;
   }
+  /**
+   * The attributes of geometry input \a gi that have \a domain: the wrangled component for input 0
+   * when it has that domain, else the mesh, point cloud, curves or instances of the input.
+   */
+  std::optional<bke::AttributeAccessor> domain_attributes(const int gi,
+                                                          const bke::AttrDomain domain)
+  {
+    if (gi <= 0 && value_input_ok) {
+      /* The wrangled geometry as it was before the program ran, see #snapshot_value_input. */
+      const bke::GeometrySet &g = value_input;
+      if (domain == bke::AttrDomain::Instance) {
+        if (const bke::Instances *instances = g.get_instances()) {
+          return instances->attributes();
+        }
+        return std::nullopt;
+      }
+      if (const Mesh *m = g.get_mesh(); m && domain != bke::AttrDomain::Curve) {
+        return m->attributes();
+      }
+      if (const PointCloud *pc = g.get_pointcloud(); pc && domain == bke::AttrDomain::Point) {
+        return pc->attributes();
+      }
+      if (const Curves *c = g.get_curves();
+          c && ELEM(domain, bke::AttrDomain::Point, bke::AttrDomain::Curve))
+      {
+        return c->geometry.wrap().attributes();
+      }
+      return std::nullopt;
+    }
+    if (gi <= 0 && attrs && attrs->domain_supported(domain)) {
+      return attrs;
+    }
+    const bke::GeometrySet *g = geo_at(this, gi);
+    if (domain == bke::AttrDomain::Instance) {
+      if (const bke::Instances *instances = g ? g->get_instances() : nullptr) {
+        return instances->attributes();
+      }
+      return std::nullopt;
+    }
+    if (domain != bke::AttrDomain::Curve) {
+      if (const Mesh *m = (gi <= 0 && mesh) ? mesh : (g ? g->get_mesh() : nullptr)) {
+        return m->attributes();
+      }
+    }
+    if (domain == bke::AttrDomain::Point) {
+      if (const PointCloud *pc = (gi <= 0 && points) ? points :
+                                                       (g ? g->get_pointcloud() : nullptr))
+      {
+        return pc->attributes();
+      }
+    }
+    if (ELEM(domain, bke::AttrDomain::Point, bke::AttrDomain::Curve)) {
+      if (gi <= 0 && curves) {
+        return curves->attributes();
+      }
+      if (const Curves *c = g ? g->get_curves() : nullptr) {
+        return c->geometry.wrap().attributes();
+      }
+    }
+    return std::nullopt;
+  }
+
+  /**
+   * `valuetoindex(geo, domain, name, value)`: the elements of one attribute grouped by value, so
+   * every call is a hash lookup instead of a search through the attribute. Built by the first call
+   * of any thread, from the attribute as it is stored on the geometry (values the running program
+   * writes are not part of it).
+   */
+  struct ValueIndex {
+    enum class Kind : int8_t { None, Int, Float, Float2, Float3, Float4, String };
+    Kind kind = Kind::None;
+    Map<std::string, Vector<int>> indices;
+  };
+  using ValueIndexMap = Map<std::string, ValueIndex *>;
+  /** By "geo|domain|name". Only used with #mutex locked, freed with the group trees. */
+  ValueIndexMap value_indices;
+  /**
+   * Copy of the wrangled geometry made before the attributes are bound. The copy shares the
+   * attribute arrays, a write of the program then copies the array it writes, so `valuetoindex`
+   * on geometry 0 reads the values that entered the node, also while other threads write.
+   */
+  bke::GeometrySet value_input;
+  bool value_input_ok = false;
+  void snapshot_value_input(const bke::GeometrySet &owner_geometry)
+  {
+    value_input.clear();
+    if (const Mesh *m = owner_geometry.get_mesh()) {
+      value_input.replace_mesh(BKE_mesh_copy_for_eval(*m));
+    }
+    if (const PointCloud *pc = owner_geometry.get_pointcloud()) {
+      value_input.replace_pointcloud(BKE_pointcloud_copy_for_eval(pc));
+    }
+    if (const Curves *c = owner_geometry.get_curves()) {
+      value_input.replace_curves(BKE_curves_copy_for_eval(c));
+    }
+    if (const bke::Instances *instances = owner_geometry.get_instances()) {
+      value_input.replace_instances(new bke::Instances(*instances));
+    }
+    value_input_ok = true;
+  }
+
+  template<typename T> static void value_index_key(const T &value, std::string &r_key)
+  {
+    r_key.assign(reinterpret_cast<const char *>(&value), sizeof(T));
+  }
+  static float value_index_float(const float f)
+  {
+    /* -0 and +0 are the same value. */
+    return f + 0.0f;
+  }
+
+  static ValueIndex *build_value_index(const bke::AttributeAccessor &attributes,
+                                       const StringRef name,
+                                       const bke::AttrDomain domain)
+  {
+    using Kind = ValueIndex::Kind;
+    const bke::GAttributeReader reader = attributes.lookup(name, domain);
+    if (!reader || reader.varray.size() != attributes.domain_size(domain)) {
+      return nullptr;
+    }
+    const CPPType &type = reader.varray.type();
+    ValueIndex *index = MEM_new<ValueIndex>(__func__);
+    std::string key;
+    auto add = [&](const int i) { index->indices.lookup_or_add_default(key).append(i); };
+    const int size = int(reader.varray.size());
+    if (type.is_any<bool, int8_t, int>()) {
+      index->kind = Kind::Int;
+      const VArraySpan<int> values(*attributes.lookup<int>(name, domain));
+      for (const int i : IndexRange(size)) {
+        value_index_key(values[i], key);
+        add(i);
+      }
+    }
+    else if (type.is<float>()) {
+      index->kind = Kind::Float;
+      const VArraySpan<float> values(reader.varray.typed<float>());
+      for (const int i : IndexRange(size)) {
+        value_index_key(value_index_float(values[i]), key);
+        add(i);
+      }
+    }
+    else if (type.is<float2>()) {
+      index->kind = Kind::Float2;
+      const VArraySpan<float2> values(reader.varray.typed<float2>());
+      for (const int i : IndexRange(size)) {
+        const float2 v(value_index_float(values[i].x), value_index_float(values[i].y));
+        value_index_key(v, key);
+        add(i);
+      }
+    }
+    else if (type.is<float3>()) {
+      index->kind = Kind::Float3;
+      const VArraySpan<float3> values(reader.varray.typed<float3>());
+      for (const int i : IndexRange(size)) {
+        const float3 v(value_index_float(values[i].x),
+                       value_index_float(values[i].y),
+                       value_index_float(values[i].z));
+        value_index_key(v, key);
+        add(i);
+      }
+    }
+    else if (type.is_any<ColorGeometry4f, ColorGeometry4b, math::Quaternion>()) {
+      index->kind = Kind::Float4;
+      Array<float4> values(size);
+      if (type.is<math::Quaternion>()) {
+        const VArraySpan<math::Quaternion> q(reader.varray.typed<math::Quaternion>());
+        for (const int i : IndexRange(size)) {
+          values[i] = float4(q[i].x, q[i].y, q[i].z, q[i].w);
+        }
+      }
+      else {
+        const VArraySpan<ColorGeometry4f> c(*attributes.lookup<ColorGeometry4f>(name, domain));
+        for (const int i : IndexRange(size)) {
+          values[i] = float4(c[i].r, c[i].g, c[i].b, c[i].a);
+        }
+      }
+      for (const int i : IndexRange(size)) {
+        const float4 v(value_index_float(values[i].x),
+                       value_index_float(values[i].y),
+                       value_index_float(values[i].z),
+                       value_index_float(values[i].w));
+        value_index_key(v, key);
+        add(i);
+      }
+    }
+    else if (type.is<std::string>()) {
+      index->kind = Kind::String;
+      const VArraySpan<std::string> values(reader.varray.typed<std::string>());
+      for (const int i : IndexRange(size)) {
+        key = values[i];
+        add(i);
+      }
+    }
+    else if (type.is<MStringProperty>()) {
+      index->kind = Kind::String;
+      const VArraySpan<MStringProperty> values(reader.varray.typed<MStringProperty>());
+      for (const int i : IndexRange(size)) {
+        key.assign(values[i].s, size_t(uint8_t(values[i].s_len)));
+        add(i);
+      }
+    }
+    return index;
+  }
+
+  /** Null when the geometry has no attribute of that name on that domain, or of no usable type. */
+  const ValueIndex *value_index_for(const int gi, const bke::AttrDomain domain, const StringRef name)
+  {
+    const int geo = (gi > 0 && gi < geos.size()) ? gi : 0;
+    std::string id = std::to_string(geo) + "|" + std::to_string(int(domain)) + "|";
+    id.append(name.data(), size_t(name.size()));
+    /* Every thread remembers the indices it has asked for, see #group_tree_for. */
+    struct ThreadIndices {
+      uint64_t id = 0;
+      const TopoUser *user = nullptr;
+      ValueIndexMap indices;
+    };
+    thread_local ThreadIndices local;
+    const uint64_t trees_id = group_trees_id.load(std::memory_order_acquire);
+    if (local.id != trees_id || local.user != this) {
+      local.indices.clear();
+      local.id = trees_id;
+      local.user = this;
+    }
+    if (ValueIndex *const *found = local.indices.lookup_ptr(id)) {
+      return *found;
+    }
+    std::lock_guard lock(mutex);
+    ValueIndex *index = value_indices.lookup_or_add_cb(id, [&]() -> ValueIndex * {
+      ValueIndex *built = nullptr;
+      /* Reading the attribute can run parallel loops, see #ensure_v2e for why that is isolated. */
+      threading::isolate_task([&]() {
+        if (const std::optional<bke::AttributeAccessor> attributes = domain_attributes(geo,
+                                                                                       domain))
+        {
+          if (attributes->domain_supported(domain)) {
+            built = build_value_index(*attributes, name, domain);
+          }
+        }
+      });
+      return built;
+    });
+    local.indices.add(id, index);
+    return index;
+  }
+
   void free_group_trees()
   {
     for (const GroupTreeMap &trees : group_trees) {
@@ -2698,6 +2943,10 @@ struct TopoUser {
       }
     }
     group_trees.clear();
+    for (ValueIndex *index : value_indices.values()) {
+      MEM_delete(index);
+    }
+    value_indices.clear();
     group_trees_id.store(new_group_trees_id(), std::memory_order_release);
   }
   void ensure_kdtree()
@@ -5664,6 +5913,93 @@ Value geo_builtin_fn(void *user,
       env.hit_n = float3(0.0f);
       return Value::from_float(dist);
     }
+    case Builtin::ValueToIndex: {
+      /* valuetoindex(geo, domain, name, value), the geometry can be left out. */
+      if (args.size() < 3) {
+        return empty_int_arr();
+      }
+      const int first = args.size() >= 4 ? 1 : 0;
+      const int gi = first ? args[0].as_int() : 0;
+      const bke::AttrDomain domain = bke::AttrDomain(parse_domain_arg(args[first], env));
+      if (!ELEM(domain,
+                bke::AttrDomain::Point,
+                bke::AttrDomain::Edge,
+                bke::AttrDomain::Face,
+                bke::AttrDomain::Corner,
+                bke::AttrDomain::Curve,
+                bke::AttrDomain::Instance))
+      {
+        return empty_int_arr();
+      }
+      const TopoUser::ValueIndex *index = u->value_index_for(
+          gi, domain, value_string(args[first + 1], env));
+      if (index == nullptr) {
+        return empty_int_arr();
+      }
+      using Kind = TopoUser::ValueIndex::Kind;
+      const Value &value = args[first + 2];
+      std::string key;
+      switch (index->kind) {
+        case Kind::None:
+          return empty_int_arr();
+        case Kind::Int: {
+          if (value.type == Type::String) {
+            return empty_int_arr();
+          }
+          int i = value.as_int();
+          if (value.type == Type::Float) {
+            /* `valuetoindex(0, "point", "class", 2.5)` matches no integer. */
+            const float f = value.as_float();
+            if (f != std::floor(f) || std::abs(f) > 2147483520.0f) {
+              return empty_int_arr();
+            }
+            i = int(f);
+          }
+          TopoUser::value_index_key(i, key);
+          break;
+        }
+        case Kind::Float:
+          if (value.type == Type::String) {
+            return empty_int_arr();
+          }
+          TopoUser::value_index_key(TopoUser::value_index_float(value.as_float()), key);
+          break;
+        case Kind::Float2:
+        case Kind::Float3:
+        case Kind::Float4: {
+          if (value.type == Type::String) {
+            return empty_int_arr();
+          }
+          const float4 v4 = value.as_vec4();
+          const float3 v3 = value.as_vec();
+          const float4 v = index->kind == Kind::Float4 ? v4 : float4(v3.x, v3.y, v3.z, 0.0f);
+          const float4 n(TopoUser::value_index_float(v.x),
+                         TopoUser::value_index_float(v.y),
+                         TopoUser::value_index_float(v.z),
+                         TopoUser::value_index_float(v.w));
+          if (index->kind == Kind::Float2) {
+            TopoUser::value_index_key(float2(n.x, n.y), key);
+          }
+          else if (index->kind == Kind::Float3) {
+            TopoUser::value_index_key(float3(n.x, n.y, n.z), key);
+          }
+          else {
+            TopoUser::value_index_key(n, key);
+          }
+          break;
+        }
+        case Kind::String:
+          if (value.type != Type::String) {
+            return empty_int_arr();
+          }
+          key = value_string(value, env);
+          break;
+      }
+      if (const Vector<int> *found = index->indices.lookup_ptr(key)) {
+        return value_from_int_span(*found);
+      }
+      return empty_int_arr();
+    }
     case Builtin::SampleNearestSurface: {
       const int gi = args.is_empty() ? 0 : args[0].as_int();
       const StringRef data_type = args.size() > 1 ? arg_string(args, 1, env) : StringRef("position");
@@ -6543,10 +6879,31 @@ const GVArray *parm_varray(const ElemUser &elem_user, const StringRef name)
   return nullptr;
 }
 
+/* The neighbour caches below used to be keyed by the geometry's address and element counts only.
+ * A geometry freed and re-allocated at the same address with the same counts (repeat zones,
+ * re-evaluation) then got the previous geometry's table, and the GPU path read stale neighbours.
+ * They are keyed by a hash of the data the table is built from instead. */
+static uint64_t hash_bytes(const void *data, const size_t bytes, uint64_t h)
+{
+  const uint8_t *p = static_cast<const uint8_t *>(data);
+  size_t i = 0;
+  for (; i + 8 <= bytes; i += 8) {
+    uint64_t w;
+    memcpy(&w, p + i, 8);
+    h = (h ^ w) * 0x100000001b3ull;
+    h ^= h >> 29;
+  }
+  for (; i < bytes; i++) {
+    h = (h ^ uint64_t(p[i])) * 0x100000001b3ull;
+  }
+  return h ^ (h >> 32);
+}
+
 struct PointNeighborCache {
   const void *key = nullptr;
   int n = 0;
   int extra = 0;
+  uint64_t content = 0;
   Array<int> off;
   Array<int> idx;
 };
@@ -6556,19 +6913,29 @@ bool get_point_neighbor_table(TopoUser &u, const int n, Span<int> &r_off, Span<i
   thread_local PointNeighborCache cache;
   const void *key = nullptr;
   int extra = 0;
+  uint64_t content = 0xcbf29ce484222325ull;
   if (u.mesh) {
     key = u.mesh;
     extra = u.mesh->edges_num;
+    const Span<int2> edges = u.mesh->edges();
+    content = hash_bytes(edges.data(), size_t(edges.size()) * sizeof(int2),
+                         content ^ uint64_t(u.mesh->verts_num));
   }
   else if (u.curves) {
     key = u.curves;
     extra = int(u.curves->points_num()) ^ (int(u.curves->curves_num()) << 16);
+    const Span<int> offsets = u.curves->offsets();
+    content = hash_bytes(offsets.data(), size_t(offsets.size()) * sizeof(int), content);
+    const VArray<bool> cyclic = u.curves->cyclic();
+    for (const int c : cyclic.index_range()) {
+      content = (content ^ uint64_t(cyclic[c] ? 1 + c : 0)) * 0x100000001b3ull;
+    }
   }
   else if (u.points) {
     key = u.points;
     extra = u.points->totpoint;
   }
-  if (key != nullptr && cache.key == key && cache.n == n && cache.extra == extra &&
+  if (key != nullptr && cache.content == content && cache.n == n && cache.extra == extra &&
       cache.off.size() == n + 1)
   {
     r_off = cache.off;
@@ -6582,6 +6949,7 @@ bool get_point_neighbor_table(TopoUser &u, const int n, Span<int> &r_off, Span<i
   cache.key = key;
   cache.n = n;
   cache.extra = extra;
+  cache.content = content;
   r_off = cache.off;
   r_idx = cache.idx;
   /* Point clouds have no mesh topology. An empty table used to count as success
@@ -6605,15 +6973,23 @@ bool get_knn_neighbor_table(TopoUser &u,
                     u.curves ? static_cast<const void *>(u.curves) :
                                static_cast<const void *>(u.owner);
   const int extra = (geo << 16) ^ std::max(k_in, 0) ^ (n * 1315423911);
-  if (key != nullptr && cache.key == key && cache.n == n && cache.extra == extra &&
+  const VexPointTree *tree = u.tree_for(geo);
+  Span<float3> pos = u.positions;
+  /* The table depends on the query positions and on the searched points. */
+  uint64_t content = 0xcbf29ce484222325ull;
+  if (tree != nullptr && pos.size() >= n && n > 0) {
+    content = hash_bytes(pos.data(), size_t(n) * sizeof(float3), content);
+    content = hash_bytes(tree->positions.data(),
+                         size_t(tree->positions.size()) * sizeof(float3),
+                         content ^ uint64_t(tree->positions.size()));
+  }
+  if (key != nullptr && cache.content == content && cache.n == n && cache.extra == extra &&
       cache.off.size() == n + 1)
   {
     r_off = cache.off;
     r_idx = cache.idx;
     return cache.off.size() == n + 1 && !cache.idx.is_empty();
   }
-  const VexPointTree *tree = u.tree_for(geo);
-  Span<float3> pos = u.positions;
   if (pos.size() < n || tree == nullptr || n <= 0 || k_in <= 0) {
     cache = {};
     return false;
@@ -6675,6 +7051,7 @@ bool get_knn_neighbor_table(TopoUser &u,
   cache.key = key;
   cache.n = n;
   cache.extra = extra;
+  cache.content = content;
   r_off = cache.off;
   r_idx = cache.idx;
   return total > 0;
@@ -7690,6 +8067,10 @@ ExecOutput run_on_accessor(const Program &program,
         break;
       }
     }
+  }
+  if (program_uses_call(program, Builtin::ValueToIndex)) {
+    /* Before the program's attributes are bound and written. */
+    topo.snapshot_value_input(owner);
   }
   BindState state;
   if (!bind_attrs(attributes, bind_domain, domain_size, mask, program, state, normals)) {

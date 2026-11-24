@@ -114,6 +114,10 @@ void image_process_clear_session_caches();
 namespace nodes::node_image_shadertoy_cc {
 void free_session_caches();
 }
+namespace nodes::node_image_wrangle_cc {
+/** Shaders compiled for Image Wrangle nodes. */
+void free_session_caches();
+}  // namespace nodes::node_image_wrangle_cc
 
 void register_node_tree_type_img();
 void register_image_nodes();

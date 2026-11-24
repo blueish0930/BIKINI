@@ -11,6 +11,7 @@ set(INC
   include
   ../intern
   ../geometry/include
+  ../shader/include
   ../../blenloader
   ../../blenloader_core
   ../../editors/include
@@ -67,6 +68,7 @@ set(SRC
   nodes/node_image_camera_view.cc
   nodes/node_image_render_material.cc
   nodes/node_image_viewer.cc
+  nodes/node_image_wrangle.cc
   nodes/node_image_file_output.cc
 
   image_nodes_evaluate.cc
@@ -79,6 +81,7 @@ set(SRC
   include/NOD_image_fluid_solver.hh
   include/NOD_image_points.hh
   include/NOD_image_paint.hh
+  include/NOD_image_wrangle.hh
   node_image_terrain_common.hh
   node_image_util.hh
 )

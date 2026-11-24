@@ -64,7 +64,6 @@ StringRef function_param_types(const StringRef name)
       {"nfaces", ""},
       {"ncorners", ""},
       {"chf", "str"},
-      {"ch", "str"},
       {"chi", "str"},
       {"chv", "str"},
       {"chb", "str"},
@@ -90,9 +89,7 @@ StringRef function_param_types(const StringRef name)
       {"qdistance", "quat,quat"},
       {"lookat", "vec,vec,vec"},
       {"valuetostring", "num,int,int"},
-      {"value_to_string", "num,int,int"},
       {"format", "str"},
-      {"sprintf", "str"},
       {"len", "arr"},
       {"append", "arr,value"},
       {"insert", "arr,int,value"},
@@ -107,7 +104,6 @@ StringRef function_param_types(const StringRef name)
       {"intersect", "arr,arr"},
       {"slice", "arr,int,int,int"},
       {"invert", "mat"},
-      {"invert_matrix", "mat"},
       {"transpose", "mat"},
       {"determinant", "mat"},
       {"det", "mat"},
@@ -131,50 +127,28 @@ StringRef function_param_types(const StringRef name)
       {"neighbours", "geo,int"},
       {"neighbors", "geo,int"},
       {"pointedges", "geo,int"},
-      {"point_edges", "geo,int"},
       {"pointfaces", "geo,int"},
-      {"point_faces", "geo,int"},
       {"pointcorners", "geo,int"},
-      {"point_corners", "geo,int"},
       {"edgepoints", "geo,int"},
-      {"edge_points", "geo,int"},
       {"edgefaces", "geo,int"},
-      {"edge_faces", "geo,int"},
       {"edgecorners", "geo,int"},
-      {"edge_corners", "geo,int"},
-      {"corners_of_edge", "geo,int"},
       {"facepoints", "geo,int"},
-      {"face_points", "geo,int"},
       {"faceedges", "geo,int"},
-      {"face_edges", "geo,int"},
       {"faceneighbours", "geo,int"},
-      {"face_neighbours", "geo,int"},
       {"facecorners", "geo,int"},
-      {"face_corners", "geo,int"},
       {"cornerpoint", "geo,int"},
-      {"corner_point", "geo,int"},
-      {"cornervert", "geo,int"},
       {"corneredges", "geo,int"},
-      {"corner_edges", "geo,int"},
       {"offsetcorner", "geo,int,int"},
       {"facesedge", "geo,int,int"},
       {"equivalentcorner", "geo,int,int"},
       {"prevedge", "geo,int"},
       {"nextedge", "geo,int"},
-      {"offset_corner", "geo,int,int"},
-      {"offset_corner_in_face", "geo,int,int"},
-      {"offsetcornerinface", "geo,int,int"},
       {"cornerface", "geo,int"},
       {"cornerorder", "geo,int"},
       {"pointcurve", "geo,int,out int,out int"},
-      {"point_curve", "geo,int,out int,out int"},
       {"curvepoints", "geo,int"},
-      {"curve_points", "geo,int"},
-      {"points_of_curve", "geo,int"},
-      {"curve_of_point", "geo,int"},
-      {"curveofpoint", "geo,int"},
       {"nearestpoints", "geo,num,enum"},
-      {"nearpoints", "geo,num,enum"},
+      {"valuetoindex", "geo,enum,str,value"},
       {"point", "geo,str,int"},
       {"edge", "geo,str,int"},
       {"face", "geo,str,int"},
@@ -185,27 +159,19 @@ StringRef function_param_types(const StringRef name)
       {"addprim", "geo,enum,arr,bool"},
       {"add_prim", "geo,enum,arr,bool"},
       {"setattribute", "geo,enum,int,str,num,enum"},
-      {"set_attribute", "geo,enum,int,str,num,enum"},
-      {"setattr", "geo,enum,int,str,num,enum"},
       {"raycast", "geo,vec,vec,float,out int,out vec,out vec,out float"},
       {"raycastall", "geo,vec,vec,float,out arr,out arr,out arr,out arr"},
       {"raycast_all", "geo,vec,vec,float,out arr,out arr,out arr,out arr"},
       {"rayishit", "ray"},
       {"rayhitpos", "ray"},
-      {"rayhitn", "ray"},
       {"rayhitdist", "ray"},
       {"bboxmin", "geo"},
       {"bboxmax", "geo"},
       {"boundingbox", "out vec,out vec"},
-      {"bounding_box", "out vec,out vec"},
       {"geometry_proximity", "geo,enum,vec,out vec,out float"},
-      {"proximity", "geo,enum,vec,out vec,out float"},
       {"sample_nearest_surface", "geo,str,value,value"},
       {"delete_geometry", "enum,int,enum"},
-      {"deletegeometry", "enum,int,enum"},
-      {"deletegeo", "enum,int,enum"},
       {"ident", ""},
-      {"identity", ""},
       {"combine_transform", "vec,quat,vec"},
       {"invert_rotation", "quat"},
       {"rotate_rotation", "quat,quat"},
@@ -214,18 +180,19 @@ StringRef function_param_types(const StringRef name)
       {"matrix2", "num"},
       {"matrix3", "num"},
       {"accumulate", "num"},
-      {"accumulate_field", "num"},
       {"field_average", "value"},
-      {"fieldaverage", "value"},
       {"field_min", "value"},
       {"field_max", "value"},
-      {"fieldminmax", "value"},
       {"field_minmax", "value"},
-      {"edges_of_corner", "geo,int"},
-      {"face_of_corner", "geo,int"},
-      {"vertex_of_corner", "geo,int"},
       {"voronoi", "vec,float,float,float,float,float,float,enum,enum,enum,float"},
-      {"voronoinoise", "vec,float,float,float,float,float,float,enum,enum,enum,float"},
+      {"frac", "num"},
+      {"ch2", "str"},
+      {"ch3", "str"},
+      {"ch4", "str"},
+      {"rayhitnormal", "ray"},
+      {"sortorder", "arr,num"},
+      {"sortbyorder", "arr,arr"},
+      {"reverse", "arr"},
       {nullptr, nullptr},
   };
   for (int i = 0; table[i].name; i++) {
@@ -303,6 +270,7 @@ void gather_completions(Vector<std::string> &r_owned_names,
   add("curvenum", "Attribute", C::Variable, K::Variable, "@curvenum", "@curvenum — curve of this point", false);
   add("index", "Attribute", C::Variable, K::Variable, "i@index", "i@index — run-over element index", false);
   add("id", "Attribute", C::Variable, K::Variable, "i@id", "i@id — id attribute", false);
+  add("PI", "Constant", C::Float, K::Variable, "PI", "PI — 3.14159265, a float constant", false);
   add("f@", "Attribute", C::Float, K::Variable, "f@", "f@name — float attribute", false);
   add("u@", "Attribute", C::Vector, K::Variable, "u@", "u@name — vector2 attribute", false);
   add("v@", "Attribute", C::Vector, K::Variable, "v@", "v@name — vector attribute", false);
@@ -343,6 +311,7 @@ void gather_completions(Vector<std::string> &r_owned_names,
   add("degrees", "Float", C::Float, K::Function, "degrees", "degrees(rad)", true);
   add("sign", "Float", C::Float, K::Function, "sign", "sign(x)", true);
   add("fract", "Float", C::Float, K::Function, "fract", "fract(x)", true);
+  add("frac", "Float", C::Float, K::Function, "frac", "frac(x)  alias of fract", true);
   add("mix", "Float", C::Float, K::Function, "mix", "mix(a, b, t)", true);
   add("lerp", "Float", C::Float, K::Function, "lerp", "lerp(a, b, t)", true);
   add("map",
@@ -373,13 +342,6 @@ void gather_completions(Vector<std::string> &r_owned_names,
       K::Function,
       "voronoi",
       "voronoi(P, scale, detail, roughness, lacunarity, smoothness, randomness, feature, metric, dim, distortion)",
-      true);
-  add("voronoinoise",
-      "Float",
-      C::Float,
-      K::Function,
-      "voronoinoise",
-      "voronoinoise(P, scale, detail, roughness, lacunarity, smoothness, randomness, feature, metric, dim, distortion)",
       true);
   add("hash", "Float", C::Float, K::Function, "hash", "hash(P)", true);
   add("rand", "Float", C::Float, K::Function, "rand", "rand() / rand(seed)", true);
@@ -424,23 +386,8 @@ void gather_completions(Vector<std::string> &r_owned_names,
       "setattribute",
       "setattribute(geo, domain, index, name, value, behavior)",
       true);
-  add("set_attribute",
-      "Geometry",
-      C::Variable,
-      K::Function,
-      "set_attribute",
-      "setattribute(geo, domain, index, name, value, behavior)",
-      true);
-  add("setattr",
-      "Geometry",
-      C::Variable,
-      K::Function,
-      "setattr",
-      "setattribute(geo, domain, index, name, value, behavior)",
-      true);
 
   add("invert", "Matrix", C::Matrix, K::Function, "invert", "invert(m) / invert(q)", true);
-  add("invert_matrix", "Matrix", C::Matrix, K::Function, "invert_matrix", "invert_matrix(m)", true);
   add("invert_rotation", "Rotation", C::Rotation, K::Function, "invert_rotation", "invert_rotation(q)", true);
   add("rotate_rotation", "Rotation", C::Rotation, K::Function, "rotate_rotation", "rotate_rotation(a, b)", true);
   add("rotate",
@@ -479,9 +426,12 @@ void gather_completions(Vector<std::string> &r_owned_names,
       true);
   add("qconvert", "Rotation", C::Rotation, K::Function, "qconvert", "qconvert(q)  -> matrix3", true);
   add("qdistance", "Rotation", C::Rotation, K::Function, "qdistance", "qdistance(a, b)  angle", true);
+  add("quat", "Rotation", C::Rotation, K::Function, "quat", "quat(x, y, z, w) / quat(angle, axis)  alias of quaternion", true);
+  add("to_euler", "Rotation", C::Rotation, K::Function, "to_euler", "to_euler(q or m)  -> vector of XYZ euler angles in radians", true);
   add("lookat", "Rotation", C::Rotation, K::Function, "lookat", "lookat(from, to, up)  -> matrix3", true);
   add("hsvtorgb", "Color", C::Color, K::Function, "hsvtorgb", "hsvtorgb(h, s, v) / hsvtorgb(hsv)", true);
   add("rgbtohsv", "Color", C::Color, K::Function, "rgbtohsv", "rgbtohsv(r, g, b) / rgbtohsv(rgb)", true);
+  add("color", "Color", C::Color, K::Function, "color", "color(r, g, b[, a])", true);
   add("vector2", "Vector", C::Vector, K::Function, "vector2", "vector2(x, y)", true);
   add("vec2", "Vector", C::Vector, K::Function, "vec2", "vec2(x, y) alias of vector2", true);
   add("vec3", "Vector", C::Vector, K::Function, "vec3", "vec3(x, y, z) alias of vector", true);
@@ -492,11 +442,11 @@ void gather_completions(Vector<std::string> &r_owned_names,
   add("matrix3", "Matrix", C::Matrix, K::Function, "matrix3", "matrix3(...) 3x3", true);
   add("mat3", "Matrix", C::Matrix, K::Function, "mat3", "mat3(...) alias of matrix3", true);
   add("mat4", "Matrix", C::Matrix, K::Function, "mat4", "mat4(...) alias of matrix", true);
+  add("matrix4", "Matrix", C::Matrix, K::Function, "matrix4", "matrix4(...) alias of matrix", true);
   add("transpose", "Matrix", C::Matrix, K::Function, "transpose", "transpose(m)", true);
   add("determinant", "Matrix", C::Matrix, K::Function, "determinant", "determinant(m)", true);
   add("det", "Matrix", C::Matrix, K::Function, "det", "det(m)", true);
   add("ident", "Matrix", C::Matrix, K::Function, "ident", "ident()", true);
-  add("identity", "Matrix", C::Matrix, K::Function, "identity", "identity()", true);
   add("combine_transform",
       "Matrix",
       C::Matrix,
@@ -512,9 +462,13 @@ void gather_completions(Vector<std::string> &r_owned_names,
       "transform_point(v, m)",
       true);
   add("svd", "Matrix", C::Matrix, K::Function, "svd", "svd(m, U, s, V)  —  m = U * diag(s) * Vᵀ", true);
+  add("svddecomp", "Matrix", C::Matrix, K::Function, "svddecomp", "svddecomp(m, U, s, V)  alias of svd", true);
   add("pd", "Matrix", C::Matrix, K::Function, "pd", "pd(m, R, S)  —  polar: m = R * S", true);
   add("polardecomp", "Matrix", C::Matrix, K::Function, "polardecomp", "polardecomp(m, R, S)", true);
+  add("polar_decomp", "Matrix", C::Matrix, K::Function, "polar_decomp", "polar_decomp(m, R, S)  alias of pd", true);
   add("eigen", "Matrix", C::Matrix, K::Function, "eigen", "eigen(m, evals, evecs)  symmetric eigen-decomposition: evals ascending, evecs[i] (column i) for evals[i]", true);
+  add("eigendecomp", "Matrix", C::Matrix, K::Function, "eigendecomp", "eigendecomp(m, evals, evecs)  alias of eigen", true);
+  add("eigen_decomp", "Matrix", C::Matrix, K::Function, "eigen_decomp", "eigen_decomp(m, evals, evecs)  alias of eigen", true);
   add("transform_direction",
       "Matrix",
       C::Matrix,
@@ -528,11 +482,13 @@ void gather_completions(Vector<std::string> &r_owned_names,
   add("scale", "Matrix", C::Matrix, K::Function, "scale", "scale(m)", true);
 
   add("chf", "Channel", C::Float, K::Function, "chf", "chf(\"name\")", true);
-  add("ch", "Channel", C::Float, K::Function, "ch", "ch(\"name\")", true);
   add("chi", "Channel", C::Variable, K::Function, "chi", "chi(\"name\")", true);
   add("chv", "Channel", C::Vector, K::Function, "chv", "chv(\"name\")", true);
   add("chb", "Channel", C::Variable, K::Function, "chb", "chb(\"name\")", true);
   add("chc", "Channel", C::Color, K::Function, "chc", "chc(\"name\")", true);
+  add("ch2", "Channel", C::Matrix, K::Function, "ch2", "ch2(\"name\")  matrix2", true);
+  add("ch3", "Channel", C::Matrix, K::Function, "ch3", "ch3(\"name\")  matrix3", true);
+  add("ch4", "Channel", C::Matrix, K::Function, "ch4", "ch4(\"name\")  matrix", true);
   add("chm", "Channel", C::Matrix, K::Function, "chm", "chm(\"name\")", true);
   add("chu", "Channel", C::Vector, K::Function, "chu", "chu(\"name\")", true);
   add("chq", "Channel", C::Vector, K::Function, "chq", "chq(\"name\")", true);
@@ -555,16 +511,31 @@ void gather_completions(Vector<std::string> &r_owned_names,
       C::Variable,
       K::Function,
       "format",
-      "format(\"{:.2f}\", x) / sprintf(\"%05d\", i)",
+      "format(\"{:.2f} {:04d}\", f, i)  also %s %d %.2f",
       true);
-  add("sprintf", "String", C::Variable, K::Function, "sprintf", "sprintf(\"%05d\", i)", true);
 
   add("array", "Array", C::Variable, K::Function, "array", "array(1, 2, 3)", true);
+  add("stringarray", "Array", C::Variable, K::Function, "stringarray", "stringarray(\"a\", \"b\")  -> string[]", true);
   add("append", "Array", C::Variable, K::Function, "append", "append(arr, x, ...)", true);
   add("insert", "Array", C::Variable, K::Function, "insert", "insert(arr, i, x)", true);
   add("removeindex", "Array", C::Variable, K::Function, "removeindex", "removeindex(arr, i)", true);
   add("removevalue", "Array", C::Variable, K::Function, "removevalue", "removevalue(arr, x)", true);
   add("sort", "Array", C::Variable, K::Function, "sort", "sort(arr)", true);
+  add("sortorder",
+      "Array",
+      C::Variable,
+      K::Function,
+      "sortorder",
+      "sortorder(arr[, sign])  -> int[] indices that sort arr; sign 1 increasing (default), -1 decreasing",
+      true);
+  add("sortbyorder",
+      "Array",
+      C::Variable,
+      K::Function,
+      "sortbyorder",
+      "sortbyorder(arr, order)  arr becomes arr[order[0]], arr[order[1]], ...",
+      true);
+  add("reverse", "Array", C::Variable, K::Function, "reverse", "reverse(arr)  -> new array, last item first", true);
   add("sum", "Array", C::Variable, K::Function, "sum", "sum(arr)", true);
   add("unique", "Array", C::Variable, K::Function, "unique", "unique(arr)  -> new array", true);
   add("find",
@@ -613,9 +584,6 @@ void gather_completions(Vector<std::string> &r_owned_names,
   add("cornerorder", "Topology", C::Variable, K::Function, "cornerorder", "cornerorder(geo, corner)", true);
   add("cornerpoint", "Topology", C::Variable, K::Function, "cornerpoint", "cornerpoint(0, i@index)", true);
   add("corneredges", "Topology", C::Variable, K::Function, "corneredges", "corneredges(0, i@index)", true);
-  add("edges_of_corner", "Topology", C::Variable, K::Function, "edges_of_corner", "edges_of_corner()", true);
-  add("face_of_corner", "Topology", C::Variable, K::Function, "face_of_corner", "face_of_corner()", true);
-  add("vertex_of_corner", "Topology", C::Variable, K::Function, "vertex_of_corner", "vertex_of_corner()", true);
   add("facesedge", "Topology", C::Variable, K::Function, "facesedge",
       "facesedge(geo, face0, face1)", true);
   add("equivalentcorner", "Topology", C::Variable, K::Function, "equivalentcorner",
@@ -631,8 +599,6 @@ void gather_completions(Vector<std::string> &r_owned_names,
       true);
   add("pointcurve", "Topology", C::Variable, K::Function, "pointcurve", "pointcurve(0, i@index, curveindex, orderincurve)", true);
   add("curvepoints", "Topology", C::Variable, K::Function, "curvepoints", "curvepoints(0, i@index)", true);
-  add("points_of_curve", "Topology", C::Variable, K::Function, "points_of_curve", "points_of_curve()", true);
-  add("curve_of_point", "Topology", C::Variable, K::Function, "curve_of_point", "curve_of_point()", true);
   add("nearestpoints",
       "Topology",
       C::Variable,
@@ -640,12 +606,12 @@ void gather_completions(Vector<std::string> &r_owned_names,
       "nearestpoints",
       "nearestpoints(geo, k_or_r, mode[, sample_pos])  k|r|rk; group after geo: bool/int point attribute > 0",
       true);
-  add("nearpoints",
+  add("valuetoindex",
       "Topology",
       C::Variable,
       K::Function,
-      "nearpoints",
-      "nearpoints(geo, k_or_r, mode[, sample_pos])  k|r|rk; group after geo: bool/int point attribute > 0",
+      "valuetoindex",
+      "valuetoindex(geo, domain, name, value)  -> int[] elements whose attribute equals value",
       true);
 
   add("raycast",
@@ -664,24 +630,16 @@ void gather_completions(Vector<std::string> &r_owned_names,
       true);
   add("rayishit", "Geometry", C::Variable, K::Function, "rayishit", "rayishit(r)", true);
   add("rayhitpos", "Geometry", C::Vector, K::Function, "rayhitpos", "rayhitpos(r)", true);
-  add("rayhitn", "Geometry", C::Vector, K::Function, "rayhitn", "rayhitnormal(r)", true);
+  add("rayhitnormal", "Geometry", C::Vector, K::Function, "rayhitnormal", "rayhitnormal(r)", true);
   add("rayhitdist", "Geometry", C::Float, K::Function, "rayhitdist", "rayhitdist(r)", true);
   add("bboxmin", "Geometry", C::Vector, K::Function, "bboxmin", "bboxmin()", true);
   add("bboxmax", "Geometry", C::Vector, K::Function, "bboxmax", "bboxmax()", true);
-  add("boundingbox", "Geometry", C::Vector, K::Function, "boundingbox", "bounding_box(min, max)", true);
-  add("bounding_box", "Geometry", C::Vector, K::Function, "bounding_box", "bounding_box(min, max)", true);
+  add("boundingbox", "Geometry", C::Vector, K::Function, "boundingbox", "boundingbox(min, max)  min, max: out vector", true);
   add("geometry_proximity",
       "Geometry",
       C::Variable,
       K::Function,
       "geometry_proximity",
-      "geometry_proximity(geo, domain, sample, pos, dist)  domain: point|edge|face",
-      true);
-  add("proximity",
-      "Geometry",
-      C::Variable,
-      K::Function,
-      "proximity",
       "geometry_proximity(geo, domain, sample, pos, dist)  domain: point|edge|face",
       true);
   add("sample_nearest_surface", "Geometry", C::Variable, K::Function, "sample_nearest_surface", "sample_nearest_surface(geo, data_type, sample_pos, value)", true);
@@ -692,20 +650,10 @@ void gather_completions(Vector<std::string> &r_owned_names,
       "delete_geometry",
       "delete_geometry(domain, index, behavior)  index=current; other domain maps",
       true);
-  add("deletegeometry",
-      "Geometry",
-      C::Variable,
-      K::Function,
-      "deletegeometry",
-      "delete_geometry(domain, index, behavior)  index=current; other domain maps",
-      true);
   add("accumulate", "Field", C::Float, K::Function, "accumulate", "accumulate(value)", true);
-  add("accumulate_field", "Field", C::Float, K::Function, "accumulate_field", "accumulate_field(value)", true);
   add("field_average", "Field", C::Float, K::Function, "field_average", "field_average(\"name\")", true);
-  add("fieldaverage", "Field", C::Float, K::Function, "fieldaverage", "fieldaverage(\"name\")", true);
   add("field_min", "Field", C::Float, K::Function, "field_min", "field_min(\"name\")", true);
   add("field_max", "Field", C::Float, K::Function, "field_max", "field_max(\"name\")", true);
-  add("fieldminmax", "Field", C::Vector, K::Function, "fieldminmax", "fieldminmax(\"name\")", true);
   add("field_minmax", "Field", C::Vector, K::Function, "field_minmax", "field_minmax(\"name\")", true);
 
   if (shader_material) {

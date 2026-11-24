@@ -53,6 +53,7 @@
 #  include "NOD_geo_wrangle.hh"
 #  include "NOD_geometry_nodes_output_cache.hh"
 #  include "NOD_shader_hlsl.hh"
+#  include "NOD_image_wrangle.hh"
 #  include "NOD_shader_wrangle.hh"
 #  include "WM_keymap.hh"
 #endif
@@ -81,6 +82,8 @@ using nodes::ShaderWrangleInputItemsAccessor;
 using nodes::ShaderWrangleOutputItemsAccessor;
 using nodes::WrangleGeoItemsAccessor;
 using nodes::WrangleInputItemsAccessor;
+using nodes::ImageWrangleInputItemsAccessor;
+using nodes::ImageWrangleOutputItemsAccessor;
 
 struct IDProperty;
 struct Main;

@@ -3294,6 +3294,87 @@ static void def_sh_wrangle(BlenderRNA *brna, StructRNA *srna)
   RNA_def_property_update(prop, NC_NODE, nullptr);
 }
 
+/* Same data as the Shader Wrangle, with item types of its own: an item finds its node through
+ * the accessor, which names the node type. */
+static void def_image_wrangle(BlenderRNA *brna, StructRNA *srna)
+{
+  PropertyRNA *prop;
+
+  {
+    StructRNA *item_srna = RNA_def_struct(brna, "NodeImageWrangleInputItem", nullptr);
+    RNA_def_struct_ui_text(item_srna, "Image Wrangle Input Item", "");
+    RNA_def_struct_sdna(item_srna, "NodeShaderWrangleItem");
+    rna_def_node_item_array_socket_item_common(item_srna, "ImageWrangleInputItemsAccessor", true);
+  }
+  {
+    StructRNA *items_srna = RNA_def_struct(brna, "NodeImageWrangleInputItems", nullptr);
+    RNA_def_struct_sdna(items_srna, "bNode");
+    RNA_def_struct_ui_text(
+        items_srna, "Input Items", "Wrangle inputs: compiled constants and images");
+    rna_def_node_item_array_new_with_socket_and_name(
+        items_srna, "NodeImageWrangleInputItem", "ImageWrangleInputItemsAccessor");
+    rna_def_node_item_array_common_functions(
+        items_srna, "NodeImageWrangleInputItem", "ImageWrangleInputItemsAccessor");
+  }
+  {
+    StructRNA *item_srna = RNA_def_struct(brna, "NodeImageWrangleOutputItem", nullptr);
+    RNA_def_struct_ui_text(item_srna, "Image Wrangle Output Item", "");
+    RNA_def_struct_sdna(item_srna, "NodeShaderWrangleItem");
+    rna_def_node_item_array_socket_item_common(item_srna, "ImageWrangleOutputItemsAccessor", true);
+  }
+  {
+    StructRNA *items_srna = RNA_def_struct(brna, "NodeImageWrangleOutputItems", nullptr);
+    RNA_def_struct_sdna(items_srna, "bNode");
+    RNA_def_struct_ui_text(
+        items_srna, "Output Items", "Wrangle outputs: assign the socket name in the code");
+    rna_def_node_item_array_new_with_socket_and_name(
+        items_srna, "NodeImageWrangleOutputItem", "ImageWrangleOutputItemsAccessor");
+    rna_def_node_item_array_common_functions(
+        items_srna, "NodeImageWrangleOutputItem", "ImageWrangleOutputItemsAccessor");
+  }
+
+  RNA_def_struct_sdna_from(srna, "NodeShaderWrangle", "storage");
+
+  prop = RNA_def_property(srna, "code", PROP_STRING, PROP_NONE);
+  RNA_def_property_ui_text(
+      prop,
+      "Code",
+      "VEX source that runs for every pixel. Typing edits a draft (does not recook). "
+      "Ctrl+Enter, click outside, or Compile commits and evaluates");
+  /* The draft is saved while typing, evaluation reads code_run. */
+  RNA_def_property_flag(prop, PROP_TEXTEDIT_UPDATE | PROP_NO_DEG_UPDATE);
+
+  prop = RNA_def_property(srna, "textbox_state", PROP_POINTER, PROP_NONE);
+  RNA_def_property_struct_type(prop, "TextboxState");
+  RNA_def_property_pointer_sdna(prop, nullptr, "textbox_state");
+
+  prop = RNA_def_property(srna, "input_items", PROP_COLLECTION, PROP_NONE);
+  RNA_def_property_collection_sdna(prop, nullptr, "input_items.items", "input_items.items_num");
+  RNA_def_property_struct_type(prop, "NodeImageWrangleInputItem");
+  RNA_def_property_srna(prop, "NodeImageWrangleInputItems");
+
+  prop = RNA_def_property(srna, "output_items", PROP_COLLECTION, PROP_NONE);
+  RNA_def_property_collection_sdna(prop, nullptr, "output_items.items", "output_items.items_num");
+  RNA_def_property_struct_type(prop, "NodeImageWrangleOutputItem");
+  RNA_def_property_ui_text(
+      prop, "Output Items", "Named outputs written in the code (`Output = ...`)");
+  RNA_def_property_srna(prop, "NodeImageWrangleOutputItems");
+
+  prop = RNA_def_property(srna, "active_input_index", PROP_INT, PROP_UNSIGNED);
+  RNA_def_property_int_sdna(prop, nullptr, "input_items.active_index");
+  RNA_def_property_ui_text(prop, "Active Input Index", "Index of the active channel parameter");
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+  RNA_def_property_flag(prop, PROP_NO_DEG_UPDATE);
+  RNA_def_property_update(prop, NC_NODE, nullptr);
+
+  prop = RNA_def_property(srna, "active_output_index", PROP_INT, PROP_UNSIGNED);
+  RNA_def_property_int_sdna(prop, nullptr, "output_items.active_index");
+  RNA_def_property_ui_text(prop, "Active Output Index", "Index of the active output");
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+  RNA_def_property_flag(prop, PROP_NO_DEG_UPDATE);
+  RNA_def_property_update(prop, NC_NODE, nullptr);
+}
+
 static void def_sh_script(BlenderRNA * /*brna*/, StructRNA *srna)
 {
   PropertyRNA *prop;
@@ -3550,6 +3631,7 @@ void RNA_def_nodes_shader(BlenderRNA *brna)
   define("ImageNode", "ImageNodeCameraView", def_image_camera_view);
   define("ImageNode", "ImageNodeRenderMaterial", def_image_render_material);
   define("ImageNode", "ImageNodeShaderToy", def_image_shadertoy);
+  define("ImageNode", "ImageNodeWrangle", def_image_wrangle);
   define("ImageNode", "ImageNodeTerrainPrimitive", def_terrain_primitive);
   define("ImageNode", "ImageNodeTerrainErosion", def_terrain_erosion);
   define("ImageNode", "ImageNodeTerrainSimulate", def_terrain_simulate);

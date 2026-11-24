@@ -266,8 +266,11 @@ void BKE_editmesh_free_data(EditMesh *em)
 {
   em->looptris = {};
 
+  /* Evaluated meshes share this edit-mesh (#Mesh copies keep the pointer), so it can outlive
+   * the BMesh: never leave them a freed one. */
   if (BMesh *bm = em->bm) {
     BM_mesh_free(bm);
+    em->bm = nullptr;
   }
 }
 

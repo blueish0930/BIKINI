@@ -172,6 +172,15 @@ vector p = {0, 1, 0};
 rotation q = {0, 0, 0, 1};
 int[] xs = array(1, 2, 3);
 float ys[] = array(0.1, 0.2);</code></pre>
+<h3 id="constants"><span class="zh">常量与保留名</span><span class="en">Constants and reserved names</span></h3>
+<p class="zh"><code>PI</code> 是 float 常量 3.14159265，可以直接写在表达式里。</p>
+<p class="en"><code>PI</code> is the float constant 3.14159265, write it directly in an expression.</p>
+<p class="zh">下面这些名字不能用作变量、foreach 变量、函数或参数的名字：<code>PI</code>、<code>Position</code>、<code>Rotation</code>、<code>Scale</code>、<code>Normal</code>、<code>Radius</code>、<code>ID</code>、<code>add</code>。大小写必须完全一致才算，所以 <code>vector position</code>、<code>float pi</code> 仍然可以用。属性名不受影响：<code>f@add</code> 照常可用。</p>
+<p class="en">These names cannot be used for a variable, foreach variable, function or parameter: <code>PI</code>, <code>Position</code>, <code>Rotation</code>, <code>Scale</code>, <code>Normal</code>, <code>Radius</code>, <code>ID</code>, <code>add</code>. Only the exact spelling is reserved, <code>vector position</code> and <code>float pi</code> still work. Attribute names are not affected: <code>f@add</code> works as before.</p>
+<pre><code>float a = 2 * PI * f@t;
+v@P += set(cos(a), sin(a), 0);
+// float PI = 3.14;      错误 / error: reserved name
+// vector Position = v@P; 错误 / error: reserved name</code></pre>
 
 <h2 id="attributes"><span class="zh">属性</span><span class="en">Attributes</span></h2>
 <p class="zh">用前缀 <code>@</code> 读写当前元素的属性。没写前缀的裸名字（如 <code>P</code>）也会当属性。</p>

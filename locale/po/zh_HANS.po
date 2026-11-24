@@ -177394,6 +177394,27 @@ msgstr "find: 在 string 数组里只能查找 string"
 msgid "slice(array, start, end, step) needs an array and a start index, end and step are optional"
 msgstr "slice(array, start, end, step) 需要一个数组和起始下标，end 和 step 可以省略"
 
+msgid "{} is a reserved name, it cannot be a variable"
+msgstr "{} 是保留名，不能用作变量名"
+
+msgid "PI is the constant 3.14159..., use it directly: float a = 2 * PI;"
+msgstr "PI 是常量 3.14159...，直接用即可：float a = 2 * PI;"
+
+msgid "Reserved: PI, Position, Rotation, Scale, Normal, Radius, ID and add. Pick another name, e.g. pos or rot."
+msgstr "保留名：PI、Position、Rotation、Scale、Normal、Radius、ID 和 add。换一个名字，例如 pos 或 rot。"
+
+msgid "valuetoindex(geo, domain, name, value) needs a domain (\"point\", \"edge\", \"face\", \"corner\", \"curve\", \"instance\"), an attribute name and a value; geo is optional"
+msgstr "valuetoindex(geo, domain, name, value) 需要一个 domain（\"point\"、\"edge\"、\"face\"、\"corner\"、\"curve\"、\"instance\"）、一个属性名和一个值；geo 可以省略"
+
+msgid "reverse(array) needs one array"
+msgstr "reverse(array) 需要一个数组"
+
+msgid "sortorder(array, sign) needs an int, float, vector or string array; the sign is optional: 1 increasing, -1 decreasing"
+msgstr "sortorder(array, sign) 需要一个 int、float、vector 或 string 数组；sign 可以省略：1 升序，-1 降序"
+
+msgid "sortbyorder(array, order) needs an array and an int array of indices"
+msgstr "sortbyorder(array, order) 需要一个数组和一个下标组成的 int 数组"
+
 msgid "chramp(\"name\", position) needs a quoted name and a position"
 msgstr "chramp(\"name\", position) 需要带引号的名字和一个位置"
 

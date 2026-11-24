@@ -1019,7 +1019,7 @@ class NodeTreeMainUpdater {
         if (ntype.type_legacy == GEO_NODE_VIEWER) {
           this->remove_unused_geometry_nodes_viewer_sockets(ntree, *node);
         }
-        if (ntype.type_legacy == SH_NODE_WRANGLE) {
+        if (ELEM(ntype.type_legacy, SH_NODE_WRANGLE, IMG_NODE_WRANGLE)) {
           nodes::remove_unlinked_shader_wrangle_field_items(ntree, *node);
         }
         if (ntype.declare) {

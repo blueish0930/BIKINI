@@ -58,6 +58,29 @@ struct CompileOutput {
 CompileOutput compile(StringRef source);
 CompileOutput compile_shader_material(StringRef source);
 
+enum class Type : uint8_t;
+
+/**
+ * A name the script can use without declaring it, with its type: an input or output socket
+ * of the node, used like a variable (`Output = Image * 2.0`), or a value the node provides,
+ * read and written with `@` (`@ix`, `@P`).
+ */
+struct PredeclaredName {
+  std::string name;
+  Type type;
+  /** Written `@name`. Otherwise a variable that the code does not declare. */
+  bool at = false;
+};
+
+/**
+ * Compile the code of an Image Wrangle, to GLSL like #compile_shader_material.
+ *
+ * There is no geometry. `@name` is one of the \a names that are written with `@`, with its
+ * type unless a matching prefix is written. A name without `@` is a variable: one of the other
+ * \a names, or one the code declares. Anything else is an error, never an attribute.
+ */
+CompileOutput compile_image_wrangle(StringRef source, Span<PredeclaredName> names);
+
 struct ExecOutput {
   bool ok = true;
   std::string error;

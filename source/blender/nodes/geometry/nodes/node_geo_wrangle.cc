@@ -247,7 +247,7 @@ static int wrangle_call_help(const StringRef fn, char (*out)[192], const int max
     StringRef(s).copy_utf8_truncated(out[n]);
     n++;
   };
-  if (fn == "delete_geometry" || fn == "deletegeometry" || fn == "deletegeo") {
+  if (fn == "delete_geometry") {
     row("delete_geometry(geo, domain, index, behavior)");
     row("  geo is always 0 (current geometry)");
     row("  domain: point|edge|face or 0,1,2");
@@ -270,7 +270,7 @@ static int wrangle_call_help(const StringRef fn, char (*out)[192], const int max
     row("  close: extra last-first edge / cyclic curve; ignored for face");
     return n;
   }
-  if (fn == "setattribute" || fn == "set_attribute" || fn == "setattr") {
+  if (fn == "setattribute") {
     row("setattribute(geo, domain, index, name, value, behavior)");
     row("  geo is always 0 (current geometry)");
     row("  domain: point|edge|face|corner");
@@ -283,14 +283,14 @@ static int wrangle_call_help(const StringRef fn, char (*out)[192], const int max
     row("  type: fbm|multifractal|hybrid|ridged|hetero");
     return n;
   }
-  if (fn == "voronoi" || fn == "voronoinoise") {
+  if (fn == "voronoi") {
     row("voronoi(P, scale, detail, roughness, lacunarity,");
     row("  smoothness, randomness, feature, metric, dim, distortion)");
     row("  feature: f1|f2|smooth_f1|edge|radius");
     row("  metric: euclidean|manhattan|chebychev|minkowski  dim 1-4");
     return n;
   }
-  if (fn == "geometry_proximity" || fn == "proximity") {
+  if (fn == "geometry_proximity") {
     row("geometry_proximity(geo, domain, sample, pos, dist)");
     row("  domain: 'point'|'edge'|'face' or 0,1,2");
     row("  pos: out vec   dist: out float");
@@ -310,7 +310,7 @@ static int wrangle_call_help(const StringRef fn, char (*out)[192], const int max
     row("  hit_n: out vector[]    hit_dist: out float[]");
     return n;
   }
-  if (fn == "nearestpoints" || fn == "nearpoints") {
+  if (fn == "nearestpoints") {
     row("nearestpoints(geo, k_or_r, mode[, sample_pos]) -> int[]");
     row("  k/0: k nearest points (k_or_r is an int count)");
     row("  r/1: all points within float radius r");
@@ -325,6 +325,15 @@ static int wrangle_call_help(const StringRef fn, char (*out)[192], const int max
     row("  returns point indices of the searched geometry");
     return n;
   }
+  if (fn == "valuetoindex") {
+    row("valuetoindex(geo, domain, name, value)  -> int[]");
+    row("  indices of the elements whose attribute equals value, in increasing order");
+    row("  domain: point|edge|face|corner|curve|instance or 0..5; geo is optional");
+    row("  int, float, vector, color, rotation or string attribute; float values match exactly");
+    row("  reads the input geometry, not values written by this node");
+    row("  e.g. int pts[] = valuetoindex(0, \"point\", \"class\", i@class);");
+    return n;
+  }
   if (fn == "facesedge") {
     row("facesedge(geo, face0, face1)");
   }
@@ -337,22 +346,20 @@ static int wrangle_call_help(const StringRef fn, char (*out)[192], const int max
   if (fn == "nextedge") {
     row("nextedge(geo, corner)");
   }
-  if (fn == "offsetcorner" || fn == "offset_corner" || fn == "offsetcornerinface" ||
-      fn == "offset_corner_in_face")
-  {
+  if (fn == "offsetcorner") {
     row("offsetcorner(geo, index, offset)");
     row("  walk offset corners around the same face");
     row("  offset default 1 if omitted");
     return n;
   }
-  if (fn == "sample_nearest_surface" || fn == "samplenearestsurface") {
+  if (fn == "sample_nearest_surface") {
     row("sample_nearest_surface(geo, type, sample, value)");
     row("  type: 'position'|'float'|'int'|'color'|attr name");
     row("  value: out sampled attribute");
     return n;
   }
-  if (fn == "bounding_box" || fn == "boundingbox") {
-    row("bounding_box(min, max)");
+  if (fn == "boundingbox") {
+    row("boundingbox(min, max)");
     row("  min, max: out vec");
     return n;
   }
@@ -369,7 +376,7 @@ static int wrangle_call_help(const StringRef fn, char (*out)[192], const int max
     row("  faceindex: out int   order: out int");
     return n;
   }
-  if (fn == "pointcurve" || fn == "point_curve") {
+  if (fn == "pointcurve") {
     row("pointcurve(geo, point, curveindex, orderincurve)");
     row("  curveindex: out int   orderincurve: out int");
     return n;
@@ -387,20 +394,20 @@ static int wrangle_call_help(const StringRef fn, char (*out)[192], const int max
     row("  name: \"P\" / \"position\" -> vector, else attr type");
     return n;
   }
-  if (fn == "valuetostring" || fn == "value_to_string") {
+  if (fn == "valuetostring") {
     row("valuetostring(int, digits)");
     row("valuetostring(float, before, after)");
     row("  extra integer digits are kept, not truncated");
     return n;
   }
-  if (fn == "format" || fn == "sprintf") {
+  if (fn == "format") {
     row("format(\"{:.2f} {:04d}\", f, i)");
-    row("sprintf(\"%s_%05d\", s, i)");
+    row("format(\"%s_%05d\", s, i)");
     row("  {} / {0} / {:.2f} / {:04d} or %s %d %.2f");
     return n;
   }
   if (fn == "pointneighbours" || fn == "point_neighbours" || fn == "pointneighbors" ||
-      fn == "neighbours" || fn == "neighbors")
+      fn == "point_neighbors" || fn == "neighbours" || fn == "neighbors")
   {
     row("pointneighbours(geo, index)  -> int[]");
     row("  neighboring point indices of a vertex");
@@ -430,14 +437,32 @@ static int wrangle_call_help(const StringRef fn, char (*out)[192], const int max
     return n;
   }
   if (fn == "find") {
-    row("find(arr, value)  -> int[] with the index of every match");
-    row("  empty when the value is not in the array: len(find(arr, x)) == 0");
+    row("int i = find(arr, value)  -> index of the first match, -1 when there is none");
+    row("int i[] = find(arr, value)  -> the index of every match, empty when there is none");
+    row("  int, float, vector or string array; a string array needs a string value");
     return n;
   }
   if (fn == "slice") {
     row("slice(arr, start, end, step)  -> new array, end is not included");
     row("  negative indices count from the end: slice(arr, -3) is the last three");
     row("  end and step are optional, a negative step walks backwards");
+    return n;
+  }
+  if (fn == "sortorder") {
+    row("sortorder(arr, sign)  -> int[] of the indices that sort arr");
+    row("  sign: 1 increasing (default), -1 decreasing; equal items keep their order");
+    row("  int, float, vector (x, then y, then z) or string array; arr is not changed");
+    row("  int order[] = sortorder(f[]@w, -1);  sortbyorder(names, order);");
+    return n;
+  }
+  if (fn == "sortbyorder") {
+    row("sortbyorder(arr, order)  arr becomes arr[order[0]], arr[order[1]], ...");
+    row("  order: int[] of indices, usually from sortorder; out of range indices are skipped");
+    return n;
+  }
+  if (fn == "reverse") {
+    row("reverse(arr)  -> new array with the items in the opposite order");
+    row("  arr itself is not changed: arr = reverse(arr);");
     return n;
   }
   if (fn == "unique") {
@@ -1974,8 +1999,8 @@ static ui::Block *wrangle_edit_popup(bContext *C, ARegion *region, void *arg_v)
     return nullptr;
   }
   NodeGeometryWrangle &storage = node_storage(*arg->node);
-  /* Font and window size are shared by every Wrangle node. */
-  ui::wrangle_editor_state_load(arg->editor_state);
+  /* Font preference is shared; an open editor keeps its own size and scroll state. */
+  arg->editor_state.font_scale = ui::wrangle_editor_font_scale();
 
   const uiStyle *style = ui::style_get_dpi();
   ui::Block *block = ui::block_begin(C, region, "wrangle_code_editor", ui::EmbossType::Emboss);
@@ -2110,6 +2135,7 @@ static wmOperatorStatus wrangle_edit_invoke(bContext *C, wmOperator *op, const w
   arg->node = static_cast<bNode *>(node_ptr.data);
   arg->ntree = reinterpret_cast<bNodeTree *>(node_ptr.owner_id);
   arg->node_identifier = arg->node->identifier;
+  ui::wrangle_editor_state_load(arg->editor_state);
   ui::popup_block_invoke(C, wrangle_edit_popup, arg, wrangle_edit_popup_free);
   return OPERATOR_CANCELLED;
 }

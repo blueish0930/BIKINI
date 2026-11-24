@@ -175,6 +175,7 @@ class NODE_MT_image_node_texture_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "ImageNodeGeoSDF")
         self.node_operator(layout, "ImageNodeFractalPrimitive")
         self.node_operator(layout, "ImageNodeShaderToy")
+        self.node_operator(layout, "ImageNodeWrangle")
         self.draw_assets_for_catalog(layout, self.bl_label)
 
 

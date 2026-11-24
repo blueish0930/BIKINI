@@ -3602,6 +3602,9 @@ static const char *wrangle_compile_operator_idname(const bNode *node)
   if (STREQ(node->idname, "ShaderNodeWrangle")) {
     return "NODE_OT_shader_wrangle_compile";
   }
+  if (STREQ(node->idname, "ImageNodeWrangle")) {
+    return "NODE_OT_image_wrangle_compile";
+  }
   return nullptr;
 }
 
@@ -3615,6 +3618,9 @@ static const char *wrangle_edit_operator_idname(const bNode *node)
   }
   if (STREQ(node->idname, "ShaderNodeWrangle")) {
     return "NODE_OT_shader_wrangle_edit";
+  }
+  if (STREQ(node->idname, "ImageNodeWrangle")) {
+    return "NODE_OT_image_wrangle_edit";
   }
   return nullptr;
 }
@@ -3656,7 +3662,8 @@ static void wrangle_commit_code_run_direct(bNode *node)
   if (node == nullptr || node->storage == nullptr || node->idname == nullptr) {
     return;
   }
-  if (STREQ(node->idname, "ShaderNodeWrangle")) {
+  /* The Image Wrangle stores the same data as the Shader Wrangle. */
+  if (STREQ(node->idname, "ShaderNodeWrangle") || STREQ(node->idname, "ImageNodeWrangle")) {
     NodeShaderWrangle &st = *static_cast<NodeShaderWrangle *>(node->storage);
     const char *code = st.code ? st.code : "";
     MEM_SAFE_DELETE(st.code_run);
@@ -3678,7 +3685,7 @@ static bool wrangle_draft_differs_from_run(const bNode *node)
   }
   const char *code = nullptr;
   const char *code_run = nullptr;
-  if (STREQ(node->idname, "ShaderNodeWrangle")) {
+  if (STREQ(node->idname, "ShaderNodeWrangle") || STREQ(node->idname, "ImageNodeWrangle")) {
     const NodeShaderWrangle &st = *static_cast<const NodeShaderWrangle *>(node->storage);
     code = st.code;
     code_run = st.code_run;
@@ -14730,6 +14737,103 @@ static bool popup_event_is_text_input(const wmEvent *event)
   return false;
 }
 
+static bool popup_is_code_editor(const Block &block)
+{
+  if (!(block.flag & BLOCK_KEEP_OPEN)) {
+    return false;
+  }
+  for (const Button &but : block.buttons()) {
+    if (but.type == ButtonType::TextBox && (but.flag & BUT_CODE_EDITOR)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool event_in_other_popup_on_top(const wmWindow *win,
+                                        const ARegion *self,
+                                        const wmEvent *event)
+{
+  if (win == nullptr) {
+    return false;
+  }
+  const bScreen *screen = WM_window_get_active_screen(win);
+  if (screen == nullptr) {
+    return false;
+  }
+  const ARegion *under_mouse = nullptr;
+  /* Temporary regions are drawn in insertion order. Only the last actual popup under the
+   * pointer owns the event; a region behind it must not make both yield to each other.
+   * Ignore tooltip/shadow rectangles without an interactive UI block at this position. */
+  for (const ARegion &region : screen->regionbase) {
+    if (region.regiontype != RGN_TYPE_TEMPORARY) {
+      continue;
+    }
+    for (const Block &block : region.runtime->uiblocks) {
+      int mx = event->xy[0];
+      int my = event->xy[1];
+      window_to_block(&region, &block, &mx, &my);
+      if (BLI_rctf_isect_pt(&block.rect, float(mx), float(my))) {
+        under_mouse = &region;
+        break;
+      }
+    }
+  }
+  return under_mouse && under_mouse != self;
+}
+
+static bool popup_has_pointer_capture(PopupBlockHandle *menu)
+{
+  Button *active = region_find_active_but(menu->region);
+  return menu->is_grab || menu->mmb_panning ||
+         (active && active->active &&
+          ELEM(active->active->state,
+               BUTTON_STATE_TEXTBOX_SCROLLING,
+               BUTTON_STATE_TEXTBOX_RESIZING,
+               BUTTON_STATE_TEXT_SELECTING,
+               BUTTON_STATE_NUM_EDITING));
+}
+
+static void popup_code_editor_transfer_focus(bContext *C, PopupBlockHandle *target)
+{
+  wmWindow *win = CTX_wm_window(C);
+  bScreen *screen = win ? WM_window_get_active_screen(win) : nullptr;
+  if (!screen) {
+    return;
+  }
+  ScrArea *previous_area = CTX_wm_area(C);
+  ARegion *previous_region = CTX_wm_region(C);
+  ARegion *previous_popup = CTX_wm_region_popup(C);
+  /* A newer popup consumes the click before older handlers see it. Finish their edits here
+   * so there is one caret, and a refresh cannot discard a sibling's uncommitted input. */
+  for (ARegion &region : screen->regionbase) {
+    if (&region == target->region || region.regiontype != RGN_TYPE_TEMPORARY) {
+      continue;
+    }
+    Block *block = region.runtime->uiblocks.first();
+    if (!block || !popup_is_code_editor(*block)) {
+      continue;
+    }
+    Button *active = region_find_active_but(&region);
+    if (!active || !active->active) {
+      continue;
+    }
+    if (block->handle && block->handle->ctx_area) {
+      CTX_wm_area_set(C, block->handle->ctx_area);
+      CTX_wm_region_set(C, block->handle->ctx_region);
+    }
+    CTX_wm_region_popup_set(C, &region);
+    const bool hover_only = active->active->state == BUTTON_STATE_HIGHLIGHT;
+    if (hover_only) {
+      active->active->cancel = true;
+    }
+    button_activate_exit(C, active, active->active, false, hover_only);
+  }
+  CTX_wm_area_set(C, previous_area);
+  CTX_wm_region_set(C, previous_region);
+  CTX_wm_region_popup_set(C, previous_popup);
+}
+
 /**
  * Pinned / floating KEEP_OPEN popups must not steal events meant for another popup or Blender.
  *
@@ -14759,25 +14863,56 @@ static bool popup_handler_should_passthrough(bContext *C,
   int my = event->xy[1];
   window_to_block(menu->region, block, &mx, &my);
   const bool inside = BLI_rctf_isect_pt(&block->rect, float(mx), float(my));
-  const bool in_other = event_in_other_temporary_region(CTX_wm_window(C), menu->region, event);
+  const bool in_other = event_in_other_popup_on_top(CTX_wm_window(C), menu->region, event);
   const bool pinned = (block->flag & BLOCK_PINNED) != 0;
+  const bool code_editor = popup_is_code_editor(*block);
   Button *active = region_find_active_but(menu->region);
   const bool has_active = active && active->active;
+  const bool has_focus = has_active && button_modal_state(active->active->state);
   const bool is_text = popup_event_is_text_input(event);
   const bool is_mouse_press = ISMOUSE_BUTTON(event->type) &&
                               ELEM(event->val, KM_PRESS, KM_DBL_CLICK);
 
+  if (ISMOUSE(event->type)) {
+    /* A drag that started in an older editor must receive movement and release even when
+     * they happen over a newer window, whose handler runs first. */
+    const wmWindow *win = CTX_wm_window(C);
+    const bScreen *screen = win ? WM_window_get_active_screen(win) : nullptr;
+    if (screen) {
+      for (ARegion &region : screen->regionbase) {
+        if (&region == menu->region || region.regiontype != RGN_TYPE_TEMPORARY) {
+          continue;
+        }
+        Block *other = region.runtime->uiblocks.first();
+        if (other && other->handle && popup_is_code_editor(*other) &&
+            popup_has_pointer_capture(other->handle))
+        {
+          return true;
+        }
+      }
+    }
+  }
+
   /* Pointer drags belong to their starting popup until release, even over another region.
    * Passing the release through left scrollbar and resize interactions stuck in modal state. */
-  if (menu->is_grab || menu->mmb_panning ||
-      (has_active && ELEM(active->active->state, BUTTON_STATE_TEXTBOX_SCROLLING,
-                         BUTTON_STATE_TEXTBOX_RESIZING, BUTTON_STATE_TEXT_SELECTING))) {
+  if (popup_has_pointer_capture(menu)) {
     return false;
   }
 
   /* Focused editor keeps keys and timers even when the cursor is over another popup. */
-  if (has_active && (is_text || ISTIMER(event->type))) {
+  if ((has_focus && is_text) || (has_active && ISTIMER(event->type))) {
     return false;
+  }
+
+  /* Completion/search menus are dispatched recursively by their owning editor. */
+  if (has_active && active->active->menu) {
+    return false;
+  }
+
+  /* Hovering a header button is not keyboard focus. The editor in an older popup may still
+   * own the caret, including when this (unpinned) code window is under the mouse. */
+  if (code_editor && is_text && !has_focus) {
+    return true;
   }
 
   /* Nested menus (File > Import, Add > Mesh, RMB submenus) have no popup_handler of
@@ -14785,7 +14920,7 @@ static bool popup_handler_should_passthrough(bContext *C,
    * Passing through whenever the cursor is in another TEMPORARY region (the child
    * menu, a tooltip, a search box) drops those events and the submenu appears frozen.
    * Only pinned inspect/editor windows should yield the event stream. */
-  if (!pinned) {
+  if (!pinned && !(code_editor && in_other)) {
     return false;
   }
 
@@ -14828,17 +14963,53 @@ static int popup_handler(bContext *C, const wmEvent *event, void *userdata)
   /* Pass through before handling, otherwise a stacked popup swallows clicks/keys
    * intended for another pinned inspect or code editor. */
   bool end_active = false;
-  if (menu->menuretval == 0 && popup_handler_should_passthrough(C, menu, event, &end_active)) {
+  const bool pass_event = menu->menuretval == 0 &&
+                          popup_handler_should_passthrough(C, menu, event, &end_active);
+  if (pass_event) {
     if (end_active) {
       if (Button *but = region_find_active_but(menu->region)) {
         if (but->active) {
-          button_activate_exit(C, but, but->active, false, false);
+          /* Leaving a hover must not execute its button (notably Pin / Close). Commit real
+           * edits on focus transfer, but cancel a highlight that has never been pressed. */
+          const bool hover_only = but->active->state == BUTTON_STATE_HIGHLIGHT;
+          if (hover_only) {
+            but->active->cancel = true;
+          }
+          button_activate_exit(C, but, but->active, false, hover_only);
         }
       }
     }
     CTX_wm_region_popup_set(C, region_popup);
     apply_but_funcs_after(C);
     return WM_UI_HANDLER_CONTINUE;
+  }
+
+  if (event->type == LEFTMOUSE && ELEM(event->val, KM_PRESS, KM_DBL_CLICK)) {
+    Block *block = menu->region->runtime->uiblocks.first();
+    if (block && popup_is_code_editor(*block) &&
+        !event_in_other_popup_on_top(CTX_wm_window(C), menu->region, event) &&
+        block_find_mouse_over(menu->region, event, false))
+    {
+      popup_code_editor_transfer_focus(C, menu);
+      Button *under_mouse = but_find_mouse_over(menu->region, event);
+      if (Button *active = region_find_active_but(menu->region);
+          active && active != under_mouse)
+      {
+        /* Commit the draft before pressing Pin/Compile/Close or dragging the header. The
+         * same click must reach its target, rather than only dismissing the old text edit. */
+        const bool hover_only = active->active->state == BUTTON_STATE_HIGHLIGHT;
+        if (hover_only) {
+          active->active->cancel = true;
+        }
+        button_activate_exit(C, active, active->active, false, hover_only);
+      }
+      /* Switching floating windows may deliver the press without a preceding hover event. */
+      if (!region_find_active_but(menu->region)) {
+        if (under_mouse) {
+          button_activate_init(C, menu->region, under_mouse, BUTTON_ACTIVATE_OVER);
+        }
+      }
+    }
   }
 
   handle_menus_recursive(C, event, menu, 0, false, false, true);
@@ -14901,7 +15072,7 @@ static int popup_handler(bContext *C, const wmEvent *event, void *userdata)
     }
   }
 
-  CTX_wm_region_set(C, region_popup);
+  CTX_wm_region_popup_set(C, region_popup);
 
   return retval;
 }

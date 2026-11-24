@@ -65,6 +65,7 @@
 #include "NOD_geo_closure.hh"
 #include "NOD_geo_expression.hh"
 #include "NOD_shader_hlsl.hh"
+#include "NOD_image_wrangle.hh"
 #include "NOD_shader_wrangle.hh"
 #include "NOD_socket.hh"
 #include "NOD_socket_items.hh"
@@ -317,6 +318,21 @@ static std::optional<SocketTypeTarget> resolve_socket_items(bNodeTree &tree,
       return t;
     }
     return resolve_item_accessor<ShaderWrangleInputItemsAccessor>(
+        tree, node, socket, "socket_type", SocketTypeTargetKind::SocketDatatype);
+  }
+
+  if (node.is_type("ImageNodeWrangle"_ustr)) {
+    if (auto t = resolve_item_accessor<ImageWrangleOutputItemsAccessor>(
+            tree, node, socket, "socket_type", SocketTypeTargetKind::SocketDatatype))
+    {
+      return t;
+    }
+    if (auto t = resolve_item_accessor<ImageWrangleFieldItemsAccessor>(
+            tree, node, socket, "socket_type", SocketTypeTargetKind::SocketDatatype))
+    {
+      return t;
+    }
+    return resolve_item_accessor<ImageWrangleInputItemsAccessor>(
         tree, node, socket, "socket_type", SocketTypeTargetKind::SocketDatatype);
   }
 

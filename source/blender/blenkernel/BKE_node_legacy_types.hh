@@ -668,6 +668,8 @@
 #define IMG_NODE_TERRAIN_DERIVE 2235
 #define IMG_NODE_TERRAIN_COLOR 2236
 #define IMG_NODE_TERRAIN_COMBINE 2237
+/** GPU Texture Editor: VEX code that runs per pixel, the image counterpart of the Shader Wrangle. */
+#define IMG_NODE_WRANGLE 2238
 /** Cordless named portals in Shader / Compositor / Image (GPU Texture) editors. */
 #define SH_NODE_STORE_NAMED_PORTAL 2198
 #define SH_NODE_NAMED_PORTAL 2199

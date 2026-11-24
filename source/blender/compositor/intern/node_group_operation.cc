@@ -2,6 +2,8 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later */
 
+#include <algorithm>
+
 #include "BLI_compute_context.hh"
 #include "BLI_index_range.hh"
 #include "BLI_math_base.hh"
@@ -327,6 +329,58 @@ static int schedule_repeat_iterations(const Schedule &schedule)
   return math::max(repeat_iterations, 1);
 }
 
+/** Identifiers of the Repeat zones a schedule runs, sorted. */
+static Vector<int> schedule_repeat_zones(const Schedule &schedule)
+{
+  Vector<int> zones;
+  for (const bNode *node : schedule.nodes) {
+    if (node->is_type("GeometryNodeRepeatInput"_ustr) && !node->is_muted()) {
+      zones.append(node->identifier);
+    }
+  }
+  std::sort(zones.begin(), zones.end());
+  return zones;
+}
+
+/**
+ * What a pass before the last one has to evaluate: the Repeat Output nodes, which keep the state
+ * for the next pass, and everything they depend on. The nodes behind the zones only matter in
+ * the last pass; evaluating them in every pass wrote each Image Output once per iteration.
+ * Empty when the schedule has no Repeat Output to carry the state.
+ */
+static VectorSet<const bNode *> repeat_state_nodes(const Schedule &schedule)
+{
+  Set<const bNode *> needed;
+  Vector<const bNode *> stack;
+  for (const bNode *node : schedule.nodes) {
+    if (node->is_type("GeometryNodeRepeatOutput"_ustr)) {
+      stack.append(node);
+    }
+  }
+  while (!stack.is_empty()) {
+    const bNode *node = stack.pop_last();
+    if (!needed.add(node)) {
+      continue;
+    }
+    for (const bNodeSocket *input : node->input_sockets()) {
+      for (const bNodeSocket *origin : input->logically_linked_sockets()) {
+        stack.append(&origin->owner_node());
+      }
+      for (const bNodeSocket *origin : input->directly_linked_sockets()) {
+        stack.append(&origin->owner_node());
+      }
+    }
+  }
+  /* In the order of the schedule. */
+  VectorSet<const bNode *> nodes;
+  for (const bNode *node : schedule.nodes) {
+    if (needed.contains(node)) {
+      nodes.add_new(node);
+    }
+  }
+  return nodes;
+}
+
 /* Get the results associated with sockets in the node group prior to its evaluation. */
 static Result *get_node_group_result_for_socket(NodeGroupOperation &operation,
                                                 const bNodeSocket &socket)
@@ -343,7 +397,8 @@ static Result *get_node_group_result_for_socket(NodeGroupOperation &operation,
 /**
  * Evaluate one demand schedule with optional Repeat multipass.
  * Each pass uses the official NodeTreeEvaluator. Intermediate passes free with the evaluator
- * destructor (zone body + its own upstream only).
+ * destructor (zone body + its own upstream only), and they only evaluate what the Repeat
+ * Output nodes need, see #repeat_state_nodes.
  */
 void NodeGroupOperation::evaluate_schedule_multipass(const Schedule &schedule)
 {
@@ -351,9 +406,20 @@ void NodeGroupOperation::evaluate_schedule_multipass(const Schedule &schedule)
                                     schedule_repeat_iterations(schedule) :
                                     1;
 
+  /* The passes before the last one only advance the state of the Repeat zones. */
+  Schedule state_schedule{schedule.node_group, schedule.zone, {}, schedule.unneeded_inputs};
+  if (repeat_iterations > 1) {
+    state_schedule.nodes = repeat_state_nodes(schedule);
+  }
+
   for (int iter = 0; iter < repeat_iterations; iter++) {
     image_process_set_repeat_iteration(iter);
-    NodeTreeEvaluator node_tree_evaluator(this->context(), schedule, *this, compute_context_);
+    const bool is_last = iter == repeat_iterations - 1;
+    const Schedule &pass_schedule = (is_last || state_schedule.nodes.is_empty()) ?
+                                        schedule :
+                                        state_schedule;
+    NodeTreeEvaluator node_tree_evaluator(
+        this->context(), pass_schedule, *this, compute_context_);
     node_tree_evaluator.evaluate();
   }
 
@@ -375,9 +441,20 @@ void NodeGroupOperation::execute()
   const Schedule full_schedule = compute_schedule(
       this->context(), this->node_group(), compute_context_, socket_result_fn);
 
-  /* Image Process: isolate each demand terminal into its own schedule. Otherwise a single
-   * multipass over a combined schedule re-evaluates independent branches every Repeat
-   * iteration (Showcase1: Rasterize→Viewer thrashing while Repeat→Image Output multipasses). */
+  /* Image Process: terminals are cooked in groups, one schedule per group.
+   *
+   * A Repeat zone makes the evaluator run its whole schedule once per iteration. Branches that
+   * have nothing to do with the zone must not be in that schedule, or they are evaluated again
+   * on every iteration (Showcase1: Rasterize→Viewer thrashing while Repeat→Image Output
+   * multipasses). So the terminals behind the same Repeat zones form a group of their own, and
+   * every terminal that one pass can cook is in one common group.
+   *
+   * Inside a group a node that several terminals use is evaluated once per pass. With a
+   * schedule per terminal the upstream was cooked again for every Image Output and Viewer,
+   * and a Repeat zone ran all its iterations again for each of its outputs.
+   *
+   * Zones are compared as a set because the number of passes is the largest iteration count in
+   * the schedule: joining terminals of different zones could change how often a zone runs. */
   if (node_group_.type == NTREE_IMAGE) {
     Vector<const bNode *> terminals;
     for (const bNode *node : full_schedule.nodes) {
@@ -390,13 +467,43 @@ void NodeGroupOperation::execute()
       const Vector<int> saved_filter(image_process_terminal_filter_get());
       const bool had_filter = !saved_filter.is_empty();
 
-      for (const int term_i : terminals.index_range()) {
+      struct TerminalGroup {
+        /** Repeat zones that run more than once. Empty for what a single pass cooks. */
+        Vector<int> repeat_zones;
+        Vector<int> terminals;
+      };
+      /* In the order of their first terminal. */
+      Vector<TerminalGroup> groups;
+      for (const bNode *term : terminals) {
+        const int term_id = term->identifier;
+        image_process_set_terminal_filter(Span<int>(&term_id, 1));
+        const Schedule schedule = compute_schedule(
+            this->context(), this->node_group(), compute_context_, socket_result_fn);
+        Vector<int> repeat_zones;
+        if (schedule_repeat_iterations(schedule) > 1) {
+          repeat_zones = schedule_repeat_zones(schedule);
+        }
+        TerminalGroup *group = nullptr;
+        for (TerminalGroup &candidate : groups) {
+          if (candidate.repeat_zones.size() == repeat_zones.size() &&
+              std::equal(repeat_zones.begin(), repeat_zones.end(), candidate.repeat_zones.begin()))
+          {
+            group = &candidate;
+            break;
+          }
+        }
+        if (group == nullptr) {
+          groups.append({std::move(repeat_zones), {}});
+          group = &groups.last();
+        }
+        group->terminals.append(term_id);
+      }
+
+      for (const TerminalGroup &group : groups) {
         if (this->context().is_canceled()) {
           break;
         }
-        const bNode *term = terminals[term_i];
-        const int term_id = term->identifier;
-        image_process_set_terminal_filter(Span<int>(&term_id, 1));
+        image_process_set_terminal_filter(group.terminals.as_span());
 
         const Schedule schedule = compute_schedule(
             this->context(), this->node_group(), compute_context_, socket_result_fn);

@@ -120,6 +120,8 @@ using nodes::HLSLOutputItemsAccessor;
 using nodes::ShaderWrangleInputItemsAccessor;
 using nodes::ShaderWrangleFieldItemsAccessor;
 using nodes::ShaderWrangleOutputItemsAccessor;
+using nodes::ImageWrangleInputItemsAccessor;
+using nodes::ImageWrangleOutputItemsAccessor;
 using nodes::IndexSwitchItemsAccessor;
 using nodes::MenuSwitchItemsAccessor;
 using nodes::RasterizePointsItemsAccessor;

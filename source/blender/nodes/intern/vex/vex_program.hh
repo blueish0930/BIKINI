@@ -660,7 +660,10 @@ enum class Builtin : uint16_t {
   DecompU,
   DecompS,
   DecompV,
+  /** `sortorder(arr[, sign])`: the indices that sort the array, increasing for a sign >= 0,
+   * decreasing for a negative sign. Equal items keep their order. */
   SortOrder,
+  /** `sortbyorder(arr, order)`: the items of the array at the indices of `order`. */
   SortByOrder,
   RayIsHit,
   Chu,
@@ -750,6 +753,13 @@ enum class Builtin : uint16_t {
   NextEdge,
   /** `cornerorder(geo, corner)`: the position of the corner in its face, 0 for the first one. */
   CornerOrder,
+  /** `reverse(arr)`: a new array with the items in the opposite order. */
+  ArrayReverse,
+  /**
+   * `valuetoindex(geo, domain, name, value)`: the indices of the elements of that domain whose
+   * attribute equals the value, in increasing order. The geometry can be left out.
+   */
+  ValueToIndex,
 };
 
 /** Widget behind a `chramp()` / `chcurve()` parameter. */
@@ -1089,6 +1099,12 @@ struct Program {
     int bytes = 0;
   };
   Vector<GpuCh> gpu_ch;
+  /**
+   * Inputs of an Image Wrangle that the code reads at another pixel, `pixel(name, x, y)`.
+   * The emitted GLSL calls `wr_pixel_<attribute local>(x, y)` for them, a function the node
+   * defines: only the node knows which texture an input is.
+   */
+  Vector<std::string> gpu_pixel_inputs;
   struct RampParm {
     std::string name;
     RampKind kind = RampKind::ColorRamp;

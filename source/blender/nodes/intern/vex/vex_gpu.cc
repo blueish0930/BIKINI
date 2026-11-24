@@ -1226,6 +1226,16 @@ void unpack_attr(AttrRT &a, const int index, const void *src, const Type type)
 
 }  // namespace
 
+const char *gpu_glsl_array_struct()
+{
+  return gpu_arr_struct();
+}
+
+const char *gpu_glsl_preamble()
+{
+  return gpu_preamble();
+}
+
 int soa_floats(const Type t)
 {
   if (t == Type::Vector2) {

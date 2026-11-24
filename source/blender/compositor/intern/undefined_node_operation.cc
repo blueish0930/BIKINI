@@ -115,7 +115,9 @@ void image_process_set_terminal_filter(const Span<int> node_identifiers)
 
 void image_process_clear_terminal_filter()
 {
-  g_image_process_terminal_filter.clear();
+  /* Also give the memory back: with more than a few terminals the list is on the heap, and a
+   * buffer that this static still owns at exit is freed after the leak detector has run. */
+  g_image_process_terminal_filter.clear_and_shrink();
 }
 
 bool image_process_terminal_filter_active()

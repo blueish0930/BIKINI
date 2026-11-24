@@ -31,6 +31,7 @@
 #include "DNA_mesh_types.h"
 #include "DNA_object_types.h"
 #include "DNA_pointcloud_types.h"
+#include "DNA_workspace_types.h"
 
 #include "RNA_enum_types.hh"
 #include "RNA_prototypes.hh"
@@ -45,6 +46,10 @@
 #include "RNA_prototypes.hh"
 
 #include "BPY_extern.hh"
+
+#include "ED_viewer_path.hh"
+
+#include "NOD_eval_log.hh"
 #include "BPY_extern_geometry.hh"
 
 #include "bpy_capi_utils.hh"
@@ -180,6 +185,59 @@ static BPy_GeometrySet *BPy_GeometrySet_static_from_evaluated_object(PyObject * 
   }
   BPy_GeometrySet *self = python_object_from_geometry_set(std::move(geometry));
   return self;
+}
+
+PyDoc_STRVAR(
+    /* Wrap. */
+    bpy_geometry_set_from_viewer_doc,
+    ".. staticmethod:: from_viewer(object)\n"
+    "\n"
+    "   The geometry of the active Viewer node, when it views a Geometry Nodes modifier of the\n"
+    "   object. This is the preview the viewport and the spreadsheet show, logged by the last\n"
+    "   evaluation.\n"
+    "\n"
+    "   :param object: The object, original or evaluated.\n"
+    "   :type object: bpy.types.Object\n"
+    "   :return: The viewed geometry, or None when the active viewer is not on this object or has\n"
+    "      not been evaluated.\n"
+    "   :rtype: :class:`bpy.types.GeometrySet` | None\n");
+static PyObject *BPy_GeometrySet_static_from_viewer(PyObject * /*self*/,
+                                                    PyObject *args,
+                                                    PyObject *kwds)
+{
+  static const char *kwlist[] = {"object", nullptr};
+  PyObject *py_object;
+  if (!PyArg_ParseTupleAndKeywords(
+          args, kwds, "O" /* `object` */ ":from_viewer", const_cast<char **>(kwlist), &py_object))
+  {
+    return nullptr;
+  }
+  ID *id = nullptr;
+  if (!pyrna_id_FromPyObject(py_object, &id) || GS(id->name) != ID_OB) {
+    PyErr_Format(PyExc_TypeError, "Expected an Object, not %.200s", Py_TYPE(py_object)->tp_name);
+    return nullptr;
+  }
+  const Object *object = DEG_get_original(reinterpret_cast<const Object *>(id));
+  const bContext *C = BPY_context_get();
+  const WorkSpace *workspace = C ? CTX_wm_workspace(C) : nullptr;
+  if (workspace == nullptr) {
+    Py_RETURN_NONE;
+  }
+  const std::optional<ed::viewer_path::ViewerPathForGeometryNodesViewer> parsed =
+      ed::viewer_path::parse_geometry_nodes_viewer(workspace->viewer_path);
+  if (!parsed || parsed->object != object) {
+    Py_RETURN_NONE;
+  }
+  const nodes::eval_log::ViewerNodeLog *viewer_log =
+      nodes::eval_log::NodesEvalLog::find_viewer_node_log_for_path(workspace->viewer_path);
+  if (viewer_log == nullptr) {
+    Py_RETURN_NONE;
+  }
+  const GeometrySet *geometry = viewer_log->main_geometry();
+  if (geometry == nullptr) {
+    Py_RETURN_NONE;
+  }
+  return reinterpret_cast<PyObject *>(python_object_from_geometry_set(*geometry));
 }
 
 static PyObject *BPy_GeometrySet_repr(BPy_GeometrySet *self)
@@ -435,6 +493,10 @@ static PyMethodDef BPy_GeometrySet_methods[] = {
      reinterpret_cast<PyCFunction>(BPy_GeometrySet_static_from_evaluated_object),
      METH_VARARGS | METH_KEYWORDS | METH_STATIC,
      bpy_geometry_set_from_evaluated_object_doc},
+    {"from_viewer",
+     reinterpret_cast<PyCFunction>(BPy_GeometrySet_static_from_viewer),
+     METH_VARARGS | METH_KEYWORDS | METH_STATIC,
+     bpy_geometry_set_from_viewer_doc},
     {"instances_pointcloud",
      reinterpret_cast<PyCFunction>(BPy_GeometrySet_get_instances_pointcloud),
      METH_NOARGS,

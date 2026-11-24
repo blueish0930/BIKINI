@@ -2036,7 +2036,7 @@ static void rna_Mesh_uv_layers_remove(Mesh *mesh, ReportList *reports, PointerRN
 static bool rna_Mesh_is_editmode_get(PointerRNA *ptr)
 {
   Mesh *mesh = rna_mesh(ptr);
-  return (mesh->runtime->edit_mesh != nullptr);
+  return BKE_editmesh_bmesh_get(mesh) != nullptr;
 }
 
 static bool rna_Mesh_materials_override_apply(Main *bmain,

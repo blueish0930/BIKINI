@@ -661,6 +661,15 @@ static ErrHint err_hint_base(const StringRef what)
     set("A type has to be followed by a variable name", "Example: int n = 0;");
     return h;
   }
+  if (what.startswith("Reserved name")) {
+    const std::string name = quoted_part(what, 0);
+    h.title = trf("{} is a reserved name, it cannot be a variable", name);
+    h.hint = name == "PI" ?
+                 tr("PI is the constant 3.14159..., use it directly: float a = 2 * PI;") :
+                 tr("Reserved: PI, Position, Rotation, Scale, Normal, Radius, ID and add. Pick "
+                    "another name, e.g. pos or rot.");
+    return h;
+  }
   if (what.find("Expected attribute name") != StringRef::not_found) {
     set("An attribute name is missing after @", "Example: f@scale = 2;");
     return h;
@@ -838,6 +847,26 @@ static std::string canonical_attr_name(const StringRef name)
     return "Output";
   }
   return std::string(name);
+}
+
+/** `PI` in an expression is this float constant. */
+static constexpr float vex_pi = 3.14159265358979323846f;
+
+/**
+ * Names that cannot be declared as a variable, foreach variable, function or parameter: the
+ * constant `PI`, Blender's built-in attribute names as the interface writes them, and mode
+ * strings such as `add`. The case has to match, `vector position` and `float pi` stay valid.
+ */
+static bool is_reserved_name(const StringRef name)
+{
+  static const char *const names[] = {
+      "PI", "Position", "Rotation", "Scale", "Normal", "Radius", "ID", "add", nullptr};
+  for (int i = 0; names[i]; i++) {
+    if (name == names[i]) {
+      return true;
+    }
+  }
+  return false;
 }
 
 enum class TokKind : uint8_t {
@@ -1305,6 +1334,8 @@ struct Expr {
   int src_len = 1;
   /** Channel call that is a direct `array()` argument and reads a whole list input. */
   bool list_ch = false;
+  /** `f@name` or `f[]@name`: the type of the attribute was written, not assumed. */
+  bool attr_prefixed = false;
   Expr *a = nullptr;
   Expr *b = nullptr;
   Expr *c = nullptr;
@@ -1365,6 +1396,14 @@ static Type expr_arg_type(const Expr *e, const int i)
     return Type::Void;
   }
   return e->args[i]->type;
+}
+
+static Type scalar_find_operand_hint(const Expr *e)
+{
+  /* Operators consume a position, just like `int index = find(...)`. Without this hint the
+   * return-type overload selects all matches and the operator sees an array handle instead.
+   * Leave array consumers (`int indices[]`, `len(find(...))`, indexing) unchanged. */
+  return e && e->kind == ExprKind::Call && e->name == "find" ? Type::Int : Type::Void;
 }
 
 static Type unary_math_result_type(const Expr *e)
@@ -1673,6 +1712,16 @@ struct Parser {
     return t;
   }
 
+  /** Fails on the current name token when it is reserved, see #is_reserved_name. */
+  bool check_new_name()
+  {
+    if (cur.kind == TokKind::Ident && is_reserved_name(cur.text)) {
+      fail("Reserved name '" + std::string(cur.text) + "'");
+      return false;
+    }
+    return true;
+  }
+
   /* `int pts[]` / `int pts[8]` after the name. `int[] pts` is handled above. */
   void eat_name_array_suffix(Type &ty)
   {
@@ -1751,6 +1800,14 @@ struct Parser {
       e->kind = ExprKind::LitBool;
       e->type = Type::Bool;
       e->lit_b = cur.text == "true";
+      eat(TokKind::Ident);
+      return e;
+    }
+    if (cur.kind == TokKind::Ident && cur.text == "PI") {
+      Expr *e = new_expr();
+      e->kind = ExprKind::LitFloat;
+      e->type = Type::Float;
+      e->f = vex_pi;
       eat(TokKind::Ident);
       return e;
     }
@@ -1957,6 +2014,7 @@ struct Parser {
     /* Diagnostics underline the whole attribute, prefix included. */
     e->src_len = std::max(1, int(cur_offset() + cur.text.size()) - attr_off);
     e->src_off = attr_off;
+    e->attr_prefixed = ptype != Type::Void || is_arr;
     if (is_arr) {
       ptype = (ptype == Type::Void) ? Type::FloatArray : array_type_of(ptype);
     }
@@ -2164,6 +2222,9 @@ struct Parser {
       }
       return false;
     }
+    if (!check_new_name()) {
+      return false;
+    }
     r_name = std::string(cur.text);
     eat(TokKind::Ident);
     return true;
@@ -2191,6 +2252,9 @@ struct Parser {
         fail("Expected variable name");
         return new_stmt();
       }
+      if (!check_new_name()) {
+        return new_stmt();
+      }
       idx_name = n1;
       val_name = std::string(cur.text);
       val_type = t2;
@@ -2204,6 +2268,12 @@ struct Parser {
       const std::string maybe = std::string(cur.text);
       eat(TokKind::Ident);
       if (cur.kind == TokKind::Semi) {
+        if (is_reserved_name(maybe)) {
+          lex = saved_lex;
+          cur = saved_cur;
+          check_new_name();
+          return new_stmt();
+        }
         idx_name = n1;
         val_name = maybe;
         val_type = Type::Void;
@@ -2434,6 +2504,9 @@ struct Parser {
       fail("Expected variable name");
       return s;
     }
+    if (!check_new_name()) {
+      return s;
+    }
     s->var_name = std::string(cur.text);
     eat(TokKind::Ident);
     eat_name_array_suffix(s->var_type);
@@ -2516,6 +2589,9 @@ struct Parser {
       fail("Expected function name");
       return s;
     }
+    if (!check_new_name()) {
+      return s;
+    }
     s->var_name = std::string(cur.text);
     eat(TokKind::Ident);
     expect(TokKind::LParen, "Expected '('");
@@ -2537,6 +2613,9 @@ struct Parser {
       }
       if (cur.kind != TokKind::Ident) {
         fail("Expected parameter name");
+        break;
+      }
+      if (!check_new_name()) {
         break;
       }
       s->param_types.append(group_ty);
@@ -2600,6 +2679,33 @@ struct Compiler {
   Map<std::string, int> attr_local;
   Parser *parser = nullptr;
   bool shader_material = false;
+  /** Names the caller declared (#PredeclaredName) and their types, canonical names as keys:
+   * the ones written `@name`, and the ones used as variables (the sockets of the node).
+   * `pixel(name, x, y)` reads one of the variables. */
+  Map<std::string, Type> predeclared_at;
+  Map<std::string, Type> predeclared_vars;
+  /** Image Wrangle: a name without `@` is a variable, never an attribute. */
+  bool strict_names = false;
+
+  /** Type of a name the code uses without declaring it (#strict_names), null for others. */
+  const Type *predeclared_var(const StringRef name) const
+  {
+    return predeclared_vars.lookup_ptr(canonical_attr_name(name));
+  }
+
+  /** The error for a name without `@` that is neither a variable nor a socket. */
+  void fail_undeclared(const Expr *e)
+  {
+    if (predeclared_at.contains(canonical_attr_name(e->name))) {
+      fail_at(e,
+              "'" + e->name + "' is a value of the pixel, it is read and written with @: @" +
+                  e->name);
+      return;
+    }
+    fail_at(e,
+            "'" + e->name + "' is not declared. Declare the variable first (float " +
+                e->name + " = ...), or add an input or output of this name");
+  }
   /** Innermost AST node being compiled. Semantic diagnostics must not use parser.cur, which is at
    * EOF after parsing has completed. */
   const Expr *error_expr = nullptr;
@@ -3105,8 +3211,16 @@ struct Compiler {
       m.add("intersect", int(Builtin::ArrayIntersect));
       m.add("sortorder", int(Builtin::SortOrder));
       m.add("sortbyorder", int(Builtin::SortByOrder));
+      m.add("reverse", int(Builtin::ArrayReverse));
       m.add("len", int(Builtin::Len));
       m.add("pointneighbours", int(Builtin::PointNeighbours));
+      /* The other spellings that the completion list and the GPU path accept, with the same
+       * (geo, point) arguments. They were not registered: "Unknown function neighbours". */
+      m.add("point_neighbours", int(Builtin::PointNeighbours));
+      m.add("pointneighbors", int(Builtin::PointNeighbours));
+      m.add("point_neighbors", int(Builtin::PointNeighbours));
+      m.add("neighbours", int(Builtin::PointNeighbours));
+      m.add("neighbors", int(Builtin::PointNeighbours));
       m.add("pointedges", int(Builtin::PointEdges));
       m.add("pointfaces", int(Builtin::PointFaces));
       m.add("pointcorners", int(Builtin::PointCorners));
@@ -3129,6 +3243,7 @@ struct Compiler {
       m.add("curvepoints", int(Builtin::PointsOfCurve));
       m.add("pointcurve", int(Builtin::PointCurve));
       m.add("nearestpoints", int(Builtin::NearestPoints));
+      m.add("valuetoindex", int(Builtin::ValueToIndex));
       m.add("transpose", int(Builtin::Transpose));
       m.add("determinant", int(Builtin::Determinant));
       m.add("det", int(Builtin::Determinant));
@@ -3345,6 +3460,16 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
         }
         return e->type;
       }
+      if (strict_names) {
+        /* An input or output of the node. */
+        if (const Type *socket_type = predeclared_var(e->name)) {
+          emit_push_attr(canonical_attr_name(e->name), *socket_type);
+          e->type = *socket_type;
+          return *socket_type;
+        }
+        fail_undeclared(e);
+        return Type::Void;
+      }
       /* Bare attribute name (Houdini-style P / pscale / previously written i[]@pts). */
       warn_if_misspelled_local(e);
       const Type t = ident_fallback_type(e->name);
@@ -3381,7 +3506,7 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
       return t;
     }
     case ExprKind::Unary: {
-      const Type ta = compile_expr(e->a);
+      const Type ta = compile_expr(e->a, false, scalar_find_operand_hint(e->a));
       if (e->op == "-") {
         emit(Op::Neg);
       }
@@ -3395,8 +3520,8 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
       return ta;
     }
     case ExprKind::Binary: {
-      const Type ta = compile_expr(e->a);
-      const Type tb = compile_expr(e->b);
+      const Type ta = compile_expr(e->a, false, scalar_find_operand_hint(e->a));
+      const Type tb = compile_expr(e->b, false, scalar_find_operand_hint(e->b));
       if (e->op == "+") {
         emit(ta == Type::Float && tb == Type::Float ? Op::AddFF :
              ta == Type::Vector && tb == Type::Vector ? Op::AddVV :
@@ -3586,6 +3711,33 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
         emit(Op::PushI, add_const_i(0));
         e->type = Type::Int;
         return Type::Int;
+      }
+      if (e->name == "pixel" && strict_names) {
+        /* `pixel(image, x, y)`: an input of an Image Wrangle at another pixel. Only the
+         * shader can do that. The instructions here keep the stack and the type right and
+         * read the input at the current pixel. */
+        Expr *input = (e->args.size() == 3) ? e->args[0] : nullptr;
+        if (input == nullptr || !ELEM(input->kind, ExprKind::Ident, ExprKind::LitString) ||
+            (input->kind == ExprKind::Ident && find_local(input->name)))
+        {
+          fail_at(input ? input : e,
+                  "pixel(image, x, y): the first argument is the name of an image input");
+          return Type::Void;
+        }
+        const std::string aname = canonical_attr_name(input->name);
+        const Type *input_type = predeclared_vars.lookup_ptr(aname);
+        if (input_type == nullptr) {
+          fail_at(input, "pixel(): '" + input->name + "' is not an input of the node");
+          return Type::Void;
+        }
+        compile_expr(e->args[1], false, Type::Int);
+        emit(Op::Pop);
+        compile_expr(e->args[2], false, Type::Int);
+        emit(Op::Pop);
+        const Type t = *input_type;
+        emit_push_attr(aname, t);
+        e->type = t;
+        return t;
       }
       const int bid = builtin_from_name(e->name);
       if (bid < 0) {
@@ -4503,6 +4655,51 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
           return Type::Void;
         }
       }
+      if (builtin == Builtin::ArrayReverse) {
+        if (n_in != 1 || !type_is_array(expr_arg_type(e, 0))) {
+          fail("reverse(array) needs one array");
+          return Type::Void;
+        }
+      }
+      if (builtin == Builtin::SortOrder) {
+        const Type array_type = expr_arg_type(e, 0);
+        if (n_in < 1 || n_in > 2 ||
+            !ELEM(array_type,
+                  Type::IntArray,
+                  Type::FloatArray,
+                  Type::VecArray,
+                  Type::Vec2Array,
+                  Type::StringArray) ||
+            (n_in == 2 && !ELEM(expr_arg_type(e, 1), Type::Int, Type::Float, Type::Bool)))
+        {
+          fail("sortorder(array, sign) needs an int, float, vector or string array; the sign is "
+               "optional: 1 increasing, -1 decreasing");
+          return Type::Void;
+        }
+      }
+      if (builtin == Builtin::ValueToIndex) {
+        /* valuetoindex(geo, domain, name, value): the geometry can be left out. */
+        const int first = std::max(n_in - 3, 0);
+        const Type value_type = n_in > 0 ? expr_arg_type(e, n_in - 1) : Type::Void;
+        if (n_in < 3 || n_in > 4 || expr_arg_type(e, first + 1) != Type::String ||
+            !ELEM(expr_arg_type(e, first), Type::Int, Type::Float, Type::Bool, Type::String) ||
+            (first == 1 && !ELEM(expr_arg_type(e, 0), Type::Int, Type::Float, Type::Bool)) ||
+            type_is_array(value_type) || type_is_matrix(value_type) || value_type == Type::Ray)
+        {
+          fail("valuetoindex(geo, domain, name, value) needs a domain (\"point\", \"edge\", "
+               "\"face\", \"corner\", \"curve\", \"instance\"), an attribute name and a value; "
+               "geo is optional");
+          return Type::Void;
+        }
+      }
+      if (builtin == Builtin::SortByOrder) {
+        if (n_in != 2 || !type_is_array(expr_arg_type(e, 0)) ||
+            expr_arg_type(e, 1) != Type::IntArray)
+        {
+          fail("sortbyorder(array, order) needs an array and an int array of indices");
+          return Type::Void;
+        }
+      }
       if (ELEM(builtin, Builtin::Chramp, Builtin::ChcurveF)) {
         const bool is_ramp = builtin == Builtin::Chramp;
         if (n_in < 2 || n_in > (is_ramp ? 2 : 3) || !e->args[0] ||
@@ -4694,9 +4891,12 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
           break;
         case Builtin::ArrayUnique:
         case Builtin::ArraySlice:
+        case Builtin::ArrayReverse:
+        case Builtin::SortByOrder:
           e->type = expr_arg_type(e, 0);
           break;
         case Builtin::ArrayFind:
+        case Builtin::SortOrder:
           e->type = Type::IntArray;
           break;
         case Builtin::ArrayFindFirst:
@@ -4971,6 +5171,7 @@ Type Compiler::compile_expr(Expr *e, const bool as_stmt, const Type hint)
         case Builtin::PointsOfCurve:
         case Builtin::NearestPoints:
         case Builtin::NearPoints:
+        case Builtin::ValueToIndex:
           e->type = Type::IntArray;
           break;
         case Builtin::ArrayFloat:
@@ -5647,6 +5848,20 @@ void Compiler::compile_lvalue_store(Expr *lval, const Type value_type)
       emit(Op::StoreLocal, loc->slot);
       return;
     }
+    if (strict_names) {
+      const Type *socket_type = predeclared_var(lval->name);
+      if (socket_type == nullptr) {
+        fail_undeclared(lval);
+        return;
+      }
+      if (type_is_array(value_type)) {
+        fail_at(lval, "'" + lval->name + "' holds one value per pixel, not an array");
+        return;
+      }
+      emit_coerce(value_type, *socket_type);
+      emit_store_attr(canonical_attr_name(lval->name), *socket_type);
+      return;
+    }
     warn_if_misspelled_local(lval);
     Type t = ident_fallback_type(lval->name);
     if (type_is_array(value_type) && !type_is_array(t)) {
@@ -5704,6 +5919,10 @@ int Compiler::attr_slot_of_lvalue(Expr *lval, const bool write)
   if (lval->kind == ExprKind::Ident) {
     if (find_local(lval->name)) {
       return -1;
+    }
+    if (strict_names) {
+      const Type *socket_type = predeclared_var(lval->name);
+      return socket_type ? attr_slot(canonical_attr_name(lval->name), *socket_type, write) : -1;
     }
     if (is_element_index_name(lval->name)) {
       return -1;
@@ -5813,7 +6032,7 @@ Type Compiler::compile_assign(Expr *e, const bool as_stmt)
     /* A bare name that is not a variable is an attribute as well. Unless it was written as an
      * array attribute before, it holds a single value. */
     if (type_is_array(got) && e->a && e->a->kind == ExprKind::Ident && !to_local &&
-        !type_is_array(ident_fallback_type(e->a->name)))
+        !strict_names && !type_is_array(ident_fallback_type(e->a->name)))
     {
       fail_at(e->a,
               trf("Cannot store the array {} in {}: it is not declared, so it is the single "
@@ -6330,7 +6549,7 @@ static bool gpu_builtin_ok(const StringRef name)
       "matrix",  "ident",
       "identity","invert",     "invert_matrix", "transpose", "determinant", "det",
       "transform_point", "transform_direction", "project_point", "array", "len",
-      "append",  "insert",     "removeindex", "removevalue", "slice", "find", "unique",
+      "append",  "insert",     "removeindex", "removevalue", "slice", "find", "unique", "reverse",
       "sum",     "sort",       "union",    "subtract", "intersect",
       "npoints", "nedges",     "nfaces",   "ncorners", "numpt",    "point",    "edge",
       "face",    "prim",       "corner",   "vertex",   "curve",    "instance", "instances",
@@ -6339,7 +6558,7 @@ static bool gpu_builtin_ok(const StringRef name)
       "scale",   "chf",        "chi",      "chv",      "chb",      "chc",      "chm",
       "chr",     "ch",
       "pointneighbours", "point_neighbours", "pointneighbors", "point_neighbors",
-      "neighbours", "neighbors", nullptr};
+      "neighbours", "neighbors", "pixel", nullptr};
   for (int i = 0; ok[i]; i++) {
     if (name == ok[i]) {
       return true;
@@ -6448,6 +6667,7 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
   prog.gpu_stride = 0;
   prog.gpu_elem_nums = 0;
   prog.gpu_samples.clear();
+  prog.gpu_pixel_inputs.clear();
 
   std::string fail;
   bool has_loop = false;
@@ -7178,8 +7398,8 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
   /* Keep arithmetic recursion outside the large builtin emitter's stack frame. */
   auto emit_binary = [&](Expr *e) -> GpuVal {
     GpuVal r;
-        GpuVal a = em(e->a, Type::Void);
-        GpuVal b = em(e->b, Type::Void);
+        GpuVal a = em(e->a, scalar_find_operand_hint(e->a));
+        GpuVal b = em(e->b, scalar_find_operand_hint(e->b));
         if (e->op == "*" && a.type == Type::Rotation && b.type == Type::Rotation) {
           r.s = "wr_qmul(" + a.s + ", " + b.s + ")";
           r.type = Type::Rotation;
@@ -7460,7 +7680,8 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
         return r;
       }
       case ExprKind::Unary: {
-        GpuVal a = em(e->a, hint);
+        const Type operand_hint = scalar_find_operand_hint(e->a);
+        GpuVal a = em(e->a, operand_hint == Type::Void ? hint : operand_hint);
         if (e->op == "-") {
           r.s = "-(" + a.s + ")";
           r.type = a.type;
@@ -7733,6 +7954,22 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
         auto arg = [&](const int i, Type h = Type::Void) {
           return (i < int(e->args.size())) ? em(e->args[i], h) : GpuVal{"0.0", Type::Float};
         };
+        if (fn == "pixel") {
+          /* The first argument only names the input, it is not evaluated. */
+          const int ai = (e->args.size() == 3 && e->args[0]) ? attr_i(e->args[0]->name) : -1;
+          if (ai < 0 || !shader_material) {
+            bad("GPU: pixel() reads an image input of an Image Wrangle");
+            r.s = "0.0";
+            return r;
+          }
+          if (!prog.gpu_pixel_inputs.contains(prog.attrs[ai].name)) {
+            prog.gpu_pixel_inputs.append(prog.attrs[ai].name);
+          }
+          r.s = "wr_pixel_" + attr_local(ai) + "(" + cast_to(arg(1, Type::Int), Type::Int) +
+                ", " + cast_to(arg(2, Type::Int), Type::Int) + ")";
+          r.type = prog.attrs[ai].type;
+          return r;
+        }
         const int ufi = user_fn_index(fn);
         if (ufi >= 0) {
           const UserFn &uf = prog.user_fns[ufi];
@@ -7829,7 +8066,7 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
                                   type_is_array(expr_arg_type(e, 0));
         if (array_reduce ||
             ELEM(fn, "append", "insert", "removeindex", "removevalue", "slice", "find", "unique") ||
-            ELEM(fn, "sort", "union", "subtract", "intersect"))
+            ELEM(fn, "sort", "union", "subtract", "intersect", "reverse"))
         {
           /* Array functions. The words of an array are compared and moved by the generic helpers
            * of the shader, `stride` words per item. */
@@ -7979,6 +8216,12 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
                   (n > 2 ? "true" : "false") + ", " +
                   (n > 3 ? cast_to(arg(3, Type::Int), Type::Int) : std::string("1")) + ", " +
                   stride + ")";
+            r.type = array_type;
+            return r;
+          }
+          if (fn == "reverse") {
+            /* The whole array walked backwards: `slice(arr, -1, <no end>, -1)`. */
+            r.s = "wr_arr_slice(" + a0.s + ", -1, 0, false, -1, " + stride + ")";
             r.type = array_type;
             return r;
           }
@@ -9114,10 +9357,32 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
         break;
     }
   }
+  /* The body runs in its own function: a `return` in the wrangle code then leaves only the body and
+   * the stores of the written attributes below still run. With the body inline in main() a
+   * `return` skipped them, and returning elements kept stale or zero outputs. The values the body
+   * shares with main() are shader globals (private per invocation). */
+  std::string globals = "int elem_i;\nint rand_seq;\n";
+  for (const int ci : prog.gpu_ch.index_range()) {
+    const Program::GpuCh &ch = prog.gpu_ch[ci];
+    globals += gl_type(ch.type);
+    globals += " ";
+    globals += glsl_ident(ch.name, "ch_");
+    globals += ";\n";
+  }
+  for (const int i : prog.attrs.index_range()) {
+    globals += gl_type(prog.attrs[i].type);
+    globals += " ";
+    globals += attr_local(i);
+    globals += ";\n";
+  }
+  src += globals;
+  src += "void wr_body()\n{\n";
+  src += body;
+  src += "}\n";
   src += "void main()\n{\n";
   src += "  uint tid = gl_GlobalInvocationID.x + gl_GlobalInvocationID.y * "
          "(gl_NumWorkGroups.x * gl_WorkGroupSize.x);\n";
-  src += "  int elem_i = int(tid);\n";
+  src += "  elem_i = int(tid);\n";
   src += "  if (elem_i < 0 || elem_i >= n_elem) { return; }\n";
   src += "  if (use_sel != 0 && sel[elem_i] == 0) {\n";
   for (const int i : prog.attrs.index_range()) {
@@ -9158,12 +9423,10 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
   }
   src += "    return;\n";
   src += "  }\n";
-  src += "  int rand_seq = 0;\n";
+  src += "  rand_seq = 0;\n";
   for (const int ci : prog.gpu_ch.index_range()) {
     const Program::GpuCh &ch = prog.gpu_ch[ci];
     src += "  ";
-    src += gl_type(ch.type);
-    src += " ";
     src += glsl_ident(ch.name, "ch_");
     src += " = ";
     if (ch.type == Type::Vector) {
@@ -9183,14 +9446,12 @@ static void gpu_emit_program(const Vector<Stmt *> &stmts,
   }
   for (const int i : prog.attrs.index_range()) {
     src += "  ";
-    src += gl_type(prog.attrs[i].type);
-    src += " ";
     src += attr_local(i);
     src += " = ";
     src += load_field(i, "elem_i");
     src += ";\n";
   }
-  src += body;
+  src += "  wr_body();\n";
   for (const int i : prog.attrs.index_range()) {
     if (!prog.attrs[i].write) {
       continue;
@@ -9711,7 +9972,10 @@ static void hoist_array_passes(Vector<Stmt *> &stmts, Program &prog)
   }
 }
 
-static CompileOutput compile_impl(const StringRef source, const bool shader_material);
+static CompileOutput compile_impl(const StringRef source,
+                                  const bool shader_material,
+                                  const Span<PredeclaredName> names = {},
+                                  const bool strict_names = false);
 
 CompileOutput compile(const StringRef source)
 {
@@ -9723,12 +9987,32 @@ CompileOutput compile_shader_material(const StringRef source)
   return compile_impl(source, true);
 }
 
-static CompileOutput compile_impl(const StringRef source, const bool shader_material)
+CompileOutput compile_image_wrangle(const StringRef source, const Span<PredeclaredName> names)
+{
+  return compile_impl(source, true, names, true);
+}
+
+static CompileOutput compile_impl(const StringRef source,
+                                  const bool shader_material,
+                                  const Span<PredeclaredName> names,
+                                  const bool strict_names)
 {
   CompileOutput out;
-  const uint64_t key = get_default_hash(source) ^ (shader_material ? 0x9e3779b97f4a7c15ull : 0);
+  /* The same source compiles differently when the names it may use have other types. */
+  std::string names_key = strict_names ? "strict\n" : "";
+  for (const PredeclaredName &predeclared : names) {
+    names_key += predeclared.name;
+    names_key += '\x1f';
+    names_key += char('A' + int(predeclared.type));
+    names_key += predeclared.at ? '@' : '.';
+    names_key += '\n';
+  }
+  const uint64_t key = get_default_hash(source) ^
+                       (shader_material ? 0x9e3779b97f4a7c15ull : 0) ^
+                       (names_key.empty() ? 0 : get_default_hash(StringRef(names_key)));
   struct CacheEntry {
     std::string src;
+    std::string names_key;
     bool shader_material = false;
     std::shared_ptr<Program> program;
     std::string error;
@@ -9740,7 +10024,8 @@ static CompileOutput compile_impl(const StringRef source, const bool shader_mate
   {
     std::lock_guard lock(mutex);
     if (CacheEntry *e = cache.lookup_ptr(key)) {
-      if (e->src == source && e->shader_material == shader_material) {
+      if (e->src == source && e->shader_material == shader_material && e->names_key == names_key)
+      {
         out.program = e->program;
         out.error = e->error;
         out.warning = e->warning;
@@ -9756,6 +10041,7 @@ static CompileOutput compile_impl(const StringRef source, const bool shader_mate
     }
     CacheEntry e;
     e.src = std::string(source);
+    e.names_key = names_key;
     e.shader_material = shader_material;
     e.program = out.program;
     e.error = out.error;
@@ -9782,6 +10068,57 @@ static CompileOutput compile_impl(const StringRef source, const bool shader_mate
   Compiler c;
   c.parser = &parser;
   c.shader_material = shader_material;
+  /* Known before the first statement, so that a use of the name finds its type. The first
+   * entry of a name wins: callers list their sockets before the values they provide. */
+  c.strict_names = strict_names;
+  for (const PredeclaredName &predeclared : names) {
+    const std::string attr_name = canonical_attr_name(predeclared.name);
+    bool known = false;
+    for (const AttrInfo &attr : c.prog.attrs) {
+      known |= attr.name == attr_name;
+    }
+    if (known || attr_name.empty()) {
+      continue;
+    }
+    (predeclared.at ? c.predeclared_at : c.predeclared_vars).add(attr_name, predeclared.type);
+    AttrInfo attr;
+    attr.name = attr_name;
+    attr.type = predeclared.type;
+    c.prog.attrs.append(std::move(attr));
+  }
+  if (strict_names) {
+    /* `@name` is one of the names written with `@`, with its type unless a prefix says
+     * otherwise. Every expression of the code, user functions included, is in the pool. */
+    for (const std::unique_ptr<Expr> &expr : parser.expr_pool) {
+      Expr *e = expr.get();
+      if (e == nullptr || e->kind != ExprKind::Attr || !c.error.empty()) {
+        continue;
+      }
+      const Type *type = c.predeclared_at.lookup_ptr(canonical_attr_name(e->name));
+      if (type == nullptr) {
+        if (c.predeclared_vars.contains(canonical_attr_name(e->name))) {
+          c.fail_at(e,
+                    "@" + e->name + ": inputs and outputs are used like variables, write " +
+                        e->name);
+        }
+        else {
+          c.fail_at(e, "@" + e->name + ": the node has no value of the pixel of this name");
+        }
+        break;
+      }
+      if (!e->attr_prefixed) {
+        e->attr_type = *type;
+        e->type = *type;
+      }
+      else if (e->attr_type != *type) {
+        c.fail_at(e,
+                  "@" + e->name + " is a " + std::string(type_name(*type)) +
+                      ", not a " + std::string(type_name(e->attr_type)) +
+                      ": write it without the prefix");
+        break;
+      }
+    }
+  }
   hoist_array_passes(stmts, c.prog);
 
   struct LoopFrame {

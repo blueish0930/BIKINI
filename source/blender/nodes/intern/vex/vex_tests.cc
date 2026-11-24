@@ -1153,6 +1153,81 @@ TEST(nodes_vex, array_find_slice)
   EXPECT_FALSE(eval_source("int[] xs = array(1, 2); return len(find(xs, \"a\"));").ok);
 }
 
+TEST(nodes_vex, array_find_operator_return_type)
+{
+  const PureEvalOutput out = eval_source(
+      "int values[] = array(2, 0, 2, 4); int score = 0;"
+      "for (int j = -1; j <= 5; j++) {"
+      "  int index = find(values, j);"
+      "  score += (find(values, j) >= 0) == (index >= 0);"
+      "  score += (j < 0 || find(values, j) >= 0) == (j < 0 || index >= 0);"
+      "  score += (j != 2 && find(values, j) < 0) == (j != 2 && index < 0);"
+      "  score += (0 <= find(values, j)) == (0 <= index);"
+      "  score += !find(values, j) == !index;"
+      "  score += (find(values, j) + 1) == (index + 1);"
+      "}"
+      "int matches[] = find(values, 2);"
+      "return score + len(matches) + len(find(values, 2));");
+  ASSERT_TRUE(out.ok) << out.error;
+  EXPECT_EQ(out.return_int, 46);
+
+  const CompileOutput compiled = compile(
+      "int values[] = array(2, 0, 2, 4); int j = i@index;"
+      "for (int k = 0; k < 2; k++) {"
+      "i@a = j < 0 || find(values, j) >= 0;"
+      "i@b = j != i@index && find(values, j) < 0;"
+      "i@n = len(find(values, j)); }");
+  ASSERT_TRUE(bool(compiled.program)) << compiled.error;
+  EXPECT_TRUE(compiled.program->gpu_ok) << compiled.program->gpu_error;
+  EXPECT_NE(compiled.program->gpu_src.find("wr_arr_find_first(l_values"), std::string::npos);
+  EXPECT_NE(compiled.program->gpu_src.find("wr_arr_find(l_values"), std::string::npos);
+}
+
+TEST(nodes_vex, pi_constant_and_reserved_names)
+{
+  const PureEvalOutput pi = eval_source("return 2 * PI;");
+  ASSERT_TRUE(pi.ok) << pi.error;
+  EXPECT_NEAR(pi.return_float, 6.2831853f, 1e-5f);
+  /* The exact spelling is reserved, other spellings stay valid. */
+  const PureEvalOutput other = eval_source(
+      "float pi = 1; vector position = {0, 0, 2}; return pi + position.z;");
+  ASSERT_TRUE(other.ok) << other.error;
+  EXPECT_NEAR(other.return_float, 3.0f, 1e-6f);
+  for (const char *src : {"float PI = 3; return PI;",
+                          "vector Position = {0, 0, 0}; return 0;",
+                          "int add = 1; return add;",
+                          "int xs[] = array(1); foreach (int ID; xs) {} return 0;",
+                          "float f(float Scale) { return Scale; } return f(1);",
+                          "float add(float x) { return x; } return 0;"})
+  {
+    EXPECT_FALSE(eval_source(src).ok) << src;
+  }
+}
+
+TEST(nodes_vex, array_sortorder_reverse)
+{
+  /* Stable in both directions: the two 3s keep their order. */
+  PureEvalOutput out = eval_source(
+      "float xs[] = array(3.0, 1.0, 3.0, 2.0); int up[] = sortorder(xs);"
+      "int down[] = sortorder(xs, -1);"
+      "return up[0] * 1000 + up[1] * 100 + up[2] * 10 + up[3] + "
+      "(down[0] * 1000 + down[1] * 100 + down[2] * 10 + down[3]) * 10000;");
+  ASSERT_TRUE(out.ok) << out.error;
+  EXPECT_EQ(out.return_int, 1302 + 231 * 10000);
+  out = eval_source(
+      "string s[] = array(\"b\", \"c\", \"a\"); sortbyorder(s, sortorder(s, -1));"
+      "return format(\"{}{}{}\", s[0], s[1], s[2]);");
+  ASSERT_TRUE(out.ok) << out.error;
+  EXPECT_EQ(out.return_string, "cba");
+  out = eval_source(
+      "int a[] = array(1, 2, 3); int r[] = reverse(a);"
+      "return r[0] * 100 + r[1] * 10 + r[2] + a[0] * 1000;");
+  ASSERT_TRUE(out.ok) << out.error;
+  EXPECT_EQ(out.return_int, 1321);
+  EXPECT_FALSE(eval_source("int a = 1; return len(reverse(a));").ok);
+  EXPECT_FALSE(eval_source("float xs[] = array(1.0); return len(sortorder(xs, \"up\"));").ok);
+}
+
 TEST(nodes_vex, array_set_operations)
 {
   /* Results have no duplicates and keep the order of the first array. */
@@ -1482,7 +1557,7 @@ TEST(nodes_vex, delete_geometry_domain_string_or_int)
   ASSERT_TRUE(bool(a.program)) << a.error;
   const CompileOutput b = compile("delete_geometry(0, i@index, 0);\n");
   ASSERT_TRUE(bool(b.program)) << b.error;
-  const CompileOutput c = compile("deletegeometry(\"edge\", i@index, \"edge_face\");\n");
+  const CompileOutput c = compile("delete_geometry(\"edge\", i@index, \"edge_face\");\n");
   ASSERT_TRUE(bool(c.program)) << c.error;
   const CompileOutput d = compile("delete_geometry(0, \"point\", i@index, \"all\");\n");
   ASSERT_TRUE(bool(d.program)) << d.error;
@@ -2180,7 +2255,7 @@ TEST(nodes_vex, format_python_and_printf)
   const PureEvalOutput c = eval_source("return format(\"{:.2f}\", 3.14159);");
   ASSERT_TRUE(c.ok) << c.error;
   EXPECT_EQ(c.return_string, "3.14");
-  const PureEvalOutput d = eval_source("return sprintf(\"%s_%05d\", \"id\", 7);");
+  const PureEvalOutput d = eval_source("return format(\"%s_%05d\", \"id\", 7);");
   ASSERT_TRUE(d.ok) << d.error;
   EXPECT_EQ(d.return_string, "id_00007");
 }

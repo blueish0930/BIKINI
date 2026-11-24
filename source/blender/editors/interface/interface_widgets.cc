@@ -2477,12 +2477,8 @@ static void widget_draw_code_line(const int fontid,
       else if (code_type_color(s + i, name_len, color)) {
         /* Pass. */
       }
-      else if ((name_len == 1 && c == 'P') || (name_len == 5 && memcmp(s + i, "ptnum", 5) == 0) ||
-               (name_len == 5 && memcmp(s + i, "index", 5) == 0))
-      {
-        color = CodeColor::Attribute;
-      }
       else {
+        /* A name without `@` is a variable, `P` too: attributes are written `@P`. */
         int k = j;
         while (k < n && (s[k] == ' ' || s[k] == '\t')) {
           k++;

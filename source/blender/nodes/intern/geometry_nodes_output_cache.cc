@@ -34,6 +34,7 @@
 #include "DNA_collection_types.h"
 #include "DNA_curves_types.h"
 #include "DNA_customdata_types.h"
+#include "DNA_image_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_node_tree_interface_types.h"
@@ -51,6 +52,7 @@
 #include "BKE_geometry_set.hh"
 #include "BKE_geometry_set_instances.hh"
 #include "BKE_idprop.hh"
+#include "BKE_image.hh"
 #include "BKE_instances.hh"
 #include "BKE_mesh.hh"
 #include "BKE_mesh_types.hh"
@@ -279,6 +281,10 @@ static uint64_t mesh_token(const Mesh &mesh, GeometryNodesOutputCache::ContentHa
     }
   }
   token = mix(token, materials_token(mesh.mat, mesh.totcol));
+  /* Meshes evaluated in edit mode keep the edit-mesh of their session. A result that holds one
+   * must not be reused after the session ends: its BMesh is freed then. The pointer is stable
+   * for the whole session, so edits within it still compare by content. */
+  token = mix(token, uint64_t(uintptr_t(mesh.runtime->edit_mesh.get())));
   return token;
 }
 
@@ -1485,6 +1491,16 @@ static uint64_t compute_ids_token(const EvalDependencies &deps,
         part = mix(
             part,
             collection_token(*collection, params.self_object, hasher, visited_collections));
+        break;
+      }
+      case ID_IM: {
+        /* The pixels are not part of what identifies an image. Its update count changes every
+         * time the image is tagged: painting, a reload, an Image Output of the GPU Texture
+         * Editor. Without it a node that samples the image keeps its old result. */
+        const Image *image = reinterpret_cast<const Image *>(id);
+        if (image->runtime != nullptr) {
+          part = mix(part, image->runtime->update_count);
+        }
         break;
       }
       default:
